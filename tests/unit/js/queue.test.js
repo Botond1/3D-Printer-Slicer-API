@@ -9,6 +9,7 @@ function runQueueScenario(name, overrides) {
     const environment = {
         ...process.env,
         MAX_SLICE_QUEUE_WAIT_MS: '60000',
+        QUEUE_TEST_MUTATION: '',
         ...overrides
     };
 
@@ -39,6 +40,14 @@ function runQueueScenario(name, overrides) {
 function assertDrained(status) {
     assert.equal(status.queueLength, 0);
     assert.equal(status.activeJobs, 0);
+}
+
+function assertRejectedTaskDidNotRun(result) {
+    assert.equal(
+        result.rejectedTaskRuns,
+        0,
+        'A rejected queue task must never execute.'
+    );
 }
 
 test('queue executes waiting jobs in FIFO order', async () => {
@@ -93,6 +102,7 @@ test('queue enforces the queued-plus-active per-client cap', async () => {
     });
     assert.deepEqual(result.results, ['first', 'second', 'other']);
     assertDrained(result.finalStatus);
+    assertRejectedTaskDidNotRun(result);
 });
 
 test('queue rejects overflow without running the rejected task', async () => {
@@ -109,6 +119,44 @@ test('queue rejects overflow without running the rejected task', async () => {
     assert.equal(result.rejected.errorCode, 'SLICE_QUEUE_FULL');
     assert.deepEqual(result.results, ['active', 'queued-1', 'queued-2']);
     assertDrained(result.finalStatus);
+    assertRejectedTaskDidNotRun(result);
+});
+
+test('queue rejection proof detects reject-then-run behavior', async (t) => {
+    const mutationCases = [
+        {
+            name: 'per-client cap',
+            scenario: 'clientCap',
+            environment: {
+                MAX_CONCURRENT_SLICES: '1',
+                MAX_SLICE_QUEUE_LENGTH: '10',
+                MAX_SLICE_QUEUE_PER_IP: '2'
+            }
+        },
+        {
+            name: 'total overflow',
+            scenario: 'overflow',
+            environment: {
+                MAX_CONCURRENT_SLICES: '1',
+                MAX_SLICE_QUEUE_LENGTH: '2',
+                MAX_SLICE_QUEUE_PER_IP: '10'
+            }
+        }
+    ];
+
+    for (const mutationCase of mutationCases) {
+        await t.test(mutationCase.name, async () => {
+            const result = await runQueueScenario(mutationCase.scenario, {
+                ...mutationCase.environment,
+                QUEUE_TEST_MUTATION: 'reject-then-run'
+            });
+            assert.equal(result.rejectedTaskRuns, 1, 'Mutation seam did not execute the rejected task.');
+            assert.throws(
+                () => assertRejectedTaskDidNotRun(result),
+                /rejected queue task must never execute/i
+            );
+        });
+    }
 });
 
 test('queue maps typed and supported legacy errors to stable API payloads', async () => {

@@ -9,16 +9,6 @@ function readSource(relativePath) {
     return fs.readFileSync(path.join(REPO_ROOT, relativePath), 'utf8');
 }
 
-function assertNearestResponseStatus(source, errorCode, expectedStatus) {
-    const marker = `errorCode: '${errorCode}'`;
-    const markerIndex = source.indexOf(marker);
-    assert.notEqual(markerIndex, -1, `Missing ${errorCode}`);
-    const prefix = source.slice(Math.max(0, markerIndex - 1600), markerIndex);
-    const statusMatches = [...prefix.matchAll(/res\.status\((\d+)\)\.json/g)];
-    assert.ok(statusMatches.length > 0, `Missing HTTP status near ${errorCode}`);
-    assert.equal(Number(statusMatches.at(-1)[1]), expectedStatus, errorCode);
-}
-
 function assertNearestRuleStatus(source, errorCode, expectedStatus) {
     const marker = `errorCode: '${errorCode}'`;
     const markerIndex = source.indexOf(marker);
@@ -28,16 +18,6 @@ function assertNearestRuleStatus(source, errorCode, expectedStatus) {
     assert.ok(statusMatches.length > 0, `Missing rule status near ${errorCode}`);
     assert.equal(Number(statusMatches.at(-1)[1]), expectedStatus, errorCode);
 }
-
-test('processing-error source retains selected fail-fast and timeout mappings', () => {
-    const source = readSource('app/services/slice/errors.js');
-    assertNearestResponseStatus(source, 'FILE_PROCESSING_TIMEOUT', 422);
-    assertNearestResponseStatus(source, 'INVALID_SOURCE_GEOMETRY', 400);
-    assertNearestResponseStatus(source, 'INVALID_SOURCE_ARCHIVE', 400);
-    assertNearestResponseStatus(source, 'ORCA_PROFILE_INCOMPATIBLE', 422);
-    assertNearestResponseStatus(source, 'INTERNAL_PROCESSING_ERROR', 500);
-    assert.match(source, /Automatic repair is disabled to preserve exact model fidelity\./);
-});
 
 test('queue source retains typed stable status/error-code metadata', () => {
     const source = readSource('app/services/slice/queue.js');

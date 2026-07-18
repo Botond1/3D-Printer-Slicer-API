@@ -7,12 +7,12 @@
     "dev": "node --watch app/server.js",
     "test": "npm run test:js && npm run test:python",
     "test:js": "node scripts/run-js-tests.js",
-    "test:python": "node scripts/run-python.js -m unittest discover -s tests/unit/python -p \"test_*.py\"",
+    "test:python": "node scripts/run-python.js scripts/run-python-tests.py",
     "check:syntax": "npm run check:syntax:js && npm run check:syntax:python",
     "check:syntax:js": "node scripts/validate-js-syntax.js",
     "check:syntax:python": "node scripts/run-python.js scripts/validate-python-syntax.py",
-    "check:repository-safety": "node scripts/run-python.js scripts/validate-repository-safety.py --scope tracked",
-    "check:repository-safety:staged": "node scripts/run-python.js scripts/validate-repository-safety.py --scope staged"
+    "check:repository-safety": "node scripts/run-python.js scripts/validate-repository-safety.py --scope tracked --require-nonempty",
+    "check:repository-safety:staged": "node scripts/run-python.js scripts/validate-repository-safety.py --scope staged --require-nonempty"
   },
   "dependencies": {
     "archiver": "^7.0.1",

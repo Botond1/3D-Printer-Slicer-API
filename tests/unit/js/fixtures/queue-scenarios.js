@@ -1,7 +1,8 @@
-const path = require('node:path');
+const {
+    loadQueueForScenario
+} = require('../helpers/load-queue-for-scenario');
 
-const REPO_ROOT = path.resolve(__dirname, '../../../..');
-const queue = require(path.join(REPO_ROOT, 'app/services/slice/queue'));
+const queue = loadQueueForScenario();
 
 function deferred() {
     let resolve;
@@ -108,6 +109,7 @@ async function runConcurrencyScenario() {
 
 async function runClientCapScenario() {
     const firstGate = deferred();
+    let rejectedTaskRuns = 0;
     const accepted = [
         queue.enqueueSliceJob(async () => {
             await firstGate.promise;
@@ -118,7 +120,10 @@ async function runClientCapScenario() {
     ];
 
     const rejected = await queue
-        .enqueueSliceJob(async () => 'must-not-run', { queueKey: 'same-client' })
+        .enqueueSliceJob(async () => {
+            rejectedTaskRuns += 1;
+            return 'must-not-run';
+        }, { queueKey: 'same-client' })
         .then(
             () => ({ unexpectedSuccess: true }),
             serializeError
@@ -131,6 +136,7 @@ async function runClientCapScenario() {
 
     return {
         rejected,
+        rejectedTaskRuns,
         results,
         whileBlocked,
         finalStatus: queue.getQueueStatus()
@@ -139,6 +145,7 @@ async function runClientCapScenario() {
 
 async function runOverflowScenario() {
     const firstGate = deferred();
+    let rejectedTaskRuns = 0;
     const accepted = [
         queue.enqueueSliceJob(async () => {
             await firstGate.promise;
@@ -149,7 +156,10 @@ async function runOverflowScenario() {
     ];
 
     const rejected = await queue
-        .enqueueSliceJob(async () => 'must-not-run', { queueKey: 'client-d' })
+        .enqueueSliceJob(async () => {
+            rejectedTaskRuns += 1;
+            return 'must-not-run';
+        }, { queueKey: 'client-d' })
         .then(
             () => ({ unexpectedSuccess: true }),
             serializeError
@@ -162,6 +172,7 @@ async function runOverflowScenario() {
 
     return {
         rejected,
+        rejectedTaskRuns,
         results,
         whileBlocked,
         finalStatus: queue.getQueueStatus()

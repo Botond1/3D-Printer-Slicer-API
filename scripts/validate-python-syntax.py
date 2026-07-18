@@ -7,7 +7,9 @@ import ast
 import subprocess
 import sys
 import tokenize
+from collections.abc import Callable, Sequence
 from pathlib import Path, PurePosixPath
+from typing import TextIO
 
 
 EXCLUDED_PREFIXES = (
@@ -86,6 +88,42 @@ def validate_file(root: Path, relative_path: str) -> None:
     )
 
 
+def validate_python_files(
+    root: Path,
+    files: Sequence[str],
+    *,
+    validator: Callable[[Path, str], None] = validate_file,
+    stdout: TextIO = sys.stdout,
+    stderr: TextIO = sys.stderr,
+) -> int:
+    """Validate an explicit file set and fail closed when the set is empty."""
+
+    if not files:
+        print(
+            "Python syntax validation failed: no applicable tracked files were found.",
+            file=stderr,
+        )
+        return 1
+
+    failures = 0
+    for relative_path in files:
+        try:
+            validator(root, relative_path)
+        except (OSError, SyntaxError, UnicodeError) as error:
+            print(f"Python syntax validation failed: {relative_path}: {error}", file=stderr)
+            failures += 1
+
+    if failures:
+        print(
+            f"Python syntax validation failed for {failures} of {len(files)} tracked file(s).",
+            file=stderr,
+        )
+        return 1
+
+    print(f"Python syntax OK: {len(files)} tracked file(s).", file=stdout)
+    return 0
+
+
 def main() -> int:
     try:
         root = repository_root()
@@ -94,23 +132,7 @@ def main() -> int:
         print(str(error), file=sys.stderr)
         return 1
 
-    failures = 0
-    for relative_path in files:
-        try:
-            validate_file(root, relative_path)
-        except (OSError, SyntaxError, UnicodeError) as error:
-            print(f"Python syntax validation failed: {relative_path}: {error}", file=sys.stderr)
-            failures += 1
-
-    if failures:
-        print(
-            f"Python syntax validation failed for {failures} of {len(files)} tracked file(s).",
-            file=sys.stderr,
-        )
-        return 1
-
-    print(f"Python syntax OK: {len(files)} tracked file(s).")
-    return 0
+    return validate_python_files(root, files)
 
 
 if __name__ == "__main__":

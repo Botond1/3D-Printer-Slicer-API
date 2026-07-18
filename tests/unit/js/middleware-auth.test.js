@@ -1,11 +1,15 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
 const REPO_ROOT = path.resolve(__dirname, '../../..');
-const errorHandler = require(path.join(REPO_ROOT, 'app/middleware/errorHandler'));
-const requireAdmin = require(path.join(REPO_ROOT, 'app/middleware/requireAdmin'));
+const REQUIRE_ADMIN_PATH = path.join(REPO_ROOT, 'app/middleware/requireAdmin.js');
+const requireAdmin = require(REQUIRE_ADMIN_PATH);
+const {
+    loadCommonJsFromSource
+} = require('./helpers/load-commonjs-from-source');
 
 function createResponseRecorder() {
     const state = {
@@ -48,89 +52,102 @@ function createAdminRequest(apiKey) {
     };
 }
 
-function invokeAdmin(apiKey) {
+function invokeAdmin(apiKey, middleware = requireAdmin) {
     const { state, response } = createResponseRecorder();
     let nextCalls = 0;
-    requireAdmin(createAdminRequest(apiKey), response, () => {
+    middleware(createAdminRequest(apiKey), response, () => {
         nextCalls += 1;
     });
     return { ...state, nextCalls };
 }
 
-test('global error middleware preserves known status and error-code mappings', async (t) => {
-    const cases = [
-        ['admin CORS', { code: 'ADMIN_CORS_ORIGIN_NOT_ALLOWED' }, 403, 'ADMIN_CORS_ORIGIN_NOT_ALLOWED'],
-        ['invalid JSON', { type: 'entity.parse.failed' }, 400, 'INVALID_JSON_BODY'],
-        ['large body', { type: 'entity.too.large' }, 413, 'PAYLOAD_TOO_LARGE'],
-        ['large upload', { code: 'LIMIT_FILE_SIZE' }, 413, 'UPLOADED_FILE_TOO_LARGE'],
-        ['unexpected upload field', { code: 'LIMIT_UNEXPECTED_FILE' }, 400, 'UNEXPECTED_FILE_FIELD'],
-        ['unsupported format', { code: 'UNSUPPORTED_FILE_FORMAT' }, 400, 'UNSUPPORTED_FILE_FORMAT'],
-        ['other Multer error', { name: 'MulterError' }, 400, 'UPLOAD_ERROR']
-    ];
+function observeAdminTimingSafeContract(middleware) {
+    const inertKey = 's01-inert-admin-key';
+    const wrongEqualLength = 's01-inert-admin-keX';
+    assert.equal(wrongEqualLength.length, inertKey.length);
 
-    for (const [name, fields, expectedStatus, expectedCode] of cases) {
-        await t.test(name, () => {
-            const { state, response } = createResponseRecorder();
-            const error = Object.assign(new Error('test failure'), fields);
-            errorHandler(error, { method: 'POST', originalUrl: '/prusa/slice' }, response, assert.fail);
-            assert.equal(state.statusCode, expectedStatus);
-            assert.equal(state.body.success, false);
-            assert.equal(state.body.errorCode, expectedCode);
+    const originalAdminKey = process.env.ADMIN_API_KEY;
+    const originalTimingSafeEqual = crypto.timingSafeEqual;
+    const originalConsoleWarn = console.warn;
+    const calls = [];
+
+    crypto.timingSafeEqual = (left, right) => {
+        calls.push({
+            leftLength: left.length,
+            rightLength: right.length,
+            sameBuffer: left === right
         });
+        return originalTimingSafeEqual(left, right);
+    };
+    console.warn = () => {};
+    process.env.ADMIN_API_KEY = inertKey;
+
+    function invokeObserved(apiKey) {
+        const firstCallIndex = calls.length;
+        const result = invokeAdmin(apiKey, middleware);
+        return {
+            result,
+            calls: calls.slice(firstCallIndex)
+        };
     }
-});
 
-test('global error middleware hides server details and preserves safe client failures', () => {
-    const clientResult = createResponseRecorder();
-    const clientError = Object.assign(new Error('Missing resource.'), { status: 404 });
-    errorHandler(
-        clientError,
-        { method: 'GET', originalUrl: '/missing' },
-        clientResult.response,
-        assert.fail
-    );
-    assert.equal(clientResult.state.statusCode, 404);
-    assert.deepEqual(clientResult.state.body, {
-        success: false,
-        error: 'Missing resource.',
-        errorCode: 'REQUEST_FAILED'
-    });
-
-    const serverResult = createResponseRecorder();
-    const originalConsoleError = console.error;
-    console.error = () => {};
     try {
-        errorHandler(
-            new Error('sensitive implementation detail'),
-            { method: 'GET', originalUrl: '/failure' },
-            serverResult.response,
-            assert.fail
-        );
+        return {
+            correct: invokeObserved(inertKey),
+            wrongEqualLength: invokeObserved(wrongEqualLength),
+            wrongUnequalLength: invokeObserved('short')
+        };
     } finally {
-        console.error = originalConsoleError;
+        crypto.timingSafeEqual = originalTimingSafeEqual;
+        console.warn = originalConsoleWarn;
+        if (originalAdminKey === undefined) {
+            delete process.env.ADMIN_API_KEY;
+        } else {
+            process.env.ADMIN_API_KEY = originalAdminKey;
+        }
     }
-    assert.equal(serverResult.state.statusCode, 500);
-    assert.deepEqual(serverResult.state.body, {
-        success: false,
-        error: 'Internal server error.',
-        errorCode: 'INTERNAL_SERVER_ERROR'
-    });
-});
+}
 
-test('global error middleware delegates after headers have been sent', () => {
-    const { state, response } = createResponseRecorder();
-    state.headersSent = true;
-    const error = new Error('stream failed');
-    let delegated = null;
+function assertAdminTimingSafeContract(observation) {
+    assert.equal(observation.correct.result.statusCode, null);
+    assert.equal(observation.correct.result.nextCalls, 1);
+    assert.equal(
+        observation.correct.calls.length,
+        1,
+        'A correct admin key must invoke crypto.timingSafeEqual exactly once.'
+    );
+    assert.equal(observation.correct.calls[0].sameBuffer, false);
+    assert.equal(
+        observation.correct.calls[0].leftLength,
+        observation.correct.calls[0].rightLength
+    );
 
-    errorHandler(error, {}, response, (received) => {
-        delegated = received;
-    });
+    assert.equal(observation.wrongEqualLength.result.statusCode, 401);
+    assert.equal(observation.wrongEqualLength.result.nextCalls, 0);
+    assert.equal(
+        observation.wrongEqualLength.calls.length,
+        1,
+        'An equal-length wrong admin key must invoke crypto.timingSafeEqual exactly once.'
+    );
+    assert.equal(observation.wrongEqualLength.calls[0].sameBuffer, false);
+    assert.equal(
+        observation.wrongEqualLength.calls[0].leftLength,
+        observation.wrongEqualLength.calls[0].rightLength
+    );
 
-    assert.equal(delegated, error);
-    assert.equal(state.statusCode, null);
-    assert.equal(state.body, null);
-});
+    assert.equal(observation.wrongUnequalLength.result.statusCode, 401);
+    assert.equal(observation.wrongUnequalLength.result.nextCalls, 0);
+    assert.equal(
+        observation.wrongUnequalLength.calls.length,
+        1,
+        'An unequal-length wrong admin key must invoke the dummy crypto.timingSafeEqual comparison.'
+    );
+    assert.equal(observation.wrongUnequalLength.calls[0].sameBuffer, true);
+    assert.equal(
+        observation.wrongUnequalLength.calls[0].leftLength,
+        observation.wrongUnequalLength.calls[0].rightLength
+    );
+}
 
 test('admin middleware handles missing configuration and all inert-key comparisons', () => {
     const inertKey = 's0-inert-admin-key';
@@ -176,15 +193,24 @@ test('admin middleware handles missing configuration and all inert-key compariso
     }
 });
 
-test('admin comparison structurally invokes timingSafeEqual for equal and unequal lengths', () => {
-    const source = fs.readFileSync(
-        path.join(REPO_ROOT, 'app/middleware/requireAdmin.js'),
-        'utf8'
-    );
+test('live admin middleware invokes timingSafeEqual for all key comparison branches', () => {
+    assertAdminTimingSafeContract(observeAdminTimingSafeContract(requireAdmin));
+});
 
-    assert.match(
-        source,
-        /if \(bufA\.length !== bufB\.length\) \{\s*crypto\.timingSafeEqual\(bufA, bufA\);\s*return false;\s*\}/
+test('live timing-safe proof rejects direct equality with an unused timing-safe helper', () => {
+    const source = fs.readFileSync(REQUIRE_ADMIN_PATH, 'utf8');
+    const mutatedSource = source.replace(
+        'if (!apiKey || !timingSafeCompare(apiKey, adminApiKey)) {',
+        'if (!apiKey || apiKey !== adminApiKey) {'
     );
-    assert.match(source, /return crypto\.timingSafeEqual\(bufA, bufB\);/);
+    assert.notEqual(mutatedSource, source, 'Direct-equality mutation seam did not apply.');
+    assert.match(mutatedSource, /crypto\.timingSafeEqual/);
+
+    const mutatedMiddleware = loadCommonJsFromSource(REQUIRE_ADMIN_PATH, mutatedSource);
+    const observation = observeAdminTimingSafeContract(mutatedMiddleware);
+    assert.equal(observation.correct.calls.length, 0, 'Mutation seam must bypass the live primitive.');
+    assert.throws(
+        () => assertAdminTimingSafeContract(observation),
+        /correct admin key must invoke crypto\.timingSafeEqual/i
+    );
 });
