@@ -114,7 +114,7 @@ def main() -> int:
     print(f"[FULL API SUITE] Completed. total={total} failed={failed}")
     print(f"[FULL API SUITE] Summary report: {REPORT_PATH}")
 
-    return 0
+    return 1 if failed > 0 else 0
 
 
 if __name__ == "__main__":

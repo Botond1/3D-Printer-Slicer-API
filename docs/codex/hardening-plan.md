@@ -16,7 +16,7 @@ This plan was initialized 2026-07-18 from code baseline
 
 | Stage | Status | Depends on | Parallel ownership | Outcome and exact exit condition |
 | --- | --- | --- | --- | --- |
-| S0 - knowledge, characterization, truthful runners, validation CI | `IN_PROGRESS` | clean authorized baseline | docs; JS tests/seams; Python runner tests; CI/safety scripts in disjoint files | Four Codex knowledge files exist; deterministic JS/Python suites and complete tracked-source syntax gates pass; failed runner scenarios propagate non-zero; validation-only CI and repository guards exist; all mandatory S0 gates are green. |
+| S0 - knowledge, characterization, truthful runners, validation CI | `VERIFIED` | clean authorized baseline | docs; JS tests/seams; Python runner tests; CI/safety scripts in disjoint files | Four Codex knowledge files exist; deterministic JS/Python suites and complete tracked-source syntax gates pass; failed runner scenarios propagate non-zero; validation-only CI and repository guards exist; all mandatory S0 gates are green. |
 | S1 - job/upload lifecycle and cancellation | `NOT_STARTED` | `S0 VERIFIED` | runtime-lifecycle lane; native-cancellation lane; tests owned separately | Upload enters a job-scoped workspace; full/client/deadline/abort/error/success paths clean deterministically; deadlines fire at configured time independent of slots; counters remain correct; child trees are terminated with verified escalation; stale recovery works; local script paths are module-anchored while flattened Docker behavior is unchanged. |
 | S2 - resource/state envelope | `NOT_STARTED` | S0; integrates after S1 lifecycle seams | resource/archive lane; artifact/pricing lane; container-permission lane | Measured CPU/RAM/PID/disk/archive/model/output caps fail closed; streaming/actual-byte limits apply; unique artifact correlation plus TTL/count/byte quotas exist; output validity is required before success; pricing writes are atomic with rollback; root filesystem/code/profiles are read-only/root-owned and mutable pricing/input/output are separated. |
 | S3 - reproducible supply chain and safe promotion | `NOT_STARTED` | S0; may branch in parallel with S1 | build/provenance lane; deploy/readiness lane | Verified immutable base/dependency/action inputs; clean CI builds one digest-addressed image; SBOM, scan, signature/provenance are verified; deployment promotes that artifact through human approval; readiness proves dependencies; rollback is documented and drilled without mutable `git pull` builds. |
@@ -58,6 +58,17 @@ S0 exit criteria:
 abort/process-tree termination, server factory/root injection, timestamp/output
 collision, zero-stat output rejection, retention, pricing atomicity, protected
 pricing CORS, readiness, and production authentication redesign.
+
+S0 verification snapshot (2026-07-18): lockfile installation completed with
+`npm ci --ignore-scripts --no-audit --no-fund`; dynamic syntax, JavaScript and
+Python unit tests, mirror equality, index safety, and whitespace gates passed.
+The network-enabled audit reported one high and three moderate package findings
+for the locked Multer/Express dependency graph; S0 did not silently change
+dependency versions (D-011). Compose configuration validated with the available
+standalone client, while image/health smoke was `NOT_RUN_ENVIRONMENT` because no
+Docker daemon was reachable. Native integration runners were
+`NOT_RUN_ENVIRONMENT` because only the tracked `.gitkeep` fixture exists; neither
+conditional skip is represented as green.
 
 ## S1 detailed exit criteria
 
@@ -153,3 +164,4 @@ only after those security surfaces stabilize.
 | D-008 | Successful outputs need explicit ownership/retention, not timestamp folklore. | No response correlation, TTL, quota, or collision resistance. | S2 artifact lane |
 | D-009 | Native compromise is contained only partially. | Non-root/cap-drop/PID exist, but code/config/state and network remain writable/available. | S2/S5 |
 | D-010 | Promotion to `main` is not part of S0 completion. | Current workflow can deploy every `main` push. | human-approved integration decision |
+| D-011 | The locked dependency graph has current audit findings; S0 must not hide them with an unreviewed upgrade. | `npm audit --omit=dev --audit-level=high` reported GHSA-72gw-mp4g-v24j and GHSA-3p4h-7m6x-2hcm for Multer plus GHSA-q8mj-m7cp-5q26 through `qs`/Express: one high and three moderate package findings. | S1 request-lifecycle mitigation + S3 provenance/upgrade verification |

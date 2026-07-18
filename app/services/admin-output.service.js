@@ -209,6 +209,7 @@ function validateBulkDownloadLimits(files) {
 
 module.exports = {
     BULK_DOWNLOAD_ALL_TOKEN,
+    resolveValidatedOutputFile,
     getValidatedOutputFile,
     getValidatedOutputFiles,
     listOutputFileSummaries,

@@ -29,12 +29,12 @@ PRUSA_SL1_SCENARIO = SliceScenario(
 
 def main() -> int:
     try:
-        run_scenario(SCRIPTS_ROOT, PRUSA_SL1_SCENARIO)
+        result = run_scenario(SCRIPTS_ROOT, PRUSA_SL1_SCENARIO)
     except Exception as exc:
         print(f"[PRUSA SL1 TEST] ERROR: {exc}")
         return 1
 
-    return 0
+    return 1 if result.failed_count > 0 else 0
 
 
 if __name__ == "__main__":

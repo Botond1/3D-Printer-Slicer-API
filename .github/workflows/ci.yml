@@ -1,0 +1,42 @@
+name: Validation CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Syntax, tests, and repository safety
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Node.js dependencies from lockfile
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Validate tracked source syntax
+        run: npm run check:syntax
+
+      - name: Run deterministic unit tests
+        run: npm test
+
+      - name: Guard tracked repository content
+        run: npm run check:repository-safety

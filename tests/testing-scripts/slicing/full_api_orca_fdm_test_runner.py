@@ -29,12 +29,12 @@ ORCA_FDM_SCENARIO = SliceScenario(
 
 def main() -> int:
     try:
-        run_scenario(SCRIPTS_ROOT, ORCA_FDM_SCENARIO)
+        result = run_scenario(SCRIPTS_ROOT, ORCA_FDM_SCENARIO)
     except Exception as exc:
         print(f"[ORCA FDM TEST] ERROR: {exc}")
         return 1
 
-    return 0
+    return 1 if result.failed_count > 0 else 0
 
 
 if __name__ == "__main__":
