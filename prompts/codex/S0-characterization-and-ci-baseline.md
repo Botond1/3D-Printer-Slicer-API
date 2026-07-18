@@ -22,7 +22,7 @@ Do not implement the queue/upload lifecycle fix yet. S0 must make that later cha
   - `CODE_BASELINE` — the expected commit above;
   - `WORK_BASELINE` — the exact HEAD from which you create your work branch.
 - Before editing, run read-only preflight checks for repository root, remote, HEAD, branch, status, and the diff from `CODE_BASELINE` to `WORK_BASELINE`.
-- If the worktree is dirty, or commits above `CODE_BASELINE` contain anything other than architect prompt/documentation setup, stop. Do not stash, reset, clean, overwrite, or absorb unrelated work.
+- If the worktree is dirty, or `CODE_BASELINE..WORK_BASELINE` changes any path other than the single allowed prompt path above, stop. Do not stash, reset, clean, overwrite, or absorb unrelated work.
 - Create and work only on `codex/s0-characterization-ci-baseline` (or an isolated linked worktree using that branch). Never edit `main` directly.
 - Do not fetch, pull, push, open a PR, tag, release, deploy, SSH to a VPS, call a remote/production API, or touch the LeadPilot repository.
 - Do not create or use real secrets. Do not commit `.env`; use explicit inert test values only.
