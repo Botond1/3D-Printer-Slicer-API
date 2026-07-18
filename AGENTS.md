@@ -30,6 +30,28 @@ Use sources in this order:
 Treat documentation-only claims as `UNVERIFIED` until code or runtime evidence
 supports them. Cite repository paths and symbols in durable knowledge changes.
 
+## Current local checkpoint
+
+S0/S0.1 repository validation is anchored by
+`b1411be8cfd68101eb2a3a909b0e1a428e8c111f` (fail-closed validation and
+characterization) and `f9ed1ee6791e531670d5d7703f994bfb51986ebb`
+(production dependency remediation). Local evidence is 63/63 JavaScript tests,
+22/22 discovered/run/passing Python tests, 48 JavaScript and 25 Python syntax
+files, 146 tracked safety-scanner paths, and zero production audit findings at
+all severities with npm 10.9.8. Docker image/health validation was
+`NOT_RUN_ENVIRONMENT`; hosted CI, branch protection, deployment state, and
+production topology remain `UNVERIFIED`. This checkpoint is not production
+promotion authorization.
+
+S0.1 is the sole owner of manifests/lockfile, validation scripts, validation
+CI, and current-state documentation. After integration, S1a owns upload/job
+workspaces; S1b follows S1a for deadline/abort-aware queueing; S1c follows the
+AbortSignal contract for process-tree cancellation and subprocess-environment
+minimization. S3 may work in parallel on Docker/build/provenance and
+validation/deploy separation but must not edit manifests or the lockfile. S2
+artifact work waits for S1a workspace ownership, and its container envelope waits
+for S3 image-control decisions.
+
 ## Read before changing
 
 - Any change: this file, the three Codex knowledge files, root `CLAUDE.md`, and

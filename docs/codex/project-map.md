@@ -2,14 +2,38 @@
 
 ## Snapshot and authority
 
-- Audit date: **2026-07-18**.
-- Code baseline: `899f1916437620ab536e912bf404d8da261cc37f`.
-- Work baseline: `02afc555509f00d432c24520601f4c7034becd81`.
+- Historical S0 audit date: **2026-07-18**.
+- Historical code baseline: `899f1916437620ab536e912bf404d8da261cc37f`.
+- Historical work baseline: `02afc555509f00d432c24520601f4c7034becd81`.
 - The only code-to-work-baseline addition is the
   [S0 execution prompt](../../prompts/codex/S0-characterization-and-ci-baseline.md).
+- The original topology and capability matrices below are historical S0
+  snapshots. The current repository delta is anchored separately; historical
+  `ABSENT`/`UNTESTED` labels must not be read as current results.
 - This document records repository evidence, not production health. GitHub
   settings, secrets, branch protection, the VPS state, and the deployed version
   are `UNVERIFIED`.
+
+## Current S0.1 verification delta
+
+The current local checkpoint is anchored by
+`b1411be8cfd68101eb2a3a909b0e1a428e8c111f` (fail-closed validation and
+characterization) and `f9ed1ee6791e531670d5d7703f994bfb51986ebb`
+(dependency remediation). The later documentation commit intentionally does not
+name itself.
+
+| Surface | Historical S0 snapshot | Current local evidence |
+| --- | --- | --- |
+| Unit discovery | JS/Python suites absent | 63/63 JavaScript tests pass; Python reports 22 discovered, 22 run, 22 pass, 0 failures/errors/skips; empty discovery fails closed. |
+| Tracked syntax | partial named-file checks | Dynamic gates validate 48 JavaScript and 25 Python files and fail on an empty applicable set without creating bytecode. |
+| Repository safety | absent | Scanner selects and inspects 146 tracked paths; staged commit gates inspected 20 paths for the characterization commit and 3 for the dependency commit; empty staged scope is allowed only outside required-nonempty mode. |
+| Auth/queue/error characterization | untested or source-only | Live timing-safe admin calls, rejected-callback non-execution, and adjacent processing-error status/code ownership have deterministic tests. |
+| Production dependency audit | one high plus three moderate findings | Exact npm 10.9.8 locks Express 4.22.2, Multer 2.2.0, body-parser 1.20.6, and qs 6.15.3; full production audit reports zero findings at every severity and the three named S0 advisories are absent. |
+| Conditional/external gates | unverified | Clean lockfile installation and all local gates pass. Docker image/health smoke is `NOT_RUN_ENVIRONMENT` because no daemon was available; hosted CI, branch protection, required checks, deployment, and production topology remain `UNVERIFIED`. |
+
+This delta verifies a local repository baseline only. A `main` push still has an
+independent deployment path, so neither S0 implementation commit nor this
+knowledge update authorizes production promotion.
 
 ## System context
 
@@ -55,7 +79,7 @@ code order is authoritative.
 | HTTP contract | [`app/routes`](../../app/routes), [`app/middleware`](../../app/middleware), and [`swagger-docs.js`](../../app/docs/swagger-docs.js). |
 | Slice orchestration | [`app/services/slice.service.js`](../../app/services/slice.service.js) delegates to [`app/services/slice/`](../../app/services/slice). |
 | Pricing | [`pricing.service.js`](../../app/services/pricing.service.js) facade plus [`pricing/repository.js`](../../app/services/pricing/repository.js) and [`pricing/catalog.js`](../../app/services/pricing/catalog.js). |
-| Admin artifacts | [`admin-output.service.js`](../../app/services/admin-output.service.js) validates extension, containment, lstat, and realpath. |
+| Admin artifacts | [`admin-output.service.js`](../../app/services/admin-output.service.js) validates extension, containment, lstat, and realpath. Its existing filesystem-checking `resolveValidatedOutputFile` helper is exported for tests; it is not a pure helper. |
 | Python/native preprocessing | [`app/cad2stl.py`](../../app/cad2stl.py), [`mesh2stl.py`](../../app/mesh2stl.py), [`orient.py`](../../app/orient.py), [`scale_model.py`](../../app/scale_model.py). |
 | Profiles/state | [`configs/prusa`](../../configs/prusa), [`configs/orca`](../../configs/orca), and runtime `configs/pricing.json` resolved by `paths.js`. |
 | Integration runners | [`tests/testing-scripts`](../../tests/testing-scripts) with shared helpers in `common/`; reports are generated in ignored `results/`. |
@@ -69,6 +93,11 @@ code order is authoritative.
 - Multer persists input before queue admission. Full/client-limit rejection and
   dequeue-time expiry do not enter `processSlice`, so no cleanup list runs
   ([`slice.routes.js`](../../app/routes/slice.routes.js), `upload`; [`queue.js`](../../app/services/slice/queue.js), `enqueueSliceJob`).
+- Multer configures `fileSize`, but explicit field/part/header count and size
+  limits, total upload time, request/header/socket deadlines, and connection
+  limits are not characterized. Multipart parser-limit behavior is
+  `NOT_COVERED_S0`; S1a owns parser-level ingress tests and S2 owns the measured
+  HTTP/server resource envelope.
 - Queue expiry is checked only by `runNextSliceJob` after a slot opens; no timer
   enforces the configured deadline while the head worker is busy
   ([`queue.js`](../../app/services/slice/queue.js), `runNextSliceJob`).
@@ -95,6 +124,9 @@ Runtime route registration, not README lists, is canonical:
   [`system.routes.js`](../../app/routes/system.routes.js);
 - protected pricing mutations and `/health/detailed` / `/admin/**` apply
   `adminRateLimiter` then `requireAdmin` in their route definitions;
+- public `/prusa/slice` and `/orca/slice` have rate limiting but no
+  application-layer service authentication; private binding or reverse-proxy
+  topology would be a separate external control and remains `UNVERIFIED`;
 - `choosenFile`, stable status/error mappings, Prusa FDM/SLA, Orca FDM-only,
   profile pairing, pricing behavior, and argument semantics are compatibility
   invariants for behavior-preserving stages;
@@ -113,13 +145,20 @@ Runtime route registration, not README lists, is canonical:
 - `runCommand` uses `execFile` and arrays, preventing shell interpolation, but
   its timeout targets the direct child only and does not verify descendant
   termination ([`command.js`](../../app/services/slice/command.js)).
+- Python and slicer children inherit the API process environment unless an
+  explicit environment is supplied; no minimal allowlist or egress boundary is
+  verified. Argument/environment integrity is `NOT_COVERED_S0` and belongs to
+  the S1c process contract.
 - Docker verifies versioned Prusa/Orca AppImage SHA-256 values, while Ubuntu
   tags, NodeSource/Apt inputs, unversioned Python requirements, action tags, and
   Compose image tags remain floating
   ([`Dockerfile`](../../Dockerfile), [`requirements.txt`](../../requirements.txt),
   [`deploy.yml`](../../.github/workflows/deploy.yml)).
 
-## Test and CI capability matrix
+## Historical S0 test and CI capability matrix
+
+This table records the pre-implementation work baseline. Use the current S0.1
+delta above for present test and audit status.
 
 | Capability at work baseline | Evidence | Result |
 | --- | --- | --- |
