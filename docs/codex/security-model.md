@@ -21,6 +21,9 @@ production readiness
   test exercises its security property.
 - `IMPLEMENTED_UNTESTED`: the control exists in executable code, but no durable
   deterministic test at this baseline proves it.
+- `PENDING_LOCAL_VALIDATION`: implementation and focused deterministic evidence
+  exist in the active worktree, but mandatory reinstall/audit/full-suite/
+  applicable Docker/commit gates have not all completed; this is not verified.
 - `PARTIAL`: the control covers only part of the threat or has a material gap.
 - `ABSENT`: no effective repository control was found.
 
@@ -42,7 +45,7 @@ unmodified risks, but these current results supersede their old
 | Processing error status/code ownership | `IMPLEMENTED_AND_TESTED` | Dynamic fake-response cases bind every stable mapping, including adjacent invalid-geometry/archive branches, to status and code. |
 | Admin output path resolution | `IMPLEMENTED_AND_TESTED` for characterized filesystem cases | `resolveValidatedOutputFile` is the existing filesystem-checking helper newly exported for temporary-directory tests; it is not pure. Descriptor-level TOCTOU protection remains S2 work. |
 | Validation discovery and repository safety | `IMPLEMENTED_AND_TESTED` | 63/63 JS tests and 22/22 Python tests pass; syntax covers 48 JS and 25 Python files; 146 tracked paths are safety-inspected and zero-file required scopes fail closed. |
-| Locked production dependency graph | `IMPLEMENTED_AND_TESTED` for the local audit gate | Exact npm 10.9.8 locks Express 4.22.2, Multer 2.2.0, body-parser 1.20.6, and qs 6.15.3. The former one-high/three-moderate result is now zero at every severity; the three named GHSAs are absent. |
+| Locked production dependency graph | `IMPLEMENTED_AND_TESTED` for the local audit gate | Exact npm 10.9.8 locks Express 4.22.2, Multer 2.2.0, body-parser 1.20.6, and qs 6.15.3. The former one-high/three-moderate registry result is now zero at every severity. That audit result did not itself configure the `GHSA-72gw-mp4g-v24j` application mitigation; S1a owns the separate fixed nesting-depth control. |
 | Multipart parser-limit behavior beyond `fileSize` | `NOT_COVERED_S0` | Field/part/header counts and sizes, total upload time, request/header/socket timeouts, and connection limits lack deterministic coverage; see S1a/S2 exits below. |
 | `runCommand` argument and environment integrity | `NOT_COVERED_S0` | `execFile` arrays exist, but no current test proves the exact argument/environment contract or a minimal child environment; see S1c. |
 
@@ -50,6 +53,24 @@ The clean lockfile install and local gates passed. Docker image/health validatio
 was `NOT_RUN_ENVIRONMENT` because no daemon was available. Hosted CI, required
 checks, branch protection, deployed state, and production topology remain
 `UNVERIFIED`; this local control delta is not promotion authorization.
+
+## Current S1a control delta
+
+S1a is `VERIFIED` for the local repository checkpoint at implementation commit
+`e7a409566bb8795a22f38bbf9f514b42c51bda74`. Exact npm 10.9.8 clean installation,
+the zero-finding production audit, 132/132 JavaScript and 22/22 Python tests,
+63-JavaScript/25-Python syntax, safety over 163 tracked paths plus the 30-file
+implementation stage, whitespace, mirrors, and forbidden-surface checks passed.
+Docker smoke is `NOT_RUN_ENVIRONMENT` because
+no daemon was available. These results do not verify S3a, S4, S3b, hosted CI,
+production topology, or promotion.
+
+| Current control | Classification | Local evidence and remaining boundary |
+| --- | --- | --- |
+| Marked per-request workspace ownership | `IMPLEMENTED_AND_TESTED` | [`workspace.js`](../../app/services/slice/workspace.js) allocates random marked directories under `input/.slice-jobs`, uses segment-aware containment and symlink/junction rejection, and cleans idempotently without adopting input/output roots or foreign output candidates. Focused temporary-directory tests exercise uniqueness, marker/version, exact output identity/custody, neighbor preservation, path mutation, and symlink cases. |
+| One route lifecycle across upload and queue settlement | `IMPLEMENTED_AND_TESTED` | [`slice.routes.js`](../../app/routes/slice.routes.js) places rate limiting before allocation and awaits Multer plus the queue-aware service inside one cleanup `finally`. Live HTTP cases cover parser failure after a persisted file, missing file, queue full/client cap/expiry mapping, validation failure, downstream throw, abort settlement, and success with zero request-owned residue; focused response-settlement tests cover finish/close/error custody. S1b still owns real queue timers and AbortSignal semantics. |
+| Finite multipart parser envelope | `IMPLEMENTED_AND_TESTED` | Actual defaults are `fileSize: 524288000`, `files: 1`, `fields: 40`, `parts: 42`, `fieldNameSize: 64`, `fieldSize: 65536`, and fixed non-configurable `fieldNestingDepth: 0`; bounded overrides cannot restore infinity. Live file-first `a[b]` evidence reaches Multer `LIMIT_FIELD_NESTING`, maps to HTTP 400 / `UPLOAD_FIELD_NESTING_TOO_DEEP`, and observes cleanup. Busboy 1.6.0 retains its internal fixed `MAX_HEADER_PAIRS = 2000`; no lower application override is claimed. Total upload/request/header/socket/connection bounds remain S2 work. |
+| Startup stale-workspace audit | `IMPLEMENTED_AND_TESTED` | Startup awaits immediate-child classification before listening and remains audit/report-only. Marked age, malformed/unmarked/fresh entries, symlink roots, partial inspection failure, and the programmatic exclusive-lease/bounded-lifetime deletion preconditions have focused tests. Production deletion remains disabled because total lifetime and rolling/shared-volume exclusivity are unproven. |
 
 ## Assets and data classification
 
@@ -100,20 +121,20 @@ delta above when reading test classifications.
 
 | Threat / abuse case | Severity | Current control | Evidence | Gap | Planned verification / stage |
 | --- | --- | --- | --- | --- | --- |
-| Malicious multipart input or field confusion | High | `PARTIAL`: one `choosenFile`, extension filter, byte cap, rate limiter | [`slice.routes.js`](../../app/routes/slice.routes.js) | extension is not content validation; upload precedes queue admission | Multipart limit behavior is `NOT_COVERED_S0`; S1a parser/workspace controls; S2 content/resource envelope |
+| Malicious multipart input or field confusion | High | Historical `PARTIAL`: one `choosenFile`, extension filter, byte cap, rate limiter; current tested S1a adds finite file/field/part/name/value limits and fixed `fieldNestingDepth: 0` | [`slice.routes.js`](../../app/routes/slice.routes.js); live file-first nesting rejection in [`slice-route-lifecycle.test.js`](../../tests/unit/js/slice-route-lifecycle.test.js) | extension is not content validation; total HTTP/upload resource envelope remains incomplete | S1a parser/workspace controls are locally verified; S2 owns content and measured HTTP/server resource envelope |
 | ZIP bomb, traversal, encryption, multiple/unsupported entries | High | `IMPLEMENTED_UNTESTED`: lazy entry inspection, path/entry/declared-size limits, exact one supported file | [`zip.js`](../../app/services/slice/zip.js), `inspectZipFile` | declared sizes can be deceptive; 3MF/native archives bypass this ZIP-specific guard; extraction/runtime disk not quota-bound | S2 generated archive tests, streaming/actual-byte caps, model/archive policy |
 | Admin output traversal, symlink, realpath escape, TOCTOU | High | `PARTIAL`: filename extension, containment, lstat non-symlink, realpath containment | [`admin-output.service.js`](../../app/services/admin-output.service.js), `resolveValidatedOutputFile` | validate-then-open race; hard links/mount changes not addressed | S0 filesystem-helper/temp-dir tests; S2 descriptor-based or equivalent race-safe open |
 | Native parser/slicer compromise | Critical | `PARTIAL`: non-root container, cap drop, PID cap | [`Dockerfile`](../../Dockerfile), [`docker-compose.yml`](../../docker-compose.yml) | runtime user owns app/config; writable mounts, shared service process, no CPU/RAM/disk/egress isolation | S2 read-only/root-owned layout and quotas; S5 isolated worker decision |
-| Command injection through request data | Critical | `IMPLEMENTED_UNTESTED`: centralized `execFile` with argument arrays | [`command.js`](../../app/services/slice/command.js), [`engine.js`](../../app/services/slice/engine.js) | executable provenance, inherited environment, failure-log injection, and descendant lifecycle are not controlled | Argument/environment integrity is `NOT_COVERED_S0`; S1c exact arguments, minimal environment, cancellation; S3 executable provenance |
+| Command injection through request data | Critical | `IMPLEMENTED_UNTESTED`: centralized `execFile` with argument arrays | [`command.js`](../../app/services/slice/command.js), [`engine.js`](../../app/services/slice/engine.js) | executable provenance, inherited environment, failure-log injection, and descendant lifecycle are not controlled | Argument/environment integrity is `NOT_COVERED_S0`; S1c exact arguments, minimal environment, cancellation; S3a executable provenance |
 | CPU/RAM/disk/PID exhaustion | Critical | `PARTIAL`: upload/ZIP caps, queue/rate bounds, command timeout, container PID limit | constants, [`queue.js`](../../app/services/slice/queue.js), Compose | 500 MB defaults are large; no CPU/RAM/tmpfs-size/disk/output quota; direct-child timeout only | S1c cancellation; S2 measured envelope/quotas/streaming; S5 isolation decision |
-| Queue starvation, monopolization, or false timeout | High | `PARTIAL`: FIFO, concurrency, max queue, queued+active per-client cap | [`queue.js`](../../app/services/slice/queue.js) | wait expiry is dequeue-only; IP identity is coarse; rejected/expired uploads remain | S0 safe FIFO/cap characterization; S1a workspace ownership; S1b real deadlines, abort, counters, cleanup |
+| Queue starvation, monopolization, or false timeout | High | `PARTIAL`: FIFO, concurrency, max queue, queued+active per-client cap; S1a route ownership now cleans after queue settlement | [`queue.js`](../../app/services/slice/queue.js); [`slice.routes.js`](../../app/routes/slice.routes.js) | wait expiry is dequeue-only and IP identity is coarse | S1a workspace ownership is locally verified; S1b owns real deadlines, abort, and counters |
 | Proxy spoofing / rate-limit evasion | High | `IMPLEMENTED_UNTESTED`: forwarded headers trusted only with explicit boolean plus CIDR/name list | [`server.js`](../../app/server.js), `resolveTrustProxySetting`; [`client-ip.js`](../../app/utils/client-ip.js) | actual proxy chain/CIDRs are external and `UNVERIFIED` | S4 topology test and proxy-header matrix |
 | Admin/internal key compromise or brute force | Critical | `PARTIAL`: mandatory startup key, timing-safe comparison, admin limiter, request ID/IP log | [`requireAdmin.js`](../../app/middleware/requireAdmin.js), route chains | static shared key, no rotation/scope/audience; pricing CORS classification gap; responses lack stable codes | S0 inert-key tests; S4 service-to-service auth and consistent admin policy |
 | Output disclosure or cross-job collision | High | `PARTIAL`: admin auth plus extension/path checks | [`system.routes.js`](../../app/routes/system.routes.js), [`common.js`](../../app/services/slice/common.js) | no job ownership, artifact ID, response correlation, TTL; millisecond same-name collision | S2 unique IDs, quotas/TTL/correlation; S4 service authorization contract |
-| Cleanup residue after rejection/failure | High | `PARTIAL`: best-effort cleanup inside processing | [`common.js`](../../app/services/slice/common.js), `cleanupFiles` | queue rejection/expiry bypass; orientation failure can leave output; final/partial output retention unbounded | S1a job workspace and cleanup; S1b deadline ownership |
-| Supply-chain compromise | Critical | `PARTIAL`: npm lock integrity and AppImage SHA-256 | [`package-lock.json`](../../package-lock.json), [`Dockerfile`](../../Dockerfile) | floating base/Apt/NodeSource/Python/Actions/Compose inputs; no SBOM/sign/scan/provenance | S3 verified pins/hashes, immutable image, SBOM, signing, scan |
-| Log injection or confidential-data leakage | Medium | `PARTIAL`: successful command logs gated/truncated | [`command.js`](../../app/services/slice/command.js), [`logger.js`](../../app/utils/logger.js) | failure args/output are unconditional and unescaped; file paths/request metadata may leak; no structured redaction | S4 structured/redacted logs, correlation and injection tests |
-| Deploy/readiness/rollback failure | Critical | `ABSENT`: deploy uses fixed sleep plus liveness curl | [`deploy.yml`](../../.github/workflows/deploy.yml) | main push deploys mutable checkout/build; no approval, immutable identity, readiness, rollback; pruning removes fallback | S3 separate artifact build/promotion, human gate, readiness and rollback drill |
+| Cleanup residue after rejection/failure | High | Historical `PARTIAL`; current tested S1a centralizes marked-workspace cleanup after parser, queue, processing, response, and success settlement | [`workspace.js`](../../app/services/slice/workspace.js); [`slice.routes.js`](../../app/routes/slice.routes.js) | stale production deletion, abort deadlines, and final artifact retention/quota remain deferred | S1a local lifecycle verification; S1b deadline ownership; S2 retention/quota |
+| Supply-chain compromise | Critical | `PARTIAL`: npm lock integrity and AppImage SHA-256 | [`package-lock.json`](../../package-lock.json), [`Dockerfile`](../../Dockerfile) | floating base/Apt/NodeSource/Python/Actions/Compose inputs; no SBOM/sign/scan/provenance | S3a verified pins/hashes, immutable image, SBOM, signing, scan |
+| Log injection or confidential-data leakage | Medium | `PARTIAL`: normal subprocess failures and unclassified slice failures now emit stable path-free messages; native stdout/stderr remains gated and truncated behind `DEBUG_COMMAND_LOGS=true` | [`command.js`](../../app/services/slice/command.js), [`errors.js`](../../app/services/slice/errors.js), [`logger.js`](../../app/utils/logger.js) | debug native output is unescaped and generic unknown 5xx logging can still include raw error metadata; no centralized structured redaction | S4 structured/redacted logs, correlation and injection tests |
+| Deploy/readiness/rollback failure | Critical | `ABSENT`: deploy uses fixed sleep plus liveness curl | [`deploy.yml`](../../.github/workflows/deploy.yml) | main push deploys mutable checkout/build; no approval, immutable identity, readiness, rollback; pruning removes fallback | S3a separates repository build/provenance and automatic deploy; S3b runs staging/promotion/readiness/rollback only after S4 topology evidence and separate explicit user/owner authorization |
 | Protected pricing browser-origin policy bypass | High | `PARTIAL`: API key and admin limiter still apply | [`pricing.routes.js`](../../app/routes/pricing.routes.js) | CORS identifies only `/admin/**` in [`server.js`](../../app/server.js) | S4 unified protected-route policy; do not change contract in S0 |
 
 ## Current unresolved promotion risks and exact exits
@@ -121,9 +142,9 @@ delta above when reading test classifications.
 | Risk | Severity | Current evidence | Required exit / owner |
 | --- | --- | --- | --- |
 | Native Python/slicer compromise can read inherited API-process secrets and use unrestricted egress. | Critical | `runCommand` supplies no child `env`, so children inherit values including `ADMIN_API_KEY`; parser/slicer processes share the API container network boundary. | **S1c:** define the minimum converter/slicer environment allowlist and dynamically prove required entries survive while an inert secret marker and unrelated variables do not; preserve exact argument arrays and add AbortSignal/process-tree cancellation tests. Network egress restriction remains a verified topology/container gate before promotion. |
-| Public slice endpoints lack application-layer service authentication. | Critical | `/prusa/slice` and `/orca/slice` have rate limiting but no service-auth middleware. Localhost/private binding is a separate external control and is `UNVERIFIED`. | **S4 service trust + S3 promotion gate:** verify service authentication and private, ingress/egress-restricted topology before production promotion, or record an explicit architect-approved risk decision. Neither current commit is authorization. |
-| Multipart/HTTP ingress can exhaust resources beyond `fileSize`. | High | No deterministic evidence covers field/part/header counts or sizes, total upload time, request/header/socket timeouts, or connection limits. | **S1a:** configure and test explicit parser counts/sizes and cleanup for every rejection before/inside the job workspace. **S2:** measure and enforce upload duration, request/header/socket deadlines, connection/concurrency limits, memory and disk envelopes under synthetic load. |
-| Validation and deployment remain independently triggerable. | Critical | Validation CI covers PRs/non-main pushes/dispatch, while a `main` push still activates `deploy.yml`; branch protection and required checks are external `UNVERIFIED`. | **S3 + repository administrator:** separate validated build identity from promotion, require external checks/approval, prove readiness and rollback, and block promotion until auth/topology gates above are satisfied. |
+| Public slice endpoints lack application-layer service authentication. | Critical | `/prusa/slice` and `/orca/slice` have rate limiting but no service-auth middleware. Localhost/private binding is a separate external control and is `UNVERIFIED`. | **S4 service trust/topology + S3b promotion gate:** verify service authentication and private, ingress/egress-restricted topology before production promotion, or obtain explicit human owner/user-approved, documented risk acceptance. An agent cannot grant this exception. No current commit is authorization. |
+| Multipart/HTTP ingress can exhaust resources beyond `fileSize`. | High | Locally verified S1a evidence covers bounded file/field/part/name/value limits, fixed `fieldNestingDepth: 0`, stable error mapping, and cleanup. Busboy's fixed header-pair boundary is 2000; total upload time and server/connection envelopes are not bounded. | **S2:** measure and enforce upload duration, request/header/socket deadlines, connection/concurrency limits, memory and disk envelopes under synthetic load. |
+| Validation and deployment remain independently triggerable. | Critical | Validation CI covers PRs/non-main pushes/dispatch, while a `main` push still activates `deploy.yml`; branch protection and required checks are external `UNVERIFIED`. | **S3a + repository administrator:** separate validated build identity and automatic deployment. **S3b:** only after S4 evidence and separate explicit user/owner authorization, prove staging readiness and rollback for promotion. |
 
 ## Historical S0 control inventory
 
@@ -162,7 +183,7 @@ above is authoritative for controls tested by S0/S0.1.
 
 | Property | Deterministic verification | Integration/operational verification |
 | --- | --- | --- |
-| Parsing/profile traversal | Node unit tests over value/options helpers | synthetic multipart rejection |
+| Parsing/profile traversal | Node unit tests over value/options helpers and workspace containment | live synthetic multipart limits, including file-first `a[b]` rejection at fixed nesting depth 0 and zero residue |
 | Stable middleware/auth errors | fake request/response unit tests plus source contract assertions | local inert-key API probe when environment exists |
 | Queue safety | isolated-process FIFO/concurrency/cap/overflow tests | synthetic concurrency runner after S1b deadline changes |
 | ZIP/model bounds | generated archives and tiny self-authored geometry only | native container probes with legal fixtures |
@@ -173,15 +194,27 @@ above is authoritative for controls tested by S0/S0.1.
 
 ## Accepted risks and non-goals for S0
 
-S0 accepts, documents, and does not fix upload/queue residue, dequeue-only expiry,
-direct-child-only timeout, local/container Python path divergence, output/stat
-weaknesses, retention/correlation, pricing atomicity, protected-pricing CORS,
-container resource gaps, supply-chain immutability, inherited subprocess
-environment/egress, unauthenticated public slicing, incomplete multipart/HTTP
-ingress bounds, and deployment safety. Their secure expectations and owners are in
+S0 accepted and documented upload/queue residue and incomplete multipart bounds.
+S1a now locally verifies marked-workspace cleanup and finite parser counts/sizes
+with fixed `fieldNestingDepth: 0`. Dequeue-only
+expiry, direct-child-only timeout, local/container Python path divergence,
+output/stat weaknesses, retention/correlation, pricing atomicity,
+protected-pricing CORS, measured HTTP/upload/connection limits, container
+resource gaps, supply-chain immutability, inherited subprocess
+environment/egress, unauthenticated public slicing, and deployment safety remain
+open. Their secure expectations and owners are in
 [`hardening-plan.md`](hardening-plan.md).
 
 S0 does not add public versions/jobs, a database/broker/object store, customer
 fixtures, automatic model healing, LeadPilot integration, or production calls.
 Public exposure of the slicer and an isolated async worker are decision-gated,
 not implicit scope.
+
+Delivery ownership is separated: S3a is repository-only build/provenance and
+automatic-deploy separation; S4 is service authentication plus proxy/private
+ingress and egress topology; S3b is staging/promotion/readiness/rollback only
+after S4 evidence and separate explicit user/owner authorization. The
+manifest/lock freeze applies only to the S1a/S3a parallel wave; a new advisory
+gets a serialized `dependency-maintenance` checkpoint as sole owner. Parallel
+lanes return evidence and the integrator reconciles canonical knowledge after
+integration; S3a does not edit the canonical files in parallel.

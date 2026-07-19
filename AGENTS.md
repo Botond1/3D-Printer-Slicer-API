@@ -35,22 +35,33 @@ supports them. Cite repository paths and symbols in durable knowledge changes.
 S0/S0.1 repository validation is anchored by
 `b1411be8cfd68101eb2a3a909b0e1a428e8c111f` (fail-closed validation and
 characterization) and `f9ed1ee6791e531670d5d7703f994bfb51986ebb`
-(production dependency remediation). Local evidence is 63/63 JavaScript tests,
-22/22 discovered/run/passing Python tests, 48 JavaScript and 25 Python syntax
-files, 146 tracked safety-scanner paths, and zero production audit findings at
-all severities with npm 10.9.8. Docker image/health validation was
-`NOT_RUN_ENVIRONMENT`; hosted CI, branch protection, deployment state, and
-production topology remain `UNVERIFIED`. This checkpoint is not production
-promotion authorization.
+(registry/audit dependency remediation). Its committed local gates and
+production dependency audit were green with npm 10.9.8. Docker image/health
+validation was `NOT_RUN_ENVIRONMENT`; hosted CI, branch protection, deployment
+state, and production topology remain `UNVERIFIED`.
 
-S0.1 is the sole owner of manifests/lockfile, validation scripts, validation
-CI, and current-state documentation. After integration, S1a owns upload/job
-workspaces; S1b follows S1a for deadline/abort-aware queueing; S1c follows the
-AbortSignal contract for process-tree cancellation and subprocess-environment
-minimization. S3 may work in parallel on Docker/build/provenance and
-validation/deploy separation but must not edit manifests or the lockfile. S2
-artifact work waits for S1a workspace ownership, and its container envelope waits
-for S3 image-control decisions.
+S1a upload/workspace lifecycle is `VERIFIED` for the local repository checkpoint
+at implementation commit `e7a409566bb8795a22f38bbf9f514b42c51bda74`.
+Evidence includes fixed Multer `fieldNestingDepth: 0`, 132/132 JavaScript and
+22/22 Python tests, 63 JavaScript and 25 Python syntax files, 163 tracked safety
+paths plus the 30-file implementation stage, an exact npm 10.9.8 clean install,
+and zero production audit findings.
+Docker image/startup smoke was `NOT_RUN_ENVIRONMENT` because the client found no
+daemon; hosted CI and all deployment/topology state remain `UNVERIFIED`. This
+checkpoint is not production promotion authorization.
+
+The manifest/lock freeze applies only to the parallel S1a/S3a wave: neither lane
+may edit `package.json` or `package-lock.json`. A newly discovered advisory must
+open a separate serialized `dependency-maintenance` checkpoint as the sole owner
+of manifest/lock changes. After integration, S1b follows S1a for
+deadline/abort-aware queueing; S1c follows the AbortSignal contract for
+process-tree cancellation and subprocess-environment minimization. S3a may work
+in parallel on repository-only build/provenance and automatic-deploy separation.
+S4 owns service authentication and proxy/private-ingress/egress topology. S3b
+owns staging, promotion, readiness, and rollback drills only after S4 evidence
+and separate explicit user/owner authorization. S2 artifact work waits for the
+S1a ownership seam, and its container envelope waits for S3a image-control
+decisions.
 
 ## Read before changing
 
@@ -120,6 +131,11 @@ Keep first-pass discovery read-only and divide non-overlapping lanes:
 Assign explicit file ownership before parallel edits. Agents are not alone in
 the worktree: do not revert others, and reconcile cross-lane findings centrally
 before editing shared files.
+
+Parallel lanes return implementation and validation evidence to the integrator.
+The integrator alone reconciles canonical shared knowledge after integration;
+in the S1a/S3a wave, S3a must not edit `AGENTS.md` or `docs/codex/**` in
+parallel with S1a.
 
 ## Validation gates
 
