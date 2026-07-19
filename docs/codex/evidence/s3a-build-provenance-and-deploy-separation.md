@@ -125,7 +125,7 @@ The final staged five-file candidate was validated locally with these results:
 - repository safety: 151 tracked indexed files and the non-empty five-file staged scope passed;
 - production dependency audit: exact npm 10.9.8 reported zero vulnerabilities at the moderate threshold.
 
-The workflow-contract suite rejects unsupported YAML structural forms instead of silently ignoring them, asserts that every mutation actually changed the in-memory source, and never writes a mutated workflow to the worktree. These local results do not upgrade hosted image execution from `UNVERIFIED`.
+The workflow-contract suite rejects unsupported YAML structural forms instead of silently ignoring them, asserts that every mutation actually changed the in-memory source, and never writes a mutated workflow to the worktree. These local results do not make the later fail-closed hosted image run green or explain its `UNVERIFIED` cause.
 
 ## Docker and hosted-CI evidence
 
@@ -154,7 +154,20 @@ Per the S3a gate, `Dockerfile`, `.dockerignore`, and `requirements.txt` therefor
 | `package-lock.json` | `f6558eaa127b081979308306fa50ecc96a2167ba0fe7a0e64edba94ca0c815be` |
 | `requirements.txt` | `77612390b7dde174c98f7f01996960d7c84fe992a4e97b599192ee84a4b46063` |
 
-Hosted GitHub Actions were **not run**, because this branch is intentionally not pushed. The local gates cover syntax, deterministic tests, mutation contracts, audit, repository safety, permission/ref inspection, and source preservation. They cannot substitute for hosted build/SBOM/scan/smoke evidence.
+The original S3a branch was initially unpushed, so the local evidence above did
+not include hosted execution. S3a.1 exact implementation commit
+`4f55062096d57a9245282b686fd8619c29c473e8` now has hosted results:
+[Source Validation run `29680527745`](https://github.com/Botond1/3D-Printer-Slicer-API/actions/runs/29680527745)
+passed; [Image Validation run `29680527711`](https://github.com/Botond1/3D-Printer-Slicer-API/actions/runs/29680527711)
+failed closed. The image failure cause is `UNVERIFIED`: the available result does not
+distinguish scanner infrastructure failure from actual HIGH/CRITICAL findings.
+The scan gate remains mandatory and fail closed.
+
+These hosted runs do not prove branch protection, required-check configuration,
+an immutable registry digest, signature, attestation, image promotion,
+production readiness, VPS topology, or deployed identity. The workflows do not
+publish or deploy, and this integration changed neither `main` nor the running
+VPS.
 
 ## Remaining risks and next-stage boundary
 
@@ -172,9 +185,9 @@ Hosted GitHub Actions were **not run**, because this branch is intentionally not
 
 ## Integration handoff
 
-1. Integrate reviewed S1a commits first.
-2. Integrate the single atomic S3a commit next; never push an intermediate tree on which the legacy automatic deploy workflow still exists.
-3. Let the integrator perform a separate canonical-document reconciliation from this evidence.
+1. Reviewed S1a commits were integrated first.
+2. The atomic S3a commit and S3a.1 correction were integrated next; the resulting tree contains no legacy automatic deploy workflow.
+3. This I0 pass reconciles canonical documentation from the integrated evidence.
 4. Rerun syntax, focused and aggregate tests, production audit, tracked/staged repository safety, instruction-mirror consistency, and workflow contract inspection on the combined tree.
 5. On a trusted Docker host, rerun the complete build/import/liveness/import/native/SBOM/scan/history gates on the combined candidate before any Dockerfile/dependency change.
 6. S4 must establish the service/security boundary. Only then may S3b design authorized immutable registry promotion, signing/attestation, approval, readiness, rollback, and deployment.
@@ -191,4 +204,4 @@ git diff --check "$base_sha" "$CANDIDATE_SHA" --
 
 This is a fail-closed final candidate-delta guarantee: it does not use an event `before` value, a PR-base value, `HEAD^`, an empty tree, a historical hard-coded baseline, or an empty-range fallback. Whitespace debt already committed on `main` and untouched by the candidate remains outside the range.
 
-The focused disposable-Git tests create a local `origin/main`, a diverged multi-commit feature candidate, and a fresh clean checkout. They prove that the legacy bare command returns green for a committed trailing-whitespace candidate while the corrected range command fails; they also cover clean candidates, pre-existing unchanged main debt, untracked files, paths with spaces, invalid/missing `origin/main`, missing merge-base, and cleanup after success and failure. This correction's local static contract and mutation suite passed 156/156, the disposable-Git suite passed 5/5, and the aggregate suites passed 224/224 JavaScript and 22/22 Python tests. Hosted source and image status for the S3a.1 implementation SHA remains `UNVERIFIED` until the authorized branch push triggers and completes the no-deploy workflows.
+The focused disposable-Git tests create a local `origin/main`, a diverged multi-commit feature candidate, and a fresh clean checkout. They prove that the legacy bare command returns green for a committed trailing-whitespace candidate while the corrected range command fails; they also cover clean candidates, pre-existing unchanged main debt, untracked files, paths with spaces, invalid/missing `origin/main`, missing merge-base, and cleanup after success and failure. This correction's local static contract and mutation suite passed 156/156, the disposable-Git suite passed 5/5, and the aggregate suites passed 224/224 JavaScript and 22/22 Python tests. For exact implementation SHA `4f55062096d57a9245282b686fd8619c29c473e8`, hosted Source Validation run `29680527745` passed and hosted Image Validation run `29680527711` failed closed with cause `UNVERIFIED`; this is not production-readiness evidence.

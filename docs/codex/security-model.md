@@ -15,6 +15,10 @@ production readiness
 ([S0 prompt](../../prompts/codex/S0-characterization-and-ci-baseline.md),
 [`system.routes.js`](../../app/routes/system.routes.js)).
 
+The current repository workflow is validation-only: it no longer automatically
+deploys a `main` push. This repository fact does not verify or change the
+running VPS, production topology, promotion controls, or deployed identity.
+
 ## Classification vocabulary
 
 - `IMPLEMENTED_AND_TESTED`: the control exists and a deterministic, current
@@ -72,13 +76,31 @@ production topology, or promotion.
 | Finite multipart parser envelope | `IMPLEMENTED_AND_TESTED` | Actual defaults are `fileSize: 524288000`, `files: 1`, `fields: 40`, `parts: 42`, `fieldNameSize: 64`, `fieldSize: 65536`, and fixed non-configurable `fieldNestingDepth: 0`; bounded overrides cannot restore infinity. Live file-first `a[b]` evidence reaches Multer `LIMIT_FIELD_NESTING`, maps to HTTP 400 / `UPLOAD_FIELD_NESTING_TOO_DEEP`, and observes cleanup. Busboy 1.6.0 retains its internal fixed `MAX_HEADER_PAIRS = 2000`; no lower application override is claimed. Total upload/request/header/socket/connection bounds remain S2 work. |
 | Startup stale-workspace audit | `IMPLEMENTED_AND_TESTED` | Startup awaits immediate-child classification before listening and remains audit/report-only. Marked age, malformed/unmarked/fresh entries, symlink roots, partial inspection failure, and the programmatic exclusive-lease/bounded-lifetime deletion preconditions have focused tests. Production deletion remains disabled because total lifetime and rolling/shared-volume exclusivity are unproven. |
 
+## Current I0 workflow-security delta
+
+The integrated S3a/S3a.1 workflows require an exact candidate SHA, check out
+with credentials disabled and `contents: read`, build one run-local image for
+all image checks, never push or deploy it, and fail closed on missing, malformed,
+infrastructure-failed, or HIGH/CRITICAL scan results. Source whitespace is
+checked over the dynamically derived `origin/main` merge-base-to-candidate
+range, with ancestry proof and no empty fallback.
+
+For exact original implementation commit
+`4f55062096d57a9245282b686fd8619c29c473e8`, hosted Source Validation run
+`29680527745` passed and Image Validation run `29680527711` failed closed. Its
+cause is `UNVERIFIED`; the failure is not evidence of either a clean image or a
+confirmed vulnerability finding. Branch protection, required checks, immutable
+registry digest, signature, attestation, promotion, production readiness, VPS
+topology, and deployed state remain `UNVERIFIED`. I0 touched neither `main` nor
+the running VPS.
+
 ## Assets and data classification
 
 | Asset | Classification | Security need | Evidence |
 | --- | --- | --- | --- |
 | Uploaded model/CAD/archive | customer-confidential, untrusted | containment, bounded processing, cleanup | Multer and pipeline in [`slice.routes.js`](../../app/routes/slice.routes.js) / [`slice.service.js`](../../app/services/slice.service.js) |
 | Generated `.gcode` / `.sl1` | customer-confidential, integrity-sensitive | authorized disclosure, correlation, retention | [`admin-output.service.js`](../../app/services/admin-output.service.js) |
-| Admin API key / deploy secrets | secret | non-disclosure, rotation, least privilege | [`requireAdmin.js`](../../app/middleware/requireAdmin.js), [`deploy.yml`](../../.github/workflows/deploy.yml) |
+| Admin API key / historical deployment credentials | secret | non-disclosure, rotation, least privilege | [`requireAdmin.js`](../../app/middleware/requireAdmin.js); current repository workflows request no production credential, while external secret state remains `UNVERIFIED` |
 | Pricing data | business-confidential mutable state | authenticated, atomic, recoverable writes | [`pricing.service.js`](../../app/services/pricing.service.js) and repository/catalog modules |
 | Slicer profiles | safety/integrity configuration | trusted, read-only to runtime where possible | [`configs`](../../configs), [`profiles.js`](../../app/services/slice/profiles.js) |
 | Application/native binaries | executable trusted computing base | provenance, immutability, isolation | [`Dockerfile`](../../Dockerfile), manifests |
@@ -98,8 +120,9 @@ Material trust boundaries:
    processes via `execFile`.
 4. Admin key boundary protecting pricing, detailed health, and artifact access.
 5. Proxy-to-app boundary controlling forwarded client identity.
-6. Source/lockfiles/build network to container image, then GitHub workflow to
-   mutable VPS checkout.
+6. Source/lockfiles/build network to the run-local validation image. The former
+   GitHub-workflow-to-mutable-VPS path is historical and has been removed from
+   the repository; any external deployment path is `UNVERIFIED`.
 7. API/monitoring containers to the default Compose network and unrestricted
    outbound network.
 
@@ -111,8 +134,8 @@ Material trust boundaries:
 - admin output names and `ALL` archive export;
 - native parsers, profile metadata, generated G-code/SL1, and command output;
 - in-memory queue/rate state plus disk-backed input/output/pricing state;
-- Docker build context, registries/package indexes, GitHub Actions, SSH deploy,
-  mutable host checkout, and monitoring image.
+- Docker build context, registries/package indexes, GitHub Actions, historical
+  SSH deployment, any external mutable host checkout, and monitoring image.
 
 ## Historical S0 threat and abuse-case matrix
 
@@ -134,7 +157,7 @@ delta above when reading test classifications.
 | Cleanup residue after rejection/failure | High | Historical `PARTIAL`; current tested S1a centralizes marked-workspace cleanup after parser, queue, processing, response, and success settlement | [`workspace.js`](../../app/services/slice/workspace.js); [`slice.routes.js`](../../app/routes/slice.routes.js) | stale production deletion, abort deadlines, and final artifact retention/quota remain deferred | S1a local lifecycle verification; S1b deadline ownership; S2 retention/quota |
 | Supply-chain compromise | Critical | `PARTIAL`: npm lock integrity and AppImage SHA-256 | [`package-lock.json`](../../package-lock.json), [`Dockerfile`](../../Dockerfile) | floating base/Apt/NodeSource/Python/Actions/Compose inputs; no SBOM/sign/scan/provenance | S3a verified pins/hashes, immutable image, SBOM, signing, scan |
 | Log injection or confidential-data leakage | Medium | `PARTIAL`: normal subprocess failures and unclassified slice failures now emit stable path-free messages; native stdout/stderr remains gated and truncated behind `DEBUG_COMMAND_LOGS=true` | [`command.js`](../../app/services/slice/command.js), [`errors.js`](../../app/services/slice/errors.js), [`logger.js`](../../app/utils/logger.js) | debug native output is unescaped and generic unknown 5xx logging can still include raw error metadata; no centralized structured redaction | S4 structured/redacted logs, correlation and injection tests |
-| Deploy/readiness/rollback failure | Critical | `ABSENT`: deploy uses fixed sleep plus liveness curl | [`deploy.yml`](../../.github/workflows/deploy.yml) | main push deploys mutable checkout/build; no approval, immutable identity, readiness, rollback; pruning removes fallback | S3a separates repository build/provenance and automatic deploy; S3b runs staging/promotion/readiness/rollback only after S4 topology evidence and separate explicit user/owner authorization |
+| Deploy/readiness/rollback failure | Critical | Historical S0 `ABSENT`: the former deploy used fixed sleep plus liveness curl; current S3a workflow is no-deploy validation only | [`deploy.yml`](../../.github/workflows/deploy.yml), [`image-validation.yml`](../../.github/workflows/image-validation.yml) | automatic deploy is removed, but no approval, immutable registry identity, signature/attestation, readiness, rollback, or verified production topology exists; hosted image validation is fail-closed red with cause `UNVERIFIED` | S3a-B image/supply-chain diagnosis without weakening the scan gate; S4 topology; S3b only after S4 and separate explicit authorization |
 | Protected pricing browser-origin policy bypass | High | `PARTIAL`: API key and admin limiter still apply | [`pricing.routes.js`](../../app/routes/pricing.routes.js) | CORS identifies only `/admin/**` in [`server.js`](../../app/server.js) | S4 unified protected-route policy; do not change contract in S0 |
 
 ## Current unresolved promotion risks and exact exits
@@ -144,7 +167,7 @@ delta above when reading test classifications.
 | Native Python/slicer compromise can read inherited API-process secrets and use unrestricted egress. | Critical | `runCommand` supplies no child `env`, so children inherit values including `ADMIN_API_KEY`; parser/slicer processes share the API container network boundary. | **S1c:** define the minimum converter/slicer environment allowlist and dynamically prove required entries survive while an inert secret marker and unrelated variables do not; preserve exact argument arrays and add AbortSignal/process-tree cancellation tests. Network egress restriction remains a verified topology/container gate before promotion. |
 | Public slice endpoints lack application-layer service authentication. | Critical | `/prusa/slice` and `/orca/slice` have rate limiting but no service-auth middleware. Localhost/private binding is a separate external control and is `UNVERIFIED`. | **S4 service trust/topology + S3b promotion gate:** verify service authentication and private, ingress/egress-restricted topology before production promotion, or obtain explicit human owner/user-approved, documented risk acceptance. An agent cannot grant this exception. No current commit is authorization. |
 | Multipart/HTTP ingress can exhaust resources beyond `fileSize`. | High | Locally verified S1a evidence covers bounded file/field/part/name/value limits, fixed `fieldNestingDepth: 0`, stable error mapping, and cleanup. Busboy's fixed header-pair boundary is 2000; total upload time and server/connection envelopes are not bounded. | **S2:** measure and enforce upload duration, request/header/socket deadlines, connection/concurrency limits, memory and disk envelopes under synthetic load. |
-| Validation and deployment remain independently triggerable. | Critical | Validation CI covers PRs/non-main pushes/dispatch, while a `main` push still activates `deploy.yml`; branch protection and required checks are external `UNVERIFIED`. | **S3a + repository administrator:** separate validated build identity and automatic deployment. **S3b:** only after S4 evidence and separate explicit user/owner authorization, prove staging readiness and rollback for promotion. |
+| Validation is not yet a production promotion chain. | Critical | S3a removed the repository's automatic `main` deploy path and added exact-candidate no-deploy gates. Hosted source passed, hosted image failed closed with cause `UNVERIFIED`; branch protection and required checks remain external `UNVERIFIED`. | **S3a-B + repository administrator:** diagnose the image gate without weakening it and verify required-check policy. **S4/S3b:** only after S4 evidence and separate explicit user/owner authorization, prove immutable promotion, staging readiness, and rollback. |
 
 ## Historical S0 control inventory
 
@@ -201,7 +224,8 @@ expiry, direct-child-only timeout, local/container Python path divergence,
 output/stat weaknesses, retention/correlation, pricing atomicity,
 protected-pricing CORS, measured HTTP/upload/connection limits, container
 resource gaps, supply-chain immutability, inherited subprocess
-environment/egress, unauthenticated public slicing, and deployment safety remain
+environment/egress, unauthenticated public slicing, and production promotion,
+readiness, and rollback safety remain
 open. Their secure expectations and owners are in
 [`hardening-plan.md`](hardening-plan.md).
 
@@ -210,9 +234,10 @@ fixtures, automatic model healing, LeadPilot integration, or production calls.
 Public exposure of the slicer and an isolated async worker are decision-gated,
 not implicit scope.
 
-Delivery ownership is separated: S3a is repository-only build/provenance and
-automatic-deploy separation; S4 is service authentication plus proxy/private
-ingress and egress topology; S3b is staging/promotion/readiness/rollback only
+Delivery ownership is separated: S3a repository-only build-once/no-deploy
+controls are integrated, while its image/supply-chain exits remain blocked; S4
+is service authentication plus proxy/private ingress and egress topology; S3b
+is staging/promotion/readiness/rollback only
 after S4 evidence and separate explicit user/owner authorization. The
 manifest/lock freeze applies only to the S1a/S3a parallel wave; a new advisory
 gets a serialized `dependency-maintenance` checkpoint as sole owner. Parallel

@@ -50,13 +50,27 @@ Docker image/startup smoke was `NOT_RUN_ENVIRONMENT` because the client found no
 daemon; hosted CI and all deployment/topology state remain `UNVERIFIED`. This
 checkpoint is not production promotion authorization.
 
+The I0 integration preserves that S1a upload/workspace/multipart contract and
+adds the repository-only S3a/S3a.1 workflow separation. The integrated
+workflows require an exact candidate SHA, build one run-local image for smoke,
+SBOM, and fail-closed scan, never push or deploy it, and validate whitespace
+over the dynamic `merge-base(origin/main, candidate)..candidate` range. Hosted
+Source Validation for exact S3a.1 commit
+`4f55062096d57a9245282b686fd8619c29c473e8` passed in run `29680527745`;
+Image Validation run `29680527711` failed closed, and whether that was scanner
+infrastructure failure or actual HIGH/CRITICAL findings is `UNVERIFIED`.
+Branch protection, required checks, immutable registry digest, signature,
+attestation, promotion, production readiness, VPS topology, and deployed state
+remain `UNVERIFIED`. I0 changes neither `main` nor the running VPS.
+
 The manifest/lock freeze applies only to the parallel S1a/S3a wave: neither lane
 may edit `package.json` or `package-lock.json`. A newly discovered advisory must
 open a separate serialized `dependency-maintenance` checkpoint as the sole owner
-of manifest/lock changes. After integration, S1b follows S1a for
+of manifest/lock changes. After I0 integration, S1b follows S1a for
 deadline/abort-aware queueing; S1c follows the AbortSignal contract for
-process-tree cancellation and subprocess-environment minimization. S3a may work
-in parallel on repository-only build/provenance and automatic-deploy separation.
+process-tree cancellation and subprocess-environment minimization. S3a's
+repository no-deploy workflow separation is integrated, while its
+image/supply-chain gate remains blocked on the fail-closed hosted image result.
 S4 owns service authentication and proxy/private-ingress/egress topology. S3b
 owns staging, promotion, readiness, and rollback drills only after S4 evidence
 and separate explicit user/owner authorization. S2 artifact work waits for the
@@ -115,9 +129,10 @@ decisions.
   edit `main` directly.
 - Do not fetch, pull, push, open a PR, tag, release, deploy, SSH, or contact the
   VPS unless the current user explicitly authorizes that exact action.
-- A `main` push is currently configured to attempt deployment. Promotion needs a
-  separate human-approved change window and integration decision; validation CI
-  alone does not make a commit production-ready.
+- Before S3a, a `main` push was configured to attempt deployment. The current
+  repository workflows do not automatically deploy on `main` or any validation
+  event. Promotion still needs separate verified controls and explicit human
+  authorization; validation CI alone does not make a commit production-ready.
 
 ## Parallel ownership
 

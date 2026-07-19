@@ -31,9 +31,9 @@ name itself.
 | Production dependency audit | one high plus three moderate findings | Exact npm 10.9.8 locks Express 4.22.2, Multer 2.2.0, body-parser 1.20.6, and qs 6.15.3; full production audit reports zero findings at every severity and the three named S0 registry findings are absent. This did not by itself supply `GHSA-72gw-mp4g-v24j`'s application-level nesting-depth mitigation; S1a adds that separately. |
 | Conditional/external gates | unverified | Clean lockfile installation and all local gates pass. Docker image/health smoke is `NOT_RUN_ENVIRONMENT` because no daemon was available; hosted CI, branch protection, required checks, deployment, and production topology remain `UNVERIFIED`. |
 
-This delta verifies a local repository baseline only. A `main` push still has an
-independent deployment path, so neither S0 implementation commit nor this
-knowledge update authorizes production promotion.
+This delta verifies a local repository baseline only. A `main` push still had an
+independent deployment path in the historical S0/S0.1 snapshot. S3a later
+removed that path; neither checkpoint authorizes production promotion.
 
 ## Current S1a verification checkpoint
 
@@ -78,6 +78,28 @@ Current repository evidence:
   over 63 JavaScript and 25 Python files, and safety inspection of 163 tracked
   paths plus the 30-file implementation stage. Node was v24.11.1 and bundled
   Python was 3.12.13. The exact production audit reported zero findings.
+
+## Current I0 S1a/S3a integration checkpoint
+
+The integrated tree retains all S1a upload/workspace/multipart behavior above
+and includes the S3a/S3a.1 repository workflow controls. `deploy.yml` is now a
+manual exact-candidate preflight only; it calls reusable source and image gates
+and has no deployment, registry publication, SSH, VPS, or production-secret
+path. Source validation resolves and checks out the exact candidate with
+credentials disabled, and its final whitespace gate derives a dynamic
+merge-base from `refs/remotes/origin/main`, proves ancestry, and checks that
+candidate range without an empty fallback. Image validation builds once, loads
+one run-local SHA-tagged image, and reuses it for smoke, SBOM, and fail-closed
+HIGH/CRITICAL scanning without pushing it.
+
+Hosted evidence applies to exact original S3a.1 implementation commit
+`4f55062096d57a9245282b686fd8619c29c473e8`: Source Validation run
+`29680527745` passed; Image Validation run `29680527711` failed closed. The
+image failure cause is `UNVERIFIED` and the scan gate must remain fail closed.
+Branch protection, required checks, immutable registry digest, signature,
+attestation, promotion, production readiness, VPS topology, deployed identity,
+and the integrated cherry-pick SHA's hosted results remain `UNVERIFIED`. I0 did
+not change `main` or the running VPS.
 
 ## System context
 
@@ -137,7 +159,7 @@ code order is authoritative.
 | Profiles/state | [`configs/prusa`](../../configs/prusa), [`configs/orca`](../../configs/orca), and runtime `configs/pricing.json` resolved by `paths.js`. |
 | Integration runners | [`tests/testing-scripts`](../../tests/testing-scripts) with shared helpers in `common/`; reports are generated in ignored `results/`. |
 | Runtime/container | [`Dockerfile`](../../Dockerfile), [`docker-compose.yml`](../../docker-compose.yml), and [`docker-compose.dev.yml`](../../docker-compose.dev.yml). |
-| Automation | [`deploy.yml`](../../.github/workflows/deploy.yml) combines partial validation with automatic `main` deployment. |
+| Automation | [`ci.yml`](../../.github/workflows/ci.yml) and [`image-validation.yml`](../../.github/workflows/image-validation.yml) validate an exact candidate without deployment; [`deploy.yml`](../../.github/workflows/deploy.yml) is a manual no-deploy preflight that calls both gates. |
 
 ## Runtime state and artifact lifecycle
 
@@ -216,10 +238,11 @@ Runtime route registration, not README lists, is canonical:
   tags, NodeSource/Apt inputs, unversioned Python requirements, action tags, and
   Compose image tags remain floating
   ([`Dockerfile`](../../Dockerfile), [`requirements.txt`](../../requirements.txt),
-  [`deploy.yml`](../../.github/workflows/deploy.yml)).
+  [`image-validation.yml`](../../.github/workflows/image-validation.yml)).
 
-The remaining delivery cycle is formally separated: S3a is repository-only
-build/provenance and automatic-deploy separation; S4 owns service authentication
+The remaining delivery cycle is formally separated: S3a repository-only
+build-once/no-deploy controls are integrated but its hosted image gate and wider
+supply-chain exits are incomplete; S4 owns service authentication
 plus proxy/private ingress and egress topology; S3b owns staging, promotion,
 readiness, and rollback drill only after S4 evidence and separate explicit
 user/owner authorization. None of those stages, the production topology, or
@@ -272,8 +295,10 @@ delta above for present test and audit status.
 6. OpenAPI omits health/docs/root routes and several 413/429/503 responses. It
    also claims default pricing entries cannot be deleted, but route/catalog code
    contains no such guard.
-7. README's “zero-downtime” and broad supply-chain claims exceed the in-place,
-   floating-input deployment implemented by `deploy.yml`/`Dockerfile`.
+7. Historically, README's “zero-downtime” and broad supply-chain claims exceeded
+   the in-place, floating-input deployment then implemented by
+   `deploy.yml`/`Dockerfile`. S3a removed that automatic deploy path, but did not
+   verify production readiness or the remaining supply-chain claims.
 8. `docker-compose.dev.yml` live-mounts three Python helpers but not
    `scale_model.py`.
 9. README/config example pricing differs from the code fallback in
