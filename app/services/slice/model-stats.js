@@ -28,7 +28,7 @@ async function getModelInfo(filePath) {
 
         return { x, y, z, height_mm: z };
     } catch (err) {
-        console.warn(`[WARN] Could not get model info: ${err.message}`);
+        console.warn('[WARN] Could not read model dimensions from the contained source.');
         return { x: 0, y: 0, z: 0, height_mm: 0 };
     }
 }
@@ -143,7 +143,7 @@ function parseFdmOutputStats(stats, technology, filePath, engine = 'prusa') {
             console.warn('[WARN] Orca output parsed without explicit print time metadata.');
         }
     } catch (error_) {
-        console.error('[PARSER ERROR]', error_.message);
+        console.error('[PARSER ERROR] Could not parse the contained slicer artifact.');
     }
 }
 

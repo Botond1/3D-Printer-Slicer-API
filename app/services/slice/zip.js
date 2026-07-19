@@ -3,7 +3,9 @@
  */
 
 const fs = require('node:fs');
+const fsPromises = require('node:fs/promises');
 const path = require('node:path');
+const { randomBytes } = require('node:crypto');
 const { pipeline } = require('node:stream/promises');
 const yauzl = require('yauzl');
 const { EXTENSIONS, DEFAULTS } = require('../../config/constants');
@@ -60,7 +62,7 @@ async function openZipWithRetry(zipPath, attempts = 5, waitMs = 80) {
         }
     }
 
-    throw lastError || new Error(`ZIP_GUARD|Unable to open ZIP file: ${zipPath}`);
+    throw lastError || new Error('ZIP_GUARD|Unable to open uploaded ZIP file.');
 }
 
 /**
@@ -69,8 +71,8 @@ async function openZipWithRetry(zipPath, attempts = 5, waitMs = 80) {
  * @returns {boolean} True when the entry path is unsafe.
  */
 function isUnsafeZipPath(entryPath) {
-    const normalized = path.posix.normalize(entryPath).replaceAll('\\', '/');
-    if (path.posix.isAbsolute(normalized)) return true;
+    const normalized = path.posix.normalize(String(entryPath || '')).replaceAll('\\', '/');
+    if (!normalized || path.posix.isAbsolute(normalized) || /^[a-z]:\//i.test(normalized)) return true;
     return normalized.split('/').includes('..');
 }
 
@@ -177,8 +179,7 @@ async function extractZipEntry(zipPath, entryName, destinationPath) {
                 }
 
                 try {
-                    await fs.promises.mkdir(path.dirname(destinationPath), { recursive: true });
-                    await pipeline(readStream, fs.createWriteStream(destinationPath, { flags: 'w' }));
+                    await pipeline(readStream, fs.createWriteStream(destinationPath, { flags: 'wx', mode: 0o600 }));
                     zipFile.close();
                     resolve(destinationPath);
                 } catch (error_) {
@@ -207,34 +208,48 @@ async function extractZipEntry(zipPath, entryName, destinationPath) {
  * @param {string} zipPath Candidate ZIP file path.
  * @returns {string} Existing ZIP path.
  */
-function resolveExistingZipPath(zipPath) {
-    if (fs.existsSync(zipPath)) return zipPath;
+async function resolveExistingZipPath(zipPath, workspace) {
+    const candidates = [zipPath];
+    candidates.push(zipPath.toLowerCase().endsWith('.zip') ? zipPath.slice(0, -4) : `${zipPath}.zip`);
 
-    if (zipPath.toLowerCase().endsWith('.zip')) {
-        const withoutExt = zipPath.slice(0, -4);
-        if (fs.existsSync(withoutExt)) return withoutExt;
-    } else {
-        const withExt = `${zipPath}.zip`;
-        if (fs.existsSync(withExt)) return withExt;
+    for (const candidate of candidates) {
+        const safeCandidate = workspace.assertContainedPath(candidate);
+        try {
+            const stats = await fsPromises.lstat(safeCandidate);
+            if (stats.isFile() && !stats.isSymbolicLink()) return safeCandidate;
+        } catch (error_) {
+            if (error_?.code !== 'ENOENT') throw error_;
+        }
     }
 
-    throw new Error(`ZIP_GUARD|Uploaded ZIP file is not accessible at runtime: ${zipPath}`);
+    throw new Error('ZIP_GUARD|Uploaded ZIP file is not accessible at runtime.');
+}
+
+/**
+ * Resolve a collision-resistant extraction directory inside the owning workspace.
+ * @param {{resolvePath(...segments: string[]): string, assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {(defaultPath: string) => string} [pathFactory] Test-only candidate override.
+ * @returns {string} Contained extraction directory.
+ */
+function resolveExtractionDirectory(workspace, pathFactory) {
+    const defaultPath = workspace.resolvePath(`extract-${randomBytes(16).toString('hex')}`);
+    return workspace.assertContainedPath(pathFactory ? pathFactory(defaultPath) : defaultPath);
 }
 
 /**
  * Extract first supported file from uploaded ZIP archive.
  * @param {string} inputFile Uploaded zip file path.
- * @param {string[]} filesCleanupList Collector for temp paths.
+ * @param {{resolvePath(...segments: string[]): string, assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {{pathFactory?: (defaultPath: string) => string}} [options] Test-only path seam.
  * @returns {Promise<string>} Extracted file path.
  */
-async function extractFirstSupportedFromZip(inputFile, filesCleanupList) {
+async function extractFirstSupportedFromZip(inputFile, workspace, options = {}) {
     console.log('[INFO] Extracting ZIP...');
-    const zipPath = resolveExistingZipPath(inputFile);
+    workspace.assertContainedPath(inputFile);
+    const zipPath = await resolveExistingZipPath(inputFile, workspace);
 
-    const unzipDir = path.join(path.dirname(inputFile), `unzip_${Date.now()}`);
-    if (!fs.existsSync(unzipDir)) fs.mkdirSync(unzipDir);
-
-    filesCleanupList.push(unzipDir);
+    const unzipDir = resolveExtractionDirectory(workspace, options.pathFactory);
+    await fsPromises.mkdir(unzipDir, { mode: 0o700 });
     const supportedExts = new Set([...EXTENSIONS.direct, ...EXTENSIONS.cad]);
 
     const zipCandidates = await inspectZipFile(zipPath, supportedExts);
@@ -242,17 +257,19 @@ async function extractFirstSupportedFromZip(inputFile, filesCleanupList) {
     if (!selectedEntry) throw new Error('ZIP does not contain a supported model file.');
 
     const selectedName = path.basename(selectedEntry);
-    const extractedPath = path.join(unzipDir, selectedName);
+    const extractedPath = workspace.assertContainedPath(path.join(unzipDir, selectedName));
     await extractZipEntry(zipPath, selectedEntry, extractedPath);
 
-    if (!fs.existsSync(extractedPath)) {
+    const extractedStat = await fsPromises.lstat(extractedPath);
+    if (!extractedStat.isFile() || extractedStat.isSymbolicLink()) {
         throw new Error('ZIP_GUARD|Failed to extract validated source file from ZIP.');
     }
 
-    console.log(`[INFO] Found in ZIP: ${selectedName}`);
+    console.log('[INFO] Extracted one validated model from ZIP.');
     return extractedPath;
 }
 
 module.exports = {
-    extractFirstSupportedFromZip
+    extractFirstSupportedFromZip,
+    resolveExtractionDirectory
 };

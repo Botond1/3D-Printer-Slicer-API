@@ -16,6 +16,7 @@ const errorHandler = require('./middleware/errorHandler');
 const { PORT, DEFAULTS } = require('./config/constants');
 const { ensureRequiredDirectories } = require('./config/paths');
 const { loadPricingFromDisk, getPricing } = require('./services/pricing.service');
+const { auditWorkspacesThenListen } = require('./services/slice/workspace');
 
 // Security check for critical environment variables
 if (!process.env.ADMIN_API_KEY) {
@@ -191,7 +192,29 @@ app.all('*', (req, res) => {
 // Global error handler
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-    console.log(`FDM and SLA Slicer Engine running on port ${PORT}`);
-    console.log(`Swagger Docs available at http://localhost:${PORT}/docs`);
+/**
+ * Audit positively identified stale workspaces before accepting traffic.
+ * S1a intentionally keeps production startup audit-only because total request lifetime is not bounded yet.
+ */
+async function startServer() {
+    return auditWorkspacesThenListen({
+        auditOptions: {
+            staleAgeMs: process.env.JOB_WORKSPACE_STALE_AGE_MS,
+            logger: console
+        },
+        onAudit(audit) {
+            console.info('[STARTUP] Slice workspace audit complete.', audit);
+        },
+        listen() {
+            return app.listen(PORT, () => {
+                console.log(`FDM and SLA Slicer Engine running on port ${PORT}`);
+                console.log(`Swagger Docs available at http://localhost:${PORT}/docs`);
+            });
+        }
+    });
+}
+
+startServer().catch(() => {
+    console.error('[STARTUP] Slice workspace audit failed. Refusing to listen.');
+    process.exitCode = 1;
 });

@@ -39,10 +39,7 @@ function runCommand(executable, args = []) {
                     error.message = `The slicing process timed out after ${Math.round(COMMAND_TIMEOUT_MS / 60000)} minutes.`;
                 }
 
-                console.error(`[EXEC ERROR] Command failed: ${executable} ${args.join(' ')}`);
-                if (stderr || stdout) {
-                    console.error(`[EXEC OUTPUT]:\n${truncateLogOutput(stderr || stdout)}`);
-                }
+                console.error('[EXEC ERROR] Contained slice subprocess failed.');
                 error.stderr = stderr || stdout || error.message;
                 return reject(error);
             }

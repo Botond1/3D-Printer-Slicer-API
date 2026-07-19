@@ -3,21 +3,18 @@
  */
 
 const fs = require('node:fs');
+const fsPromises = require('node:fs/promises');
 const path = require('node:path');
+const { randomBytes } = require('node:crypto');
 const {
     DEFAULTS,
     ORCA_PROCESS_PROFILE_BY_LAYER,
     MAX_BUILD_VOLUMES,
     MIN_BUILD_VOLUMES
 } = require('../../config/constants');
-const {
-    OUTPUT_DIR,
-    HELP_FILES_DIR,
-    PRUSA_CONFIGS_DIR,
-    ORCA_CONFIGS_DIR
-} = require('../../config/paths');
+const { PRUSA_CONFIGS_DIR, ORCA_CONFIGS_DIR } = require('../../config/paths');
 const { parseNumberLike } = require('./value-parsers');
-const { roundToThree, cleanupOrcaResultMetadata } = require('./common');
+const { roundToThree } = require('./common');
 
 /**
  * Resolve Orca process profile filename from explicit override, env, or defaults.
@@ -316,19 +313,22 @@ function validateModelDimensionsAgainstLimits(modelInfo, buildVolumeLimits) {
  * @param {string} baseProcessProfilePath Source process profile path.
  * @param {number} layerHeight Requested layer height.
  * @param {string} infillPercentage Infill override.
- * @param {string[]} filesCleanupList Cleanup collector.
- * @returns {string} Runtime profile path.
+ * @param {{resolvePath(...segments: string[]): string, assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {{pathFactory?: (defaultPath: string) => string}} [options] Test-only path seam.
+ * @returns {Promise<string>} Runtime profile path.
  */
-function createOrcaRuntimeProcessProfile(baseProcessProfilePath, layerHeight, infillPercentage, filesCleanupList) {
+async function createOrcaRuntimeProcessProfile(baseProcessProfilePath, layerHeight, infillPercentage, workspace, options = {}) {
     const profileData = JSON.parse(fs.readFileSync(baseProcessProfilePath, 'utf8'));
     profileData.layer_height = `${layerHeight}`;
     profileData.sparse_infill_density = infillPercentage;
     profileData.layer_gcode = 'G92 E0';
     profileData.use_relative_e_distances = '0';
 
-    const runtimeProfilePath = path.join(HELP_FILES_DIR, `orca_runtime_${Date.now()}_${Math.floor(Math.random() * 100000)}.json`);
-    fs.writeFileSync(runtimeProfilePath, JSON.stringify(profileData, null, 4));
-    filesCleanupList.push(runtimeProfilePath);
+    const runtimeProfilePath = resolveRuntimeProfilePath(workspace, 'orca-runtime', '.json', options.pathFactory);
+    await fsPromises.writeFile(runtimeProfilePath, JSON.stringify(profileData, null, 4), {
+        flag: 'wx',
+        mode: 0o600
+    });
 
     return runtimeProfilePath;
 }
@@ -371,10 +371,11 @@ function upsertIniKey(content, key, value) {
  * @param {'FDM'|'SLA'} technology Active technology.
  * @param {number} layerHeight Requested layer height.
  * @param {string} infillPercentage Infill override.
- * @param {string[]} filesCleanupList Cleanup collector.
- * @returns {string} Runtime profile path.
+ * @param {{resolvePath(...segments: string[]): string, assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {{pathFactory?: (defaultPath: string) => string}} [options] Test-only path seam.
+ * @returns {Promise<string>} Runtime profile path.
  */
-function createPrusaRuntimeProfile(baseConfigPath, technology, layerHeight, infillPercentage, filesCleanupList) {
+async function createPrusaRuntimeProfile(baseConfigPath, technology, layerHeight, infillPercentage, workspace, options = {}) {
     let iniContent = fs.readFileSync(baseConfigPath, 'utf8');
     iniContent = upsertIniKey(iniContent, 'layer_height', `${layerHeight}`);
 
@@ -382,11 +383,28 @@ function createPrusaRuntimeProfile(baseConfigPath, technology, layerHeight, infi
         iniContent = upsertIniKey(iniContent, 'fill_density', infillPercentage);
     }
 
-    const runtimeProfilePath = path.join(HELP_FILES_DIR, `prusa_runtime_${Date.now()}_${Math.floor(Math.random() * 100000)}.ini`);
-    fs.writeFileSync(runtimeProfilePath, iniContent);
-    filesCleanupList.push(runtimeProfilePath);
+    const runtimeProfilePath = resolveRuntimeProfilePath(workspace, 'prusa-runtime', '.ini', options.pathFactory);
+    await fsPromises.writeFile(runtimeProfilePath, iniContent, {
+        flag: 'wx',
+        mode: 0o600
+    });
 
     return runtimeProfilePath;
+}
+
+/**
+ * Resolve a server-generated runtime profile path inside a job workspace.
+ * @param {{resolvePath(...segments: string[]): string, assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {string} prefix Stable server prefix.
+ * @param {'.ini'|'.json'} extension Profile extension.
+ * @param {(defaultPath: string) => string} [pathFactory] Test-only candidate override.
+ * @returns {string} Contained runtime profile path.
+ */
+function resolveRuntimeProfilePath(workspace, prefix, extension, pathFactory) {
+    const suffix = randomBytes(8).toString('hex');
+    const defaultPath = workspace.resolvePath(`${prefix}-${suffix}${extension}`);
+    const candidatePath = pathFactory ? pathFactory(defaultPath) : defaultPath;
+    return workspace.assertContainedPath(candidatePath);
 }
 
 /**
@@ -396,15 +414,16 @@ function createPrusaRuntimeProfile(baseConfigPath, technology, layerHeight, infi
  * @param {'FDM'|'SLA'} technology Active technology.
  * @param {number} layerHeight Requested layer height.
  * @param {string} infillPercentage Infill override.
- * @param {string[]} filesCleanupList Cleanup collector.
- * @returns {string} Runtime profile path.
+ * @param {{resolvePath(...segments: string[]): string, assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {{pathFactory?: (defaultPath: string) => string}} [options] Test-only path seam.
+ * @returns {Promise<string>} Runtime profile path.
  */
-function createRuntimeSlicerProfile(engine, baseConfigFile, technology, layerHeight, infillPercentage, filesCleanupList) {
+async function createRuntimeSlicerProfile(engine, baseConfigFile, technology, layerHeight, infillPercentage, workspace, options = {}) {
     if (engine === 'orca') {
-        return createOrcaRuntimeProcessProfile(baseConfigFile, layerHeight, infillPercentage, filesCleanupList);
+        return createOrcaRuntimeProcessProfile(baseConfigFile, layerHeight, infillPercentage, workspace, options);
     }
 
-    return createPrusaRuntimeProfile(baseConfigFile, technology, layerHeight, infillPercentage, filesCleanupList);
+    return createPrusaRuntimeProfile(baseConfigFile, technology, layerHeight, infillPercentage, workspace, options);
 }
 
 /**
@@ -461,25 +480,9 @@ function resolveProfileSelection(engine, technology, layerHeight, profileOverrid
  * @param {number} layerHeight Layer height override.
  * @returns {void}
  */
-function logEngineProfileSelection(engine, orcaMachineConfigFile, baseConfigFile, infillPercentage, layerHeight) {
-    if (engine === 'orca') {
-        console.log(`[INFO] Slicing with ${path.basename(orcaMachineConfigFile)} + ${path.basename(baseConfigFile)} (infill override: ${infillPercentage})...`);
-        return;
-    }
-
-    console.log(`[INFO] Slicing with ${path.basename(baseConfigFile)} (runtime layer=${layerHeight}, infill=${infillPercentage})...`);
-}
-
-/**
- * Apply engine-specific post-processing cleanup.
- * @param {'prusa'|'orca'} engine Slicer engine key.
- * @param {string} [metadataDir=OUTPUT_DIR] Directory containing engine metadata.
- * @returns {void}
- */
-function finalizeEngineMetadata(engine, metadataDir = OUTPUT_DIR) {
-    if (engine === 'orca') {
-        cleanupOrcaResultMetadata(metadataDir);
-    }
+function logEngineProfileSelection(engine) {
+    const safeEngine = engine === 'orca' ? 'Orca' : 'Prusa';
+    console.log(`[INFO] Starting ${safeEngine} slicing with a contained runtime profile.`);
 }
 
 module.exports = {
@@ -488,7 +491,7 @@ module.exports = {
     resolveBuildVolumeLimits,
     validateModelDimensionsAgainstLimits,
     createRuntimeSlicerProfile,
+    resolveRuntimeProfilePath,
     resolveProfileSelection,
-    logEngineProfileSelection,
-    finalizeEngineMetadata
+    logEngineProfileSelection
 };

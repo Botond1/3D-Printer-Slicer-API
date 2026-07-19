@@ -4,7 +4,6 @@
 
 const { DEFAULTS } = require('../../config/constants');
 const { logError } = require('../../utils/logger');
-const { cleanupFiles } = require('./common');
 
 /**
  * Detect converter-level geometry failures from command output.
@@ -93,14 +92,12 @@ function isOrcaPresetCompatibilityError(err) {
  * Convert processing exceptions into stable API error responses.
  * @param {Error & {stderr?: string, killed?: boolean}} err Processing error.
  * @param {import('express').Response} res Express response.
- * @param {string[]} filesCleanupList Temporary files scheduled for cleanup.
- * @param {string} inputFile Uploaded input path.
+ * @param {unknown} _legacyCleanupList Retained compatibility placeholder; route lifecycle owns cleanup.
+ * @param {unknown} _legacyInputFile Retained compatibility placeholder; request paths are not logged.
  * @param {() => string} getSupportedInputExtensionsText Supported extension formatter callback.
  * @returns {import('express').Response} Serialized error response.
  */
-function handleProcessingError(err, res, filesCleanupList, inputFile, getSupportedInputExtensionsText) {
-    console.error('[CRITICAL ERROR]', err.message);
-    cleanupFiles(filesCleanupList);
+function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, getSupportedInputExtensionsText) {
 
     if (isProcessingTimeoutError(err)) {
         return res.status(422).json({
@@ -144,13 +141,12 @@ function handleProcessingError(err, res, filesCleanupList, inputFile, getSupport
 
     try {
         logError({
-            message: err.message,
-            stderr: err.stderr,
-            stack: err.stack,
-            path: inputFile
+            message: 'Slicing pipeline failed',
+            stderr: 'Contained request failed with an unclassified processing error.',
+            path: 'request-owned workspace'
         });
     } catch (error_) {
-        console.error(`[LOGGER ERROR] ${error_.message}`);
+        console.error('[LOGGER ERROR] Failed to record sanitized slicing failure.');
     }
 
     return res.status(500).json({

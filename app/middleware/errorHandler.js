@@ -43,6 +43,30 @@ const KNOWN_ERROR_RULES = Object.freeze([
         errorCode: 'UPLOADED_FILE_TOO_LARGE'
     },
     {
+        match: (err) => err?.code === 'LIMIT_FIELD_NESTING', status: 400,
+        message: 'Nested upload field names are not allowed.', errorCode: 'UPLOAD_FIELD_NESTING_TOO_DEEP'
+    },
+    {
+        match: (err) => err?.code === 'LIMIT_FIELD_KEY', status: 400,
+        message: 'Upload field name is too long.', errorCode: 'UPLOAD_FIELD_NAME_TOO_LONG'
+    },
+    {
+        match: (err) => err?.code === 'LIMIT_FIELD_COUNT', status: 413,
+        message: 'Too many upload fields.', errorCode: 'TOO_MANY_UPLOAD_FIELDS'
+    },
+    {
+        match: (err) => err?.code === 'LIMIT_FIELD_VALUE', status: 413,
+        message: 'Upload field value is too large.', errorCode: 'UPLOAD_FIELD_TOO_LARGE'
+    },
+    {
+        match: (err) => err?.code === 'LIMIT_PART_COUNT', status: 413,
+        message: 'Too many multipart parts.', errorCode: 'TOO_MANY_MULTIPART_PARTS'
+    },
+    {
+        match: (err) => err?.code === 'LIMIT_FILE_COUNT', status: 400,
+        message: 'Too many upload files.', errorCode: 'TOO_MANY_UPLOAD_FILES'
+    },
+    {
         match: (err) => err?.code === 'LIMIT_UNEXPECTED_FILE',
         status: 400,
         message: 'Unexpected file field. Use "choosenFile" for uploads.',
@@ -53,6 +77,26 @@ const KNOWN_ERROR_RULES = Object.freeze([
         status: 400,
         message: 'Unsupported file format.',
         errorCode: 'UNSUPPORTED_FILE_FORMAT'
+    },
+    {
+        match: (err) => err?.code === 'MALFORMED_MULTIPART_REQUEST', status: 400,
+        message: 'Invalid multipart request.', errorCode: 'INVALID_MULTIPART_REQUEST'
+    },
+    {
+        match: (err) => err?.code === 'UPLOAD_REQUEST_ABORTED', status: 400,
+        message: 'Upload request was aborted.', errorCode: 'UPLOAD_REQUEST_ABORTED'
+    },
+    {
+        match: (err) => err?.code === 'UPLOAD_STORAGE_ERROR', status: 500,
+        message: 'File upload could not be stored.', errorCode: 'UPLOAD_STORAGE_ERROR'
+    },
+    {
+        match: (err) => err?.code === 'WORKSPACE_CLEANUP_FAILED', status: 500,
+        message: 'Request cleanup failed.', errorCode: 'INTERNAL_SERVER_ERROR'
+    },
+    {
+        match: (err) => err?.code === 'WORKSPACE_ALLOCATION_FAILED', status: 500,
+        message: 'Request workspace is unavailable.', errorCode: 'INTERNAL_SERVER_ERROR'
     },
     {
         match: (err) => err?.name === 'MulterError',
