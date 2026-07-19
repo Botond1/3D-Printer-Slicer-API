@@ -1,79 +1,68 @@
-name: CI and Deploy to VPS
+name: Production Candidate Preflight (NO DEPLOY)
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Full 40-character commit SHA to validate without deployment
+        required: true
+        type: string
+
+permissions:
+  contents: read
 
 concurrency:
-  group: deploy-main
-  cancel-in-progress: true
+  group: production-candidate-preflight-${{ inputs.candidate_sha }}
+  cancel-in-progress: false
 
 jobs:
-  validate:
-    name: Validate source files
+  source-validation:
+    name: Source gate for exact candidate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+    with:
+      candidate_sha: ${{ inputs.candidate_sha }}
+
+  image-validation:
+    name: Image gate for exact candidate
+    permissions:
+      contents: read
+    uses: ./.github/workflows/image-validation.yml
+    with:
+      candidate_sha: ${{ inputs.candidate_sha }}
+
+  no-deploy-boundary:
+    name: Record validation-only boundary
+    if: ${{ always() }}
+    needs:
+      - source-validation
+      - image-validation
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+      SOURCE_RESULT: ${{ needs.source-validation.result }}
+      IMAGE_RESULT: ${{ needs.image-validation.result }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Validate JavaScript syntax
+      - name: Summarize the NO DEPLOY result
+        shell: bash
         run: |
-          node --check app/server.js
-          node --check app/services/slice.service.js
-          node --check app/services/pricing.service.js
-          node --check app/docs/swagger-docs.js
-          node --check app/routes/pricing.routes.js
-          node --check app/routes/slice.routes.js
-          node --check app/routes/system.routes.js
-          node --check app/middleware/requireAdmin.js
-          node --check app/config/constants.js
-          node --check app/config/paths.js
-          node --check app/utils/logger.js
+          set -euo pipefail
+          {
+            echo "### Production candidate preflight - NO DEPLOY"
+            echo
+            echo "Candidate: \`$CANDIDATE_SHA\`"
+            echo "Source validation: \`$SOURCE_RESULT\`"
+            echo "Image validation: \`$IMAGE_RESULT\`"
+            echo
+            echo "This run did not publish, promote, approve, deploy, or prove rollback/readiness."
+            echo "Production promotion remains intentionally unavailable pending S4, then S3b."
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Validate Python syntax
-        run: |
-          python -m py_compile app/cad2stl.py app/mesh2stl.py app/orient.py app/scale_model.py
-
-  deploy:
-    name: Deploy on VPS
-    needs: validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SERVER_PORT }}
-          script_stop: true
-          script: |
-            cd ~/3D-Printer-Slicer-API-for-FDM-and-SLA_JS
-            git pull origin main
-            
-            # Rebuild and restart API (and optional monitoring profile if needed)
-            sudo docker compose up -d --build
-
-            # Optional: uncomment if monitoring profile is used on VPS
-            # sudo docker compose --profile monitoring up -d
-
-            # Wait briefly, then verify health endpoint
-            sleep 8
-            curl -fsS http://127.0.0.1:3000/health >/dev/null
-
-            # Cleanup dangling images
-            sudo docker image prune -f
+          if [ "$SOURCE_RESULT" != "success" ] || [ "$IMAGE_RESULT" != "success" ]; then
+            echo "One or more validation gates did not succeed." >&2
+            exit 1
+          fi

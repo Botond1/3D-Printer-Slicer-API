@@ -1,0 +1,465 @@
+name: Image Validation - Build Once (NO PUSH / NO DEPLOY)
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Full 40-character commit SHA to validate
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      candidate_sha:
+        description: Full 40-character commit SHA to validate
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-validation-${{ github.workflow }}-${{ github.ref }}-${{ inputs.candidate_sha }}
+  cancel-in-progress: true
+
+jobs:
+  validate-image:
+    name: Build once, inspect, scan, and discard (NO DEPLOY)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      CONTAINER_NAME: s3a-validation-${{ github.run_id }}-${{ github.run_attempt }}
+      EVIDENCE_SUBDIR: s3a-image-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+      DOCKER_BUILD_RECORD_UPLOAD: 'false'
+      DOCKER_BUILD_SUMMARY: 'false'
+    steps:
+      - name: Resolve and require a full lowercase commit SHA
+        id: candidate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_CANDIDATE_SHA: ${{ github.sha }}
+          REQUESTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          HAS_REQUESTED_CANDIDATE: ${{ contains(toJSON(inputs), '"candidate_sha"') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$HAS_REQUESTED_CANDIDATE" = "true" ]; then
+            candidate_sha="$REQUESTED_CANDIDATE_SHA"
+          elif [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "push" ]; then
+            candidate_sha="$EVENT_CANDIDATE_SHA"
+          else
+            echo "An explicit candidate_sha input is required for this invocation." >&2
+            exit 1
+          fi
+
+          if [[ ! "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "candidate_sha must be a full 40-character lowercase commit SHA." >&2
+            exit 1
+          fi
+
+          evidence_dir="$RUNNER_TEMP/$EVIDENCE_SUBDIR"
+          if [ -e "$evidence_dir" ] || [ -L "$evidence_dir" ]; then
+            echo "The run-scoped evidence path already exists or is a symbolic link." >&2
+            exit 1
+          fi
+          mkdir -m 0700 -- "$evidence_dir"
+          echo "EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
+          : > "$evidence_dir/syft.yaml"
+          : > "$evidence_dir/grype.yaml"
+          if [ ! -f "$evidence_dir/syft.yaml" ] || [ -L "$evidence_dir/syft.yaml" ] || \
+             [ ! -f "$evidence_dir/grype.yaml" ] || [ -L "$evidence_dir/grype.yaml" ]; then
+            echo "Trusted scanner configuration files were not created as regular files." >&2
+            exit 1
+          fi
+
+          image_ref="local/slicer-api-validation:$candidate_sha"
+          echo "sha=$candidate_sha" >> "$GITHUB_OUTPUT"
+          echo "image_ref=$image_ref" >> "$GITHUB_OUTPUT"
+          echo "CANDIDATE_SHA=$candidate_sha" >> "$GITHUB_ENV"
+          echo "IMAGE_REF=$image_ref" >> "$GITHUB_ENV"
+
+      - name: Checkout the exact candidate
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ steps.candidate.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prove the checked-out candidate identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$CANDIDATE_SHA" ]; then
+            echo "Expected $CANDIDATE_SHA, checked out $actual_sha." >&2
+            exit 1
+          fi
+          git cat-file -e "$CANDIDATE_SHA^{commit}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        with:
+          version: v0.35.0
+          cache-binary: false
+          cleanup: true
+
+      - name: Build the exact candidate image once and load it locally
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          pull: true
+          no-cache: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.candidate.outputs.image_ref }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.candidate.outputs.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          github-token: ''
+
+      - name: Record and verify local image identity
+        env:
+          BUILD_IMAGE_ID: ${{ steps.build.outputs.imageid }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$EVIDENCE_DIR"
+          actual_image_id="$(docker image inspect --format '{{.Id}}' "$IMAGE_REF")"
+          revision_label="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE_REF")"
+
+          if [ -z "$actual_image_id" ]; then
+            echo "The loaded image has no local image ID." >&2
+            exit 1
+          fi
+          if [ -n "$BUILD_IMAGE_ID" ] && [ "$actual_image_id" != "$BUILD_IMAGE_ID" ]; then
+            echo "Build output image ID $BUILD_IMAGE_ID differs from loaded image ID $actual_image_id." >&2
+            exit 1
+          fi
+          if [ "$revision_label" != "$CANDIDATE_SHA" ]; then
+            echo "Image revision label $revision_label differs from candidate $CANDIDATE_SHA." >&2
+            exit 1
+          fi
+
+          {
+            echo "candidate_sha=$CANDIDATE_SHA"
+            echo "local_image_ref=$IMAGE_REF"
+            echo "local_image_id=$actual_image_id"
+            echo "build_action_image_id=$BUILD_IMAGE_ID"
+            echo "identity_scope=local-loaded-image-only"
+            echo "registry_digest=not_applicable_no_push"
+            echo "signature=not_created"
+            echo "attestation=not_created"
+          } > "$EVIDENCE_DIR/image-identity.txt"
+
+      - name: Start an isolated inert container from the exact image
+        shell: bash
+        run: |
+          set -euo pipefail
+          inert_admin_key="s3a-inert-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker run --detach \
+            --name "$CONTAINER_NAME" \
+            --pull never \
+            --restart no \
+            --network none \
+            --cap-drop ALL \
+            --security-opt no-new-privileges \
+            --pids-limit 512 \
+            --tmpfs /app/input:rw,nosuid,nodev,noexec,size=64m \
+            --tmpfs /app/output:rw,nosuid,nodev,noexec,size=64m \
+            --env "ADMIN_API_KEY=$inert_admin_key" \
+            --label io.s3a.validation-only=true \
+            "$IMAGE_REF"
+
+      - name: Wait for the bounded liveness-only health check
+        id: smoke_gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 120); do
+            running="$(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME")"
+            health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$CONTAINER_NAME")"
+            if [ "$health" = "healthy" ]; then
+              {
+                echo "### Image runtime smoke gate"
+                echo
+                echo "The existing Docker HEALTHCHECK reached \`healthy\`."
+                echo "This is bounded startup/liveness evidence only, not production readiness."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "$running" != "true" ] || [ "$health" = "unhealthy" ] || [ "$health" = "missing" ]; then
+              docker logs "$CONTAINER_NAME" || true
+              echo "Container failed its liveness-only smoke gate (running=$running, health=$health)." >&2
+              exit 1
+            fi
+            sleep 2
+          done
+
+          docker logs "$CONTAINER_NAME" || true
+          echo "Container did not become healthy within the 240-second bound." >&2
+          exit 1
+
+      - name: Generate SPDX JSON SBOM from the exact local image
+        id: sbom
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ steps.candidate.outputs.image_ref }}
+          format: spdx-json
+          output-file: ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json
+          config: ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/syft.yaml
+          syft-version: v1.44.0
+          github-token: ''
+          dependency-snapshot: false
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Require a non-empty valid SPDX JSON result
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -s "$EVIDENCE_DIR/sbom.spdx.json" ]; then
+            echo "::error title=SBOM infrastructure failure::The SPDX JSON result is missing or empty."
+            exit 2
+          fi
+
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          let report;
+          try {
+            report = JSON.parse(fs.readFileSync(`${process.env.EVIDENCE_DIR}/sbom.spdx.json`, 'utf8'));
+          } catch (error) {
+            console.error(`::error title=SBOM infrastructure failure::Invalid SPDX JSON: ${error.message}`);
+            process.exit(2);
+          }
+
+          if (typeof report.spdxVersion !== 'string' || typeof report.SPDXID !== 'string' || !Array.isArray(report.packages)) {
+            console.error('::error title=SBOM infrastructure failure::SPDX JSON lacks required document structure.');
+            process.exit(2);
+          }
+          NODE
+
+      - name: Scan the exact local image with Grype
+        id: scan
+        continue-on-error: true
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: ${{ steps.candidate.outputs.image_ref }}
+          fail-build: false
+          output-format: json
+          output-file: ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json
+          config: ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.yaml
+          severity-cutoff: high
+          only-fixed: false
+          grype-version: v0.110.0
+          cache-db: false
+
+      - name: Distinguish scanner failure from high or critical findings
+        id: scan_gate
+        if: ${{ always() && steps.scan.outcome != 'skipped' }}
+        env:
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$SCAN_OUTCOME" != "success" ]; then
+            echo "::error title=Scanner infrastructure failure::The Grype action did not complete successfully."
+            exit 2
+          fi
+          if [ ! -s "$EVIDENCE_DIR/grype.json" ]; then
+            echo "::error title=Scanner infrastructure failure::The Grype JSON result is missing or empty."
+            exit 2
+          fi
+
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const resultPath = `${process.env.EVIDENCE_DIR}/grype.json`;
+          let report;
+          try {
+            report = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+          } catch (error) {
+            console.error(`::error title=Scanner infrastructure failure::Invalid Grype JSON: ${error.message}`);
+            process.exit(2);
+          }
+
+          if (!Array.isArray(report.matches)) {
+            console.error('::error title=Scanner infrastructure failure::Grype JSON has no matches array.');
+            process.exit(2);
+          }
+
+          const counts = { high: 0, critical: 0 };
+          for (const match of report.matches) {
+            const severity = String(match?.vulnerability?.severity || '').toLowerCase();
+            if (Object.hasOwn(counts, severity)) counts[severity] += 1;
+          }
+
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            `\n### Exact-image vulnerability gate\n\nHigh findings: ${counts.high}\nCritical findings: ${counts.critical}\n`
+          );
+
+          if (counts.high > 0 || counts.critical > 0) {
+            console.error(`High/critical vulnerability gate failed: high=${counts.high}, critical=${counts.critical}.`);
+            process.exit(1);
+          }
+          NODE
+
+      - name: Require exact regular evidence files before upload
+        id: artifact_boundary
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const expectedRoot = path.resolve(process.env.RUNNER_TEMP, process.env.EVIDENCE_SUBDIR);
+          if (process.env.EVIDENCE_DIR !== expectedRoot) {
+            console.error('Evidence directory differs from the exact run-scoped runner.temp path.');
+            process.exit(2);
+          }
+
+          let actualRoot;
+          try {
+            const rootStat = fs.lstatSync(expectedRoot);
+            if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error('root is not a regular directory');
+            actualRoot = fs.realpathSync(expectedRoot);
+          } catch (error) {
+            console.error(`Evidence directory boundary failed: ${error.message}`);
+            process.exit(2);
+          }
+
+          if (actualRoot !== expectedRoot) {
+            console.error('Evidence directory realpath escaped the exact run-scoped path.');
+            process.exit(2);
+          }
+
+          const limits = {
+            'image-identity.txt': 16 * 1024,
+            'sbom.spdx.json': 100 * 1024 * 1024,
+            'grype.json': 100 * 1024 * 1024
+          };
+          for (const [name, limit] of Object.entries(limits)) {
+            const filePath = path.join(actualRoot, name);
+            let stat;
+            try {
+              stat = fs.lstatSync(filePath);
+            } catch (error) {
+              console.error(`Required evidence file ${name} is unavailable: ${error.message}`);
+              process.exit(2);
+            }
+            if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0 || stat.size > limit) {
+              console.error(`Evidence file ${name} is not a bounded non-empty regular file.`);
+              process.exit(2);
+            }
+            if (path.dirname(fs.realpathSync(filePath)) !== actualRoot) {
+              console.error(`Evidence file ${name} escaped the run-scoped directory.`);
+              process.exit(2);
+            }
+          }
+
+          let sbom;
+          let scan;
+          try {
+            sbom = JSON.parse(fs.readFileSync(path.join(actualRoot, 'sbom.spdx.json'), 'utf8'));
+            scan = JSON.parse(fs.readFileSync(path.join(actualRoot, 'grype.json'), 'utf8'));
+          } catch (error) {
+            console.error(`Evidence JSON validation failed: ${error.message}`);
+            process.exit(2);
+          }
+          if (typeof sbom.spdxVersion !== 'string' || typeof sbom.SPDXID !== 'string' || !Array.isArray(sbom.packages)) {
+            console.error('SPDX evidence lacks required document structure.');
+            process.exit(2);
+          }
+          if (!Array.isArray(scan.matches)) {
+            console.error('Grype evidence lacks a matches array.');
+            process.exit(2);
+          }
+
+          const identityLines = fs.readFileSync(path.join(actualRoot, 'image-identity.txt'), 'utf8')
+            .trimEnd()
+            .split('\n');
+          const identity = Object.fromEntries(identityLines.map((line) => {
+            const separator = line.indexOf('=');
+            return separator > 0 ? [line.slice(0, separator), line.slice(separator + 1)] : ['', ''];
+          }));
+          const expectedKeys = [
+            'candidate_sha', 'local_image_ref', 'local_image_id', 'build_action_image_id',
+            'identity_scope', 'registry_digest', 'signature', 'attestation'
+          ];
+          if (identityLines.length !== expectedKeys.length || expectedKeys.some((key) => !(key in identity))) {
+            console.error('Image identity evidence has unexpected keys or line count.');
+            process.exit(2);
+          }
+          if (identity.candidate_sha !== process.env.CANDIDATE_SHA || identity.local_image_ref !== process.env.IMAGE_REF ||
+              !/^sha256:[0-9a-f]{64}$/.test(identity.local_image_id) ||
+              (identity.build_action_image_id && identity.build_action_image_id !== identity.local_image_id) ||
+              identity.identity_scope !== 'local-loaded-image-only' ||
+              identity.registry_digest !== 'not_applicable_no_push' || identity.signature !== 'not_created' ||
+              identity.attestation !== 'not_created') {
+            console.error('Image identity evidence failed its exact allowlist contract.');
+            process.exit(2);
+          }
+          NODE
+
+      - name: Upload bounded image-validation evidence only
+        if: ${{ always() && steps.artifact_boundary.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: s3a-image-evidence-${{ steps.candidate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+          include-hidden-files: false
+
+      - name: Remove only this run's container and local image
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -u
+          cleanup_status=0
+          if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            docker container rm --force "$CONTAINER_NAME" || cleanup_status=1
+          fi
+          if [ -n "${IMAGE_REF:-}" ] && docker image inspect "$IMAGE_REF" >/dev/null 2>&1; then
+            docker image rm --force "$IMAGE_REF" || cleanup_status=1
+          fi
+          expected_evidence_dir="$RUNNER_TEMP/$EVIDENCE_SUBDIR"
+          if [ -n "${EVIDENCE_DIR:-}" ]; then
+            if [ "$EVIDENCE_DIR" != "$expected_evidence_dir" ] || [ -L "$expected_evidence_dir" ]; then
+              echo "Refusing cleanup outside the exact run-scoped evidence directory." >&2
+              cleanup_status=1
+            elif [ -d "$expected_evidence_dir" ]; then
+              for evidence_name in image-identity.txt sbom.spdx.json grype.json syft.yaml grype.yaml; do
+                evidence_path="$expected_evidence_dir/$evidence_name"
+                if [ -f "$evidence_path" ] && [ ! -L "$evidence_path" ]; then
+                  rm -- "$evidence_path" || cleanup_status=1
+                elif [ -e "$evidence_path" ] || [ -L "$evidence_path" ]; then
+                  echo "Refusing to remove non-regular evidence path $evidence_path." >&2
+                  cleanup_status=1
+                fi
+              done
+              rmdir -- "$expected_evidence_dir" || cleanup_status=1
+            fi
+          fi
+          if [ "$cleanup_status" -ne 0 ]; then
+            echo "Exact-resource cleanup failed." >&2
+            exit "$cleanup_status"
+          fi
+          echo "Removed only this run's container, image tag, and bounded runner.temp evidence when present; no prune was run." >> "$GITHUB_STEP_SUMMARY"
