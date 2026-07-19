@@ -178,3 +178,17 @@ Hosted GitHub Actions were **not run**, because this branch is intentionally not
 4. Rerun syntax, focused and aggregate tests, production audit, tracked/staged repository safety, instruction-mirror consistency, and workflow contract inspection on the combined tree.
 5. On a trusted Docker host, rerun the complete build/import/liveness/import/native/SBOM/scan/history gates on the combined candidate before any Dockerfile/dependency change.
 6. S4 must establish the service/security boundary. Only then may S3b design authorized immutable registry promotion, signing/attestation, approval, readiness, rollback, and deployment.
+
+## S3a.1 correction: exact candidate-range whitespace gate
+
+The former source workflow ended with a bare `git diff --check`. Because the exact candidate checkout is normally clean, that command inspected only the empty worktree/index delta and could return success even when a committed candidate file contained trailing whitespace. It therefore was local-worktree evidence, not proof about the candidate commit.
+
+The corrected source gate uses the credentials-disabled, full-history exact checkout to resolve `refs/remotes/origin/main` as a commit, derive `merge-base(origin/main, CANDIDATE_SHA)`, prove that base is an ancestor of the exact candidate, and run:
+
+```bash
+git diff --check "$base_sha" "$CANDIDATE_SHA" --
+```
+
+This is a fail-closed final candidate-delta guarantee: it does not use an event `before` value, a PR-base value, `HEAD^`, an empty tree, a historical hard-coded baseline, or an empty-range fallback. Whitespace debt already committed on `main` and untouched by the candidate remains outside the range.
+
+The focused disposable-Git tests create a local `origin/main`, a diverged multi-commit feature candidate, and a fresh clean checkout. They prove that the legacy bare command returns green for a committed trailing-whitespace candidate while the corrected range command fails; they also cover clean candidates, pre-existing unchanged main debt, untracked files, paths with spaces, invalid/missing `origin/main`, missing merge-base, and cleanup after success and failure. This correction's local static contract and mutation suite passed 156/156, the disposable-Git suite passed 5/5, and the aggregate suites passed 224/224 JavaScript and 22/22 Python tests. Hosted source and image status for the S3a.1 implementation SHA remains `UNVERIFIED` until the authorized branch push triggers and completes the no-deploy workflows.

@@ -63,7 +63,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ steps.candidate.outputs.sha }}
-          fetch-depth: 1
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Prove the checked-out candidate identity
@@ -123,5 +123,16 @@ jobs:
       - name: Guard tracked repository content
         run: npm run check:repository-safety
 
-      - name: Reject whitespace errors
-        run: git diff --check
+      - name: Reject whitespace errors in the exact candidate range
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_main_sha="$(git rev-parse 'refs/remotes/origin/main^{commit}')"
+          git cat-file -e "$remote_main_sha^{commit}"
+          base_sha="$(git merge-base "$remote_main_sha" "$CANDIDATE_SHA")"
+          if [ -z "$base_sha" ]; then
+            echo "No merge-base exists between origin/main and $CANDIDATE_SHA." >&2
+            exit 1
+          fi
+          git merge-base --is-ancestor "$base_sha" "$CANDIDATE_SHA"
+          git diff --check "$base_sha" "$CANDIDATE_SHA" --

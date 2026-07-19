@@ -13,7 +13,7 @@ const WORKFLOW_PATHS = Object.freeze({
 });
 
 function readWorkflow(relativePath) {
-    return fs.readFileSync(path.join(REPOSITORY_ROOT, relativePath), 'utf8');
+    return fs.readFileSync(path.join(REPOSITORY_ROOT, relativePath), 'utf8').replace(/\r\n?/g, '\n');
 }
 
 const WORKFLOWS = Object.freeze(Object.fromEntries(
@@ -48,7 +48,7 @@ const CI_REQUIRED_COMMANDS = Object.freeze([
     ['npm test', 'aggregate JavaScript/Python test gate'],
     ['npm audit --omit=dev --audit-level=moderate', 'moderate production audit gate'],
     ['npm run check:repository-safety', 'tracked repository-safety gate'],
-    ['git diff --check', 'whitespace gate']
+    ['git diff --check "$base_sha" "$CANDIDATE_SHA" --', 'candidate-range whitespace gate']
 ]);
 
 function stripInlineComment(value) {
@@ -403,6 +403,7 @@ function validateCi(source) {
     validateInputContract(document, 'workflow_dispatch', errors);
     validateInputContract(document, 'workflow_call', errors);
     validateExactCandidate(document, errors);
+    validateCandidateRangeWhitespaceGate(document, errors);
     addError(errors, /^name:\s*.*NO DEPLOY.*$/mi.test(source), 'ci: workflow name must state NO DEPLOY');
 
     for (const [command, label] of CI_REQUIRED_COMMANDS) {
@@ -422,6 +423,54 @@ function validateCi(source) {
         && /\[ "\$actual_npm_version" != "10\.9\.8" \]/.test(npmSelectorText),
     'ci: exact npm selector must prove npm --version equals 10.9.8');
     return errors;
+}
+
+function validateCandidateRangeWhitespaceGate(document, errors) {
+    const checkouts = actionSteps(document, 'actions/checkout@');
+    addError(errors, checkouts.length === 1, 'ci: candidate-range gate requires one exact checkout');
+    if (checkouts.length === 1) {
+        const withBlock = directKey(checkouts[0], 'with');
+        addError(errors, withBlock && directScalar(withBlock, 'fetch-depth') === '0',
+            'ci: candidate-range gate requires full checkout history');
+    }
+
+    const command = 'git diff --check "$base_sha" "$CANDIDATE_SHA" --';
+    const gateSteps = stepsWithExactCommand(document, command);
+    addError(errors, gateSteps.length === 1,
+        'ci: candidate-range whitespace gate must use the derived merge-base and exact candidate');
+    if (gateSteps.length === 1) {
+        const gateText = blockText(gateSteps[0]);
+        addError(errors, stepScalar(gateSteps[0], 'shell') === 'bash',
+            'ci: candidate-range whitespace gate must run under Bash');
+        addError(errors, gateText.includes('set -euo pipefail'),
+            'ci: candidate-range whitespace gate must enable set -euo pipefail');
+        addError(errors, gateText.includes("git rev-parse 'refs/remotes/origin/main^{commit}'"),
+            'ci: candidate-range whitespace gate must resolve origin/main as a commit');
+        addError(errors, gateText.includes('git cat-file -e "$remote_main_sha^{commit}"'),
+            'ci: candidate-range whitespace gate must prove the origin/main commit exists');
+        addError(errors, gateText.includes('base_sha="$(git merge-base "$remote_main_sha" "$CANDIDATE_SHA")"'),
+            'ci: candidate-range whitespace gate must derive its merge-base from origin/main and CANDIDATE_SHA');
+        addError(errors, gateText.includes('if [ -z "$base_sha" ]; then'),
+            'ci: candidate-range whitespace gate must fail if merge-base resolution is empty');
+        addError(errors, gateText.includes('git merge-base --is-ancestor "$base_sha" "$CANDIDATE_SHA"'),
+            'ci: candidate-range whitespace gate must prove merge-base ancestry');
+        addError(errors, stepKeyBlock(gateSteps[0], 'if') === null,
+            'ci: candidate-range whitespace gate must not have a skippable if condition');
+        addError(errors, stepKeyBlock(gateSteps[0], 'continue-on-error') === null,
+            'ci: candidate-range whitespace gate must not continue on error');
+    }
+
+    const commands = allRunCommands(document);
+    addError(errors, !commands.includes('git diff --check'),
+        'ci: bare clean-worktree git diff --check is forbidden');
+    addError(errors, !/\bgit\s+diff\s+--check\s+(?:HEAD\^|[0-9a-f]{40})/i.test(document.source)
+        && !document.source.includes('github.event.before')
+        && !document.source.includes('github.event.pull_request.base'),
+        'ci: candidate-range whitespace gate must not use HEAD^, event bases, or a hard-coded baseline');
+    addError(errors, !/4b825dc642cb6eb9a060e54bf8d69288fbee4904|--root/.test(document.source),
+        'ci: candidate-range whitespace gate must not compare against an empty tree');
+    addError(errors, !/git merge-base[^\n]*(?:\|\|\s*true|\|\|\s*echo)|base_sha=.*:-/.test(document.source),
+        'ci: candidate-range whitespace gate must not use an empty-range fallback');
 }
 
 function findJob(document, jobName) {
@@ -1040,6 +1089,71 @@ test('source validation candidate and gate omissions are rejected in memory', as
             mutate: (source) => mutateOnce(source, 'actual_sha="$(git rev-parse HEAD)"',
                 'actual_sha="$CANDIDATE_SHA"', 'actual_sha="$CANDIDATE_SHA"'),
             expected: /missing HEAD resolution proof/
+        },
+        {
+            name: 'candidate checkout history is shallow',
+            mutate: (source) => mutateOnce(source, 'fetch-depth: 0', 'fetch-depth: 1', 'fetch-depth: 1'),
+            expected: /requires full checkout history/
+        },
+        {
+            name: 'remote main tracking ref is replaced',
+            mutate: (source) => mutateOnce(source, "refs/remotes/origin/main^{commit}",
+                'refs/heads/main^{commit}', 'refs/heads/main^{commit}'),
+            expected: /resolve origin\/main as a commit/
+        },
+        {
+            name: 'remote main commit proof is removed',
+            mutate: (source) => mutateOnce(source, 'git cat-file -e "$remote_main_sha^{commit}"',
+                ':', 'remote_main_sha="$(git rev-parse'),
+            expected: /prove the origin\/main commit exists/
+        },
+        {
+            name: 'merge-base is replaced with a parent shortcut',
+            mutate: (source) => mutateOnce(source,
+                'base_sha="$(git merge-base "$remote_main_sha" "$CANDIDATE_SHA")"',
+                'base_sha="$(git rev-parse "$CANDIDATE_SHA^")"', 'rev-parse "$CANDIDATE_SHA^"'),
+            expected: /derive its merge-base/
+        },
+        {
+            name: 'merge-base ancestry proof is removed',
+            mutate: (source) => mutateOnce(source,
+                'git merge-base --is-ancestor "$base_sha" "$CANDIDATE_SHA"', ':', 'if [ -z "$base_sha"'),
+            expected: /prove merge-base ancestry/
+        },
+        {
+            name: 'candidate-range command falls back to clean worktree',
+            mutate: (source) => mutateOnce(source,
+                'git diff --check "$base_sha" "$CANDIDATE_SHA" --', 'git diff --check', 'git diff --check'),
+            expected: /candidate-range whitespace gate must use the derived merge-base/
+        },
+        {
+            name: 'event before is used as a whitespace base',
+            mutate: (source) => mutateOnce(source,
+                'git diff --check "$base_sha" "$CANDIDATE_SHA" --',
+                'git diff --check "${{ github.event.before }}" "$CANDIDATE_SHA" --', 'github.event.before'),
+            expected: /must not use HEAD\^, event bases, or a hard-coded baseline/
+        },
+        {
+            name: 'hard-coded whitespace baseline is used',
+            mutate: (source) => mutateOnce(source,
+                'git diff --check "$base_sha" "$CANDIDATE_SHA" --',
+                `git diff --check ${'a'.repeat(40)} "$CANDIDATE_SHA" --`, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+            expected: /must not use HEAD\^, event bases, or a hard-coded baseline/
+        },
+        {
+            name: 'empty tree is used as a whitespace base',
+            mutate: (source) => mutateOnce(source,
+                'git diff --check "$base_sha" "$CANDIDATE_SHA" --',
+                'git diff --check 4b825dc642cb6eb9a060e54bf8d69288fbee4904 "$CANDIDATE_SHA" --',
+                '4b825dc642cb6eb9a060e54bf8d69288fbee4904'),
+            expected: /must not compare against an empty tree/
+        },
+        {
+            name: 'merge-base allows an empty fallback',
+            mutate: (source) => mutateOnce(source,
+                'base_sha="$(git merge-base "$remote_main_sha" "$CANDIDATE_SHA")"',
+                'base_sha="$(git merge-base "$remote_main_sha" "$CANDIDATE_SHA" || true)"', '|| true'),
+            expected: /must not use an empty-range fallback/
         },
         ...[
             ['exact npm selector', 'npm install --global npm@10.9.8 --ignore-scripts --no-audit --no-fund',
