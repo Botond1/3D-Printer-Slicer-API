@@ -20,8 +20,8 @@ function hasChildExited(child) {
 
 function delay(ms, dependencies) {
     return new Promise((resolve) => {
-        const timer = dependencies.setTimeout(resolve, ms);
-        timer?.unref?.();
+        // Settlement polling is safety-critical and must keep the host alive.
+        dependencies.setTimeout(resolve, ms);
     });
 }
 
