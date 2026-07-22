@@ -128,6 +128,24 @@ test('identity lookup is exact, positive, single-line, and bound to the loaded i
     assert.doesNotMatch(SOURCE, /(?:uid|gid)\s*=\s*(?:0|1000|1001)\b/);
 });
 
+test('container presence parser accepts only bounded known Docker absent forms', () => {
+    const present = { status: 0, stdout: `"${'c'.repeat(64)}"\n`, stderr: '' };
+    assert.equal(diagnostic.parsePresenceResult(present, 'probe-a'), true);
+    for (const stdout of ['', '[]\n']) {
+        for (const stderr of [
+            'Error: No such object: probe-a\n',
+            'Error: No such container: probe-a\n',
+            'Error response from daemon: No such container: probe-a\n'
+        ]) assert.equal(diagnostic.parsePresenceResult({ status: 1, stdout, stderr }, 'probe-a'), false);
+    }
+    for (const malformed of [
+        { status: 1, stdout: '[{}]\n', stderr: 'Error: No such object: probe-a\n' },
+        { status: 1, stdout: '[]\n', stderr: 'permission denied\n' },
+        { status: 2, stdout: '[]\n', stderr: 'Error: No such object: probe-a\n' },
+        { status: 0, stdout: '[]\n', stderr: '' }
+    ]) assert.throws(() => diagnostic.parsePresenceResult(malformed, 'probe-a'));
+});
+
 test('resolver and A/B/C probes retain exact non-shell identity and isolation envelopes', async (t) => {
     const resolver = diagnostic.buildResolverArgs('uid-probe', ID, '-u');
     assertRunEnvelope(resolver, '/usr/bin/id');

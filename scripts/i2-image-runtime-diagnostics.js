@@ -271,8 +271,12 @@ function runDocker(args, timeout = DOCKER_TIMEOUT_MS) {
     return { status: result.status, stdout, stderr };
 }
 
-function isPresent(name) {
-    const result = runDocker(buildPresenceArgs(name), 10_000);
+function parsePresenceResult(result, name) {
+    validateName(name);
+    exactKeys(result, ['status', 'stdout', 'stderr'], 'container_lookup_result');
+    if (!Number.isInteger(result.status) || typeof result.stdout !== 'string' || typeof result.stderr !== 'string') {
+        throw new Error('container_lookup_shape');
+    }
     if (result.status === 0) {
         if (!/^"[0-9a-f]{64}"\r?\n?$/.test(result.stdout)) throw new Error('container_lookup_shape');
         return true;
@@ -280,10 +284,14 @@ function isPresent(name) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const absent = new RegExp(`^(?:Error: No such (?:object|container): |` +
         `Error response from daemon: No such container: )${escaped}\\r?\\n?$`);
-    if (result.status !== 1 || result.stdout !== '' || !absent.test(result.stderr)) {
+    if (result.status !== 1 || !/^(?:\[\]\r?\n?)?$/.test(result.stdout) || !absent.test(result.stderr)) {
         throw new Error('container_lookup_failure');
     }
     return false;
+}
+
+function isPresent(name) {
+    return parsePresenceResult(runDocker(buildPresenceArgs(name), 10_000), name);
 }
 
 function cleanupName(name) {
@@ -460,6 +468,6 @@ function main() {
 module.exports = Object.freeze({ DOCUMENT_VERSION, MAX_EVIDENCE_BYTES, PROBE_PROGRAM,
     validateImageRef, validateImageId, validateName, parseInspectOutput, parsePositiveId,
     validateProbeResult, validateOwnershipDocument, buildInspectArgs, buildResolverArgs,
-    buildProbeArgs, buildPresenceArgs, buildRemoveArgs, characterize, finalize });
+    buildProbeArgs, buildPresenceArgs, buildRemoveArgs, parsePresenceResult, characterize, finalize });
 
 if (require.main === module) main();
