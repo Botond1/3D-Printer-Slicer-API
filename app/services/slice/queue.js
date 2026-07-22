@@ -4,6 +4,7 @@
 
 const { DEFAULTS } = require('../../config/constants');
 const { parsePositiveInt } = require('./number-utils');
+const { createQueueScheduler } = require('./queue-scheduler');
 
 const MAX_SLICE_QUEUE_LENGTH = parsePositiveInt(
     process.env.MAX_SLICE_QUEUE_LENGTH || `${DEFAULTS.MAX_SLICE_QUEUE_LENGTH}`,
@@ -21,11 +22,6 @@ const MAX_CONCURRENT_SLICES = parsePositiveInt(
     process.env.MAX_CONCURRENT_SLICES || `${DEFAULTS.MAX_CONCURRENT_SLICES}`,
     DEFAULTS.MAX_CONCURRENT_SLICES
 );
-
-const sliceQueue = [];
-let activeSliceJobs = 0;
-const queuedByKey = new Map();
-const activeByKey = new Map();
 
 /**
  * Base queue-domain error carrying stable API mapping metadata.
@@ -68,6 +64,15 @@ class SliceQueueTimeoutError extends SliceQueueError {
 class SliceQueueClientLimitError extends SliceQueueError {
     constructor() {
         super('Too many queued slice jobs for this client. Please wait and retry.', 429, 'SLICE_QUEUE_CLIENT_LIMIT');
+    }
+}
+
+/**
+ * Queue shutdown admission/drain error.
+ */
+class SliceQueueShutdownError extends SliceQueueError {
+    constructor() {
+        super('Slice queue is shutting down. Please retry later.', 503, 'SLICE_QUEUE_SHUTDOWN');
     }
 }
 
@@ -131,117 +136,48 @@ function toQueueErrorResponse(err) {
     return null;
 }
 
-/**
- * Increment tracked count for key.
- * @param {Map<string, number>} map Counter map.
- * @param {string} key Counter key.
- * @returns {void}
- */
-function incrementKeyCount(map, key) {
-    map.set(key, (map.get(key) || 0) + 1);
+/** Resolve a safe positive factory limit. */
+function finiteLimit(value, fallback) {
+    return Number.isSafeInteger(value) && value > 0 ? value : fallback;
 }
 
 /**
- * Decrement tracked count for key.
- * @param {Map<string, number>} map Counter map.
- * @param {string} key Counter key.
- * @returns {void}
+ * Create an isolated deterministic slice queue.
+ * @param {object} [options] Limits and clock/timer dependencies.
+ * @returns {object} Queue facade.
  */
-function decrementKeyCount(map, key) {
-    const nextValue = (map.get(key) || 0) - 1;
-    if (nextValue > 0) {
-        map.set(key, nextValue);
-    } else {
-        map.delete(key);
-    }
-}
-
-/**
- * Get total queued+active jobs for a queue key.
- * @param {string} queueKey Queue ownership key.
- * @returns {number} Total pending and active jobs.
- */
-function getTotalJobsForKey(queueKey) {
-    return (queuedByKey.get(queueKey) || 0) + (activeByKey.get(queueKey) || 0);
-}
-
-/**
- * Dispatch waiting slice jobs while free execution slots are available.
- * @returns {void}
- */
-function runNextSliceJob() {
-    while (activeSliceJobs < MAX_CONCURRENT_SLICES && sliceQueue.length > 0) {
-        const nextJob = sliceQueue.shift();
-        decrementKeyCount(queuedByKey, nextJob.queueKey);
-        const waitedMs = Date.now() - nextJob.enqueuedAt;
-
-        if (waitedMs > MAX_SLICE_QUEUE_WAIT_MS) {
-            nextJob.reject(new SliceQueueTimeoutError());
-            continue;
-        }
-
-        activeSliceJobs += 1;
-        incrementKeyCount(activeByKey, nextJob.queueKey);
-
-        nextJob
-            .task()
-            .then(nextJob.resolve)
-            .catch(nextJob.reject)
-            .finally(() => {
-                activeSliceJobs -= 1;
-                decrementKeyCount(activeByKey, nextJob.queueKey);
-                runNextSliceJob();
-            });
-    }
-}
-
-/**
- * Queue a slicing task and execute it when capacity becomes available.
- * @template T
- * @param {() => Promise<T>} task Async slicing task.
- * @param {{queueKey?: string}} [options] Queue behavior options.
- * @returns {Promise<T>} Task result once executed.
- */
-function enqueueSliceJob(task, options = {}) {
-    const queueKey = String(options.queueKey || 'anonymous');
-
-    return new Promise((resolve, reject) => {
-        if (sliceQueue.length >= MAX_SLICE_QUEUE_LENGTH) {
-            reject(new SliceQueueFullError());
-            return;
-        }
-
-        if (getTotalJobsForKey(queueKey) >= MAX_SLICE_QUEUE_PER_IP) {
-            reject(new SliceQueueClientLimitError());
-            return;
-        }
-
-        sliceQueue.push({ task, resolve, reject, enqueuedAt: Date.now(), queueKey });
-        incrementKeyCount(queuedByKey, queueKey);
-        runNextSliceJob();
+function createSliceQueue(options = {}) {
+    return createQueueScheduler({
+        maxConcurrent: finiteLimit(options.maxConcurrent, MAX_CONCURRENT_SLICES),
+        maxQueueLength: finiteLimit(options.maxQueueLength, MAX_SLICE_QUEUE_LENGTH),
+        maxQueuePerClient: finiteLimit(options.maxQueuePerClient, MAX_SLICE_QUEUE_PER_IP),
+        maxWaitMs: finiteLimit(options.maxWaitMs, MAX_SLICE_QUEUE_WAIT_MS),
+        now: options.now || Date.now,
+        setTimeout: options.setTimeout || setTimeout,
+        clearTimeout: options.clearTimeout || clearTimeout,
+        createFullError: () => new SliceQueueFullError(),
+        createTimeoutError: () => new SliceQueueTimeoutError(),
+        createClientLimitError: () => new SliceQueueClientLimitError(),
+        createShutdownError: () => new SliceQueueShutdownError()
     });
 }
 
-/**
- * Get current queue status for health check diagnostics.
- * @returns {{queueLength: number, activeJobs: number, maxConcurrent: number, maxQueueLength: number}}
- */
-function getQueueStatus() {
-    return {
-        queueLength: sliceQueue.length,
-        activeJobs: activeSliceJobs,
-        maxConcurrent: MAX_CONCURRENT_SLICES,
-        maxQueueLength: MAX_SLICE_QUEUE_LENGTH,
-        maxQueuePerClient: MAX_SLICE_QUEUE_PER_IP
-    };
-}
+const defaultQueue = createSliceQueue();
+const enqueueSliceJob = defaultQueue.enqueueSliceJob;
+const getQueueStatus = defaultQueue.getQueueStatus;
+const beginSliceQueueShutdown = defaultQueue.beginSliceQueueShutdown;
+const shutdownSliceQueue = defaultQueue.shutdownSliceQueue;
 
 module.exports = {
     enqueueSliceJob,
     getQueueStatus,
+    beginSliceQueueShutdown,
+    shutdownSliceQueue,
+    createSliceQueue,
     toQueueErrorResponse,
     SliceQueueError,
     SliceQueueFullError,
     SliceQueueTimeoutError,
-    SliceQueueClientLimitError
+    SliceQueueClientLimitError,
+    SliceQueueShutdownError
 };

@@ -184,3 +184,57 @@ test('queue maps typed and supported legacy errors to stable API payloads', asyn
     );
     assert.equal(result.unknown, null);
 });
+
+test('abort/dequeue races select one queued-or-active outcome', async (t) => {
+    const { createSliceQueue } = require('../../../app/services/slice/queue');
+    const makeQueue = () => createSliceQueue({
+        maxConcurrent: 1, maxQueueLength: 10, maxQueuePerClient: 10, maxWaitMs: 60_000
+    });
+    const gate = () => {
+        let resolve;
+        const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
+        return { promise, resolve };
+    };
+
+    await t.test('queued abort wins before dequeue', async () => {
+        const queue = makeQueue();
+        const activeGate = gate();
+        const active = queue.enqueueSliceJob(() => activeGate.promise, { queueKey: 'a' });
+        const controller = new AbortController();
+        let runs = 0;
+        const waiting = queue.enqueueSliceJob(async () => { runs += 1; }, {
+            queueKey: 'b', signal: controller.signal
+        }).then(assert.fail, (reason) => reason);
+        const reason = new Error('queued abort wins');
+        controller.abort(reason);
+        activeGate.resolve();
+        await active;
+        assert.equal(await waiting, reason);
+        assert.equal(runs, 0);
+    });
+
+    await t.test('dequeue wins and active abort waits for task settlement', async () => {
+        const queue = makeQueue();
+        const activeGate = gate();
+        const taskGate = gate();
+        const started = gate();
+        const controller = new AbortController();
+        const active = queue.enqueueSliceJob(() => activeGate.promise, { queueKey: 'a' });
+        let runs = 0;
+        const waiting = queue.enqueueSliceJob(async () => {
+            runs += 1;
+            started.resolve();
+            await taskGate.promise;
+            return 'ignored';
+        }, { queueKey: 'b', signal: controller.signal }).then(assert.fail, (reason) => reason);
+        activeGate.resolve();
+        await active;
+        await started.promise;
+        const reason = new Error('active abort wins');
+        controller.abort(reason);
+        assert.equal(queue.getQueueStatus().activeJobs, 1);
+        taskGate.resolve();
+        assert.equal(await waiting, reason);
+        assert.equal(runs, 1);
+    });
+});
