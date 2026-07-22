@@ -56,12 +56,13 @@ test('S1c source mutations are rejected for lifecycle, environment, helper, fall
         ['module helper anchor replaced by cwd', 'helpers', "path.resolve(__dirname, '..', '..')", 'path.resolve(process.cwd())'],
         ['orientation abort fallback swallowed', 'input', 'if (isAbortError(error_, signal))', 'if (false && isAbortError(error_, signal))'],
         ['model-info abort fallback swallowed', 'model', 'if (isAbortError(err, signal))', 'if (false && isAbortError(err, signal))'],
-        ['post-promotion abort guard removed', 'output', 'await workspace.promoteOutputCandidate(outputCandidate, effectiveOutputPath);\n    throwIfAborted(signal);', 'await workspace.promoteOutputCandidate(outputCandidate, effectiveOutputPath);'],
+        ['post-promotion abort guard removed', 'output', /await workspace\.promoteOutputCandidate\(outputCandidate, effectiveOutputPath\);\r?\n    throwIfAborted\(signal\);/, 'await workspace.promoteOutputCandidate(outputCandidate, effectiveOutputPath);'],
         ['process entry abort guard removed', 'pipeline', '        throwIfAborted(options.signal);', '        // guard removed']
     ];
     for (const [name, key, from, to] of mutations) {
         await t.test(name, () => {
-            assert.ok(sources[key].includes(from), `missing mutation seam: ${name}`);
+            const seamExists = from instanceof RegExp ? from.test(sources[key]) : sources[key].includes(from);
+            assert.ok(seamExists, `missing mutation seam: ${name}`);
             const mutated = { ...sources, [key]: sources[key].replace(from, to) };
             assert.throws(() => validate(mutated), assert.AssertionError);
         });

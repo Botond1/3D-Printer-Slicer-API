@@ -17,6 +17,8 @@ const { PORT, DEFAULTS } = require('./config/constants');
 const { ensureRequiredDirectories } = require('./config/paths');
 const { loadPricingFromDisk, getPricing } = require('./services/pricing.service');
 const { auditWorkspacesThenListen } = require('./services/slice/workspace');
+const { beginSliceQueueShutdown } = require('./services/slice/queue');
+const { createRuntimeLifecycle } = require('./services/runtime-lifecycle');
 
 // Security check for critical environment variables
 if (!process.env.ADMIN_API_KEY) {
@@ -30,6 +32,7 @@ loadPricingFromDisk();
 
 /** @type {import('express').Express} */
 const app = express();
+const runtimeLifecycle = createRuntimeLifecycle({ beginQueueShutdown: beginSliceQueueShutdown });
 
 const standardHelmet = helmet();
 const docsHelmet = helmet({
@@ -206,6 +209,7 @@ async function startServer() {
             console.info('[STARTUP] Slice workspace audit complete.', audit);
         },
         listen() {
+            if (runtimeLifecycle.isShuttingDown()) return null;
             return app.listen(PORT, () => {
                 console.log(`FDM and SLA Slicer Engine running on port ${PORT}`);
                 console.log(`Swagger Docs available at http://localhost:${PORT}/docs`);
@@ -214,7 +218,7 @@ async function startServer() {
     });
 }
 
-startServer().catch(() => {
+runtimeLifecycle.run(startServer).catch(() => {
     console.error('[STARTUP] Slice workspace audit failed. Refusing to listen.');
     process.exitCode = 1;
 });

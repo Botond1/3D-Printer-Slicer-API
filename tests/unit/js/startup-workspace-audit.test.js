@@ -31,7 +31,7 @@ test('server creates required directories before invoking the audit-before-liste
     const serverPath = path.resolve(__dirname, '../../../app/server.js');
     const source = await fs.readFile(serverPath, 'utf8');
     const ensureIndex = source.indexOf('ensureRequiredDirectories();');
-    const startIndex = source.lastIndexOf('startServer().catch');
+    const startIndex = source.lastIndexOf('runtimeLifecycle.run(startServer).catch');
     assert.ok(ensureIndex >= 0);
     assert.ok(startIndex > ensureIndex);
     assert.match(source, /auditOptions:\s*\{[\s\S]*JOB_WORKSPACE_STALE_AGE_MS/);
