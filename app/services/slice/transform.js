@@ -5,7 +5,8 @@
 const { randomBytes } = require('node:crypto');
 const fs = require('node:fs/promises');
 const { PYTHON_EXECUTABLE } = require('../../config/python');
-const { runCommand } = require('./command');
+const { runCommand, throwIfAborted } = require('./command');
+const { resolvePythonHelper } = require('./helper-paths');
 const { getModelInfo } = require('./model-stats');
 const { validateModelDimensionsAgainstLimits } = require('./profiles');
 const { roundDimensions } = require('./common');
@@ -164,19 +165,18 @@ function buildModelTransformPlan(modelInfo, transformOptions) {
  * @param {() => string} [suffixFactory] Server-generated suffix factory.
  * @returns {Promise<string>} Transformed STL path.
  */
-async function applyModelTransform(inputPath, transformPlan, workspace, suffixFactory) {
+async function applyModelTransform(inputPath, transformPlan, workspace, suffixFactory, signal) {
+    throwIfAborted(signal);
     const transformedPath = resolveTransformedPath(inputPath, workspace, suffixFactory);
 
-    const args = [
-        transformPlan.scale.x,
-        transformPlan.scale.y,
-        transformPlan.scale.z,
-        transformPlan.rotationDeg.x,
-        transformPlan.rotationDeg.y,
-        transformPlan.rotationDeg.z
-    ].map((value) => Number.parseFloat(value).toString());
+    const args = [transformPlan.scale.x, transformPlan.scale.y, transformPlan.scale.z,
+        transformPlan.rotationDeg.x, transformPlan.rotationDeg.y, transformPlan.rotationDeg.z]
+        .map((value) => Number.parseFloat(value).toString());
 
-    await runCommand(PYTHON_EXECUTABLE, ['scale_model.py', inputPath, transformedPath, ...args]);
+    await runCommand(PYTHON_EXECUTABLE, [
+        resolvePythonHelper('scale_model.py'), inputPath, transformedPath, ...args
+    ], { signal });
+    throwIfAborted(signal);
     const transformedStat = await fs.lstat(transformedPath);
     if (!transformedStat.isFile() || transformedStat.isSymbolicLink()) {
         throw new Error('Model transform did not produce a safe STL file.');
@@ -217,8 +217,9 @@ async function applyTransformAndValidateModel(
     originalModelInfo,
     transformOptions,
     buildVolumeLimits,
-    workspace
+    workspace, signal
 ) {
+    throwIfAborted(signal);
     const transformPlanResult = buildModelTransformPlan(originalModelInfo, transformOptions);
     if (!transformPlanResult.isValid) {
         return {
@@ -235,12 +236,13 @@ async function applyTransformAndValidateModel(
 
     let transformedFilePath = processableFile;
     if (transformPlan.requiresTransform) {
-        transformedFilePath = await applyModelTransform(processableFile, transformPlan, workspace);
+        transformedFilePath = await applyModelTransform(processableFile, transformPlan, workspace, undefined, signal);
     }
 
+    throwIfAborted(signal);
     const effectiveModelInfo = transformPlan.requiresTransform
-        ? await getModelInfo(transformedFilePath)
-        : originalModelInfo;
+        ? await getModelInfo(transformedFilePath, signal) : originalModelInfo;
+    throwIfAborted(signal);
 
     const hasKnownFinalDimensions = [effectiveModelInfo.x, effectiveModelInfo.y, effectiveModelInfo.z]
         .every((value) => Number.parseFloat(value) > 0);

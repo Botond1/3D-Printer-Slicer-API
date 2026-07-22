@@ -4,16 +4,18 @@
 
 const fs = require('node:fs');
 const { DEFAULTS } = require('../../config/constants');
-const { runCommand } = require('./command');
+const { runCommand, throwIfAborted, isAbortError } = require('./command');
 
 /**
  * Read model dimensions from `prusa-slicer --info` output.
  * @param {string} filePath Path to mesh file.
  * @returns {Promise<{x: number, y: number, z: number, height_mm: number}>} Parsed size metrics.
  */
-async function getModelInfo(filePath) {
+async function getModelInfo(filePath, signal) {
+    throwIfAborted(signal);
     try {
-        const { stdout } = await runCommand('prusa-slicer', ['--info', filePath]);
+        const { stdout } = await runCommand('prusa-slicer', ['--info', filePath], { signal });
+        throwIfAborted(signal);
         let x = 0;
         let y = 0;
         let z = 0;
@@ -28,6 +30,10 @@ async function getModelInfo(filePath) {
 
         return { x, y, z, height_mm: z };
     } catch (err) {
+        if (isAbortError(err, signal)) {
+            throwIfAborted(signal);
+            throw err;
+        }
         console.warn('[WARN] Could not read model dimensions from the contained source.');
         return { x: 0, y: 0, z: 0, height_mm: 0 };
     }

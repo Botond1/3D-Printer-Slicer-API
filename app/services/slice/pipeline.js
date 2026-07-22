@@ -14,6 +14,7 @@ const { isSupportedInputExtension, getSupportedInputExtensionsText } = require('
 const { resolveBuildVolumeLimits, resolveProfileSelection } = require('./profiles');
 const { resolveSliceOutputTargets, runSlicerAndParseStats } = require('./output-lifecycle');
 const { writeJsonAndWaitForFinish, setResponseSettlement } = require('./response-lifecycle');
+const { throwIfAborted, isAbortError } = require('./command');
 
 function findUploadedModelFile(req) {
     return req.file?.fieldname === 'choosenFile' ? req.file : null;
@@ -35,15 +36,20 @@ async function appendOriginalExtensionToUpload(inputFile, originalExt, workspace
     return destination;
 }
 
-async function prepareProcessableModel(inputFile, technology, workspace) {
+async function prepareProcessableModel(inputFile, technology, workspace, signal) {
+    throwIfAborted(signal);
     let processableFile = workspace.assertContainedPath(inputFile);
     if (path.extname(processableFile).toLowerCase() === '.zip') {
         processableFile = await extractFirstSupportedFromZip(processableFile, workspace);
+        throwIfAborted(signal);
     }
-    processableFile = await convertInputToStl(processableFile, workspace);
-    processableFile = await tryOptimizeOrientation(processableFile, technology, workspace);
+    processableFile = await convertInputToStl(processableFile, workspace, signal);
+    throwIfAborted(signal);
+    processableFile = await tryOptimizeOrientation(processableFile, technology, workspace, signal);
+    throwIfAborted(signal);
     workspace.assertContainedPath(processableFile);
-    const originalModelInfo = await getModelInfo(processableFile);
+    const originalModelInfo = await getModelInfo(processableFile, signal);
+    throwIfAborted(signal);
     return { processableFile, originalModelInfo };
 }
 
@@ -59,7 +65,8 @@ function resolveProfilesOrResponse(res, engine, technology, layerHeight, profile
     };
 }
 
-async function prepareModelOrResponse(res, request, processableFile, originalModelInfo, profiles, workspace) {
+async function prepareModelOrResponse(res, request, processableFile, originalModelInfo, profiles, workspace, signal) {
+    throwIfAborted(signal);
     const buildVolumeLimits = resolveBuildVolumeLimits(
         request.engine,
         request.technology,
@@ -71,8 +78,10 @@ async function prepareModelOrResponse(res, request, processableFile, originalMod
         originalModelInfo,
         request.transformOptions,
         buildVolumeLimits,
-        workspace
+        workspace,
+        signal
     );
+    throwIfAborted(signal);
     if (!model.isValid) return { response: res.status(model.status).json(model.response) };
     return { response: null, buildVolumeLimits, model };
 }
@@ -106,9 +115,12 @@ function resolveRequestOrResponse(req, res, options, workspace) {
     };
 }
 
-async function prepareSliceJob(res, request, workspace) {
+async function prepareSliceJob(res, request, workspace, signal) {
+    throwIfAborted(signal);
     const inputFile = await appendOriginalExtensionToUpload(request.inputFile, request.originalExt, workspace);
-    const source = await prepareProcessableModel(inputFile, request.technology, workspace);
+    throwIfAborted(signal);
+    const source = await prepareProcessableModel(inputFile, request.technology, workspace, signal);
+    throwIfAborted(signal);
     const profiles = resolveProfilesOrResponse(
         res,
         request.engine,
@@ -123,19 +135,23 @@ async function prepareSliceJob(res, request, workspace) {
         source.processableFile,
         source.originalModelInfo,
         profiles,
-        workspace
+        workspace,
+        signal
     );
     if (preparedModel.response) return preparedModel;
+    throwIfAborted(signal);
     const targets = await resolveSliceOutputTargets(
         request.engine,
         request.originalName,
         request.technology,
         workspace
     );
+    throwIfAborted(signal);
     return { response: null, request, source, profiles, preparedModel, targets };
 }
 
-async function executePreparedSlice(req, res, job, workspace) {
+async function executePreparedSlice(req, res, job, workspace, signal) {
+    throwIfAborted(signal);
     const { request, source, profiles, preparedModel, targets } = job;
     const { model, buildVolumeLimits } = preparedModel;
     const { stats } = await runSlicerAndParseStats({
@@ -144,8 +160,10 @@ async function executePreparedSlice(req, res, job, workspace) {
         ...targets,
         processableFile: model.processableFile,
         effectiveModelInfo: model.effectiveModelInfo,
-        workspace
+        workspace,
+        signal
     });
+    throwIfAborted(signal);
     const responsePayload = buildSliceSuccessResponse({
         ...request,
         ...profiles,
@@ -155,6 +173,7 @@ async function executePreparedSlice(req, res, job, workspace) {
         buildVolumeLimits,
         stats
     });
+    throwIfAborted(signal);
     setResponseSettlement(
         req,
         writeJsonAndWaitForFinish(res, responsePayload)
@@ -167,13 +186,20 @@ async function processSlice(req, res, options = {}) {
     const workspace = getRequestWorkspace(req);
     if (!workspace) throw new Error('Slice workspace is unavailable.');
     try {
+        throwIfAborted(options.signal);
         const resolved = resolveRequestOrResponse(req, res, options, workspace);
         if (resolved.response) return resolved.response;
+        throwIfAborted(options.signal);
         console.log(`[INFO] Processing contained slice job ${workspace.id} with ${resolved.request.engine}.`);
-        const job = await prepareSliceJob(res, resolved.request, workspace);
+        const job = await prepareSliceJob(res, resolved.request, workspace, options.signal);
         if (job.response) return job.response;
-        return await executePreparedSlice(req, res, job, workspace);
+        throwIfAborted(options.signal);
+        return await executePreparedSlice(req, res, job, workspace, options.signal);
     } catch (err) {
+        if (isAbortError(err, options.signal)) {
+            throwIfAborted(options.signal);
+            throw err;
+        }
         if (res.headersSent || res.destroyed) throw err;
         return handleProcessingError(err, res, null, null, getSupportedInputExtensionsText);
     }

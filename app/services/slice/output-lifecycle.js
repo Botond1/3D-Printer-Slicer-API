@@ -2,7 +2,7 @@
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const { runCommand } = require('./command');
+const { runCommand, throwIfAborted } = require('./command');
 const { resolveSingleOutputFile } = require('./common');
 const { parseOutputDetailed } = require('./model-stats');
 const { resolveSlicerExecutable, buildSlicerCommandArgs } = require('./engine');
@@ -41,9 +41,12 @@ async function runSlicerAndParseStats(context) {
         orcaMachineConfigFile, slicerOutputPath, outputCandidate,
         engineOutputDir, processableFile, effectiveModelInfo, workspace
     } = context;
+    const { signal } = context;
+    throwIfAborted(signal);
     const runtimeConfigFile = await createRuntimeSlicerProfile(
         engine, baseConfigFile, technology, layerHeight, infillPercentage, workspace
     );
+    throwIfAborted(signal);
     logEngineProfileSelection(engine);
     const slicerArgs = buildSlicerCommandArgs(
         technology,
@@ -53,13 +56,16 @@ async function runSlicerAndParseStats(context) {
         engine,
         orcaMachineConfigFile
     );
-    await runCommand(resolveSlicerExecutable(engine), [...slicerArgs, processableFile]);
+    await runCommand(resolveSlicerExecutable(engine), [...slicerArgs, processableFile], { signal });
+    throwIfAborted(signal);
 
     const generatedPath = engine === 'orca'
         ? await resolveSingleOutputFile(engineOutputDir, '.gcode', workspace)
         : slicerOutputPath;
+    throwIfAborted(signal);
     if (!generatedPath) throw new Error('Slicer did not produce an output artifact.');
     const effectiveOutputPath = await assertValidContainedArtifact(generatedPath, workspace);
+    throwIfAborted(signal);
     const stats = await parseOutputDetailed(
         effectiveOutputPath,
         technology,
@@ -67,7 +73,9 @@ async function runSlicerAndParseStats(context) {
         effectiveModelInfo.height_mm,
         engine
     );
+    throwIfAborted(signal);
     await workspace.promoteOutputCandidate(outputCandidate, effectiveOutputPath);
+    throwIfAborted(signal);
     return { stats };
 }
 

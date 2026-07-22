@@ -6,7 +6,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { EXTENSIONS } = require('../../config/constants');
 const { PYTHON_EXECUTABLE } = require('../../config/python');
-const { runCommand } = require('./command');
+const { runCommand, throwIfAborted, isAbortError } = require('./command');
+const { resolvePythonHelper } = require('./helper-paths');
 
 /**
  * Convert supported non-STL inputs to STL for downstream slicing.
@@ -14,14 +15,20 @@ const { runCommand } = require('./command');
  * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
  * @returns {Promise<string>} Final STL-compatible file path.
  */
-async function convertInputToStl(processableFile, workspace) {
+async function convertInputToStl(processableFile, workspace, signal) {
+    throwIfAborted(signal);
     const currentExt = path.extname(processableFile).toLowerCase();
     let finalStlPath = processableFile;
 
     if (['.obj', '.3mf', '.ply'].includes(currentExt)) {
         console.log('[INFO] Converting Mesh to STL...');
         finalStlPath = resolveConvertedPath(processableFile, workspace);
-        await runCommand(PYTHON_EXECUTABLE, ['mesh2stl.py', processableFile, finalStlPath]);
+        await runCommand(
+            PYTHON_EXECUTABLE,
+            [resolvePythonHelper('mesh2stl.py'), processableFile, finalStlPath],
+            { signal }
+        );
+        throwIfAborted(signal);
         if (!await isRegularNonSymlink(finalStlPath)) throw new Error('Converter did not produce a safe STL file.');
         return finalStlPath;
     }
@@ -29,7 +36,12 @@ async function convertInputToStl(processableFile, workspace) {
     if (EXTENSIONS.cad.includes(currentExt)) {
         console.log('[INFO] Converting CAD to STL...');
         finalStlPath = resolveConvertedPath(processableFile, workspace);
-        await runCommand(PYTHON_EXECUTABLE, ['cad2stl.py', processableFile, finalStlPath]);
+        await runCommand(
+            PYTHON_EXECUTABLE,
+            [resolvePythonHelper('cad2stl.py'), processableFile, finalStlPath],
+            { signal }
+        );
+        throwIfAborted(signal);
         if (!await isRegularNonSymlink(finalStlPath)) throw new Error('Converter did not produce a safe STL file.');
         return finalStlPath;
     }
@@ -76,16 +88,26 @@ async function isRegularNonSymlink(filePath) {
  * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
  * @returns {Promise<string>} Optimized or original STL path.
  */
-async function tryOptimizeOrientation(processableFile, technology, workspace) {
+async function tryOptimizeOrientation(processableFile, technology, workspace, signal) {
+    throwIfAborted(signal);
     console.log(`[INFO] Optimizing orientation for ${technology}...`);
     const orientedStlPath = resolveOrientedPath(processableFile, workspace);
 
     try {
-        await runCommand(PYTHON_EXECUTABLE, ['orient.py', processableFile, orientedStlPath, technology]);
+        await runCommand(
+            PYTHON_EXECUTABLE,
+            [resolvePythonHelper('orient.py'), processableFile, orientedStlPath, technology],
+            { signal }
+        );
+        throwIfAborted(signal);
         if (await isRegularNonSymlink(orientedStlPath)) {
             return orientedStlPath;
         }
     } catch (error_) {
+        if (isAbortError(error_, signal)) {
+            throwIfAborted(signal);
+            throw error_;
+        }
         console.warn('[WARN] Orientation optimization failed; continuing with the contained source model.');
     }
 
