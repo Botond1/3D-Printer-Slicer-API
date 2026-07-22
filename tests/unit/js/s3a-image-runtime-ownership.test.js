@@ -131,7 +131,7 @@ test('identity lookup is exact, positive, single-line, and bound to the loaded i
 test('container presence parser accepts only bounded known Docker absent forms', () => {
     const present = { status: 0, stdout: `"${'c'.repeat(64)}"\n`, stderr: '' };
     assert.equal(diagnostic.parsePresenceResult(present, 'probe-a'), true);
-    for (const stdout of ['', '[]\n']) {
+    for (const stdout of ['', '\n', '[]\n']) {
         for (const stderr of [
             'Error: No such object: probe-a\n',
             'Error: No such container: probe-a\n',

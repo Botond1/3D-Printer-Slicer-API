@@ -284,7 +284,7 @@ function parsePresenceResult(result, name) {
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const absent = new RegExp(`^(?:Error: No such (?:object|container): |` +
         `Error response from daemon: No such container: )${escaped}\\r?\\n?$`);
-    if (result.status !== 1 || !/^(?:\[\]\r?\n?)?$/.test(result.stdout) || !absent.test(result.stderr)) {
+    if (result.status !== 1 || !/^(?:\r?\n|\[\]\r?\n?)?$/.test(result.stdout) || !absent.test(result.stderr)) {
         throw new Error('container_lookup_failure');
     }
     return false;
