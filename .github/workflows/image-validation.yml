@@ -370,6 +370,18 @@ jobs:
           grype-version: v0.110.0
           cache-db: false
 
+      - name: Render bounded HIGH and CRITICAL vulnerability triage
+        id: vulnerability_triage
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        env:
+          GRYPE_RESULT_PATH: ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "classification=triage_parser_failure" >> "$GITHUB_OUTPUT"
+          node scripts/render-image-vulnerability-summary.js
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
       - name: Distinguish scanner failure from high or critical findings
         id: scan_gate
         if: ${{ always() && steps.build.outcome == 'success' }}
@@ -582,6 +594,8 @@ jobs:
           SCAN_OUTCOME: ${{ steps.scan.outcome }}
           SCAN_GATE_OUTCOME: ${{ steps.scan_gate.outcome }}
           SCAN_CLASSIFICATION: ${{ steps.scan_gate.outputs.classification }}
+          TRIAGE_OUTCOME: ${{ steps.vulnerability_triage.outcome }}
+          TRIAGE_CLASSIFICATION: ${{ steps.vulnerability_triage.outputs.classification }}
           DIAGNOSTIC_OUTCOME: ${{ steps.runtime_diagnostics.outcome }}
           ARTIFACT_BOUNDARY_OUTCOME: ${{ steps.artifact_boundary.outcome }}
           EVIDENCE_UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
@@ -604,6 +618,9 @@ jobs:
           } else if (process.env.SCAN_OUTCOME !== 'success' || process.env.SCAN_GATE_OUTCOME !== 'success'
               || process.env.SCAN_CLASSIFICATION !== 'success') {
             failures.push('scanner_infrastructure_failure');
+          }
+          if (process.env.TRIAGE_OUTCOME !== 'success' || process.env.TRIAGE_CLASSIFICATION !== 'success') {
+            failures.push('triage_parser_failure');
           }
           if (process.env.DIAGNOSTIC_OUTCOME !== 'success'
               || process.env.ARTIFACT_BOUNDARY_OUTCOME !== 'success'

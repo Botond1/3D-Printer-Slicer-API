@@ -10,6 +10,10 @@ const { spawnSync } = require('node:child_process');
 const ROOT = path.resolve(__dirname, '../../..');
 const WORKFLOW = fs.readFileSync(path.join(ROOT, '.github/workflows/image-validation.yml'), 'utf8')
     .replace(/\r\n?/g, '\n');
+const TRIAGE_HELPER_PATH = path.join(ROOT, 'scripts/render-image-vulnerability-summary.js');
+const TRIAGE_HELPER = fs.readFileSync(TRIAGE_HELPER_PATH, 'utf8').replace(/\r\n?/g, '\n');
+const { MAX_FIELD_CHARACTERS, MAX_MATCHES, MAX_ROWS, MAX_SUMMARY_BYTES,
+    renderSummary } = require(TRIAGE_HELPER_PATH);
 
 function stepText(id) {
     const lines = WORKFLOW.split('\n');
@@ -46,6 +50,8 @@ const SUCCESS_ENV = Object.freeze({
     SCAN_OUTCOME: 'success',
     SCAN_GATE_OUTCOME: 'success',
     SCAN_CLASSIFICATION: 'success',
+    TRIAGE_OUTCOME: 'success',
+    TRIAGE_CLASSIFICATION: 'success',
     DIAGNOSTIC_OUTCOME: 'success',
     ARTIFACT_BOUNDARY_OUTCOME: 'success',
     EVIDENCE_UPLOAD_OUTCOME: 'success'
@@ -78,6 +84,9 @@ test('final enforcement preserves independent fail-closed classifications', asyn
         ['high or critical finding fails', { SCAN_GATE_OUTCOME: 'failure',
             SCAN_CLASSIFICATION: 'vulnerability_gate_failure' }, 1,
         ['vulnerability_gate_failure'], ['scanner_infrastructure_failure']],
+        ['triage parser failure is independently fail-closed', { TRIAGE_OUTCOME: 'failure',
+            TRIAGE_CLASSIFICATION: 'triage_parser_failure' }, 1,
+        ['triage_parser_failure'], ['scanner_infrastructure_failure']],
         ['evidence boundary fails', { DIAGNOSTIC_OUTCOME: 'failure' }, 1,
         ['evidence_boundary_failure'], ['runtime_liveness_failure']],
         ['combined failures are not masked', { SMOKE_OUTCOME: 'failure', SBOM_OUTCOME: 'failure',
@@ -98,6 +107,145 @@ test('final enforcement preserves independent fail-closed classifications', asyn
             for (const marker of excluded) assert.doesNotMatch(result.summary, new RegExp(marker));
         });
     }
+});
+
+function grypeMatch(id, severity, name, version, type = 'deb', fixVersions = [], fixState = 'fixed') {
+    return {
+        vulnerability: { id, severity, fix: { versions: fixVersions, state: fixState } },
+        artifact: { name, version, type }
+    };
+}
+
+test('bounded triage renders only HIGH and CRITICAL findings in stable deduplicated order', () => {
+    const report = { environment: 'forbidden-secret', sourcePath: '/forbidden/path', matches: [
+        grypeMatch('CVE-LOW', 'Low', 'low-package', '1'),
+        grypeMatch('CVE-HIGH-2', 'High', 'z-package', '2', 'npm', ['3']),
+        grypeMatch('CVE-CRITICAL', 'Critical', 'critical-package', '1', 'python', ['2']),
+        grypeMatch('CVE-HIGH-1', 'High', 'a-package', '1', 'deb', ['2', '3', '4', '5', '6', '7']),
+        grypeMatch('CVE-HIGH-1', 'High', 'a-package', '1', 'deb', ['2', '3', '4', '5', '6', '7']),
+        grypeMatch('CVE-MEDIUM', 'Medium', 'medium-package', '1'),
+        grypeMatch('CVE-NEGLIGIBLE', 'Negligible', 'negligible-package', '1'),
+        grypeMatch('CVE-UNKNOWN', 'Unknown', 'unknown-package', '1')
+    ] };
+    const summary = renderSummary(report);
+
+    assert.match(summary, /Total HIGH\/CRITICAL matches: 4/);
+    assert.match(summary, /Unique allowlisted rows: 3/);
+    assert.doesNotMatch(summary, /CVE-LOW|CVE-MEDIUM|CVE-NEGLIGIBLE|CVE-UNKNOWN/);
+    assert.doesNotMatch(summary, /forbidden-secret|forbidden\/path|sourcePath|environment/);
+    assert.equal((summary.match(/CVE-HIGH-1/g) || []).length, 1);
+    assert.ok(summary.indexOf('CVE-CRITICAL') < summary.indexOf('CVE-HIGH-1'));
+    assert.ok(summary.indexOf('CVE-HIGH-1') < summary.indexOf('CVE-HIGH-2'));
+    assert.match(summary, /2, 3, 4, 5, 6/);
+    assert.doesNotMatch(summary, /2, 3, 4, 5, 6, 7/);
+});
+
+test('bounded triage enforces row, byte, field, and injection boundaries', () => {
+    const ordinary = Array.from({ length: 60 }, (_, index) => grypeMatch(
+        `CVE-NORMAL-${String(index).padStart(4, '0')}`, 'High', `package-${index}`, '1'
+    ));
+    const ordinaryRows = renderSummary({ matches: ordinary }).split('\n')
+        .filter((line) => /^\| HIGH /.test(line));
+    assert.equal(ordinaryRows.length, MAX_ROWS);
+
+    const hostile = `line\r\n|\`%\u0001::warning::${'x'.repeat(400)}`;
+    const matches = Array.from({ length: 80 }, (_, index) => grypeMatch(
+        `CVE-${String(index).padStart(4, '0')}-${hostile}`,
+        index % 2 ? 'High' : 'Critical', hostile, hostile, hostile,
+        [hostile, hostile, hostile, hostile, hostile, hostile], hostile
+    ));
+    const summary = renderSummary({ matches });
+    const dataRows = summary.split('\n').filter((line) => /^\| (?:HIGH|CRITICAL) /.test(line));
+
+    assert.ok(dataRows.length <= MAX_ROWS);
+    assert.ok(Buffer.byteLength(summary, 'utf8') <= MAX_SUMMARY_BYTES);
+    assert.match(summary, /Truncated: yes/);
+    assert.doesNotMatch(summary, /\r|`|%|\u0001|::warning::/);
+    assert.doesNotMatch(summary, /environment|host\/container|full JSON/);
+    for (const row of dataRows) {
+        const fields = row.split(' | ').slice(1, -1);
+        for (const field of fields) assert.ok(Array.from(field).length <= MAX_FIELD_CHARACTERS);
+    }
+});
+
+test('bounded triage fails closed for missing or malformed matches arrays', () => {
+    for (const report of [{}, { matches: null }, { matches: {} }, [], null]) {
+        assert.throws(() => renderSummary(report), /triage_parser_failure/);
+    }
+    assert.throws(() => renderSummary({ matches: [
+        { vulnerability: { id: 'CVE-BAD', severity: 'Critical' } }
+    ] }), /triage_parser_failure/);
+    assert.throws(() => renderSummary({ matches: Array(MAX_MATCHES + 1).fill(
+        grypeMatch('CVE-LIMIT', 'High', 'package', '1')) }), /triage_parser_failure/);
+});
+
+test('triage CLI appends bounded output and fails closed without exact evidence binding', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 's3a-triage-'));
+    const input = path.join(directory, 'grype.json');
+    const summary = path.join(directory, 'summary.md');
+    fs.writeFileSync(input, JSON.stringify({ matches: [grypeMatch('CVE-CLI', 'High', 'package', '1')] }));
+    fs.writeFileSync(summary, '');
+
+    const success = spawnSync(process.execPath, [TRIAGE_HELPER_PATH], {
+        cwd: ROOT,
+        env: { ...process.env, EVIDENCE_DIR: directory, GRYPE_RESULT_PATH: input,
+            GITHUB_STEP_SUMMARY: summary },
+        encoding: 'utf8'
+    });
+    assert.equal(success.status, 0, success.stderr);
+    assert.match(fs.readFileSync(summary, 'utf8'), /CVE-CLI/);
+
+    const wrongBinding = spawnSync(process.execPath, [TRIAGE_HELPER_PATH], {
+        cwd: ROOT,
+        env: { ...process.env, EVIDENCE_DIR: directory,
+            GRYPE_RESULT_PATH: path.join(directory, 'other.json'), GITHUB_STEP_SUMMARY: summary },
+        encoding: 'utf8'
+    });
+    assert.equal(wrongBinding.status, 2);
+    assert.match(wrongBinding.stderr, /triage_parser_failure/);
+    assert.doesNotMatch(wrongBinding.stderr, new RegExp(directory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    fs.rmSync(directory, { recursive: true, force: true });
+});
+
+test('triage workflow remains observational and preserves scan, artifact, and cleanup contracts', () => {
+    const triageStep = stepText('vulnerability_triage');
+    const scanStep = stepText('scan');
+    const boundaryStep = stepText('artifact_boundary');
+    const cleanupStep = WORKFLOW.slice(WORKFLOW.indexOf('- name: Remove only this run'));
+
+    assert.match(triageStep, /GRYPE_RESULT_PATH:/);
+    assert.match(triageStep, /classification=triage_parser_failure/);
+    assert.match(scanStep, /severity-cutoff: high/);
+    assert.match(scanStep, /grype-version: v0\.110\.0/);
+    assert.match(boundaryStep, /'image-identity\.txt': 16 \* 1024/);
+    assert.match(boundaryStep, /'runtime-diagnostics\.json': 96 \* 1024/);
+    assert.match(boundaryStep, /'sbom\.spdx\.json': 100 \* 1024 \* 1024/);
+    assert.match(boundaryStep, /'grype\.json': 100 \* 1024 \* 1024/);
+    assert.doesNotMatch(boundaryStep, /vulnerability-summary|triage-summary/);
+    assert.match(cleanupStep, /no prune was run/);
+    assert.match(WORKFLOW, /push: false/);
+    assert.doesNotMatch(WORKFLOW, /^\s*(?:docker\s+push|ssh\b|scp\b|rsync\b)/m);
+});
+
+test('triage mutation anchors reject weakened bounded-output and enforcement contracts', () => {
+    const mutations = [
+        ["new Set(['critical', 'high'])", "new Set(['critical', 'high', 'low'])"],
+        ['const MAX_ROWS = 50;', 'const MAX_ROWS = 500;'],
+        [".replace(/%/g, '&#37;')", ''],
+        ['fs.appendFileSync(summaryPath, renderSummary(report));',
+            'fs.appendFileSync(summaryPath, JSON.stringify(report));']
+    ];
+    for (const [anchor, replacement] of mutations) {
+        assert.ok(TRIAGE_HELPER.includes(anchor), `Missing mutation anchor: ${anchor}`);
+        assert.ok(!TRIAGE_HELPER.replace(anchor, replacement).includes(anchor));
+    }
+
+    assert.match(WORKFLOW, /severity-cutoff: high/);
+    assert.match(WORKFLOW, /failures\.push\('vulnerability_gate_failure'\)/);
+    const weakenedCutoff = WORKFLOW.replace('severity-cutoff: high', 'severity-cutoff: critical');
+    const bypassedGate = WORKFLOW.replace("failures.push('vulnerability_gate_failure');", '');
+    assert.doesNotMatch(weakenedCutoff, /severity-cutoff: high/);
+    assert.doesNotMatch(bypassedGate, /failures\.push\('vulnerability_gate_failure'\)/);
 });
 
 const BOUNDARY = nodeHeredoc('artifact_boundary');
