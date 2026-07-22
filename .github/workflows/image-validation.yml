@@ -34,6 +34,11 @@ jobs:
       contents: read
     env:
       CONTAINER_NAME: s3a-validation-${{ github.run_id }}-${{ github.run_attempt }}
+      I2_UID_PROBE_NAME: i2-uid-${{ github.run_id }}-${{ github.run_attempt }}
+      I2_GID_PROBE_NAME: i2-gid-${{ github.run_id }}-${{ github.run_attempt }}
+      I2_PROBE_A_NAME: i2-probe-a-${{ github.run_id }}-${{ github.run_attempt }}
+      I2_PROBE_B_NAME: i2-probe-b-${{ github.run_id }}-${{ github.run_attempt }}
+      I2_PROBE_C_NAME: i2-probe-c-${{ github.run_id }}-${{ github.run_attempt }}
       EVIDENCE_SUBDIR: s3a-image-evidence-${{ github.run_id }}-${{ github.run_attempt }}
       DOCKER_BUILD_RECORD_UPLOAD: 'false'
       DOCKER_BUILD_SUMMARY: 'false'
@@ -128,6 +133,7 @@ jobs:
           github-token: ''
 
       - name: Record and verify local image identity
+        id: image_identity
         env:
           BUILD_IMAGE_ID: ${{ steps.build.outputs.imageid }}
         shell: bash
@@ -149,6 +155,7 @@ jobs:
             echo "Image revision label $revision_label differs from candidate $CANDIDATE_SHA." >&2
             exit 1
           fi
+          echo "image_id=$actual_image_id" >> "$GITHUB_OUTPUT"
 
           {
             echo "candidate_sha=$CANDIDATE_SHA"
@@ -160,6 +167,16 @@ jobs:
             echo "signature=not_created"
             echo "attestation=not_created"
           } > "$EVIDENCE_DIR/image-identity.txt"
+
+      - name: Characterize exact-image runtime ownership before main startup
+        id: ownership_characterization
+        continue-on-error: true
+        env:
+          EXPECTED_IMAGE_ID: ${{ steps.image_identity.outputs.image_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/i2-image-runtime-diagnostics.js characterize
 
       - name: Start an isolated inert container from the exact image
         id: container_start
@@ -296,6 +313,17 @@ jobs:
           fi
           printf '\n### Bounded runtime diagnostics\n\nClassification: `%s`. Raw output is retained only in the bounded artifact.\n' \
             "$summary_classification" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Finalize exact main-container cleanup evidence
+        id: ownership_finalization
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          EXPECTED_IMAGE_ID: ${{ steps.image_identity.outputs.image_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/i2-image-runtime-diagnostics.js finalize
 
       - name: Generate SPDX JSON SBOM from the exact local image
         id: sbom
@@ -473,6 +501,7 @@ jobs:
           const limits = {
             'image-identity.txt': 16 * 1024,
             'runtime-diagnostics.json': 96 * 1024,
+            'runtime-ownership.json': 128 * 1024,
             'sbom.spdx.json': 100 * 1024 * 1024,
             'grype.json': 100 * 1024 * 1024
           };
@@ -498,10 +527,12 @@ jobs:
           let sbom;
           let scan;
           let diagnostic;
+          let ownership;
           try {
             sbom = JSON.parse(fs.readFileSync(path.join(actualRoot, 'sbom.spdx.json'), 'utf8'));
             scan = JSON.parse(fs.readFileSync(path.join(actualRoot, 'grype.json'), 'utf8'));
             diagnostic = JSON.parse(fs.readFileSync(path.join(actualRoot, 'runtime-diagnostics.json'), 'utf8'));
+            ownership = JSON.parse(fs.readFileSync(path.join(actualRoot, 'runtime-ownership.json'), 'utf8'));
           } catch (error) {
             console.error(`Evidence JSON validation failed: ${error.message}`);
             process.exit(2);
@@ -512,6 +543,13 @@ jobs:
           }
           if (!Array.isArray(scan.matches)) {
             console.error('Grype evidence lacks a matches array.');
+            process.exit(2);
+          }
+          try {
+            const { validateOwnershipDocument } = require('./scripts/i2-image-runtime-diagnostics');
+            validateOwnershipDocument(ownership, { requireMainCleanup: true });
+          } catch (error) {
+            console.error(`Runtime ownership evidence failed its exact schema and bounds contract: ${error.message}`);
             process.exit(2);
           }
           const diagnosticKeys = [
@@ -563,6 +601,24 @@ jobs:
             console.error('Image identity evidence failed its exact allowlist contract.');
             process.exit(2);
           }
+          if (ownership.image.reference !== process.env.IMAGE_REF || ownership.image.id !== identity.local_image_id
+              || ownership.image.configuredUser !== 'slicer') {
+            console.error('Runtime ownership evidence is not bound to the exact image identity.');
+            process.exit(2);
+          }
+          const expectedNames = {
+            uid: process.env.I2_UID_PROBE_NAME,
+            gid: process.env.I2_GID_PROBE_NAME,
+            A: process.env.I2_PROBE_A_NAME,
+            B: process.env.I2_PROBE_B_NAME,
+            C: process.env.I2_PROBE_C_NAME,
+            main: process.env.CONTAINER_NAME
+          };
+          if (Object.entries(expectedNames).some(([key, name]) => ownership.cleanup[key]?.name !== name)
+              || ['A', 'B', 'C'].some((key) => ownership.probes[key]?.name !== expectedNames[key])) {
+            console.error('Runtime ownership evidence is not bound to the exact run-scoped container names.');
+            process.exit(2);
+          }
           NODE
           echo "classification=success" >> "$GITHUB_OUTPUT"
 
@@ -575,12 +631,97 @@ jobs:
           path: |
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/runtime-diagnostics.json
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/runtime-ownership.json
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json
           if-no-files-found: error
           retention-days: 7
           overwrite: false
           include-hidden-files: false
+
+      - name: Remove only this run's exact containers, image, and evidence
+        id: exact_cleanup
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -u
+          echo "classification=cleanup_failure" >> "$GITHUB_OUTPUT"
+          cleanup_status=0
+          exact_container_present() {
+            local exact_name="$1" inspect_error inspect_status
+            inspect_error="$(docker container inspect "$exact_name" 2>&1 >/dev/null)"
+            inspect_status=$?
+            if [ "$inspect_status" -eq 0 ]; then return 0; fi
+            case "$inspect_error" in
+              "Error: No such object: $exact_name"|"Error response from daemon: No such container: $exact_name") return 1 ;;
+              *) return 2 ;;
+            esac
+          }
+          exact_image_present() {
+            local exact_ref="$1" inspect_error inspect_status
+            inspect_error="$(docker image inspect "$exact_ref" 2>&1 >/dev/null)"
+            inspect_status=$?
+            if [ "$inspect_status" -eq 0 ]; then return 0; fi
+            case "$inspect_error" in
+              "Error: No such object: $exact_ref"|"Error response from daemon: No such image: $exact_ref") return 1 ;;
+              *) return 2 ;;
+            esac
+          }
+          for exact_container in "$I2_UID_PROBE_NAME" "$I2_GID_PROBE_NAME" "$I2_PROBE_A_NAME" \
+              "$I2_PROBE_B_NAME" "$I2_PROBE_C_NAME" "$CONTAINER_NAME"; do
+            exact_container_present "$exact_container"
+            container_state=$?
+            if [ "$container_state" -eq 0 ]; then
+              docker container rm --force "$exact_container" || cleanup_status=1
+            elif [ "$container_state" -ne 1 ]; then
+              cleanup_status=1
+            fi
+            exact_container_present "$exact_container"
+            if [ "$?" -ne 1 ]; then
+              echo "Exact container cleanup verification failed for $exact_container." >&2
+              cleanup_status=1
+            fi
+          done
+          if [ -n "${IMAGE_REF:-}" ]; then
+            exact_image_present "$IMAGE_REF"
+            image_state=$?
+            if [ "$image_state" -eq 0 ]; then
+              docker image rm --force "$IMAGE_REF" || cleanup_status=1
+            elif [ "$image_state" -ne 1 ]; then
+              cleanup_status=1
+            fi
+            exact_image_present "$IMAGE_REF"
+            if [ "$?" -ne 1 ]; then
+              echo "Exact image cleanup verification failed." >&2
+              cleanup_status=1
+            fi
+          fi
+          expected_evidence_dir="$RUNNER_TEMP/$EVIDENCE_SUBDIR"
+          if [ -n "${EVIDENCE_DIR:-}" ]; then
+            if [ "$EVIDENCE_DIR" != "$expected_evidence_dir" ] || [ -L "$expected_evidence_dir" ]; then
+              echo "Refusing cleanup outside the exact run-scoped evidence directory." >&2
+              cleanup_status=1
+            elif [ -d "$expected_evidence_dir" ]; then
+              for evidence_name in image-identity.txt runtime-diagnostics.json runtime-ownership.json \
+                  sbom.spdx.json grype.json syft.yaml grype.yaml; do
+                evidence_path="$expected_evidence_dir/$evidence_name"
+                if [ -f "$evidence_path" ] && [ ! -L "$evidence_path" ]; then
+                  rm -- "$evidence_path" || cleanup_status=1
+                elif [ -e "$evidence_path" ] || [ -L "$evidence_path" ]; then
+                  echo "Refusing to remove non-regular evidence path $evidence_path." >&2
+                  cleanup_status=1
+                fi
+              done
+              rmdir -- "$expected_evidence_dir" || cleanup_status=1
+            fi
+          fi
+          if [ "$cleanup_status" -ne 0 ]; then
+            echo "Exact-resource cleanup failed." >&2
+            exit "$cleanup_status"
+          fi
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+          echo "Removed only this run's exact containers, image tag, five evidence files, and scanner configs when present; no prune was run." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce all independent image validation gates fail-closed
         id: final_enforcement
@@ -597,8 +738,14 @@ jobs:
           TRIAGE_OUTCOME: ${{ steps.vulnerability_triage.outcome }}
           TRIAGE_CLASSIFICATION: ${{ steps.vulnerability_triage.outputs.classification }}
           DIAGNOSTIC_OUTCOME: ${{ steps.runtime_diagnostics.outcome }}
+          OWNERSHIP_CHARACTERIZATION_OUTCOME: ${{ steps.ownership_characterization.outcome }}
+          OWNERSHIP_CHARACTERIZATION_CLASSIFICATION: ${{ steps.ownership_characterization.outputs.classification }}
+          OWNERSHIP_FINALIZATION_OUTCOME: ${{ steps.ownership_finalization.outcome }}
+          OWNERSHIP_FINALIZATION_CLASSIFICATION: ${{ steps.ownership_finalization.outputs.classification }}
           ARTIFACT_BOUNDARY_OUTCOME: ${{ steps.artifact_boundary.outcome }}
           EVIDENCE_UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
+          CLEANUP_OUTCOME: ${{ steps.exact_cleanup.outcome }}
+          CLEANUP_CLASSIFICATION: ${{ steps.exact_cleanup.outputs.classification }}
         shell: bash
         run: |
           set -euo pipefail
@@ -622,15 +769,26 @@ jobs:
           if (process.env.TRIAGE_OUTCOME !== 'success' || process.env.TRIAGE_CLASSIFICATION !== 'success') {
             failures.push('triage_parser_failure');
           }
+          if (process.env.OWNERSHIP_CHARACTERIZATION_OUTCOME !== 'success'
+              || process.env.OWNERSHIP_CHARACTERIZATION_CLASSIFICATION !== 'success') {
+            failures.push('ownership_characterization_failure');
+          }
+          if (process.env.OWNERSHIP_FINALIZATION_OUTCOME !== 'success'
+              || process.env.OWNERSHIP_FINALIZATION_CLASSIFICATION !== 'success') {
+            failures.push('ownership_finalization_failure');
+          }
           if (process.env.DIAGNOSTIC_OUTCOME !== 'success'
               || process.env.ARTIFACT_BOUNDARY_OUTCOME !== 'success'
               || process.env.EVIDENCE_UPLOAD_OUTCOME !== 'success') {
             failures.push('evidence_boundary_failure');
           }
+          if (process.env.CLEANUP_OUTCOME !== 'success' || process.env.CLEANUP_CLASSIFICATION !== 'success') {
+            failures.push('cleanup_failure');
+          }
 
           const classifications = [...new Set(failures)];
           const summary = classifications.length === 0
-            ? '\n### Final image validation enforcement\n\nAll independent runtime, SBOM, scanner, vulnerability, and evidence gates passed.\n'
+            ? '\n### Final image validation enforcement\n\nAll independent runtime, ownership, SBOM, scanner, vulnerability, evidence, and cleanup gates passed.\n'
             : `\n### Final image validation enforcement\n\nFail-closed classifications: ${classifications.map((value) => `\`${value}\``).join(', ')}.\n`;
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
           if (classifications.length > 0) {
@@ -638,39 +796,3 @@ jobs:
             process.exit(1);
           }
           NODE
-
-      - name: Remove only this run's container and local image
-        if: ${{ always() }}
-        shell: bash
-        run: |
-          set -u
-          cleanup_status=0
-          if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
-            docker container rm --force "$CONTAINER_NAME" || cleanup_status=1
-          fi
-          if [ -n "${IMAGE_REF:-}" ] && docker image inspect "$IMAGE_REF" >/dev/null 2>&1; then
-            docker image rm --force "$IMAGE_REF" || cleanup_status=1
-          fi
-          expected_evidence_dir="$RUNNER_TEMP/$EVIDENCE_SUBDIR"
-          if [ -n "${EVIDENCE_DIR:-}" ]; then
-            if [ "$EVIDENCE_DIR" != "$expected_evidence_dir" ] || [ -L "$expected_evidence_dir" ]; then
-              echo "Refusing cleanup outside the exact run-scoped evidence directory." >&2
-              cleanup_status=1
-            elif [ -d "$expected_evidence_dir" ]; then
-              for evidence_name in image-identity.txt runtime-diagnostics.json sbom.spdx.json grype.json syft.yaml grype.yaml; do
-                evidence_path="$expected_evidence_dir/$evidence_name"
-                if [ -f "$evidence_path" ] && [ ! -L "$evidence_path" ]; then
-                  rm -- "$evidence_path" || cleanup_status=1
-                elif [ -e "$evidence_path" ] || [ -L "$evidence_path" ]; then
-                  echo "Refusing to remove non-regular evidence path $evidence_path." >&2
-                  cleanup_status=1
-                fi
-              done
-              rmdir -- "$expected_evidence_dir" || cleanup_status=1
-            fi
-          fi
-          if [ "$cleanup_status" -ne 0 ]; then
-            echo "Exact-resource cleanup failed." >&2
-            exit "$cleanup_status"
-          fi
-          echo "Removed only this run's container, image tag, and bounded runner.temp evidence when present; no prune was run." >> "$GITHUB_STEP_SUMMARY"
