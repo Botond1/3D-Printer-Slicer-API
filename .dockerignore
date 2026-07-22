@@ -32,5 +32,9 @@ logs/
 # Documentation and non-runtime assets
 README.md
 LICENSE.md
-tests/
+tests/*
+!tests/s3a-v2c/
+tests/s3a-v2c/*
+!tests/s3a-v2c/browser-harness.html
+!tests/s3a-v2c/browser-harness.js
 ops/

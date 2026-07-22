@@ -54,11 +54,15 @@ ARG PRUSA_APPIMAGE_URL="https://github.com/prusa3d/PrusaSlicer/releases/download
 ARG ORCA_APPIMAGE_URL="https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v2.3.1/OrcaSlicer_Linux_AppImage_Ubuntu2404_V2.3.1.AppImage"
 ARG PRUSA_APPIMAGE_SHA256="565f2f4bd4dbb05904a459d54db1916b6932124709c1d17b5aacfe9f5f2f1b03"
 ARG ORCA_APPIMAGE_SHA256="f199e5408914efdbbbfa4fd6752cd6ad4727209b488bc47bff9a0da5f053a701"
+# Swiper 12.1.2 (MIT), upstream tag commit 2fd88b718b6854e8d6be7f183e68b73b68dae816.
+ARG SWIPER_VENDOR_URL="https://registry.npmjs.org/swiper/-/swiper-12.1.2.tgz"
+
+COPY scripts/install-swiper-vendor.py /tmp/install-swiper-vendor.py
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates wget \
+    && apt-get install -y --no-install-recommends ca-certificates python3 wget \
     && wget -q "$PRUSA_APPIMAGE_URL" -O PrusaSlicer.AppImage \
     && echo "$PRUSA_APPIMAGE_SHA256  PrusaSlicer.AppImage" | sha256sum -c - \
     && chmod +x PrusaSlicer.AppImage \
@@ -68,10 +72,50 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && echo "$ORCA_APPIMAGE_SHA256  OrcaSlicer.AppImage" | sha256sum -c - \
     && chmod +x OrcaSlicer.AppImage \
     && ./OrcaSlicer.AppImage --appimage-extract \
-    && mv squashfs-root orca-squashfs-root
+    && mv squashfs-root orca-squashfs-root \
+    && wget -q --max-redirect=0 "$SWIPER_VENDOR_URL" -O swiper-12.1.2.tgz \
+    && python3 /tmp/install-swiper-vendor.py \
+        --archive /tmp/swiper-12.1.2.tgz \
+        --orca-root /tmp/orca-squashfs-root \
+        --source-url "$SWIPER_VENDOR_URL" \
+    && rm -- /tmp/PrusaSlicer.AppImage /tmp/OrcaSlicer.AppImage \
+        /tmp/swiper-12.1.2.tgz /tmp/install-swiper-vendor.py
 
 # ==============================================================================
-# Stage 3: Final runtime - Ubuntu 24.04 (Optimized for size & security)
+# Stage 3: Offline browser contract for the remediated Swiper bundle
+# ==============================================================================
+FROM mcr.microsoft.com/playwright:v1.55.0-noble@sha256:b27e719ecbfef153e13fd24e8341736733bf2658b229677eb21ff57ff5d7fb29 AS swiper-browser-check
+
+WORKDIR /home/pwuser/swiper-browser-check
+COPY --from=slicer-base --chown=pwuser:pwuser /tmp/orca-squashfs-root/resources/web/include/swiper/swiper-bundle.min.js ./swiper-bundle.min.js
+COPY --from=slicer-base --chown=pwuser:pwuser /tmp/orca-squashfs-root/resources/web/include/swiper/swiper-bundle.min.css ./swiper-bundle.min.css
+COPY --chown=pwuser:pwuser tests/s3a-v2c/browser-harness.html tests/s3a-v2c/browser-harness.js ./
+USER pwuser
+
+RUN --network=none --mount=type=tmpfs,target=/tmp,size=67108864 <<'SWIPER_BROWSER_CHECK'
+set -eu
+marker=/home/pwuser/swiper-browser-check.pass
+browser_list=/tmp/swiper-browser-paths
+result=/tmp/swiper-browser-result.html
+find /ms-playwright -type f -path '*/chrome-linux*/chrome' -perm -u+x > "$browser_list"
+test "$(wc -l < "$browser_list")" -eq 1
+browser="$(cat "$browser_list")"
+timeout 30s "$browser" \
+  --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
+  --disable-background-networking --disable-component-update --disable-default-apps \
+  --disable-extensions --disable-sync --metrics-recording-only --no-first-run \
+  --no-zygote --mute-audio --user-data-dir=/tmp/swiper-browser-profile \
+  --virtual-time-budget=3000 --dump-dom \
+  file:///home/pwuser/swiper-browser-check/browser-harness.html > "$result"
+test "$(wc -c < "$result")" -le 2097152
+grep -Fq 'data-status="PASS"' "$result"
+printf '%s\n' '{"contract":"swiper-browser-check","status":"PASS"}'
+printf '%s\n' 'SWIPER_BROWSER_CHECK=PASS' > "$marker"
+test "$(cat "$marker")" = 'SWIPER_BROWSER_CHECK=PASS'
+SWIPER_BROWSER_CHECK
+
+# ==============================================================================
+# Stage 4: Final runtime - Ubuntu 24.04 (Optimized for size & security)
 # ==============================================================================
 FROM ubuntu:24.04
 
@@ -85,6 +129,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH=/opt/venv/bin:$PATH
 
 WORKDIR /app
+
+# Require the offline browser contract without copying its marker or browser into the final image.
+RUN --mount=from=swiper-browser-check,source=/home/pwuser/swiper-browser-check.pass,target=/tmp/swiper-browser-check.pass,ro \
+    test "$(cat /tmp/swiper-browser-check.pass)" = 'SWIPER_BROWSER_CHECK=PASS'
 
 # 1. Create unprivileged user first
 RUN groupadd --system slicer \
