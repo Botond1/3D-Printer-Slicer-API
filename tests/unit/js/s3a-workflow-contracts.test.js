@@ -22,22 +22,48 @@ const WORKFLOWS = Object.freeze(Object.fromEntries(
 
 const AUDITED_USES = Object.freeze({
     ci: Object.freeze([
-        'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683',
-        'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
-        'actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065'
+        'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8',
+        'actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444',
+        'actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c'
     ]),
     deploy: Object.freeze([
         './.github/workflows/ci.yml',
         './.github/workflows/image-validation.yml'
     ]),
     image: Object.freeze([
-        'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683',
-        'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
+        'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8',
+        'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f',
         'anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610',
         'anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2',
-        'docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83',
-        'docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f'
+        'docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294',
+        'docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd'
     ])
+});
+
+const AUDITED_ACTION_VERSION_COMMENTS = Object.freeze({
+    'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8': 'v5.0.0',
+    'actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444': 'v5.0.0',
+    'actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c': 'v6.0.0',
+    'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f': 'v6.0.0',
+    'anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610': 'v0.24.0',
+    'anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2': 'v7.4.0',
+    'docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294': 'v7.0.0',
+    'docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd': 'v4.0.0'
+});
+
+const RETIRED_NODE20_ACTION_USES = Object.freeze({
+    'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8':
+        'actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683',
+    'actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444':
+        'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020',
+    'actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c':
+        'actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065',
+    'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f':
+        'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02',
+    'docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294':
+        'docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83',
+    'docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd':
+        'docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f'
 });
 
 const CI_REQUIRED_COMMANDS = Object.freeze([
@@ -197,8 +223,7 @@ function stepScalar(step, key) {
 }
 
 function actionReference(line) {
-    const value = scalarValue(line);
-    return value.split(/\s+/)[0];
+    return scalarValue(line);
 }
 
 function usesLines(document) {
@@ -334,6 +359,20 @@ function validateAuditedActionAllowlist(document, errors) {
         `${document.name}: uses multiset differs from the audited action/reusable-workflow allowlist`);
 }
 
+function validateAuditedActionVersionComments(document, errors) {
+    for (const line of usesLines(document)) {
+        const reference = actionReference(line);
+        if (reference.startsWith('./')) continue;
+        const expectedVersion = AUDITED_ACTION_VERSION_COMMENTS[reference];
+        addError(errors, Boolean(expectedVersion),
+            `${document.name}: external action lacks audited release metadata (${reference})`);
+        if (expectedVersion) {
+            addError(errors, line.raw.trim() === `uses: ${reference} # ${expectedVersion}`,
+                `${document.name}: ${reference} version comment must be exactly # ${expectedVersion}`);
+        }
+    }
+}
+
 function validateCheckoutCredentials(document, errors) {
     const checkouts = actionSteps(document, 'actions/checkout@');
     for (const step of checkouts) {
@@ -356,6 +395,7 @@ function validateGlobalWorkflowSet(workflows) {
         validatePermissions(document, errors);
         validateActionPins(document, errors);
         validateAuditedActionAllowlist(document, errors);
+        validateAuditedActionVersionComments(document, errors);
         validateCheckoutCredentials(document, errors);
     }
     return errors;
@@ -405,6 +445,19 @@ function validateCi(source) {
     validateExactCandidate(document, errors);
     validateCandidateRangeWhitespaceGate(document, errors);
     addError(errors, /^name:\s*.*NO DEPLOY.*$/mi.test(source), 'ci: workflow name must state NO DEPLOY');
+
+    const nodeSetups = actionSteps(document, 'actions/setup-node@');
+    addError(errors, nodeSetups.length === 1, 'ci: exactly one setup-node action is required');
+    if (nodeSetups.length === 1) {
+        const withBlock = directKey(nodeSetups[0], 'with');
+        addError(errors, withBlock && directScalar(withBlock, 'node-version') === '20'
+            && directScalar(withBlock, 'package-manager-cache') === 'false',
+        'ci: setup-node must preserve Node 20 and explicitly disable automatic package-manager caching');
+        addError(errors, withBlock
+            && JSON.stringify(directKeys(withBlock).sort())
+                === JSON.stringify(['node-version', 'package-manager-cache'].sort()),
+        'ci: setup-node with mapping must contain only the exact audited input-key allowlist');
+    }
 
     for (const [command, label] of CI_REQUIRED_COMMANDS) {
         const matches = stepsWithExactCommand(document, command);
@@ -1092,9 +1145,9 @@ test('global workflow safety mutations are rejected in memory', async (t) => {
             name: 'unnamed checkout persists credentials',
             workflow: 'ci',
             mutate: (source) => mutateOnce(source, '    steps:\n',
-                '    steps:\n      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683\n'
+                '    steps:\n      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8\n'
                 + '        with:\n          persist-credentials: true\n',
-                '- uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683'),
+                '- uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8'),
             expected: /persist-credentials: false/
         },
         {
@@ -1123,6 +1176,43 @@ test('global workflow safety mutations are rejected in memory', async (t) => {
                     '    permissions: *read_permissions', '*read_permissions');
             },
             expected: /unsupported YAML syntax/
+        },
+        ...Object.entries(RETIRED_NODE20_ACTION_USES).flatMap(([currentReference, retiredReference]) =>
+            Object.entries(WORKFLOWS)
+                .filter(([, source]) => source.includes(currentReference))
+                .map(([workflow]) => ({
+                    name: `${workflow} rejects retired Node 20 pin for ${currentReference.split('@')[0]}`,
+                    workflow,
+                    mutate: (source) => mutateOnce(source, currentReference, retiredReference, retiredReference),
+                    expected: /audited action\/reusable-workflow allowlist/
+                }))),
+        ...Object.entries(AUDITED_ACTION_VERSION_COMMENTS).flatMap(([reference, version]) =>
+            Object.entries(WORKFLOWS)
+                .filter(([, source]) => source.includes(`${reference} # ${version}`))
+                .map(([workflow]) => ({
+                    name: `${workflow} rejects wrong release comment for ${reference.split('@')[0]}`,
+                    workflow,
+                    mutate: (source) => mutateOnce(source, `${reference} # ${version}`,
+                        `${reference} # v0.0.0`, `${reference} # v0.0.0`),
+                    expected: /version comment must be exactly/
+                }))),
+        {
+            name: 'extra scalar content after a valid action SHA',
+            workflow: 'ci',
+            mutate: (source) => mutateOnce(source,
+                'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0',
+                'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 trailing # v5.0.0',
+                'trailing # v5.0.0'),
+            expected: /full 40-hex SHA/
+        },
+        {
+            name: 'audited action release comment is removed',
+            workflow: 'ci',
+            mutate: (source) => mutateOnce(source,
+                'actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0',
+                'actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444',
+                'uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444\n'),
+            expected: /version comment must be exactly/
         }
     ];
 
@@ -1190,6 +1280,24 @@ test('source validation candidate and gate omissions are rejected in memory', as
             name: 'candidate checkout history is shallow',
             mutate: (source) => mutateOnce(source, 'fetch-depth: 0', 'fetch-depth: 1', 'fetch-depth: 1'),
             expected: /requires full checkout history/
+        },
+        {
+            name: 'setup-node automatic package-manager cache is enabled',
+            mutate: (source) => mutateOnce(source, 'package-manager-cache: false',
+                'package-manager-cache: true', 'package-manager-cache: true'),
+            expected: /explicitly disable automatic package-manager caching/
+        },
+        {
+            name: 'setup-node automatic package-manager cache policy is omitted',
+            mutate: (source) => mutateOnce(source, "          package-manager-cache: false\n", '',
+                "          node-version: '20'"),
+            expected: /explicitly disable automatic package-manager caching/
+        },
+        {
+            name: 'setup-node explicit npm cache bypass is added',
+            mutate: (source) => mutateOnce(source, '          package-manager-cache: false\n',
+                '          package-manager-cache: false\n          cache: npm\n', 'cache: npm'),
+            expected: /setup-node with mapping must contain only the exact audited input-key allowlist/
         },
         {
             name: 'remote main tracking ref is replaced',

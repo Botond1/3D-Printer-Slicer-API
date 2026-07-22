@@ -84,7 +84,7 @@ jobs:
           echo "IMAGE_REF=$image_ref" >> "$GITHUB_ENV"
 
       - name: Checkout the exact candidate
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           ref: ${{ steps.candidate.outputs.sha }}
           fetch-depth: 1
@@ -102,7 +102,7 @@ jobs:
           git cat-file -e "$CANDIDATE_SHA^{commit}"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
         with:
           version: v0.35.0
           cache-binary: false
@@ -110,7 +110,7 @@ jobs:
 
       - name: Build the exact candidate image once and load it locally
         id: build
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7.0.0
         with:
           context: .
           file: ./Dockerfile
@@ -569,7 +569,7 @@ jobs:
       - name: Upload bounded image-validation evidence only
         id: evidence_upload
         if: ${{ always() && steps.artifact_boundary.outcome == 'success' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: s3a-image-evidence-${{ steps.candidate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
