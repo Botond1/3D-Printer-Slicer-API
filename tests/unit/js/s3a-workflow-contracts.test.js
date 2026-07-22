@@ -592,6 +592,7 @@ function validateExactImageAction(step, label, errors) {
 function validateImage(source) {
     const document = parseWorkflow(source, 'image');
     const errors = [];
+    const alwaysAfterBuild = "${{ always() && steps.build.outcome == 'success' }}";
     validateTriggerSet(document, ['pull_request', 'push', 'workflow_dispatch', 'workflow_call'], errors);
     validateNonMainPush(document, errors);
     validateInputContract(document, 'workflow_dispatch', errors);
@@ -697,8 +698,13 @@ function validateImage(source) {
         'image: smoke_gate must retain the bounded liveness-only health loop');
         addError(errors, stepKeyBlock(smokeGate, 'if') === null,
             'image: smoke_gate must not have a skippable if condition');
-        addError(errors, stepKeyBlock(smokeGate, 'continue-on-error') === null,
-            'image: smoke_gate must not continue on error');
+        addError(errors, stepScalar(smokeGate, 'continue-on-error') === 'true',
+            'image: smoke_gate must return control for independent gates');
+        addError(errors, smokeText.includes('classification=runtime_liveness_failure'),
+            'image: smoke_gate must expose a stable runtime failure classification');
+        addError(errors, (smokeText.match(/classification=runtime_liveness_failure/g) || []).length === 2
+            && (smokeText.match(/exit 1/g) || []).length === 2,
+        'image: smoke_gate must exit nonzero after every runtime failure classification');
         const dockerRunStep = stepBlocks(document).find((step) => runCommands(step)
             .some((command) => /\bdocker\s+run\b/.test(command)));
         addError(errors, dockerRunStep && smokeGate.start > dockerRunStep.start,
@@ -707,9 +713,48 @@ function validateImage(source) {
     addError(errors, source.includes('not production readiness'),
         'image: health evidence must be labelled liveness-only, not readiness');
 
+    const diagnostics = stepById(document, 'runtime_diagnostics');
+    addError(errors, Boolean(diagnostics), 'image: missing bounded runtime_diagnostics step');
+    if (diagnostics) {
+        const diagnosticText = blockText(diagnostics);
+        const expectedDockerCommands = [
+            'if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then',
+            'running="$(docker inspect --format \'{{json .State.Running}}\' "$CONTAINER_NAME")"',
+            'exit_code="$(docker inspect --format \'{{json .State.ExitCode}}\' "$CONTAINER_NAME")"',
+            'oom_killed="$(docker inspect --format \'{{json .State.OOMKilled}}\' "$CONTAINER_NAME")"',
+            'engine_error="$(docker inspect --format \'{{json .State.Error}}\' "$CONTAINER_NAME" | head -c 8192)"',
+            'started_at="$(docker inspect --format \'{{json .State.StartedAt}}\' "$CONTAINER_NAME")"',
+            'finished_at="$(docker inspect --format \'{{json .State.FinishedAt}}\' "$CONTAINER_NAME")"',
+            'health_status="$(docker inspect --format \'{{if .State.Health}}{{json .State.Health.Status}}{{else}}"missing"{{end}}\' "$CONTAINER_NAME")"',
+            'health_log="$(docker inspect --format \'{{if .State.Health}}{{json .State.Health.Log}}{{else}}[]{{end}}\' "$CONTAINER_NAME" | head -c 32768)"',
+            'container_log="$(docker logs --tail 200 "$CONTAINER_NAME" 2>&1 | head -c 20480)"'
+        ].sort();
+        const actualDockerCommands = diagnosticText.split('\n').map((line) => line.trim())
+            .filter((line) => /\bdocker\b/.test(line)).sort();
+        addError(errors, stepScalar(diagnostics, 'if') === alwaysAfterBuild,
+            'image: runtime diagnostics must use the exact always/build-success condition');
+        addError(errors, stepScalar(diagnostics, 'continue-on-error') === 'true',
+            'image: runtime diagnostics must return control to final enforcement');
+        addError(errors, JSON.stringify(actualDockerCommands) === JSON.stringify(expectedDockerCommands)
+            && !/\bdocker\s+(?:ps|container\s+ls|info|events)\b/.test(diagnosticText),
+        'image: runtime diagnostics must use only exact-container allowlisted inspection');
+        addError(errors, /docker logs --tail 200 "\$CONTAINER_NAME"/.test(diagnosticText)
+            && /health_log=.*head -c 32768/.test(diagnosticText) && /head -c 20480/.test(diagnosticText)
+            && /slice\(0, limit\)/.test(diagnosticText),
+        'image: runtime and health diagnostic output must be bounded');
+        addError(errors, diagnosticText.includes('diagnostic_path="$EVIDENCE_DIR/runtime-diagnostics.json"')
+            && /flag:\s*'wx'/.test(diagnosticText) && /stat\.isSymbolicLink\(\)/.test(diagnosticText)
+            && /fs\.realpathSync\(target\)/.test(diagnosticText) && /96 \* 1024/.test(diagnosticText),
+        'image: runtime diagnostic file must have exact path, regular-file, symlink, realpath, and size boundaries');
+    }
+
     const sbomSteps = actionSteps(document, 'anchore/sbom-action@');
     addError(errors, sbomSteps.length === 1, 'image: exactly one SBOM action is required');
     if (sbomSteps.length === 1) {
+        addError(errors, stepScalar(sbomSteps[0], 'id') === 'sbom'
+            && stepScalar(sbomSteps[0], 'if') === alwaysAfterBuild
+            && stepScalar(sbomSteps[0], 'continue-on-error') === 'true',
+        'image: SBOM action must remain observable and run after runtime failure');
         validateExactImageAction(sbomSteps[0], 'SBOM', errors);
         const withBlock = directKey(sbomSteps[0], 'with');
         addError(errors, withBlock && directScalar(withBlock, 'format') === 'spdx-json',
@@ -727,10 +772,25 @@ function validateImage(source) {
             === '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/syft.yaml',
         'image: SBOM action must use the exact runner.temp Syft config');
     }
+    const sbomGate = stepById(document, 'sbom_gate');
+    addError(errors, Boolean(sbomGate), 'image: missing explicit sbom_gate step');
+    if (sbomGate) {
+        const gateText = blockText(sbomGate);
+        addError(errors, stepScalar(sbomGate, 'if') === alwaysAfterBuild
+            && stepScalar(sbomGate, 'continue-on-error') === 'true',
+        'image: sbom_gate must remain observable and run after runtime failure');
+        addError(errors, /steps\.sbom\.outcome/.test(gateText)
+            && gateText.includes('sbom_infrastructure_failure') && /process\.exit\(2\)/.test(gateText),
+        'image: sbom_gate must fail closed with stable infrastructure classification');
+    }
 
     const scanSteps = actionSteps(document, 'anchore/scan-action@');
     addError(errors, scanSteps.length === 1, 'image: exactly one scan action is required');
     if (scanSteps.length === 1) {
+        addError(errors, stepScalar(scanSteps[0], 'id') === 'scan'
+            && stepScalar(scanSteps[0], 'if') === alwaysAfterBuild
+            && stepScalar(scanSteps[0], 'continue-on-error') === 'true',
+        'image: scan action must remain observable and run after runtime failure');
         validateExactImageAction(scanSteps[0], 'scan', errors);
         const withBlock = directKey(scanSteps[0], 'with');
         addError(errors, withBlock && directScalar(withBlock, 'output-format') === 'json',
@@ -770,11 +830,10 @@ function validateImage(source) {
     addError(errors, Boolean(scanGate), 'image: missing explicit scan_gate step');
     if (scanGate) {
         const gateText = blockText(scanGate);
-        addError(errors, stepScalar(scanGate, 'if')
-            === "${{ always() && steps.scan.outcome != 'skipped' }}",
-        'image: scan_gate must have the exact always/non-skipped condition');
-        addError(errors, stepKeyBlock(scanGate, 'continue-on-error') === null,
-            'image: scan_gate must not continue on error');
+        addError(errors, stepScalar(scanGate, 'if') === alwaysAfterBuild,
+            'image: scan_gate must have the exact always/build-success condition');
+        addError(errors, stepScalar(scanGate, 'continue-on-error') === 'true',
+            'image: scan_gate must return control to final enforcement');
         addError(errors, scanSteps.length === 1 && scanGate.start > scanSteps[0].start,
             'image: scan_gate must execute after the scan action');
         addError(errors, /counts\.high\s*>\s*0\s*\|\|\s*counts\.critical\s*>\s*0/.test(gateText)
@@ -782,6 +841,9 @@ function validateImage(source) {
         'image: scan_gate must fail verified high/critical findings');
         addError(errors, gateText.includes('Scanner infrastructure failure') && /process\.exit\(2\)/.test(gateText),
             'image: scan_gate must distinguish and fail scanner infrastructure errors');
+        addError(errors, gateText.includes('vulnerability_gate_failure')
+            && gateText.includes('scanner_infrastructure_failure'),
+        'image: scan_gate must expose stable scanner and vulnerability classifications');
     }
 
     const uploads = actionSteps(document, 'actions/upload-artifact@');
@@ -795,19 +857,22 @@ function validateImage(source) {
             .map((line) => line.raw.trim()).filter(Boolean) : [];
         addError(errors, Number.isInteger(retention) && retention >= 1 && retention <= 7,
             'image: evidence artifact retention must be between 1 and 7 days');
+        addError(errors, stepScalar(uploads[0], 'id') === 'evidence_upload',
+            'image: evidence upload needs an observable step outcome');
         addError(errors, directScalar(withBlock, 'name')
             === 's3a-image-evidence-${{ steps.candidate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}',
         'image: artifact name must be unique across candidate, run, and rerun attempt');
-        for (const fileName of ['image-identity.txt', 'sbom.spdx.json', 'grype.json']) {
+        for (const fileName of ['image-identity.txt', 'runtime-diagnostics.json', 'sbom.spdx.json', 'grype.json']) {
             addError(errors, artifactPaths.includes(fileName), `image: bounded artifact must include ${fileName}`);
         }
         const expectedUploadPaths = [
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt',
+            '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/runtime-diagnostics.json',
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json',
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json'
         ].sort();
         addError(errors, JSON.stringify(uploadedPathLines.sort()) === JSON.stringify(expectedUploadPaths),
-            'image: artifact upload must use the exact three runner.temp evidence paths');
+            'image: artifact upload must use the exact four runner.temp evidence paths');
         addError(errors, !/(?:\.tar\b|\.oci\b|\*\*|^\s*\.\s*$)/im.test(artifactPaths),
             'image: full image or broad directory artifact upload is forbidden');
     }
@@ -819,9 +884,9 @@ function validateImage(source) {
         const boundaryText = blockText(artifactBoundary);
         addError(errors, boundaryCondition === "${{ always() && steps.build.outcome == 'success' }}",
             'image: artifact boundary must use the exact always/build-success condition');
-        addError(errors, stepKeyBlock(artifactBoundary, 'continue-on-error') === null,
-            'image: artifact boundary must not continue on error');
-        for (const fileName of ['image-identity.txt', 'sbom.spdx.json', 'grype.json']) {
+        addError(errors, stepScalar(artifactBoundary, 'continue-on-error') === 'true',
+            'image: artifact boundary must return control to final enforcement');
+        for (const fileName of ['image-identity.txt', 'runtime-diagnostics.json', 'sbom.spdx.json', 'grype.json']) {
             addError(errors, boundaryText.includes(fileName),
                 `image: artifact boundary must enumerate ${fileName}`);
         }
@@ -833,8 +898,11 @@ function validateImage(source) {
             'image: artifact boundary must prove realpath containment');
         addError(errors, /stat\.size\s*<=\s*0\s*\|\|\s*stat\.size\s*>\s*limit/.test(boundaryText),
             'image: artifact boundary must enforce file-size bounds');
-        addError(errors, (boundaryText.match(/JSON\.parse/g) || []).length >= 2,
+        addError(errors, (boundaryText.match(/JSON\.parse/g) || []).length >= 3,
             'image: artifact boundary must parse machine-readable JSON before upload');
+        addError(errors, boundaryText.includes('diagnosticKeys') && boundaryText.includes('healthLog')
+            && boundaryText.includes('containerLog'),
+        'image: artifact boundary must validate the diagnostic field allowlist');
     }
     if (uploads.length === 1) {
         const uploadCondition = directScalar(uploads[0], 'if') || '';
@@ -842,6 +910,34 @@ function validateImage(source) {
             'image: artifact upload must be gated by successful artifact boundary outcome');
         addError(errors, artifactBoundary && artifactBoundary.start < uploads[0].start,
             'image: artifact boundary must run before artifact upload');
+    }
+
+    const finalEnforcement = stepById(document, 'final_enforcement');
+    addError(errors, Boolean(finalEnforcement), 'image: missing final fail-closed enforcement gate');
+    if (finalEnforcement) {
+        const gateText = blockText(finalEnforcement);
+        addError(errors, stepScalar(finalEnforcement, 'if') === '${{ always() }}',
+            'image: final enforcement must use if: always()');
+        addError(errors, stepKeyBlock(finalEnforcement, 'continue-on-error') === null,
+            'image: final enforcement must not continue on error');
+        for (const outcome of ['SMOKE_OUTCOME', 'SBOM_OUTCOME', 'SBOM_GATE_OUTCOME', 'SCAN_OUTCOME',
+            'SCAN_GATE_OUTCOME', 'DIAGNOSTIC_OUTCOME', 'ARTIFACT_BOUNDARY_OUTCOME', 'EVIDENCE_UPLOAD_OUTCOME']) {
+            addError(errors, gateText.includes(`process.env.${outcome}`),
+                `image: final enforcement must check ${outcome}`);
+        }
+        addError(errors, gateText.includes('process.env.SMOKE_CLASSIFICATION')
+            && gateText.includes('process.env.SBOM_CLASSIFICATION')
+            && gateText.includes('process.env.SCAN_CLASSIFICATION'),
+        'image: final enforcement must consume stable gate classifications');
+        for (const classification of ['runtime_liveness_failure', 'sbom_infrastructure_failure',
+            'scanner_infrastructure_failure', 'vulnerability_gate_failure', 'evidence_boundary_failure']) {
+            addError(errors, gateText.includes(`failures.push('${classification}')`),
+                `image: final enforcement must report ${classification}`);
+        }
+        addError(errors, /process\.exit\(1\)/.test(gateText),
+            'image: final enforcement must fail non-success outcomes');
+        addError(errors, uploads.length === 1 && finalEnforcement.start > uploads[0].start,
+            'image: final enforcement must run after evidence upload');
     }
 
     addError(errors, source.includes('candidate_sha=$CANDIDATE_SHA')
@@ -1354,13 +1450,65 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ].map(([name, before, after]) => [name, (source) => mutateOnce(source, before, after, after),
             /docker run must retain isolation flag/]),
         ['smoke gate is skipped', (source) => mutateOnce(source,
-            '        id: smoke_gate\n        shell: bash',
-            '        id: smoke_gate\n        if: ${{ false }}\n        shell: bash',
+            '        id: smoke_gate\n        continue-on-error: true',
+            '        id: smoke_gate\n        if: ${{ false }}\n        continue-on-error: true',
             'id: smoke_gate\n        if: ${{ false }}'), /smoke_gate must not have a skippable if/],
-        ['smoke gate continues on error', (source) => mutateOnce(source,
-            '        id: smoke_gate\n        shell: bash',
-            '        id: smoke_gate\n        continue-on-error: true\n        shell: bash',
-            'id: smoke_gate\n        continue-on-error: true'), /smoke_gate must not continue on error/],
+        ['smoke gate cannot return control', (source) => mutateOnce(source,
+            '        id: smoke_gate\n        continue-on-error: true',
+            '        id: smoke_gate', 'id: smoke_gate\n        shell: bash'),
+        /smoke_gate must return control/],
+        ['smoke failure classification exits successfully', (source) => mutateOnce(source,
+            '              echo "Container failed its liveness-only smoke gate (running=$running, health=$health)." >&2\n              exit 1',
+            '              echo "Container failed its liveness-only smoke gate (running=$running, health=$health)." >&2\n              exit 0',
+            'health=$health)." >&2\n              exit 0'), /must exit nonzero after every runtime failure classification/],
+        ['runtime diagnostics step removed', (source) => mutateOnce(source,
+            '        id: runtime_diagnostics', '        id: runtime_diagnostics_disabled',
+            'id: runtime_diagnostics_disabled'), /missing bounded runtime_diagnostics/],
+        ['runtime diagnostics loses always condition', (source) => mutateOnce(source,
+            "        id: runtime_diagnostics\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            '        id: runtime_diagnostics\n        if: ${{ false }}', 'id: runtime_diagnostics\n        if: ${{ false }}'),
+        /runtime diagnostics must use the exact always\/build-success/],
+        ['runtime diagnostics cannot return control', (source) => mutateOnce(source,
+            "        id: runtime_diagnostics\n        if: ${{ always() && steps.build.outcome == 'success' }}\n        continue-on-error: true",
+            "        id: runtime_diagnostics\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            'id: runtime_diagnostics\n        if:'), /runtime diagnostics must return control/],
+        ['runtime diagnostics targets another container', (source) => mutateOnce(source,
+            'if docker container inspect "$CONTAINER_NAME"', 'if docker container inspect "$OTHER_CONTAINER"',
+            '$OTHER_CONTAINER'), /exact-container allowlisted inspection/],
+        ['runtime diagnostics emits full inspect', (source) => mutateOnce(source,
+            '          if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then',
+            '          if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then\n            docker inspect "$CONTAINER_NAME"',
+            'docker inspect "$CONTAINER_NAME"'), /exact-container allowlisted inspection/],
+        ['runtime diagnostics reads full config', (source) => mutateOnce(source,
+            '            running="$(docker inspect --format \'{{json .State.Running}}\' "$CONTAINER_NAME")"',
+            '            running="$(docker inspect --format \'{{json .State.Running}}\' "$CONTAINER_NAME")"\n            docker inspect --format \'{{json .Config}}\' "$CONTAINER_NAME"',
+            '{{json .Config}}'), /exact-container allowlisted inspection/],
+        ['runtime diagnostics reads container environment', (source) => mutateOnce(source,
+            '{{json .State.Error}}', '{{json .Config.Env}}', '.Config.Env'),
+        /exact-container allowlisted inspection/],
+        ['runtime diagnostics lists containers', (source) => mutateOnce(source,
+            '          if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then',
+            '          docker ps\n          if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then',
+            'docker ps'), /exact-container allowlisted inspection/],
+        ['runtime diagnostics runs a non-allowlisted container command', (source) => mutateOnce(source,
+            '          if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then',
+            '          docker top "$CONTAINER_NAME"\n          if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then',
+            'docker top "$CONTAINER_NAME"'), /exact-container allowlisted inspection/],
+        ['runtime container log loses line bound', (source) => mutateOnce(source,
+            'docker logs --tail 200 "$CONTAINER_NAME"', 'docker logs "$CONTAINER_NAME"',
+            'docker logs "$CONTAINER_NAME"'), /runtime and health diagnostic output must be bounded/],
+        ['runtime health log loses byte bound', (source) => mutateStringOccurrence(source,
+            '| head -c 32768', 1, '', 'health_log="$(docker inspect'),
+        /runtime and health diagnostic output must be bounded/],
+        ['runtime diagnostic writes outside evidence root', (source) => mutateOnce(source,
+            'diagnostic_path="$EVIDENCE_DIR/runtime-diagnostics.json"',
+            'diagnostic_path="$GITHUB_WORKSPACE/runtime-diagnostics.json"',
+            'diagnostic_path="$GITHUB_WORKSPACE'), /diagnostic file must have exact path/],
+        ['runtime diagnostic permits overwrite', (source) => mutateOnce(source,
+            "{ flag: 'wx', mode: 0o600 }", "{ flag: 'w', mode: 0o600 }", "flag: 'w'"),
+        /diagnostic file must have exact path/],
+        ['runtime diagnostic drops size bound', (source) => mutateOnce(source,
+            'stat.size > 96 * 1024', 'false', '|| false'), /diagnostic file must have exact path/],
         ['broad Docker prune', (source) => mutateOnce(source, '          set -u\n',
             '          set -u\n          docker system prune --force\n', 'docker system prune --force'),
         /broad Docker prune/],
@@ -1395,6 +1543,28 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             '          : > "$evidence_dir/syft.yaml"\n          echo "EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"',
             ': > "$evidence_dir/syft.yaml"\n          echo "EVIDENCE_DIR='),
         /exported immediately after trusted creation/],
+        ['SBOM action loses always condition', (source) => mutateOnce(source,
+            "        id: sbom\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            '        id: sbom\n        if: ${{ false }}', 'id: sbom\n        if: ${{ false }}'),
+        /SBOM action must remain observable/],
+        ['SBOM action cannot return control', (source) => mutateOnce(source,
+            "        id: sbom\n        if: ${{ always() && steps.build.outcome == 'success' }}\n        continue-on-error: true",
+            "        id: sbom\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            'id: sbom\n        if:'), /SBOM action must remain observable/],
+        ['SBOM gate loses always condition', (source) => mutateOnce(source,
+            "        id: sbom_gate\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            '        id: sbom_gate\n        if: ${{ false }}', 'id: sbom_gate\n        if: ${{ false }}'),
+        /sbom_gate must remain observable/],
+        ['SBOM gate cannot return control', (source) => mutateOnce(source,
+            "        id: sbom_gate\n        if: ${{ always() && steps.build.outcome == 'success' }}\n        continue-on-error: true",
+            "        id: sbom_gate\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            'id: sbom_gate\n        if:'), /sbom_gate must remain observable/],
+        ['SBOM gate ignores action outcome', (source) => mutateOnce(source,
+            'SBOM_OUTCOME: ${{ steps.sbom.outcome }}', 'SBOM_OUTCOME: success',
+            'SBOM_OUTCOME: success'), /sbom_gate must fail closed/],
+        ['SBOM gate loses stable classification', (source) => mutateOnce(source,
+            'classification=sbom_infrastructure_failure', 'classification=sbom_failure',
+            'classification=sbom_failure'), /sbom_gate must fail closed/],
         ['SBOM action falls back to implicit config discovery', (source) => mutateOnce(source,
             '          config: ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/syft.yaml\n', '',
             '          syft-version:'), /runner\.temp Syft config/],
@@ -1416,6 +1586,14 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             '          image: ${{ steps.candidate.outputs.image_ref }}\n          fail-build: false',
             '          image: ${{ steps.candidate.outputs.image_ref }}\n          vex: synthetic-vex.json\n          fail-build: false',
             'vex: synthetic-vex.json'), /scanner with mapping must contain only the exact audited input-key allowlist/],
+        ['scan action loses always condition', (source) => mutateOnce(source,
+            "        id: scan\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            '        id: scan\n        if: ${{ false }}', 'id: scan\n        if: ${{ false }}'),
+        /scan action must remain observable/],
+        ['scan action cannot return control', (source) => mutateOnce(source,
+            "        id: scan\n        if: ${{ always() && steps.build.outcome == 'success' }}\n        continue-on-error: true",
+            "        id: scan\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            'id: scan\n        if:'), /scan action must remain observable/],
         ['scanner output leaves runner temp', (source) => mutateOnce(source,
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json',
             '${{ github.workspace }}/grype.json', '${{ github.workspace }}/grype.json'),
@@ -1430,13 +1608,13 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             'counts.high > 0 || counts.critical > 0', 'false', 'if (false)'),
         /scan_gate must fail verified high\/critical/],
         ['scan gate is skipped', (source) => mutateOnce(source,
-            "        if: ${{ always() && steps.scan.outcome != 'skipped' }}",
-            '        if: ${{ false }}', 'id: scan_gate\n        if: ${{ false }}'),
-        /scan_gate must have the exact always\/non-skipped condition/],
-        ['scan gate continues on error', (source) => mutateOnce(source,
-            '        id: scan_gate\n        if:',
-            '        id: scan_gate\n        continue-on-error: true\n        if:',
-            'id: scan_gate\n        continue-on-error: true'), /scan_gate must not continue on error/],
+            "        id: scan_gate\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            '        id: scan_gate\n        if: ${{ false }}', 'id: scan_gate\n        if: ${{ false }}'),
+        /scan_gate must have the exact always\/build-success condition/],
+        ['scan gate cannot return control', (source) => mutateOnce(source,
+            '        id: scan_gate\n        if: ${{ always() && steps.build.outcome == \'success\' }}\n        continue-on-error: true',
+            '        id: scan_gate\n        if: ${{ always() && steps.build.outcome == \'success\' }}',
+            'id: scan_gate\n        if:'), /scan_gate must return control/],
         ['artifact retained too long', (source) => mutateOnce(source, 'retention-days: 7',
             'retention-days: 90', 'retention-days: 90'), /retention must be between/],
         ['artifact uploads broad directory', (source) => mutateOnce(source,
@@ -1445,33 +1623,34 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ['artifact upload reads from workspace', (source) => mutateOnce(source,
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt',
             '${{ github.workspace }}/image-identity.txt', '${{ github.workspace }}/image-identity.txt'),
-        /exact three runner\.temp evidence paths/],
+        /exact four runner\.temp evidence paths/],
         ['artifact upload permits parent-path exfil', (source) => mutateStringOccurrence(source,
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json',
             2, '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/../synthetic-link',
-            '../synthetic-link'), /exact three runner\.temp evidence paths/],
+            '../synthetic-link'), /exact four runner\.temp evidence paths/],
         ['artifact name collides across reruns', (source) => mutateOnce(source,
             's3a-image-evidence-${{ steps.candidate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}',
             's3a-image-evidence-${{ steps.candidate.outputs.sha }}',
             'name: s3a-image-evidence-${{ steps.candidate.outputs.sha }}'), /unique across candidate, run, and rerun/],
         ['artifact boundary loses always condition', (source) => mutateOnce(source,
-            "        if: ${{ always() && steps.build.outcome == 'success' }}",
-            "        if: ${{ steps.build.outcome == 'success' }}",
-            "if: ${{ steps.build.outcome == 'success' }}"), /artifact boundary must use the exact always\/build-success/],
+            "        id: artifact_boundary\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            "        id: artifact_boundary\n        if: ${{ steps.build.outcome == 'success' }}",
+            "id: artifact_boundary\n        if: ${{ steps.build.outcome == 'success' }}"), /artifact boundary must use the exact always\/build-success/],
         ['artifact boundary is skipped with false', (source) => mutateOnce(source,
-            "        if: ${{ always() && steps.build.outcome == 'success' }}",
-            '        if: ${{ false }}', 'id: artifact_boundary\n        if: ${{ false }}'),
+            "        id: artifact_boundary\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            '        id: artifact_boundary\n        if: ${{ false }}', 'id: artifact_boundary\n        if: ${{ false }}'),
         /artifact boundary must use the exact always\/build-success/],
-        ['artifact boundary continues on error', (source) => mutateOnce(source,
-            '        id: artifact_boundary\n        if:',
-            '        id: artifact_boundary\n        continue-on-error: true\n        if:',
-            'id: artifact_boundary\n        continue-on-error: true'), /artifact boundary must not continue on error/],
-        ['artifact boundary accepts a directory', (source) => mutateOnce(source,
+        ['artifact boundary cannot return control', (source) => mutateOnce(source,
+            "        id: artifact_boundary\n        if: ${{ always() && steps.build.outcome == 'success' }}\n        continue-on-error: true",
+            "        id: artifact_boundary\n        if: ${{ always() && steps.build.outcome == 'success' }}",
+            'id: artifact_boundary\n        if:'), /artifact boundary must return control/],
+        ['artifact boundary accepts a directory', (source) => mutateStringOccurrence(source,
             '!stat.isFile() || stat.isSymbolicLink()',
+            3,
             '!stat.isDirectory() || stat.isSymbolicLink()', '!stat.isDirectory()'),
         /artifact boundary must require regular files/],
-        ['artifact boundary accepts symlink files', (source) => mutateOnce(source,
-            '!stat.isFile() || stat.isSymbolicLink()', '!stat.isFile()',
+        ['artifact boundary accepts symlink files', (source) => mutateStringOccurrence(source,
+            '!stat.isFile() || stat.isSymbolicLink()', 3, '!stat.isFile()',
             'if (!stat.isFile() || stat.size'), /artifact boundary must reject symlink/],
         ['artifact boundary skips file realpath containment', (source) => mutateOnce(source,
             'path.dirname(fs.realpathSync(filePath)) !== actualRoot',
@@ -1487,6 +1666,45 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ['artifact upload bypasses boundary outcome', (source) => mutateOnce(source,
             "steps.artifact_boundary.outcome == 'success'", "steps.build.outcome == 'success'",
             "steps.build.outcome == 'success'"), /upload must be gated by successful artifact boundary/],
+        ['final enforcement is removed', (source) => mutateOnce(source,
+            '        id: final_enforcement', '        id: final_enforcement_disabled',
+            'id: final_enforcement_disabled'), /missing final fail-closed enforcement/],
+        ['final enforcement loses always condition', (source) => mutateOnce(source,
+            '        id: final_enforcement\n        if: ${{ always() }}',
+            '        id: final_enforcement\n        if: ${{ success() }}',
+            'id: final_enforcement\n        if: ${{ success() }}'), /final enforcement must use if: always/],
+        ['final enforcement continues on error', (source) => mutateOnce(source,
+            '        id: final_enforcement\n        if: ${{ always() }}',
+            '        id: final_enforcement\n        if: ${{ always() }}\n        continue-on-error: true',
+            'id: final_enforcement\n        if: ${{ always() }}\n        continue-on-error: true'),
+        /final enforcement must not continue/],
+        ['final enforcement ignores smoke outcome', (source) => mutateOnce(source,
+            "process.env.SMOKE_OUTCOME !== 'success'", 'false', 'if (false ||'),
+        /final enforcement must check SMOKE_OUTCOME/],
+        ['final enforcement ignores smoke classification', (source) => mutateOnce(source,
+            "process.env.SMOKE_CLASSIFICATION !== 'success'", 'false', '|| false)'),
+        /final enforcement must consume stable gate classifications/],
+        ['final enforcement ignores SBOM outcome', (source) => mutateOnce(source,
+            "process.env.SBOM_OUTCOME !== 'success'", 'false', 'if (false ||'),
+        /final enforcement must check SBOM_OUTCOME/],
+        ['final enforcement ignores scan outcome', (source) => mutateOnce(source,
+            "process.env.SCAN_OUTCOME !== 'success'", 'false', 'else if (false ||'),
+        /final enforcement must check SCAN_OUTCOME/],
+        ['final enforcement ignores diagnostic outcome', (source) => mutateOnce(source,
+            "process.env.DIAGNOSTIC_OUTCOME !== 'success'", 'false', 'if (false'),
+        /final enforcement must check DIAGNOSTIC_OUTCOME/],
+        ['final enforcement ignores upload outcome', (source) => mutateOnce(source,
+            "process.env.EVIDENCE_UPLOAD_OUTCOME !== 'success'", 'false', '|| false'),
+        /final enforcement must check EVIDENCE_UPLOAD_OUTCOME/],
+        ['final enforcement loses scanner infrastructure class', (source) => mutateOnce(source,
+            "failures.push('scanner_infrastructure_failure');", "failures.push('scanner_failure');",
+            "failures.push('scanner_failure')"), /must report scanner_infrastructure_failure/],
+        ['final enforcement loses vulnerability class', (source) => mutateOnce(source,
+            "failures.push('vulnerability_gate_failure');", "failures.push('vulnerability_failure');",
+            "failures.push('vulnerability_failure')"), /must report vulnerability_gate_failure/],
+        ['final enforcement neutralizes nonzero exit', (source) => mutateStringOccurrence(source,
+            'process.exit(1);', 2, 'process.exit(0);', 'process.exit(0);'),
+        /final enforcement must fail non-success outcomes/],
         ['cleanup loses always condition', (source) => mutateOnce(source,
             '      - name: Remove only this run\'s container and local image\n        if: ${{ always() }}',
             '      - name: Remove only this run\'s container and local image\n        if: ${{ success() }}',

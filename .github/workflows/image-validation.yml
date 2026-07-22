@@ -162,6 +162,7 @@ jobs:
           } > "$EVIDENCE_DIR/image-identity.txt"
 
       - name: Start an isolated inert container from the exact image
+        id: container_start
         shell: bash
         run: |
           set -euo pipefail
@@ -182,6 +183,7 @@ jobs:
 
       - name: Wait for the bounded liveness-only health check
         id: smoke_gate
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -195,22 +197,110 @@ jobs:
                 echo "The existing Docker HEALTHCHECK reached \`healthy\`."
                 echo "This is bounded startup/liveness evidence only, not production readiness."
               } >> "$GITHUB_STEP_SUMMARY"
+              echo "classification=success" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             if [ "$running" != "true" ] || [ "$health" = "unhealthy" ] || [ "$health" = "missing" ]; then
-              docker logs "$CONTAINER_NAME" || true
+              echo "classification=runtime_liveness_failure" >> "$GITHUB_OUTPUT"
               echo "Container failed its liveness-only smoke gate (running=$running, health=$health)." >&2
               exit 1
             fi
             sleep 2
           done
 
-          docker logs "$CONTAINER_NAME" || true
+          echo "classification=runtime_liveness_failure" >> "$GITHUB_OUTPUT"
           echo "Container did not become healthy within the 240-second bound." >&2
           exit 1
 
+      - name: Capture bounded allowlisted runtime diagnostics
+        id: runtime_diagnostics
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          SMOKE_OUTCOME: ${{ steps.smoke_gate.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          diagnostic_path="$EVIDENCE_DIR/runtime-diagnostics.json"
+          if [ "$EVIDENCE_DIR" != "$RUNNER_TEMP/$EVIDENCE_SUBDIR" ] || [ -L "$EVIDENCE_DIR" ] || \
+             [ ! -d "$EVIDENCE_DIR" ] || [ -e "$diagnostic_path" ] || [ -L "$diagnostic_path" ]; then
+            echo "The runtime diagnostic path is outside its exact run-scoped boundary." >&2
+            exit 2
+          fi
+
+          running=null
+          exit_code=null
+          oom_killed=null
+          engine_error='""'
+          started_at='""'
+          finished_at='""'
+          health_status='"missing"'
+          health_log='[]'
+          container_log=''
+          if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            running="$(docker inspect --format '{{json .State.Running}}' "$CONTAINER_NAME")"
+            exit_code="$(docker inspect --format '{{json .State.ExitCode}}' "$CONTAINER_NAME")"
+            oom_killed="$(docker inspect --format '{{json .State.OOMKilled}}' "$CONTAINER_NAME")"
+            set +o pipefail
+            engine_error="$(docker inspect --format '{{json .State.Error}}' "$CONTAINER_NAME" | head -c 8192)"
+            started_at="$(docker inspect --format '{{json .State.StartedAt}}' "$CONTAINER_NAME")"
+            finished_at="$(docker inspect --format '{{json .State.FinishedAt}}' "$CONTAINER_NAME")"
+            health_status="$(docker inspect --format '{{if .State.Health}}{{json .State.Health.Status}}{{else}}"missing"{{end}}' "$CONTAINER_NAME")"
+            health_log="$(docker inspect --format '{{if .State.Health}}{{json .State.Health.Log}}{{else}}[]{{end}}' "$CONTAINER_NAME" | head -c 32768)"
+            container_log="$(docker logs --tail 200 "$CONTAINER_NAME" 2>&1 | head -c 20480)"
+            set -o pipefail
+          fi
+          export DIAG_RUNNING="$running" DIAG_EXIT_CODE="$exit_code" DIAG_OOM_KILLED="$oom_killed"
+          export DIAG_ENGINE_ERROR="$engine_error" DIAG_STARTED_AT="$started_at" DIAG_FINISHED_AT="$finished_at"
+          export DIAG_HEALTH_STATUS="$health_status" DIAG_HEALTH_LOG="$health_log" DIAG_CONTAINER_LOG="$container_log"
+
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const root = path.resolve(process.env.RUNNER_TEMP, process.env.EVIDENCE_SUBDIR);
+          if (process.env.EVIDENCE_DIR !== root || fs.realpathSync(root) !== root) process.exit(2);
+          const parse = (name, fallback) => {
+            try { return JSON.parse(process.env[name]); } catch { return fallback; }
+          };
+          const clip = (value, limit) => String(value || '').slice(0, limit);
+          const rawHealthLog = parse('DIAG_HEALTH_LOG', []);
+          const healthLog = Array.isArray(rawHealthLog) ? rawHealthLog.slice(-8).map((entry) => ({
+            start: clip(entry?.Start, 80),
+            end: clip(entry?.End, 80),
+            exitCode: Number.isSafeInteger(entry?.ExitCode) ? entry.ExitCode : null,
+            output: clip(entry?.Output, 2048)
+          })) : [];
+          const diagnostic = {
+            running: parse('DIAG_RUNNING', null),
+            exitCode: parse('DIAG_EXIT_CODE', null),
+            oomKilled: parse('DIAG_OOM_KILLED', null),
+            engineError: clip(parse('DIAG_ENGINE_ERROR', ''), 4096),
+            startedAt: clip(parse('DIAG_STARTED_AT', ''), 80),
+            finishedAt: clip(parse('DIAG_FINISHED_AT', ''), 80),
+            healthStatus: clip(parse('DIAG_HEALTH_STATUS', 'missing'), 32),
+            healthLog,
+            containerLog: clip(process.env.DIAG_CONTAINER_LOG, 20480)
+          };
+          const target = path.join(root, 'runtime-diagnostics.json');
+          fs.writeFileSync(target, `${JSON.stringify(diagnostic, null, 2)}\n`, { flag: 'wx', mode: 0o600 });
+          const stat = fs.lstatSync(target);
+          if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0 || stat.size > 96 * 1024
+              || path.dirname(fs.realpathSync(target)) !== root) process.exit(2);
+          NODE
+          echo "classification=captured" >> "$GITHUB_OUTPUT"
+          if [ "$SMOKE_OUTCOME" = "success" ]; then
+            summary_classification=runtime_liveness_success
+          else
+            summary_classification=runtime_liveness_failure
+          fi
+          printf '\n### Bounded runtime diagnostics\n\nClassification: `%s`. Raw output is retained only in the bounded artifact.\n' \
+            "$summary_classification" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Generate SPDX JSON SBOM from the exact local image
         id: sbom
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        continue-on-error: true
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           image: ${{ steps.candidate.outputs.image_ref }}
@@ -224,20 +314,34 @@ jobs:
           upload-release-assets: false
 
       - name: Require a non-empty valid SPDX JSON result
+        id: sbom_gate
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          SBOM_OUTCOME: ${{ steps.sbom.outcome }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -s "$EVIDENCE_DIR/sbom.spdx.json" ]; then
-            echo "::error title=SBOM infrastructure failure::The SPDX JSON result is missing or empty."
+          echo "classification=sbom_infrastructure_failure" >> "$GITHUB_OUTPUT"
+          if [ "$SBOM_OUTCOME" != "success" ]; then
+            echo "::error title=SBOM infrastructure failure::The SBOM action did not complete successfully."
             exit 2
           fi
 
           node <<'NODE'
           const fs = require('node:fs');
+          const path = require('node:path');
 
+          const resultPath = `${process.env.EVIDENCE_DIR}/sbom.spdx.json`;
+          let stat;
           let report;
           try {
-            report = JSON.parse(fs.readFileSync(`${process.env.EVIDENCE_DIR}/sbom.spdx.json`, 'utf8'));
+            stat = fs.lstatSync(resultPath);
+            if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0 || stat.size > 100 * 1024 * 1024
+                || path.dirname(fs.realpathSync(resultPath)) !== fs.realpathSync(process.env.EVIDENCE_DIR)) {
+              throw new Error('result is not a bounded contained regular file');
+            }
+            report = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
           } catch (error) {
             console.error(`::error title=SBOM infrastructure failure::Invalid SPDX JSON: ${error.message}`);
             process.exit(2);
@@ -248,9 +352,11 @@ jobs:
             process.exit(2);
           }
           NODE
+          echo "classification=success" >> "$GITHUB_OUTPUT"
 
       - name: Scan the exact local image with Grype
         id: scan
+        if: ${{ always() && steps.build.outcome == 'success' }}
         continue-on-error: true
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
         with:
@@ -266,12 +372,14 @@ jobs:
 
       - name: Distinguish scanner failure from high or critical findings
         id: scan_gate
-        if: ${{ always() && steps.scan.outcome != 'skipped' }}
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        continue-on-error: true
         env:
           SCAN_OUTCOME: ${{ steps.scan.outcome }}
         shell: bash
         run: |
           set -euo pipefail
+          echo "classification=scanner_infrastructure_failure" >> "$GITHUB_OUTPUT"
           if [ "$SCAN_OUTCOME" != "success" ]; then
             echo "::error title=Scanner infrastructure failure::The Grype action did not complete successfully."
             exit 2
@@ -310,17 +418,21 @@ jobs:
           );
 
           if (counts.high > 0 || counts.critical > 0) {
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'classification=vulnerability_gate_failure\n');
             console.error(`High/critical vulnerability gate failed: high=${counts.high}, critical=${counts.critical}.`);
             process.exit(1);
           }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'classification=success\n');
           NODE
 
       - name: Require exact regular evidence files before upload
         id: artifact_boundary
         if: ${{ always() && steps.build.outcome == 'success' }}
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
+          echo "classification=evidence_boundary_failure" >> "$GITHUB_OUTPUT"
           node <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');
@@ -348,6 +460,7 @@ jobs:
 
           const limits = {
             'image-identity.txt': 16 * 1024,
+            'runtime-diagnostics.json': 96 * 1024,
             'sbom.spdx.json': 100 * 1024 * 1024,
             'grype.json': 100 * 1024 * 1024
           };
@@ -372,9 +485,11 @@ jobs:
 
           let sbom;
           let scan;
+          let diagnostic;
           try {
             sbom = JSON.parse(fs.readFileSync(path.join(actualRoot, 'sbom.spdx.json'), 'utf8'));
             scan = JSON.parse(fs.readFileSync(path.join(actualRoot, 'grype.json'), 'utf8'));
+            diagnostic = JSON.parse(fs.readFileSync(path.join(actualRoot, 'runtime-diagnostics.json'), 'utf8'));
           } catch (error) {
             console.error(`Evidence JSON validation failed: ${error.message}`);
             process.exit(2);
@@ -385,6 +500,30 @@ jobs:
           }
           if (!Array.isArray(scan.matches)) {
             console.error('Grype evidence lacks a matches array.');
+            process.exit(2);
+          }
+          const diagnosticKeys = [
+            'running', 'exitCode', 'oomKilled', 'engineError', 'startedAt', 'finishedAt',
+            'healthStatus', 'healthLog', 'containerLog'
+          ];
+          if (!diagnostic || typeof diagnostic !== 'object' || Array.isArray(diagnostic)
+              || JSON.stringify(Object.keys(diagnostic).sort()) !== JSON.stringify([...diagnosticKeys].sort())
+              || ![true, false, null].includes(diagnostic.running)
+              || !(diagnostic.exitCode === null || Number.isSafeInteger(diagnostic.exitCode))
+              || ![true, false, null].includes(diagnostic.oomKilled)
+              || typeof diagnostic.engineError !== 'string' || diagnostic.engineError.length > 4096
+              || typeof diagnostic.startedAt !== 'string' || diagnostic.startedAt.length > 80
+              || typeof diagnostic.finishedAt !== 'string' || diagnostic.finishedAt.length > 80
+              || typeof diagnostic.healthStatus !== 'string' || diagnostic.healthStatus.length > 32
+              || typeof diagnostic.containerLog !== 'string' || diagnostic.containerLog.length > 20480
+              || !Array.isArray(diagnostic.healthLog) || diagnostic.healthLog.length > 8
+              || diagnostic.healthLog.some((entry) => !entry || typeof entry !== 'object' || Array.isArray(entry)
+                || JSON.stringify(Object.keys(entry).sort()) !== JSON.stringify(['end', 'exitCode', 'output', 'start'])
+                || typeof entry.start !== 'string' || entry.start.length > 80
+                || typeof entry.end !== 'string' || entry.end.length > 80
+                || !(entry.exitCode === null || Number.isSafeInteger(entry.exitCode))
+                || typeof entry.output !== 'string' || entry.output.length > 2048)) {
+            console.error('Runtime diagnostic evidence failed its exact allowlist and bounds contract.');
             process.exit(2);
           }
 
@@ -413,20 +552,75 @@ jobs:
             process.exit(2);
           }
           NODE
+          echo "classification=success" >> "$GITHUB_OUTPUT"
 
       - name: Upload bounded image-validation evidence only
+        id: evidence_upload
         if: ${{ always() && steps.artifact_boundary.outcome == 'success' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: s3a-image-evidence-${{ steps.candidate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/runtime-diagnostics.json
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json
           if-no-files-found: error
           retention-days: 7
           overwrite: false
           include-hidden-files: false
+
+      - name: Enforce all independent image validation gates fail-closed
+        id: final_enforcement
+        if: ${{ always() }}
+        env:
+          SMOKE_OUTCOME: ${{ steps.smoke_gate.outcome }}
+          SMOKE_CLASSIFICATION: ${{ steps.smoke_gate.outputs.classification }}
+          SBOM_OUTCOME: ${{ steps.sbom.outcome }}
+          SBOM_GATE_OUTCOME: ${{ steps.sbom_gate.outcome }}
+          SBOM_CLASSIFICATION: ${{ steps.sbom_gate.outputs.classification }}
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          SCAN_GATE_OUTCOME: ${{ steps.scan_gate.outcome }}
+          SCAN_CLASSIFICATION: ${{ steps.scan_gate.outputs.classification }}
+          DIAGNOSTIC_OUTCOME: ${{ steps.runtime_diagnostics.outcome }}
+          ARTIFACT_BOUNDARY_OUTCOME: ${{ steps.artifact_boundary.outcome }}
+          EVIDENCE_UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const failures = [];
+          if (process.env.SMOKE_OUTCOME !== 'success' || process.env.SMOKE_CLASSIFICATION !== 'success') {
+            failures.push('runtime_liveness_failure');
+          }
+          if (process.env.SBOM_OUTCOME !== 'success' || process.env.SBOM_GATE_OUTCOME !== 'success'
+              || process.env.SBOM_CLASSIFICATION !== 'success') {
+            failures.push('sbom_infrastructure_failure');
+          }
+          if (process.env.SCAN_CLASSIFICATION === 'vulnerability_gate_failure') {
+            failures.push('vulnerability_gate_failure');
+          } else if (process.env.SCAN_OUTCOME !== 'success' || process.env.SCAN_GATE_OUTCOME !== 'success'
+              || process.env.SCAN_CLASSIFICATION !== 'success') {
+            failures.push('scanner_infrastructure_failure');
+          }
+          if (process.env.DIAGNOSTIC_OUTCOME !== 'success'
+              || process.env.ARTIFACT_BOUNDARY_OUTCOME !== 'success'
+              || process.env.EVIDENCE_UPLOAD_OUTCOME !== 'success') {
+            failures.push('evidence_boundary_failure');
+          }
+
+          const classifications = [...new Set(failures)];
+          const summary = classifications.length === 0
+            ? '\n### Final image validation enforcement\n\nAll independent runtime, SBOM, scanner, vulnerability, and evidence gates passed.\n'
+            : `\n### Final image validation enforcement\n\nFail-closed classifications: ${classifications.map((value) => `\`${value}\``).join(', ')}.\n`;
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+          if (classifications.length > 0) {
+            console.error(`Image validation failed closed: ${classifications.join(',')}`);
+            process.exit(1);
+          }
+          NODE
 
       - name: Remove only this run's container and local image
         if: ${{ always() }}
@@ -446,7 +640,7 @@ jobs:
               echo "Refusing cleanup outside the exact run-scoped evidence directory." >&2
               cleanup_status=1
             elif [ -d "$expected_evidence_dir" ]; then
-              for evidence_name in image-identity.txt sbom.spdx.json grype.json syft.yaml grype.yaml; do
+              for evidence_name in image-identity.txt runtime-diagnostics.json sbom.spdx.json grype.json syft.yaml grype.yaml; do
                 evidence_path="$expected_evidence_dir/$evidence_name"
                 if [ -f "$evidence_path" ] && [ ! -L "$evidence_path" ]; then
                   rm -- "$evidence_path" || cleanup_status=1
