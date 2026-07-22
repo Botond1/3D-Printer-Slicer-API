@@ -50,27 +50,52 @@ Docker image/startup smoke was `NOT_RUN_ENVIRONMENT` because the client found no
 daemon; hosted CI and all deployment/topology state remain `UNVERIFIED`. This
 checkpoint is not production promotion authorization.
 
-The I0 integration preserves that S1a upload/workspace/multipart contract and
-adds the repository-only S3a/S3a.1 workflow separation. The integrated
-workflows require an exact candidate SHA, build one run-local image for smoke,
-SBOM, and fail-closed scan, never push or deploy it, and validate whitespace
-over the dynamic `merge-base(origin/main, candidate)..candidate` range. Hosted
-Source Validation for exact S3a.1 commit
-`4f55062096d57a9245282b686fd8619c29c473e8` passed in run `29680527745`;
-Image Validation run `29680527711` failed closed, and whether that was scanner
-infrastructure failure or actual HIGH/CRITICAL findings is `UNVERIFIED`.
-Branch protection, required checks, immutable registry digest, signature,
-attestation, promotion, production readiness, VPS topology, and deployed state
-remain `UNVERIFIED`. I0 changes neither `main` nor the running VPS.
+The current I1 integration checkpoint is
+`I1_CHECKPOINT_BLOCKED_IMAGE`, anchored by runtime commit
+`995bb9de750ef2a0ebefb22d8cedf6e19c49cf48`. It integrates, in order,
+`a862e2c` (source `78693fe`, dependency maintenance), `4c7df9e` (source
+`b91401e`, S3a-B1), `7bc7946` (source `edbe81c`, S3a-V1), `6921f7a`
+(source `fd93c0b`, S3a-B2), `d1db7df` (source `67a2922`, S1b), `89369d1`
+(source `fd6f4f3`, S1c), `2fee995` (source `d1bc413`, S1c evidence),
+`896f3bf` (source `d0d7dc3`, process settlement polling), and then the runtime
+commit. Dependency patch ID `5b593dee0baaa1437aedfd4892654bd90c971a4e`
+occurs once; duplicate commit `306b799` was not integrated.
 
-The manifest/lock freeze applies only to the parallel S1a/S3a wave: neither lane
-may edit `package.json` or `package-lock.json`. A newly discovered advisory must
-open a separate serialized `dependency-maintenance` checkpoint as the sole owner
-of manifest/lock changes. After I0 integration, S1b follows S1a for
-deadline/abort-aware queueing; S1c follows the AbortSignal contract for
-process-tree cancellation and subprocess-environment minimization. S3a's
-repository no-deploy workflow separation is integrated, while its
-image/supply-chain gate remains blocked on the fail-closed hosted image result.
+I1 now handles `SIGTERM` and `SIGINT` through one single-flight shutdown. It
+closes HTTP admission, starts typed queue shutdown, rejects later admission as
+`SLICE_QUEUE_SHUTDOWN`, aborts queued and active jobs, waits for both HTTP and
+queue drains, and retains an active slot until its task actually settles. The
+S1c command contract uses a minimal child environment and bounded TERM-to-KILL
+process-tree termination; abort cannot become a later success or released
+artifact. Deterministic evidence covers timer, listener, counter, response,
+workspace, and process-settlement cleanup.
+
+Local I1 evidence is green for a 175-package clean install, focused
+runtime/queue/native tests 48/48, focused quality tests 58/58, aggregate
+JavaScript 457/457 and Python 22/22, syntax over 86 tracked JavaScript and 25
+Python files, runtime-stage safety over 192
+tracked and six staged files, final tracked safety over 196 files, documentation
+stage safety over five files, and an offline production audit with zero findings. The online
+audit is `BLOCKED_POLICY`; `actionlint` and Docker are unavailable.
+
+Hosted S3a-B2 Source Validation for exact source commit `fd93c0b` passed in run
+`29957927228` / job `89051575423` with no annotations or Node 20 warnings.
+Image Validation run `29957927370` / job `89051576245` failed. Its retained
+artifact is `8545008995` with digest
+`sha256:c0c80f843cbea086eb4a8e6a293cd467254b8da67ae1c09b4e84d832a21d3bcc`.
+Annotations show liveness exit 1, a Grype HIGH result, scanner-classifier exit
+1, and final-gate exit 1. Swiper 7.2.0 advisory
+`GHSA-hmx5-qpq5-p643` / `CVE-2026-27212` is an allowed known advisory for
+triage, but it is not claimed as the sole failure: the persistent runtime
+liveness failure remains unresolved. S3a-V2C's deterministic Swiper vendor
+upgrade is not integrated and its worktree/surfaces are untouched.
+
+The historical S1a/S3a manifest freeze was closed by the serialized dependency
+patch above. S3a's repository no-deploy workflow separation is integrated, but
+its image gate remains blocked. Branch protection, required checks, immutable
+registry digest, signature, attestation, promotion, S4, S3b, production
+readiness, VPS topology, and deployed state remain `UNVERIFIED`. I1 changes
+neither `main` nor the running VPS and grants no deployment permission.
 S4 owns service authentication and proxy/private-ingress/egress topology. S3b
 owns staging, promotion, readiness, and rollback drills only after S4 evidence
 and separate explicit user/owner authorization. S2 artifact work waits for the

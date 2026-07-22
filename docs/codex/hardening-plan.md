@@ -21,10 +21,10 @@ This plan was initialized 2026-07-18 from historical code baseline
 | --- | --- | --- | --- | --- |
 | S0/S0.1 - truthful local baseline and dependency gate | `VERIFIED` | clean authorized baseline | committed validation and dependency-remediation evidence | Commits `b1411be8cfd68101eb2a3a909b0e1a428e8c111f` and `f9ed1ee6791e531670d5d7703f994bfb51986ebb` have green local fail-closed tests, syntax/safety gates, clean install, and zero production audit findings. Environment/external skips are explicit; this is not promotion authorization. |
 | S1a - upload and job-workspace lifecycle | `VERIFIED` | `S0/S0.1 VERIFIED` | committed slice upload/workspace lifecycle, focused tests, and canonical wave reconciliation | Commit `e7a409566bb8795a22f38bbf9f514b42c51bda74` allocates marked ownership before persistence, fixes `fieldNestingDepth: 0`, bounds parser counts/sizes, contains transient/output custody, cleans admission/rejection/error/response/success paths, and keeps startup stale recovery audit-only. Exact clean install/audit/full-suite/syntax/safety gates passed; Docker was explicitly environment-unavailable. |
-| S1b - queue deadlines and abort contract | `NOT_STARTED` | S1a workspace ownership | queue scheduling/deadline/counter lane | Deadlines fire independently of worker availability; client abort and deadline produce one AbortSignal contract; timers/listeners/counters and owned workspace cleanup are correct on every path. |
-| S1c - native process lifecycle and environment | `NOT_STARTED` | S1b AbortSignal contract | command/native process lane | Exact argument arrays are preserved; converters/slicers receive a tested minimal environment; abort terminates complete process trees with verified escalation and no orphan; local helper paths are module-anchored without changing flattened image behavior. |
+| S1b - queue deadlines and abort contract | `VERIFIED` | S1a workspace ownership | integrated queue scheduling/deadline/counter/runtime lifecycle | Independent deadlines, request/shutdown AbortSignal propagation, typed `SLICE_QUEUE_SHUTDOWN`, single settlement, active-slot retention, and timer/listener/counter/workspace cleanup have deterministic local evidence. |
+| S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `NOT_STARTED` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | resource/archive lane; artifact/pricing lane; container-permission lane | Measured HTTP/CPU/RAM/PID/disk/archive/model/output caps fail closed; streaming/actual-byte limits apply; unique artifact correlation plus TTL/count/byte quotas exist; output validity is required before success; pricing writes are atomic with rollback; root filesystem/code/profiles are read-only/root-owned and mutable pricing/input/output are separated. |
-| S3a - repository build/provenance and automatic-deploy separation | `BLOCKED` | S0.1; integrated with S1a | exact-candidate, build-once, no-push/no-deploy validation is integrated; remaining image/supply-chain evidence stays fail closed | Automatic repository deployment is removed and hosted source validation is green. Hosted image validation is fail-closed red with cause `UNVERIFIED`; immutable registry digest, signature/attestation, branch policy, promotion, topology, readiness, and rollback are not verified. |
+| S3a - repository build/provenance and automatic-deploy separation | `BLOCKED` | S0.1; integrated through I1 | exact-candidate, build-once, no-push/no-deploy validation and Node 24 action maintenance are integrated; remaining image/runtime and supply-chain evidence stays fail closed | Exact S3a-B2 source validation is green, but hosted image validation has both an unresolved persistent liveness failure and a HIGH scanner path. Swiper 7.2.0 is known, but is not claimed as the sole failure. Immutable registry digest, signature/attestation, branch policy, promotion, topology, readiness, and rollback are unverified. |
 | S4 - service trust and topology | `NOT_STARTED` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | service auth/policy; proxy/private-ingress and egress topology; observability | Rotatable scoped service auth protects slice and sensitive operations; protected-route policy is consistent; logs/metrics/traces correlate request/job/artifact; proxy trust is tested; private sidecar ingress and egress are restricted. No production promotion without this evidence or explicit human owner/user-approved, documented risk acceptance; an agent cannot grant the exception. |
 | S3b - staging and promotion drill | `NOT_STARTED` | S3a evidence; S4 evidence; separate explicit user/owner authorization | staging/promotion/readiness/rollback drill only | Promote a verified immutable artifact through a human-authorized staging gate; readiness is bounded and meaningful; failure restores the prior artifact; the drill is recorded. No authorization or verification is inferred from S1a/S3a/S4 repository work. |
 | S5 - optional isolated worker and async API | `NOT_STARTED` | explicit architecture decision after S1a-S4 and S3b evidence | API-version lane; worker-isolation lane; migration lane | Decision record approves cost/complexity; isolated worker enforces resource/network boundaries; versioned async job states, idempotency, cancellation, retention, and compatibility migration are tested without silently changing current endpoints. |
@@ -105,6 +105,46 @@ authentication, or authorize a `main` promotion.
   signature/attestation, promotion, production readiness, VPS topology, and
   deployed state remain `UNVERIFIED`. I0 changed neither `main` nor the running
   VPS.
+
+## Current I1 S1c/S3a integration checkpoint
+
+- Canonical status: `I1_CHECKPOINT_BLOCKED_IMAGE` at runtime commit
+  `995bb9de750ef2a0ebefb22d8cedf6e19c49cf48`.
+- Integrated equivalents, in order: `a862e2c` from `78693fe`, `4c7df9e` from
+  `b91401e`, `7bc7946` from `edbe81c`, `6921f7a` from `fd93c0b`, `d1db7df`
+  from `67a2922`, `89369d1` from `fd6f4f3`, `2fee995` from `d1bc413`,
+  `896f3bf` from `d0d7dc3`, then `995bb9d`.
+- Dependency patch ID `5b593dee0baaa1437aedfd4892654bd90c971a4e`
+  appears once. Duplicate `306b799` was not picked.
+- `SIGTERM`/`SIGINT` now enter one single-flight shutdown that closes HTTP,
+  begins typed queue shutdown, aborts queued and active jobs, and awaits both
+  drains. Active capacity is held until task settlement; cancellation cannot
+  become later success or artifact release.
+- S1c propagates the effective signal through every native phase, supplies a
+  minimal child environment, and uses bounded TERM-to-KILL exact-tree
+  termination. Timers, listeners, counters, response/workspace custody, and
+  process polling clean or settle deterministically.
+- Local evidence: clean install 175; runtime/queue/native 48/48; quality-focused
+  58/58; aggregate JavaScript 457/457 and Python 22/22; syntax 86 tracked
+  JavaScript and 25 Python files; runtime-stage safety 192
+  tracked/six staged, final tracked safety 196, and documentation-stage safety
+  five staged; offline audit zero. Online audit is `BLOCKED_POLICY`; `actionlint`
+  and Docker are unavailable.
+- The transient Graphify service map covered 30 code files, 411 nodes, 767
+  edges, 15 communities, and 659 extracted/108 inferred relations, without
+  missing, dangling, self-loop, or duplicate relation edges. Output was removed.
+- Exact S3a-B2 source commit `fd93c0b` passed hosted Source run `29957927228` /
+  job `89051575423` with no annotations or Node 20 warnings. Image run
+  `29957927370` / job `89051576245` failed; artifact `8545008995` has digest
+  `sha256:c0c80f843cbea086eb4a8e6a293cd467254b8da67ae1c09b4e84d832a21d3bcc`.
+  Annotations show liveness exit 1, Grype HIGH, scanner-classifier exit 1, and
+  final-gate exit 1.
+- Swiper 7.2.0 `GHSA-hmx5-qpq5-p643` / `CVE-2026-27212` is known and allowed
+  for bounded triage, but persistent runtime liveness is independently
+  unresolved. S3a-V2C is not integrated and its worktree/surfaces are untouched.
+- Branch protection, required checks, registry digest/signature/attestation,
+  promotion, S4, S3b, production readiness, VPS/deployed state remain
+  `UNVERIFIED`. No production authorization or side effect is inferred.
 
 ## S0 work package and gates
 
@@ -283,12 +323,10 @@ before that decision.
 
 ## Parallel sequencing and integration
 
-During the S1a/S3a parallel wave, `package.json` and `package-lock.json` are
-frozen to both lanes. This is a wave-only freeze, not permanent S0.1 ownership.
-If a newly discovered advisory requires a dependency change, stop parallel
-manifest work and create a separate serialized `dependency-maintenance`
-checkpoint as the sole owner of manifest/lock edits and their reinstall/audit
-evidence.
+The S1a/S3a parallel-wave manifest freeze is closed. Its separate serialized
+dependency-maintenance patch is integrated exactly once. A future advisory
+still requires a newly authorized serialized owner for manifest/lock edits and
+fresh reinstall/audit evidence.
 
 S1a owns upload/job-workspace lifecycle and canonical knowledge corrections for
 this wave. S3a owns repository-only Docker/build/provenance and
@@ -297,9 +335,9 @@ parallel. Each lane returns implementation and validation evidence. After
 integration, the integrator alone reconciles canonical shared knowledge against
 the integrated tree.
 
-S1b follows the S1a ownership seam for real queue deadlines and abort
-propagation; S1c follows the resulting AbortSignal contract for process-tree
-cancellation, exact command integrity, and subprocess-environment minimization.
+S1b and S1c are integrated at I1: real queue deadlines, abort propagation,
+graceful runtime shutdown, process-tree cancellation, exact command integrity,
+and subprocess-environment minimization are locally verified.
 S2 artifact lifecycle waits for S1a, while its container envelope waits for S3a
 image-control decisions. S4 then supplies service authentication and verified
 proxy/private ingress/egress topology. S3b may run staging, promotion, readiness,
@@ -312,9 +350,9 @@ grant itself the exception.
 
 | ID | Decision / risk | Evidence and consequence | Owner / resolution |
 | --- | --- | --- | --- |
-| D-001 | S0 recorded upload residue and false deadlines; S1a now verifies local workspace cleanup without changing the dequeue-only deadline. | Multer still precedes handler queue, but the route awaits queue settlement before workspace cleanup; timeout is still checked only on dequeue ([project map](project-map.md)). | S1b owns deadlines |
+| D-001 | S0 recorded upload residue and false deadlines; S1a fixed workspace ownership and I1 adds independent queue timers. | Multer still precedes queue admission, but the route awaits safe settlement and cleanup; queued timeout no longer waits for worker availability ([project map](project-map.md)). | S1b locally verified; S2 owns the wider HTTP/resource envelope |
 | D-002 | Do not characterize vulnerability outcomes as desired behavior. | Durable tests cover safe FIFO/caps/mappings, not delayed expiry, residue, collision, or zero-stat success. | All test owners |
-| D-003 | Local Python path divergence is real but container command contract must not change in S0. | Bare script names work only in flattened image. | S1c native/path lane |
+| D-003 | Local Python path divergence was real at S0. | I1 resolves allowlisted helpers absolutely from the application module while preserving flattened `/app` image behavior. | S1c locally verified |
 | D-004 | Validation CI does not protect `main` by itself. | Branch rules/required checks remain external `UNVERIFIED`; the former automatic `main` deploy is removed, but workflow text alone does not enforce repository settings. | repository admin required-check verification; S3b promotion gate |
 | D-005 | Do not invent Action SHAs, image digests, Python hashes, or versions. | Provenance must be verified upstream first. | S3a build lane |
 | D-006 | `/health` remains liveness in S0. | It returns status/uptime only; deploy uses it as smoke. | S3b readiness drill after S4 |
@@ -323,9 +361,11 @@ grant itself the exception.
 | D-009 | Native compromise is contained only partially. | Non-root/cap-drop/PID exist, but code/config/state and network remain writable/available. | S2/S5 |
 | D-010 | Promotion to `main` was not part of S0 completion. | At S0 the workflow could deploy every `main` push. S3a has since removed that repository path without creating a replacement promotion mechanism. | S4 then separately authorized S3b promotion design |
 | D-011 | S0.1 remediated the registry/audit findings, but that result alone did not complete the application mitigation for deeply nested multipart fields. | Commit `f9ed1ee6791e531670d5d7703f994bfb51986ebb` locks Multer 2.2.0 and the other verified non-major fixes, and its production audit is zero. S1a commit `e7a409566bb8795a22f38bbf9f514b42c51bda74` separately configures and live-tests fixed `limits.fieldNestingDepth: 0`. | S0.1 registry/audit remediation and S1a application mitigation locally verified |
-| D-012 | Native children inherit the API environment and share unrestricted egress. | `runCommand` supplies no explicit `env`; a compromised parser/slicer may read `ADMIN_API_KEY` or other process secrets and contact external systems. | S1c minimal environment allowlist and dynamic exclusion proof; topology/container egress gate before promotion |
+| D-012 | Native children require both secret minimization and egress control. | I1 supplies a tested minimal environment excluding API secrets, but parser/slicer processes still share unrestricted container egress. | S1c environment verified; S4 topology/container egress gate before promotion |
 | D-013 | Public slice routes have no application service authentication. | Rate limiting is not caller authentication, and private/localhost topology is an independent external control currently `UNVERIFIED`. | S4 service-auth/private-topology evidence, or explicit human owner/user-approved, documented risk acceptance; an agent cannot grant the exception. S3b blocks promotion meanwhile. |
 | D-014 | `fileSize` alone was not a complete multipart/HTTP resource envelope. | S1a now locally verifies finite file/field/part/name/value limits and fixed `fieldNestingDepth: 0`, with live file-first rejection/cleanup evidence; Busboy keeps a fixed 2000 header-pair boundary. Total upload time, request/header/socket timeouts, connection limits, and measured resource envelopes remain open. | S2 measured server and connection envelope |
-| D-015 | A `main` push could historically deploy independently of validation CI. | S3a removed that automatic repository path. Required checks and branch protection remain external `UNVERIFIED`; no integrated commit is production authorization. | S3a-B image-gate diagnosis plus repository policy verification; S3b only after S4 and separate user/owner authorization |
-| D-016 | The manifest/lock freeze is limited to the S1a/S3a parallel wave. | Parallel edits would make reinstall/audit evidence ambiguous; permanently assigning the files to S0.1 would also block legitimate maintenance. | A new advisory gets a separate serialized `dependency-maintenance` checkpoint as sole owner |
-| D-017 | Parallel lanes return evidence; the integrator owns canonical reconciliation. | Concurrent edits to shared knowledge create conflict and can record pre-integration claims. S1a owns this wave's correction and S3a must not edit the same canonical files. | Integrator reconciles `AGENTS.md` and `docs/codex/**` after integration |
+| D-015 | A `main` push could historically deploy independently of validation CI. | S3a removed that path. Exact S3a-B2 source is green, but image liveness and HIGH scanning remain red; required checks and branch protection are external `UNVERIFIED`. | S3a image/runtime diagnosis plus repository policy verification; S3b only after S4 and separate authorization |
+| D-016 | The manifest/lock freeze was limited to the S1a/S3a parallel wave. | The dependency patch is now integrated once by patch ID; duplicate `306b799` was not picked. | Future advisory work requires a new serialized owner and audit evidence |
+| D-017 | Parallel lanes return evidence; the integrator owns canonical reconciliation. | I1 reconciliation supersedes historical stage status without rewriting historical evidence files. | Integrator maintains `AGENTS.md` and `docs/codex/**` after integration |
+| D-018 | Graceful shutdown must drain both HTTP and queue work without early capacity release. | `SIGTERM`/`SIGINT` are single-flight; queue shutdown aborts queued/active work, closes HTTP, and awaits both drains while active slots remain owned until task settlement. | I1 runtime lifecycle locally verified |
+| D-019 | A known image advisory does not explain away an independent liveness failure. | Hosted Image run `29957927370` shows both persistent liveness exit 1 and the HIGH scanner path. Swiper 7.2.0 is known, but S3a-V2C is not integrated. | S3a remains blocked; diagnose/fix both paths without weakening gates |

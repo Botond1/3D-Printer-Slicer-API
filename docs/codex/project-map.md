@@ -101,6 +101,65 @@ attestation, promotion, production readiness, VPS topology, deployed identity,
 and the integrated cherry-pick SHA's hosted results remain `UNVERIFIED`. I0 did
 not change `main` or the running VPS.
 
+## Current I1 S1c/S3a integration checkpoint
+
+The canonical current checkpoint is `I1_CHECKPOINT_BLOCKED_IMAGE`, anchored by
+runtime commit `995bb9de750ef2a0ebefb22d8cedf6e19c49cf48`. Historical checkpoint
+records above and under [`evidence/`](evidence/) remain historical; this section
+supersedes their pre-integration stage status without rewriting them.
+
+The integrated cherry-pick equivalents, in exact order, are `a862e2c` (source
+`78693fe`, dependency patch), `4c7df9e` (source `b91401e`, S3a-B1), `7bc7946`
+(source `edbe81c`, S3a-V1), `6921f7a` (source `fd93c0b`, S3a-B2), `d1db7df`
+(source `67a2922`, S1b), `89369d1` (source `fd6f4f3`, S1c), `2fee995`
+(source `d1bc413`, S1c evidence), `896f3bf` (source `d0d7dc3`, settlement
+polling), followed by `995bb9d`. Dependency patch ID
+`5b593dee0baaa1437aedfd4892654bd90c971a4e` occurs once; duplicate `306b799`
+was not picked.
+
+Runtime and queue behavior now verified locally:
+
+- `SIGTERM` and `SIGINT` enter one single-flight lifecycle. Queue shutdown
+  starts synchronously, HTTP admission closes, and shutdown awaits both drains.
+- Queue shutdown rejects new admission with typed HTTP 503
+  `SLICE_QUEUE_SHUTDOWN`, aborts queued and active jobs, and does not release an
+  active slot/counter until the task promise settles.
+- Real queued-job timers enforce wait deadlines independently of worker
+  availability. Abort, activation, expiry, shutdown, and settlement clean
+  timers/listeners/counters exactly once.
+- The effective signal reaches every converter/slicer phase. Native cancellation
+  terminates exact process trees with bounded TERM-to-KILL escalation, and an
+  unverified tree retains the command and queue slot fail closed.
+- Child commands receive an explicit minimal environment. Pre-abort and phase
+  guards prevent later work; abort cannot produce a success response or release
+  a final artifact. Route/workspace/response cleanup remains awaited.
+
+Local evidence: clean install 175 packages; focused runtime/queue/native 48/48;
+focused quality 58/58; aggregate 457/457 JavaScript and 22/22 Python; syntax 86
+tracked JavaScript and 25 Python files; repository
+safety at the runtime stage over 192 tracked and six staged files, plus final
+tracked safety over 196 files and documentation-stage safety over five files;
+offline production audit zero. Online
+audit is `BLOCKED_POLICY`; `actionlint` and Docker are unavailable. The
+transient Graphify service map covered 30 code files, 411 nodes, 767 edges, 15
+communities, 659 extracted and 108 inferred relations, with no missing,
+dangling, self-loop, or duplicate relation edges; its output was removed.
+
+Hosted exact-source S3a-B2 evidence is mixed. Source run `29957927228`, job
+`89051575423`, passed with no annotations or Node 20 warnings. Image run
+`29957927370`, job `89051576245`, failed and retained artifact `8545008995`,
+digest `sha256:c0c80f843cbea086eb4a8e6a293cd467254b8da67ae1c09b4e84d832a21d3bcc`.
+Annotations record liveness exit 1, Grype HIGH, scanner-classifier exit 1, and
+final-gate exit 1. Swiper 7.2.0 `GHSA-hmx5-qpq5-p643` /
+`CVE-2026-27212` is a known allowed advisory, but the unresolved persistent
+runtime liveness failure means it cannot be called the sole image failure.
+S3a-V2C is not integrated and its surfaces remain untouched.
+
+Branch protection, required checks, registry digest/signature/attestation,
+promotion, S4, S3b, production readiness, VPS topology, and deployed state
+remain `UNVERIFIED`. I1 made no `main`, PR/merge, tag/release, registry, VPS,
+SSH, or deployment change and authorizes none.
+
 ## System context
 
 The service is a synchronous HTTP API that accepts model/CAD input, invokes
@@ -119,16 +178,18 @@ Actual request-to-artifact sequence:
    ([`app/routes/slice.routes.js`](../../app/routes/slice.routes.js),
    `createSliceRouter`; [`workspace.js`](../../app/services/slice/workspace.js),
    `createJobWorkspace`).
-3. The awaited handler enqueues the already-uploaded request by resolved client IP
+3. The awaited handler binds request/response disconnects to one abort signal,
+   then enqueues the already-uploaded request by resolved client IP
    ([`app/services/slice.service.js`](../../app/services/slice.service.js),
    `handleSlicePrusa` / `handleSliceOrca`).
-4. Only after a worker slot opens does `processSlice` parse request options,
+4. Only after a worker slot opens does `processSlice` receive the queue-owned
+   effective signal, parse request options,
    rename/inspect input, convert/orient, transform, and validate build bounds;
    upload, extraction, conversion, orientation, transform, engine staging, and
    request-time profile paths remain inside the owning workspace
    ([`pipeline.js`](../../app/services/slice/pipeline.js), `processSlice`).
 5. A runtime profile and argument array are built; `execFile` invokes Python or
-   Prusa/Orca with a direct-child timeout
+   Prusa/Orca with a minimal environment, timeout, and exact-tree cancellation
    ([`app/services/slice/command.js`](../../app/services/slice/command.js),
    `runCommand`).
 6. The slicer first writes inside the workspace. A validated regular output is
@@ -177,9 +238,11 @@ code order is authoritative.
   global error mapping. Busboy's header-pair boundary remains the internal fixed
   value 2000. Total upload time, request/header/socket deadlines, connection
   limits, and a measured memory/disk envelope remain S2 work.
-- Queue expiry is checked only by `runNextSliceJob` after a slot opens; no timer
-  enforces the configured deadline while the head worker is busy
-  ([`queue.js`](../../app/services/slice/queue.js), `runNextSliceJob`).
+- Queue expiry has an immediate per-job timer and a dequeue-time defense in
+  depth. Shutdown and client disconnect use the same effective abort contract;
+  active capacity remains occupied until the active task actually settles
+  ([`queue-scheduler.js`](../../app/services/slice/queue-scheduler.js),
+  `createQueueScheduler`).
 - Temporary renamed/extracted/converted/oriented/transformed/profile and native
   staging paths resolve inside the marked workspace. Cleanup validates marker,
   containment, and symlink state before recursive removal; it never recursively
@@ -227,13 +290,14 @@ Runtime route registration, not README lists, is canonical:
 - Python helpers load untrusted geometry through `trimesh`/`gmsh`; native
   Prusa/Orca parse the resulting model and profiles. They run in the API process
   container's security domain, not an isolated worker.
-- `runCommand` uses `execFile` and arrays, preventing shell interpolation, but
-  its timeout targets the direct child only and does not verify descendant
-  termination ([`command.js`](../../app/services/slice/command.js)).
-- Python and slicer children inherit the API process environment unless an
-  explicit environment is supplied; no minimal allowlist or egress boundary is
-  verified. Argument/environment integrity is `NOT_COVERED_S0` and belongs to
-  the S1c process contract.
+- `runCommand` uses `execFile` and exact argument arrays, supplies a tested
+  minimal environment, and coordinates timeout/abort cancellation across the
+  exact child tree ([`command.js`](../../app/services/slice/command.js),
+  [`process-tree.js`](../../app/services/slice/process-tree.js)). POSIX uses a
+  detached process group; Windows uses trusted absolute `taskkill.exe` exact-PID
+  tree requests. Failed termination proof retains the active slot fail closed.
+- Native children no longer inherit arbitrary API environment values. Network
+  egress remains unrestricted and belongs to the S4 topology gate.
 - Docker verifies versioned Prusa/Orca AppImage SHA-256 values, while Ubuntu
   tags, NodeSource/Apt inputs, unversioned Python requirements, action tags, and
   Compose image tags remain floating
@@ -310,13 +374,13 @@ delta above for present test and audit status.
   environment approvals, and workflow token defaults.
 - `UNVERIFIED`: deployed commit/image, VPS checkout cleanliness, reverse proxy,
   firewall/egress, quotas, backups, monitoring, and rollback readiness.
-- `UNVERIFIED`: native child-process trees, installed parser behavior under
-  hostile archives/models, and exact Prusa/Orca metadata variants.
+- Locally tested process-tree cancellation does not verify hostile
+  archive/model parser behavior, exact Prusa/Orca metadata variants, or the
+  production/container egress boundary.
 - `UNVERIFIED`: required output retention, artifact correlation identifier, and
   product policy for browser-origin protected pricing mutations.
 
-For the S1a/S3a parallel wave, the manifest/lock freeze is wave-scoped. A newly
-discovered advisory moves to a separate serialized `dependency-maintenance`
-checkpoint as sole owner. Each lane returns evidence; the integrator owns the
-post-integration canonical reconciliation, and S3a does not edit `AGENTS.md` or
-`docs/codex/**` in parallel.
+The S1a/S3a manifest freeze was wave-scoped and is closed. The serialized
+dependency-maintenance patch is integrated exactly once. Future advisory work
+still requires explicit serialized manifest/lock ownership and fresh
+install/audit evidence.
