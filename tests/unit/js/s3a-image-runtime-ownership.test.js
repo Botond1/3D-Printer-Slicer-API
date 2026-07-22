@@ -78,6 +78,7 @@ function helperSourceContract(source) {
     for (const anchor of required) assert.ok(source.includes(anchor), `missing ${anchor}`);
     assert.equal(source.split("for (const scenario of ['A', 'B', 'C'])").length - 1, 2);
     assert.doesNotMatch(source, /(?:^|[^\w.])exec(?:Sync)?\s*\(|\bshell\s*:\s*true|\beval\s*\(|\/bin\/(?:ba)?sh|\$\(/);
+    assert.match(source, /::error title=I2 runtime ownership::runtime_ownership_failure:/);
 }
 
 function step(id, source = WORKFLOW) {
@@ -107,9 +108,11 @@ function workflowContract(source) {
     for (const file of files) assert.ok(boundary.includes(file) && upload.includes(file), `missing ${file}`);
     assert.match(boundary, /'runtime-ownership\.json': 128 \* 1024/);
     assert.match(boundary, /validateOwnershipDocument\(ownership, \{ requireMainCleanup: true \}\)/);
+    assert.match(boundary, /::error title=I2 evidence boundary::\$\{code\}/);
     assert.match(boundary, /ownership\.image\.reference !== process\.env\.IMAGE_REF[\s\S]*ownership\.image\.id !== identity\.local_image_id/);
     for (const name of ['I2_UID_PROBE_NAME', 'I2_GID_PROBE_NAME', 'I2_PROBE_A_NAME',
         'I2_PROBE_B_NAME', 'I2_PROBE_C_NAME', 'CONTAINER_NAME']) assert.ok(boundary.includes(name));
+    assert.match(final, /::error title=I2 final enforcement::\$\{classifications\.join\(','\)\}/);
 }
 
 test('identity lookup is exact, positive, single-line, and bound to the loaded immutable image', () => {

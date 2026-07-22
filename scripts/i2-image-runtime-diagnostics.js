@@ -448,9 +448,11 @@ function main() {
     try {
         if (process.argv.length !== 3 || !['characterize', 'finalize'].includes(mode)) throw new Error('mode_invalid');
         if (mode === 'characterize') characterize(); else finalize();
-    } catch {
+    } catch (error) {
+        const detail = error instanceof Error && /^[a-z0-9_]{1,80}$/.test(error.message)
+            ? error.message : 'unclassified';
         try { appendClassification(process.env.GITHUB_OUTPUT, 'runtime_ownership_failure'); } catch {}
-        process.stderr.write('runtime_ownership_failure\n');
+        process.stderr.write(`::error title=I2 runtime ownership::runtime_ownership_failure:${detail}\n`);
         process.exitCode = 2;
     }
 }

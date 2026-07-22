@@ -476,11 +476,15 @@ jobs:
           node <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');
+          const failBoundary = (code) => {
+            if (!/^[a-z0-9_]{1,80}$/.test(code)) code = 'unclassified_boundary_failure';
+            console.error(`::error title=I2 evidence boundary::${code}`);
+            process.exit(2);
+          };
 
           const expectedRoot = path.resolve(process.env.RUNNER_TEMP, process.env.EVIDENCE_SUBDIR);
           if (process.env.EVIDENCE_DIR !== expectedRoot) {
-            console.error('Evidence directory differs from the exact run-scoped runner.temp path.');
-            process.exit(2);
+            failBoundary('evidence_root_mismatch');
           }
 
           let actualRoot;
@@ -488,14 +492,12 @@ jobs:
             const rootStat = fs.lstatSync(expectedRoot);
             if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new Error('root is not a regular directory');
             actualRoot = fs.realpathSync(expectedRoot);
-          } catch (error) {
-            console.error(`Evidence directory boundary failed: ${error.message}`);
-            process.exit(2);
+          } catch {
+            failBoundary('evidence_root_invalid');
           }
 
           if (actualRoot !== expectedRoot) {
-            console.error('Evidence directory realpath escaped the exact run-scoped path.');
-            process.exit(2);
+            failBoundary('evidence_root_realpath_mismatch');
           }
 
           const limits = {
@@ -510,17 +512,14 @@ jobs:
             let stat;
             try {
               stat = fs.lstatSync(filePath);
-            } catch (error) {
-              console.error(`Required evidence file ${name} is unavailable: ${error.message}`);
-              process.exit(2);
+            } catch {
+              failBoundary(`evidence_file_missing_${name.replace(/[^a-z0-9]/g, '_')}`);
             }
             if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0 || stat.size > limit) {
-              console.error(`Evidence file ${name} is not a bounded non-empty regular file.`);
-              process.exit(2);
+              failBoundary(`evidence_file_invalid_${name.replace(/[^a-z0-9]/g, '_')}`);
             }
             if (path.dirname(fs.realpathSync(filePath)) !== actualRoot) {
-              console.error(`Evidence file ${name} escaped the run-scoped directory.`);
-              process.exit(2);
+              failBoundary(`evidence_file_realpath_${name.replace(/[^a-z0-9]/g, '_')}`);
             }
           }
 
@@ -533,24 +532,22 @@ jobs:
             scan = JSON.parse(fs.readFileSync(path.join(actualRoot, 'grype.json'), 'utf8'));
             diagnostic = JSON.parse(fs.readFileSync(path.join(actualRoot, 'runtime-diagnostics.json'), 'utf8'));
             ownership = JSON.parse(fs.readFileSync(path.join(actualRoot, 'runtime-ownership.json'), 'utf8'));
-          } catch (error) {
-            console.error(`Evidence JSON validation failed: ${error.message}`);
-            process.exit(2);
+          } catch {
+            failBoundary('evidence_json_parse_failure');
           }
           if (typeof sbom.spdxVersion !== 'string' || typeof sbom.SPDXID !== 'string' || !Array.isArray(sbom.packages)) {
-            console.error('SPDX evidence lacks required document structure.');
-            process.exit(2);
+            failBoundary('sbom_schema_failure');
           }
           if (!Array.isArray(scan.matches)) {
-            console.error('Grype evidence lacks a matches array.');
-            process.exit(2);
+            failBoundary('grype_schema_failure');
           }
           try {
             const { validateOwnershipDocument } = require('./scripts/i2-image-runtime-diagnostics');
             validateOwnershipDocument(ownership, { requireMainCleanup: true });
           } catch (error) {
-            console.error(`Runtime ownership evidence failed its exact schema and bounds contract: ${error.message}`);
-            process.exit(2);
+            const detail = error instanceof Error && /^[a-z0-9_]{1,48}$/.test(error.message)
+              ? error.message : 'unclassified';
+            failBoundary(`ownership_schema_${detail}`);
           }
           const diagnosticKeys = [
             'running', 'exitCode', 'oomKilled', 'engineError', 'startedAt', 'finishedAt',
@@ -573,8 +570,7 @@ jobs:
                 || typeof entry.end !== 'string' || entry.end.length > 80
                 || !(entry.exitCode === null || Number.isSafeInteger(entry.exitCode))
                 || typeof entry.output !== 'string' || entry.output.length > 2048)) {
-            console.error('Runtime diagnostic evidence failed its exact allowlist and bounds contract.');
-            process.exit(2);
+            failBoundary('runtime_diagnostic_schema_failure');
           }
 
           const identityLines = fs.readFileSync(path.join(actualRoot, 'image-identity.txt'), 'utf8')
@@ -589,8 +585,7 @@ jobs:
             'identity_scope', 'registry_digest', 'signature', 'attestation'
           ];
           if (identityLines.length !== expectedKeys.length || expectedKeys.some((key) => !(key in identity))) {
-            console.error('Image identity evidence has unexpected keys or line count.');
-            process.exit(2);
+            failBoundary('image_identity_keys_failure');
           }
           if (identity.candidate_sha !== process.env.CANDIDATE_SHA || identity.local_image_ref !== process.env.IMAGE_REF ||
               !/^sha256:[0-9a-f]{64}$/.test(identity.local_image_id) ||
@@ -598,13 +593,11 @@ jobs:
               identity.identity_scope !== 'local-loaded-image-only' ||
               identity.registry_digest !== 'not_applicable_no_push' || identity.signature !== 'not_created' ||
               identity.attestation !== 'not_created') {
-            console.error('Image identity evidence failed its exact allowlist contract.');
-            process.exit(2);
+            failBoundary('image_identity_contract_failure');
           }
           if (ownership.image.reference !== process.env.IMAGE_REF || ownership.image.id !== identity.local_image_id
               || ownership.image.configuredUser !== 'slicer') {
-            console.error('Runtime ownership evidence is not bound to the exact image identity.');
-            process.exit(2);
+            failBoundary('ownership_image_binding_failure');
           }
           const expectedNames = {
             uid: process.env.I2_UID_PROBE_NAME,
@@ -616,8 +609,7 @@ jobs:
           };
           if (Object.entries(expectedNames).some(([key, name]) => ownership.cleanup[key]?.name !== name)
               || ['A', 'B', 'C'].some((key) => ownership.probes[key]?.name !== expectedNames[key])) {
-            console.error('Runtime ownership evidence is not bound to the exact run-scoped container names.');
-            process.exit(2);
+            failBoundary('ownership_name_binding_failure');
           }
           NODE
           echo "classification=success" >> "$GITHUB_OUTPUT"
@@ -792,6 +784,7 @@ jobs:
             : `\n### Final image validation enforcement\n\nFail-closed classifications: ${classifications.map((value) => `\`${value}\``).join(', ')}.\n`;
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
           if (classifications.length > 0) {
+            console.error(`::error title=I2 final enforcement::${classifications.join(',')}`);
             console.error(`Image validation failed closed: ${classifications.join(',')}`);
             process.exit(1);
           }
