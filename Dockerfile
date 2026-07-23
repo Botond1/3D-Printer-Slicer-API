@@ -126,6 +126,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     VIRTUAL_ENV=/opt/venv \
+    TMPDIR=/tmp \
+    HOME=/tmp/slicer-home \
+    XDG_CACHE_HOME=/tmp/xdg-cache \
+    XDG_CONFIG_HOME=/tmp/xdg-config \
+    XDG_RUNTIME_DIR=/tmp/xdg-runtime \
     PATH=/opt/venv/bin:$PATH
 
 WORKDIR /app
@@ -168,15 +173,20 @@ RUN ln -sf /opt/prusaslicer/AppRun /usr/local/bin/prusa-slicer \
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /app/node_modules ./node_modules
 
-# 5. Copy Application code and configs (Owned by slicer)
-COPY --chown=slicer:slicer app/ ./
-COPY --chown=slicer:slicer configs/ ./configs/
-COPY --chown=slicer:slicer package.json package-lock.json ./
+# 5. Copy immutable application and profile content as root-owned files
+COPY --chown=0:0 app/ ./
+COPY --chown=0:0 configs/ ./configs/
+COPY --chown=0:0 package.json package-lock.json ./
+COPY --chown=0:0 --chmod=0555 scripts/i4-container-entrypoint.sh /usr/local/bin/i4-container-entrypoint
 
-# 6. Create runtime directories with exact ownership
-# Root-scoped runtime folders inside WORKDIR (/app): input/, output/, configs/
-RUN mkdir -p input output configs \
-    && chown -R slicer:slicer input output configs
+# 6. Create only the root-scoped mutable runtime surfaces for the service user.
+# Production overlays configs/pricing-state with a dedicated writable bind mount;
+# configs/prusa and configs/orca remain immutable profile content.
+RUN chown -R root:root /app /opt/venv /opt/prusaslicer /opt/orcaslicer \
+    && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer \
+    && mkdir -p input output configs/pricing-state \
+    && chown slicer:slicer input output configs/pricing-state \
+    && chmod 0700 input output configs/pricing-state
 
 # Switch to safe user
 USER slicer
@@ -186,4 +196,5 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=5 \
     CMD node -e "const http=require('http');const req=http.get('http://127.0.0.1:3000/health',res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));req.setTimeout(5000,()=>{req.destroy();process.exit(1);});"
 
+ENTRYPOINT ["/usr/local/bin/i4-container-entrypoint"]
 CMD ["node", "server.js"]

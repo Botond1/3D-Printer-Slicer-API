@@ -29,7 +29,7 @@ jobs:
   validate-image:
     name: Build once, inspect, scan, and discard (NO DEPLOY)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       contents: read
     env:
@@ -202,11 +202,29 @@ jobs:
             --network none \
             --cap-drop ALL \
             --security-opt no-new-privileges \
+            --read-only \
             --pids-limit 512 \
+            --memory 4g \
+            --memory-swap 4g \
+            --cpus 2 \
+            --stop-timeout 30 \
+            --log-driver json-file \
+            --log-opt max-size=20m \
+            --log-opt max-file=5 \
             --tmpfs "/app/input:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
             --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
+            --tmpfs /app/configs/pricing-state:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700 \
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700 \
             --env "ADMIN_API_KEY=$inert_admin_key" \
             --env "SLICE_SERVICE_API_KEY=$inert_slice_service_key" \
+            --env "EXPECTED_SERVICE_UID=$SERVICE_UID" \
+            --env "EXPECTED_SERVICE_GID=$SERVICE_GID" \
+            --env "EXPECTED_PIDS_LIMIT=512" \
+            --env "EXPECTED_MEMORY_BYTES=4294967296" \
+            --env "EXPECTED_CPU_LIMIT=2.0" \
+            --env "EXPECTED_LOG_MAX_SIZE=20m" \
+            --env "EXPECTED_LOG_MAX_FILES=5" \
+            --env "EXPECTED_STOP_GRACE_PERIOD=30s" \
             --label io.s3a.validation-only=true \
             --label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID" \
             "$IMAGE_REF"
@@ -258,6 +276,10 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Wait for the bounded liveness-only health check
+        env:
+          EXPECTED_IMAGE_ID: ${{ steps.image_identity.outputs.image_id }}
+          SERVICE_UID: ${{ steps.runtime_identity.outputs.uid }}
+          SERVICE_GID: ${{ steps.runtime_identity.outputs.gid }}
         id: smoke_gate
         continue-on-error: true
         shell: bash
@@ -267,6 +289,7 @@ jobs:
             running="$(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME")"
             health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$CONTAINER_NAME")"
             if [ "$running" = "true" ] && [ "$health" = "healthy" ]; then
+              node scripts/i4-image-runtime-envelope.js
               {
                 echo "### Image runtime smoke gate"
                 echo
