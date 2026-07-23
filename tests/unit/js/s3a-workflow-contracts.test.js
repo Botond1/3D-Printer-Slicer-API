@@ -992,7 +992,7 @@ function validateImage(source) {
             && gateText.includes('process.env.SBOM_CLASSIFICATION')
             && gateText.includes('process.env.SCAN_CLASSIFICATION')
             && gateText.includes('process.env.RUNTIME_IDENTITY_CLASSIFICATION')
-            && gateText.includes('process.env.CLEANUP_CLASSIFICATION'),
+            && gateText.includes('process.env.CLEANUP_OUTCOME'),
         'image: final enforcement must consume stable gate classifications');
         for (const classification of ['runtime_liveness_failure', 'sbom_infrastructure_failure',
             'scanner_infrastructure_failure', 'vulnerability_gate_failure', 'runtime_identity_failure',

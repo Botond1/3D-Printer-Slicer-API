@@ -740,7 +740,6 @@ jobs:
           ARTIFACT_BOUNDARY_OUTCOME: ${{ steps.artifact_boundary.outcome }}
           EVIDENCE_UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
           CLEANUP_OUTCOME: ${{ steps.exact_cleanup.outcome }}
-          CLEANUP_CLASSIFICATION: ${{ steps.exact_cleanup.outputs.classification }}
         shell: bash
         run: |
           set -euo pipefail
@@ -773,7 +772,7 @@ jobs:
               || process.env.EVIDENCE_UPLOAD_OUTCOME !== 'success') {
             failures.push('evidence_boundary_failure');
           }
-          if (process.env.CLEANUP_OUTCOME !== 'success' || process.env.CLEANUP_CLASSIFICATION !== 'success') {
+          if (process.env.CLEANUP_OUTCOME !== 'success') {
             failures.push('cleanup_failure');
           }
 

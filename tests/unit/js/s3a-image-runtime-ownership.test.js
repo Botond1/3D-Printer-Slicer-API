@@ -83,6 +83,7 @@ function workflowContract(source) {
     assert.ok(source.indexOf('id: exact_cleanup') < source.indexOf('id: final_enforcement'));
     for (const anchor of ['RUNTIME_IDENTITY_OUTCOME', 'RUNTIME_IDENTITY_CLASSIFICATION',
         "failures.push('runtime_identity_failure');", 'CLEANUP_OUTCOME', "failures.push('cleanup_failure');",
+        "if (process.env.CLEANUP_OUTCOME !== 'success')",
         "process.env.SMOKE_OUTCOME !== 'success'", "process.env.SMOKE_CLASSIFICATION !== 'success'",
         'process.exit(1);']) assert.ok(final.includes(anchor), `final missing ${anchor}`);
     assert.match(DOCKERFILE, /^USER slicer$/m);
@@ -158,6 +159,7 @@ test('required workflow mutations are rejected', async (t) => {
         ['health accepts exited container', 'if [ "$running" = "true" ] && [ "$health" = "healthy" ]; then', 'if [ "$health" = "healthy" ]; then'],
         ['health weakened', "process.env.SMOKE_OUTCOME !== 'success'", 'false'],
         ['final identity ignored', "failures.push('runtime_identity_failure');", ''],
+        ['cleanup outcome ignored', "if (process.env.CLEANUP_OUTCOME !== 'success')", 'if (false)'],
         ['cleanup skipped', '        id: exact_cleanup\n        if: ${{ always() }}', '        id: exact_cleanup\n        if: ${{ success() }}'],
         ['cleanup probe omitted', '"$I2_UID_PROBE_NAME" "$I2_GID_PROBE_NAME" "$CONTAINER_NAME"', '"$I2_UID_PROBE_NAME" "$CONTAINER_NAME"']
     ];

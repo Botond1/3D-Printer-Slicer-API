@@ -100,7 +100,9 @@ test('final enforcement preserves independent fail-closed classifications', asyn
         ['runtime_liveness_failure', 'sbom_infrastructure_failure', 'vulnerability_gate_failure',
             'evidence_boundary_failure'], ['scanner_infrastructure_failure']],
         ['unknown scanner classification fails closed', { SCAN_GATE_OUTCOME: 'failure',
-            SCAN_CLASSIFICATION: 'unexpected' }, 1, ['scanner_infrastructure_failure'], []]
+            SCAN_CLASSIFICATION: 'unexpected' }, 1, ['scanner_infrastructure_failure'], []],
+        ['cleanup outcome fails independently', { CLEANUP_OUTCOME: 'failure' }, 1,
+            ['cleanup_failure'], ['evidence_boundary_failure']]
     ];
 
     for (const [name, overrides, status, included, excluded] of cases) {
