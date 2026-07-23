@@ -1032,8 +1032,12 @@ function validateImage(source) {
         addError(errors, /if \[ -n "\$\{IMAGE_REF:-\}" \]; then/.test(cleanupText),
             'image: cleanup must guard an unset IMAGE_REF before image inspection');
         addError(errors, /exact_image_present\(\)[\s\S]*docker image inspect "\$exact_ref"/.test(cleanupText)
-            && /if \[ -n "\$\{IMAGE_REF:-\}" \]; then[\s\S]*exact_image_present "\$IMAGE_REF"[\s\S]*image_state=\$\?[\s\S]*docker image rm --force "\$IMAGE_REF"[\s\S]*exact_image_present "\$IMAGE_REF"/.test(cleanupText),
+            && /if \[ -n "\$\{IMAGE_REF:-\}" \]; then[\s\S]*if exact_image_present "\$IMAGE_REF"; then[\s\S]*image_state=\$\?[\s\S]*docker image rm --force "\$IMAGE_REF"[\s\S]*if exact_image_present "\$IMAGE_REF"; then/.test(cleanupText),
         'image: cleanup must fail closed around exact image inspection, removal, and absence verification');
+        addError(errors, /if exact_container_present "\$exact_container"; then[\s\S]*container_state=\$\?/.test(cleanupText)
+            && /if exact_image_present "\$IMAGE_REF"; then[\s\S]*image_state=\$\?/.test(cleanupText)
+            && !/^\s*exact_(?:container|image)_present [^\n]+\n\s*(?:container|image)_state=\$\?/m.test(cleanupText),
+        'image: expected absent cleanup probes must be captured without triggering shell errexit');
         addError(errors, /\[ -n "\$\{EVIDENCE_DIR:-\}" \]/.test(cleanupText),
             'image: cleanup must guard an unset EVIDENCE_DIR before evidence inspection');
         addError(errors, stepScalar(cleanup, 'continue-on-error') === 'true'
@@ -1849,7 +1853,12 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         /guard an unset IMAGE_REF/],
         ['cleanup dereferences unset evidence directory', (source) => mutateOnce(source,
             '${EVIDENCE_DIR:-}', '$EVIDENCE_DIR', '[ -n "$EVIDENCE_DIR" ]'),
-        /guard an unset EVIDENCE_DIR/]
+        /guard an unset EVIDENCE_DIR/],
+        ['cleanup leaves an expected-absence probe exposed to shell errexit', (source) => mutateOnce(source,
+            '            if exact_container_present "$exact_container"; then\n              container_state=0\n            else\n              container_state=$?\n            fi',
+            '            exact_container_present "$exact_container"\n            container_state=$?',
+            'exact_container_present "$exact_container"\n            container_state=$?'),
+        /expected absent cleanup probes must be captured without triggering shell errexit/]
     ];
 
     for (const [name, mutate, expected] of cases) {

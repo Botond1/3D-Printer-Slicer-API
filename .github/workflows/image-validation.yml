@@ -669,28 +669,42 @@ jobs:
             esac
           }
           for exact_container in "$I2_UID_PROBE_NAME" "$I2_GID_PROBE_NAME" "$CONTAINER_NAME"; do
-            exact_container_present "$exact_container"
-            container_state=$?
+            if exact_container_present "$exact_container"; then
+              container_state=0
+            else
+              container_state=$?
+            fi
             if [ "$container_state" -eq 0 ]; then
               docker container rm --force "$exact_container" || cleanup_error container_remove_failure
             elif [ "$container_state" -ne 1 ]; then
               cleanup_error container_inspect_failure
             fi
-            exact_container_present "$exact_container"
-            if [ "$?" -ne 1 ]; then
+            if exact_container_present "$exact_container"; then
+              container_state=0
+            else
+              container_state=$?
+            fi
+            if [ "$container_state" -ne 1 ]; then
               cleanup_error container_cleanup_verification_failure
             fi
           done
           if [ -n "${IMAGE_REF:-}" ]; then
-            exact_image_present "$IMAGE_REF"
-            image_state=$?
+            if exact_image_present "$IMAGE_REF"; then
+              image_state=0
+            else
+              image_state=$?
+            fi
             if [ "$image_state" -eq 0 ]; then
               docker image rm --force "$IMAGE_REF" || cleanup_error image_remove_failure
             elif [ "$image_state" -ne 1 ]; then
               cleanup_error image_inspect_failure
             fi
-            exact_image_present "$IMAGE_REF"
-            if [ "$?" -ne 1 ]; then
+            if exact_image_present "$IMAGE_REF"; then
+              image_state=0
+            else
+              image_state=$?
+            fi
+            if [ "$image_state" -ne 1 ]; then
               cleanup_error image_cleanup_verification_failure
             fi
           fi

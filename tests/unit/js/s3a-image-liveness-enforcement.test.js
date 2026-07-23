@@ -229,6 +229,12 @@ test('triage workflow remains observational and preserves scan, artifact, and cl
     assert.match(boundaryStep, /'grype\.json': 100 \* 1024 \* 1024/);
     assert.doesNotMatch(boundaryStep, /vulnerability-summary|triage-summary/);
     assert.match(cleanupStep, /no prune was run/);
+    assert.match(cleanupStep,
+        /if exact_container_present "\$exact_container"; then[\s\S]*container_state=\$\?/);
+    assert.match(cleanupStep,
+        /if exact_image_present "\$IMAGE_REF"; then[\s\S]*image_state=\$\?/);
+    assert.doesNotMatch(cleanupStep,
+        /^\s*exact_(?:container|image)_present [^\n]+\n\s*(?:container|image)_state=\$\?/m);
     assert.ok(WORKFLOW.indexOf('id: exact_cleanup') < WORKFLOW.indexOf('id: final_enforcement'));
     assert.match(WORKFLOW, /push: false/);
     assert.doesNotMatch(WORKFLOW, /^\s*(?:docker\s+push|ssh\b|scp\b|rsync\b)/m);
