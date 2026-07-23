@@ -37,6 +37,10 @@ jobs:
       I2_UID_PROBE_NAME: i2-uid-${{ github.run_id }}-${{ github.run_attempt }}
       I2_GID_PROBE_NAME: i2-gid-${{ github.run_id }}-${{ github.run_attempt }}
       I2_ORCA_PROBE_NAME: i2-orca-${{ github.run_id }}-${{ github.run_attempt }}
+      I5_TOPOLOGY_PROBE_NAME: i5-topology-${{ github.run_id }}-${{ github.run_attempt }}
+      I5_PRIVATE_NETWORK_NAME: i5-private-${{ github.run_id }}-${{ github.run_attempt }}
+      I5_EGRESS_SENTINEL_NAME: i5-sentinel-${{ github.run_id }}-${{ github.run_attempt }}
+      I5_SENTINEL_NETWORK_NAME: i5-sentinel-net-${{ github.run_id }}-${{ github.run_attempt }}
       EVIDENCE_SUBDIR: s3a-image-evidence-${{ github.run_id }}-${{ github.run_attempt }}
       DOCKER_BUILD_RECORD_UPLOAD: 'false'
       DOCKER_BUILD_SUMMARY: 'false'
@@ -193,8 +197,7 @@ jobs:
             echo "::error title=I2 runtime identity::runtime_identity_contract_failure"
             exit 2
           fi
-          inert_admin_key="s3a-inert-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          inert_slice_service_key="i3-image-validation-inert-slice-key-0000000000000000"
+          inert_slice_service_key="i5-validation-slice-active-260723-a1"
           docker run --detach \
             --name "$CONTAINER_NAME" \
             --pull never \
@@ -215,8 +218,14 @@ jobs:
             --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
             --tmpfs /app/configs/pricing-state:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700 \
             --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700 \
-            --env "ADMIN_API_KEY=$inert_admin_key" \
             --env "SLICE_SERVICE_API_KEY=$inert_slice_service_key" \
+            --env "SLICE_SERVICE_API_KEY_PREVIOUS=i5-validation-slice-previous-260723-a2" \
+            --env "PRICING_API_KEY=i5-validation-pricing-active-260723-b1" \
+            --env "PRICING_API_KEY_PREVIOUS=i5-validation-pricing-previous-260723-b2" \
+            --env "ARTIFACT_API_KEY=i5-validation-artifact-active-260723-c1" \
+            --env "ARTIFACT_API_KEY_PREVIOUS=i5-validation-artifact-previous-260723-c2" \
+            --env "OPERATIONS_API_KEY=i5-validation-operations-active-260723-d1" \
+            --env "OPERATIONS_API_KEY_PREVIOUS=i5-validation-operations-previous-260723-d2" \
             --env "EXPECTED_SERVICE_UID=$SERVICE_UID" \
             --env "EXPECTED_SERVICE_GID=$SERVICE_GID" \
             --env "EXPECTED_PIDS_LIMIT=512" \
@@ -310,6 +319,19 @@ jobs:
           echo "classification=runtime_liveness_failure" >> "$GITHUB_OUTPUT"
           echo "Container did not become healthy within the 240-second bound." >&2
           exit 1
+
+      - name: Prove intended private ingress and API/native egress denial fail closed
+        id: topology_gate
+        if: ${{ steps.runtime_identity.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          EXPECTED_IMAGE_ID: ${{ steps.image_identity.outputs.image_id }}
+          SERVICE_UID: ${{ steps.runtime_identity.outputs.uid }}
+          SERVICE_GID: ${{ steps.runtime_identity.outputs.gid }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/i5-topology-runtime-gate.js
 
       - name: Capture bounded allowlisted runtime diagnostics
         id: runtime_diagnostics
@@ -578,6 +600,7 @@ jobs:
           const limits = {
             'image-identity.txt': 16 * 1024,
             'runtime-diagnostics.json': 96 * 1024,
+            'topology-evidence.json': 16 * 1024,
             'sbom.spdx.json': 100 * 1024 * 1024,
             'grype.json': 100 * 1024 * 1024
           };
@@ -600,10 +623,12 @@ jobs:
           let sbom;
           let scan;
           let diagnostic;
+          let topology;
           try {
             sbom = JSON.parse(fs.readFileSync(path.join(actualRoot, 'sbom.spdx.json'), 'utf8'));
             scan = JSON.parse(fs.readFileSync(path.join(actualRoot, 'grype.json'), 'utf8'));
             diagnostic = JSON.parse(fs.readFileSync(path.join(actualRoot, 'runtime-diagnostics.json'), 'utf8'));
+            topology = JSON.parse(fs.readFileSync(path.join(actualRoot, 'topology-evidence.json'), 'utf8'));
           } catch {
             failBoundary('evidence_json_parse_failure');
           }
@@ -635,6 +660,26 @@ jobs:
                 || !(entry.exitCode === null || Number.isSafeInteger(entry.exitCode))
                 || typeof entry.output !== 'string' || entry.output.length > 2048)) {
             failBoundary('runtime_diagnostic_schema_failure');
+          }
+          const topologyKeys = [
+            'classification', 'sentinelOperational', 'internalNetwork', 'loopbackIngress',
+            'authenticatedReadiness', 'apiEgressDenied', 'nativeEgressDenied'
+          ];
+          const topologyBooleanKeys = topologyKeys.filter((key) => key !== 'classification');
+          if (!topology || typeof topology !== 'object' || Array.isArray(topology)
+              || JSON.stringify(Object.keys(topology).sort()) !== JSON.stringify([...topologyKeys].sort())
+              || !['success', 'BLOCKED_S4_EGRESS_CAPABILITY', 'topology_gate_failure']
+                .includes(topology.classification)
+              || topologyBooleanKeys.some((key) => typeof topology[key] !== 'boolean')) {
+            failBoundary('topology_evidence_schema_failure');
+          }
+          const topologyProofs = topologyBooleanKeys.map((key) => topology[key]);
+          if ((topology.classification === 'success' && topologyProofs.some((value) => value !== true))
+              || (topology.classification === 'BLOCKED_S4_EGRESS_CAPABILITY'
+                && (topology.sentinelOperational !== true || topology.internalNetwork !== true
+                  || topology.loopbackIngress !== false || topology.authenticatedReadiness !== false
+                  || topology.apiEgressDenied !== true || topology.nativeEgressDenied !== true))) {
+            failBoundary('topology_evidence_classification_failure');
           }
 
           const identityLines = fs.readFileSync(path.join(actualRoot, 'image-identity.txt'), 'utf8')
@@ -676,6 +721,7 @@ jobs:
           path: |
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/runtime-diagnostics.json
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/topology-evidence.json
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json
           if-no-files-found: error
@@ -733,8 +779,16 @@ jobs:
               *) return 2 ;;
             esac
           }
+          remove_exact_network() {
+            local network_id="$1"
+            docker network rm "$network_id"
+          }
+          network_reference_present() {
+            docker network inspect "$1" >/dev/null 2>&1
+          }
           for exact_container in "$I2_UID_PROBE_NAME" "$I2_GID_PROBE_NAME" \
-              "$I2_ORCA_PROBE_NAME" "$CONTAINER_NAME"; do
+              "$I2_ORCA_PROBE_NAME" "$I5_TOPOLOGY_PROBE_NAME" "$CONTAINER_NAME" \
+              "$I5_EGRESS_SENTINEL_NAME"; do
             if container_record="$(exact_container_record "$exact_container")"; then
               container_state=0
             else
@@ -769,6 +823,51 @@ jobs:
               cleanup_error container_cleanup_verification_failure
             fi
           done
+          invalid_network_labels() {
+            local validation_label="$1" expected_label="$2"
+            [ "$validation_label" != "true" ] || [ "$expected_label" != "$EXPECTED_IMAGE_ID" ]
+          }
+          if docker network inspect "$I5_PRIVATE_NETWORK_NAME" >/dev/null 2>&1; then
+            network_record="$(docker network inspect --format \
+              '{{.Id}}|{{index .Labels "io.s3a.validation-only"}}|{{index .Labels "io.s3a.expected-image-id"}}|{{.Internal}}' \
+              "$I5_PRIVATE_NETWORK_NAME")" || cleanup_error network_inspect_failure
+            IFS='|' read -r network_id validation_label expected_label internal_flag <<< "$network_record"
+            if [[ ! "$network_id" =~ ^[0-9a-f]{64}$ ]] || \
+               invalid_network_labels "$validation_label" "$expected_label" || \
+               [ "$internal_flag" != "true" ]; then
+              cleanup_error network_ownership_failure
+            else
+              remove_exact_network "$network_id" || cleanup_error network_remove_failure
+            fi
+          fi
+          private_network_id="${network_id:-}"
+          if [ -n "$private_network_id" ] && docker network inspect "$private_network_id" >/dev/null 2>&1; then
+            cleanup_error network_cleanup_verification_failure
+          fi
+          if docker network inspect "$I5_PRIVATE_NETWORK_NAME" >/dev/null 2>&1; then
+            cleanup_error network_cleanup_verification_failure
+          fi
+          network_id=
+          if docker network inspect "$I5_SENTINEL_NETWORK_NAME" >/dev/null 2>&1; then
+            network_record="$(docker network inspect --format \
+              '{{.Id}}|{{index .Labels "io.s3a.validation-only"}}|{{index .Labels "io.s3a.expected-image-id"}}|{{.Internal}}' \
+              "$I5_SENTINEL_NETWORK_NAME")" || cleanup_error network_inspect_failure
+            IFS='|' read -r network_id validation_label expected_label internal_flag <<< "$network_record"
+            if [[ ! "$network_id" =~ ^[0-9a-f]{64}$ ]] || \
+               invalid_network_labels "$validation_label" "$expected_label" || \
+               [ "$internal_flag" != "false" ]; then
+              cleanup_error network_ownership_failure
+            else
+              remove_exact_network "$network_id" || cleanup_error network_remove_failure
+            fi
+          fi
+          sentinel_network_id="${network_id:-}"
+          if [ -n "$sentinel_network_id" ] && docker network inspect "$sentinel_network_id" >/dev/null 2>&1; then
+            cleanup_error network_cleanup_verification_failure
+          fi
+          if network_reference_present "$I5_SENTINEL_NETWORK_NAME"; then
+            cleanup_error network_cleanup_verification_failure
+          fi
           if [ -n "${IMAGE_REF:-}" ]; then
             if exact_image_present "$IMAGE_REF"; then
               image_state=0
@@ -795,7 +894,7 @@ jobs:
             cleanup_error evidence_directory_boundary_failure
           elif [ -d "$expected_evidence_dir" ]; then
               for evidence_name in image-identity.txt runtime-diagnostics.json \
-                  sbom.spdx.json grype.json syft.yaml grype.yaml; do
+                  topology-evidence.json sbom.spdx.json grype.json syft.yaml grype.yaml; do
                 evidence_path="$expected_evidence_dir/$evidence_name"
                 if [ -f "$evidence_path" ] && [ ! -L "$evidence_path" ]; then
                   rm -- "$evidence_path" || cleanup_error evidence_file_remove_failure
@@ -813,7 +912,7 @@ jobs:
             exit "$cleanup_status"
           fi
           echo "classification=success" >> "$GITHUB_OUTPUT"
-          echo "Removed only this run's exact containers, image tag, four evidence files, and scanner configs when present; no prune was run." >> "$GITHUB_STEP_SUMMARY"
+          echo "Removed only this run's exact containers, private and sentinel networks, image tag, five evidence files, and scanner configs when present; no prune was run." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce all independent image validation gates fail-closed
         id: final_enforcement
@@ -834,6 +933,9 @@ jobs:
           RUNTIME_IDENTITY_CLASSIFICATION: ${{ steps.runtime_identity.outputs.classification }}
           ORCA_CLI_SMOKE_OUTCOME: ${{ steps.orca_cli_smoke.outcome }}
           ORCA_CLI_SMOKE_CLASSIFICATION: ${{ steps.orca_cli_smoke.outputs.classification }}
+          TOPOLOGY_OUTCOME: ${{ steps.topology_gate.outcome }}
+          TOPOLOGY_CLASSIFICATION: ${{ steps.topology_gate.outputs.classification }}
+          TOPOLOGY_SENTINEL_OPERATIONAL: ${{ steps.topology_gate.outputs.sentinel_operational }}
           ARTIFACT_BOUNDARY_OUTCOME: ${{ steps.artifact_boundary.outcome }}
           EVIDENCE_UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
           CLEANUP_OUTCOME: ${{ steps.exact_cleanup.outcome }}
@@ -868,6 +970,15 @@ jobs:
               || process.env.ORCA_CLI_SMOKE_CLASSIFICATION !== 'success') {
             failures.push('orca_cli_smoke_failure');
           }
+          if (process.env.TOPOLOGY_OUTCOME !== 'success'
+              || process.env.TOPOLOGY_CLASSIFICATION !== 'success') {
+            failures.push(process.env.TOPOLOGY_CLASSIFICATION === 'BLOCKED_S4_EGRESS_CAPABILITY'
+              ? 'BLOCKED_S4_EGRESS_CAPABILITY' : 'topology_gate_failure');
+          }
+          if (Object.hasOwn(process.env, 'TOPOLOGY_SENTINEL_OPERATIONAL')
+              && process.env.TOPOLOGY_SENTINEL_OPERATIONAL !== 'true') {
+            failures.push('topology_sentinel_failure');
+          }
           if (process.env.DIAGNOSTIC_OUTCOME !== 'success'
               || process.env.ARTIFACT_BOUNDARY_OUTCOME !== 'success'
               || process.env.EVIDENCE_UPLOAD_OUTCOME !== 'success') {
@@ -879,7 +990,7 @@ jobs:
 
           const classifications = [...new Set(failures)];
           const summary = classifications.length === 0
-            ? '\n### Final image validation enforcement\n\nAll independent runtime identity, Orca CLI/synthetic slice, liveness, SBOM, scanner, vulnerability, evidence, and cleanup gates passed.\n'
+            ? '\n### Final image validation enforcement\n\nAll independent runtime identity, Orca CLI/synthetic slice, liveness, live-sentinel/private-ingress/API-native-egress, SBOM, scanner, vulnerability, evidence, and cleanup gates passed.\n'
             : `\n### Final image validation enforcement\n\nFail-closed classifications: ${classifications.map((value) => `\`${value}\``).join(', ')}.\n`;
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
           if (classifications.length > 0) {

@@ -72,7 +72,8 @@ function workflowContract(source) {
     }
     assert.match(smoke, /if \[ "\$running" = "true" \] && \[ "\$health" = "healthy" \]; then/);
     assert.doesNotMatch(source, /\b999\b|mode=0777|I2_PROBE_[ABC]_NAME|runtime-ownership\.json|ownership_(?:characterization|finalization)/);
-    for (const file of ['image-identity.txt', 'runtime-diagnostics.json', 'sbom.spdx.json', 'grype.json']) {
+    for (const file of ['image-identity.txt', 'runtime-diagnostics.json',
+        'topology-evidence.json', 'sbom.spdx.json', 'grype.json']) {
         assert.ok(boundary.includes(file) && upload.includes(file), `missing ${file}`);
     }
     assert.match(boundary, /'configured_user', 'service_uid', 'service_gid', 'kernel_uid', 'kernel_gid'/);
@@ -80,12 +81,13 @@ function workflowContract(source) {
     assert.match(boundary, /identity\.kernel_uid !== identity\.service_uid/);
     assert.match(cleanup, /if: \$\{\{ always\(\) \}\}[\s\S]*continue-on-error: true/);
     for (const name of ['I2_UID_PROBE_NAME', 'I2_GID_PROBE_NAME',
-        'I2_ORCA_PROBE_NAME', 'CONTAINER_NAME']) assert.ok(cleanup.includes(name));
+        'I2_ORCA_PROBE_NAME', 'I5_TOPOLOGY_PROBE_NAME',
+        'CONTAINER_NAME']) assert.ok(cleanup.includes(name));
     assert.match(cleanup, /::error title=I2 exact cleanup::\$1/);
     assert.match(cleanup, /container_ownership_failure/);
     assert.match(cleanup, /"\$exact_reference" 2>\/dev\/null\)/);
     assert.match(cleanup, /inspect_error="\$\(docker container inspect "\$exact_reference" 2>&1 >\/dev\/null\)"/);
-    assert.match(cleanup, /\[ "\$validation_label" != "true" \]/);
+    assert.equal((cleanup.match(/\[ "\$validation_label" != "true" \]/g) || []).length, 2);
     assert.match(cleanup, /\[ "\$expected_label" != "\$EXPECTED_IMAGE_ID" \]/);
     assert.match(cleanup, /docker container rm --force "\$container_id"/);
     assert.doesNotMatch(cleanup, /docker container rm --force "\$exact_container"/);
@@ -179,7 +181,9 @@ test('required workflow mutations are rejected', async (t) => {
         ['final Orca smoke ignored', "failures.push('orca_cli_smoke_failure');", ''],
         ['cleanup outcome ignored', "if (process.env.CLEANUP_OUTCOME !== 'success')", 'if (false)'],
         ['cleanup skipped', '        id: exact_cleanup\n        if: ${{ always() }}', '        id: exact_cleanup\n        if: ${{ success() }}'],
-        ['cleanup probe omitted', '              "$I2_ORCA_PROBE_NAME" "$CONTAINER_NAME"', '              "$CONTAINER_NAME"'],
+        ['cleanup probe omitted',
+            '              "$I2_ORCA_PROBE_NAME" "$I5_TOPOLOGY_PROBE_NAME" "$CONTAINER_NAME"',
+            '              "$I2_ORCA_PROBE_NAME" "$CONTAINER_NAME"'],
         ['cleanup ownership removed', '[ "$validation_label" != "true" ]', 'false'],
         ['cleanup absence streams merged', '"$exact_reference" 2>/dev/null)', '"$exact_reference" 2>&1)'],
         ['cleanup switches to name', 'docker container rm --force "$container_id"', 'docker container rm --force "$exact_container"']

@@ -196,9 +196,9 @@ async function slice(engine) {
       || text.includes('/app/') || text.includes('slice-jobs')) fail('slice_contract');
 }
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
-async function adminJson(path) {
+async function scopedJson(path, apiKey) {
   const response = await fetch('http://127.0.0.1:3000' + path, {
-    headers: { 'x-api-key': process.env.ADMIN_API_KEY },
+    headers: { 'x-api-key': apiKey },
     signal: AbortSignal.timeout(5000)
   });
   const text = await readBounded(response);
@@ -215,7 +215,7 @@ function outputEntries() {
   return entries;
 }
 async function outputInventory() {
-  const body = await adminJson('/admin/output-files');
+  const body = await scopedJson('/admin/output-files', process.env.ARTIFACT_API_KEY);
   if (body?.success !== true || !Number.isSafeInteger(body.total) || body.total !== body.files?.length
       || body.files.length < 2 || body.files.length > 16) fail('output_inventory_shape');
   return body.files.map((file) => {
@@ -226,7 +226,7 @@ async function outputInventory() {
   }).sort();
 }
 async function queueStatus() {
-  const body = await adminJson('/health/detailed');
+  const body = await scopedJson('/health/detailed', process.env.OPERATIONS_API_KEY);
   const queue = body?.subsystems?.queue;
   if (!Number.isSafeInteger(queue?.activeJobs) || queue.activeJobs < 0
       || !Number.isSafeInteger(queue?.queueLength) || queue.queueLength < 0) fail('queue_status_shape');

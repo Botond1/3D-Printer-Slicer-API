@@ -57,6 +57,8 @@ const SUCCESS_ENV = Object.freeze({
     RUNTIME_IDENTITY_CLASSIFICATION: 'success',
     ORCA_CLI_SMOKE_OUTCOME: 'success',
     ORCA_CLI_SMOKE_CLASSIFICATION: 'success',
+    TOPOLOGY_OUTCOME: 'success',
+    TOPOLOGY_CLASSIFICATION: 'success',
     ARTIFACT_BOUNDARY_OUTCOME: 'success',
     EVIDENCE_UPLOAD_OUTCOME: 'success',
     CLEANUP_OUTCOME: 'success',
@@ -312,6 +314,15 @@ function createEvidence() {
     }));
     fs.writeFileSync(path.join(evidenceDir, 'grype.json'), JSON.stringify({ matches: [] }));
     fs.writeFileSync(path.join(evidenceDir, 'runtime-diagnostics.json'), JSON.stringify(validDiagnostic()));
+    fs.writeFileSync(path.join(evidenceDir, 'topology-evidence.json'), JSON.stringify({
+        classification: 'success',
+        sentinelOperational: true,
+        internalNetwork: true,
+        loopbackIngress: true,
+        authenticatedReadiness: true,
+        apiEgressDenied: true,
+        nativeEgressDenied: true
+    }));
     return { runnerTemp, subdir, evidenceDir };
 }
 
