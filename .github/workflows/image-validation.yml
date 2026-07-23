@@ -641,7 +641,6 @@ jobs:
         shell: bash
         run: |
           set -u
-          echo "classification=cleanup_failure" >> "$GITHUB_OUTPUT"
           cleanup_status=0
           cleanup_error() {
             echo "::error title=I2 exact cleanup::$1"
@@ -714,6 +713,7 @@ jobs:
             cleanup_error evidence_directory_type_failure
           fi
           if [ "$cleanup_status" -ne 0 ]; then
+            echo "classification=cleanup_failure" >> "$GITHUB_OUTPUT"
             echo "Exact-resource cleanup failed." >&2
             exit "$cleanup_status"
           fi

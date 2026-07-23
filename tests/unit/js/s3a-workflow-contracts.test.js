@@ -1037,7 +1037,10 @@ function validateImage(source) {
         addError(errors, /\[ -n "\$\{EVIDENCE_DIR:-\}" \]/.test(cleanupText),
             'image: cleanup must guard an unset EVIDENCE_DIR before evidence inspection');
         addError(errors, stepScalar(cleanup, 'continue-on-error') === 'true'
-            && cleanupText.includes('classification=success'),
+            && (cleanupText.match(/classification=cleanup_failure/g) || []).length === 1
+            && (cleanupText.match(/classification=success/g) || []).length === 1
+            && cleanupText.indexOf('classification=cleanup_failure')
+                > cleanupText.indexOf('if [ "$cleanup_status" -ne 0 ]; then'),
         'image: cleanup must return a stable classification to final enforcement');
         addError(errors, finalEnforcement && cleanup.start < finalEnforcement.start,
             'image: exact cleanup must run before final enforcement');

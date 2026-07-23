@@ -77,6 +77,9 @@ function workflowContract(source) {
     assert.match(cleanup, /if: \$\{\{ always\(\) \}\}[\s\S]*continue-on-error: true/);
     for (const name of ['I2_UID_PROBE_NAME', 'I2_GID_PROBE_NAME', 'CONTAINER_NAME']) assert.ok(cleanup.includes(name));
     assert.match(cleanup, /::error title=I2 exact cleanup::\$1/);
+    assert.equal((cleanup.match(/classification=cleanup_failure/g) || []).length, 1);
+    assert.equal((cleanup.match(/classification=success/g) || []).length, 1);
+    assert.ok(cleanup.indexOf('classification=cleanup_failure') > cleanup.indexOf('if [ "$cleanup_status" -ne 0 ]; then'));
     assert.ok(source.indexOf('id: exact_cleanup') < source.indexOf('id: final_enforcement'));
     for (const anchor of ['RUNTIME_IDENTITY_OUTCOME', 'RUNTIME_IDENTITY_CLASSIFICATION',
         "failures.push('runtime_identity_failure');", 'CLEANUP_OUTCOME', "failures.push('cleanup_failure');",
