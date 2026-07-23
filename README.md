@@ -13,7 +13,9 @@
 
 An automated 3D slicing and pricing API built with `Node.js` and `Python` that converts supported 3D model and CAD inputs into printable outputs with validated pricing.
 
-Built for zero-downtime rollout, this API now supports two slicer engines through separate public endpoints.
+The repository target is a private sidecar API. Compose binds the API to host
+loopback; production ingress, egress, proxy hops, and deployment remain
+operator-verified gates rather than repository claims.
 
 ---
 
@@ -42,15 +44,33 @@ Built for zero-downtime rollout, this API now supports two slicer engines throug
 
 ## 🔑 Authentication
 
-Admin-protected endpoints require:
+Every protected audience has a distinct active key and an optional previous
+rotation slot:
 
-- Header: `x-api-key: <ADMIN_API_KEY>`
+| Audience | Active / previous environment keys | Header |
+| --- | --- | --- |
+| Slice | `SLICE_SERVICE_API_KEY`, `SLICE_SERVICE_API_KEY_PREVIOUS` | `x-slicer-api-key` |
+| Pricing | `PRICING_API_KEY`, `PRICING_API_KEY_PREVIOUS` | `x-api-key` |
+| Artifact | `ARTIFACT_API_KEY`, `ARTIFACT_API_KEY_PREVIOUS` | `x-api-key` |
+| Operations | `OPERATIONS_API_KEY`, `OPERATIONS_API_KEY_PREVIOUS` | `x-api-key` |
 
-Slicing endpoints require a separately scoped service credential:
+All active keys are required in normal operation. Every configured value must
+be unique across audiences and slots and contain 32-256 bytes of printable
+ASCII; missing, malformed, placeholder-like, reused, or duplicate material
+refuses startup with a generic error.
 
-- Header: `x-slicer-api-key: <SLICE_SERVICE_API_KEY>`
-- `SLICE_SERVICE_API_KEY` is required at startup, must contain 32-256 bytes of printable ASCII, and must differ from `ADMIN_API_KEY`.
-- Missing or wrong slice credentials return HTTP `401`:
+For rotation, set the replacement as active and the former active as previous,
+then restart once. Move the intended caller to the replacement, remove the
+previous slot, and restart a second time to revoke the former key. Key rings are
+snapshotted at startup.
+
+`ADMIN_API_KEY` is not the normal credential. It can temporarily fill one
+missing non-slice active audience only when
+`LEGACY_ADMIN_API_KEY_AUDIENCE` names `pricing`, `artifact`, or `operations`
+and `LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL` is a valid future timestamp no more
+than 90 days away. Slice and multi-audience legacy migration are rejected.
+
+Missing or wrong slice credentials return HTTP `401`:
 
 ```json
 {
@@ -60,7 +80,11 @@ Slicing endpoints require a separately scoped service credential:
 }
 ```
 
-Authentication rejections use timing-safe comparison and log only the request ID and resolved client IP. Requests without an `Origin` header are allowed; browser-origin slicing requests must match `SLICE_CORS_ALLOWED_ORIGINS`.
+All configured active and previous slots use fixed-length digest comparisons.
+Authentication events contain bounded correlation/audience fields, never key
+material. Requests without `Origin` are allowed; browser-origin protected calls
+must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
+`OPERATIONS_CORS_ALLOWED_ORIGINS` list.
 
 ---
 
@@ -69,6 +93,7 @@ Authentication rejections use timing-safe comparison and log only the request ID
 ### Public
 
 - `GET /health`
+- `GET /ready`
 - `GET /pricing`
 - `GET /openapi.json`
 - `GET /docs`
@@ -79,15 +104,23 @@ Authentication rejections use timing-safe comparison and log only the request ID
 - `POST /prusa/slice`
 - `POST /orca/slice`
 
-### Admin-protected
+### Pricing-protected (`PRICING_API_KEY`)
 
-- `GET /health/detailed`
 - `POST /pricing/FDM`
 - `POST /pricing/SLA`
 - `PATCH /pricing/:technology/:material`
 - `DELETE /pricing/:technology/:material`
+
+### Artifact-protected (`ARTIFACT_API_KEY`)
+
 - `GET /admin/output-files`
 - `GET /admin/download/:fileName`
+
+### Operations-protected (`OPERATIONS_API_KEY`)
+
+- `GET /health/detailed`
+- `GET /operations/readiness`
+- `GET /operations/metrics`
 
 ---
 
@@ -102,14 +135,19 @@ Authentication rejections use timing-safe comparison and log only the request ID
 - `app/config/constants.js` - runtime defaults, layer presets, limits, and extension groups.
 - `app/config/paths.js` - root-scoped runtime path resolution (`input/`, `output/`, `configs/`) and directory creation.
 - `app/config/python.js` - secure Python executable resolver (`PYTHON_EXECUTABLE` + `VIRTUAL_ENV` fallbacks).
-- `app/config/service-auth.js` - required slice-service credential validation and startup resolution.
+- `app/config/service-auth.js` - scoped active/previous credential validation, immutable startup key ring, and finite legacy migration.
+- `app/config/route-policy.js` - method-aware protected audience classification.
+- `app/config/trust-proxy.js` - fail-closed explicit proxy CIDR/loopback trust compilation.
 
 ### Middleware
 
 - `app/middleware/rateLimit.js` - in-memory IP throttling for slice and admin routes (`Retry-After` aware responses).
-- `app/middleware/requireAdmin.js` - timing-safe x-api-key guard + unauthorized attempt logging.
+- `app/middleware/requireAdmin.js` - scoped pricing/artifact/operations x-api-key guards.
 - `app/middleware/requireSliceService.js` - timing-safe x-slicer-api-key guard with sanitized request-ID/IP-only rejection logs.
-- `app/middleware/corsPolicy.js` - separate admin and slice browser-origin allowlists with no-Origin service support.
+- `app/middleware/requireAudience.js` - shared fixed-digest active/previous authentication.
+- `app/middleware/corsPolicy.js` - exact per-audience browser-origin allowlists with no-Origin service support.
+- `app/middleware/requestId.js` - bounded inbound request-ID validation and response propagation.
+- `app/middleware/requestObservability.js` - request lifecycle events and fixed-cardinality counters.
 - `app/middleware/errorHandler.js` - centralized request/upload/parser error normalization.
 
 ### Routes
@@ -122,6 +160,8 @@ Authentication rejections use timing-safe comparison and log only the request ID
 
 - `app/services/pricing.service.js` - pricing load/save/migration/lookup logic.
 - `app/services/http-server.js` - validated Node HTTP timeouts and connection/header/socket bounds.
+- `app/services/readiness.service.js` - cached admission-aware readiness probes and stable reason codes.
+- `app/services/observability/` - structured event context, redaction, and bounded metrics.
 - `app/services/admin-output.service.js` - validated admin output listing/download helpers and `ALL` ZIP bulk limit checks.
 - `app/services/slice.service.js` - end-to-end slicing orchestrator and queue error mapping.
 - `app/services/slice/command.js` - subprocess execution via `execFile` with timeout and optional debug logs.
@@ -140,8 +180,8 @@ Authentication rejections use timing-safe comparison and log only the request ID
 
 ### Utilities and API docs
 
-- `app/utils/client-ip.js` - trust-proxy-aware client IP normalization.
-- `app/utils/logger.js` - structured processing error logging.
+- `app/utils/client-ip.js` - Express trust-proxy-aware validated client IP normalization.
+- `app/utils/logger.js` - structured allowlisted processing-event emission.
 - `app/docs/swagger-docs.js` - OpenAPI generation for `/docs` and `/openapi.json`.
 
 ---
@@ -352,7 +392,7 @@ curl -X POST http://localhost:3000/orca/slice \
 
 Returns full pricing object.
 
-### `POST /pricing/FDM` / `POST /pricing/SLA` (admin)
+### `POST /pricing/FDM` / `POST /pricing/SLA` (pricing scope)
 
 Create new material for selected technology.
 
@@ -363,7 +403,7 @@ Create new material for selected technology.
 }
 ```
 
-### `PATCH /pricing/:technology/:material` (admin)
+### `PATCH /pricing/:technology/:material` (pricing scope)
 
 Update existing material price only.
 
@@ -373,7 +413,7 @@ Update existing material price only.
 }
 ```
 
-### `DELETE /pricing/:technology/:material` (admin)
+### `DELETE /pricing/:technology/:material` (pricing scope)
 
 Delete existing material from selected technology.
 
@@ -381,7 +421,7 @@ Delete existing material from selected technology.
 
 ## 🛠️ Admin Endpoint
 
-### `GET /admin/output-files` (admin)
+### `GET /admin/output-files` (artifact scope)
 
 Lists generated `.gcode` / `.sl1` files from `output/`.
 
@@ -417,7 +457,7 @@ Successful slice responses also include collision-resistant `job_id` and
 `artifact_id` fields. They expose correlation identifiers only, never absolute
 or workspace paths.
 
-### `GET /admin/download/:fileName` (admin)
+### `GET /admin/download/:fileName` (artifact scope)
 
 Downloads a generated `.gcode` / `.sl1` artifact by file name.
 
@@ -430,13 +470,13 @@ Bulk `ALL` downloads are validated before streaming and return HTTP `413` with `
 Examples:
 
 ```bash
-curl -L -H "x-api-key: <ADMIN_API_KEY>" \
+curl -L -H "x-api-key: <ARTIFACT_API_KEY>" \
   http://localhost:3000/admin/download/Cover-output-1777587775846.sl1 \
   -o Cover-output-1777587775846.sl1
 ```
 
 ```bash
-curl -L -H "x-api-key: <ADMIN_API_KEY>" \
+curl -L -H "x-api-key: <ARTIFACT_API_KEY>" \
   http://localhost:3000/admin/download/ALL \
   -o output-files.zip
 ```
@@ -481,9 +521,12 @@ cp configs/pricing.example.json configs/pricing.json
 }
 ```
 
-### 3. Set both required keys in `.env`
+### 3. Provision required scoped keys in `.env`
 
-Set distinct values for `ADMIN_API_KEY` and `SLICE_SERVICE_API_KEY`. The slice-service key must be 32-256 bytes of printable ASCII.
+Set distinct, securely generated active values for `SLICE_SERVICE_API_KEY`,
+`PRICING_API_KEY`, `ARTIFACT_API_KEY`, and `OPERATIONS_API_KEY`. Leave previous
+slots empty until a rotation. The deliberately empty `.env.example` credential
+fields are not runnable defaults; startup refuses them.
 
 ### 4. Start the app
 
@@ -531,19 +574,31 @@ You can customize pricing, security, and slicing behavior without changing endpo
 - **Pricing Matrix:** Persisted atomically in
   `configs/pricing-state/pricing.json`; a safe legacy `configs/pricing.json`
   can be migrated on startup.
-- **Admin Security:** `ADMIN_API_KEY` environment variable controls access to pricing updates/deletes.
-- **Slice Service Security:** `SLICE_SERVICE_API_KEY` is a distinct mandatory credential for both slicing endpoints and is supplied in `x-slicer-api-key`.
-- **Admin Browser CORS Control:** `/admin/*` browser-origin requests are constrained by `ADMIN_CORS_ALLOWED_ORIGINS`.
-- **Slice Browser CORS Control:** no-Origin service calls are allowed; browser-origin slice calls are constrained only by `SLICE_CORS_ALLOWED_ORIGINS`.
-- **Admin File Listing:** `GET /admin/output-files` requires `ADMIN_API_KEY` and returns generated output artifacts.
-- **Admin File Download:** `GET /admin/download/:fileName` requires `ADMIN_API_KEY`, allows downloading a single `.gcode` / `.sl1` artifact, and supports `ALL` for ZIP download of all valid output files within configured ZIP limits.
-- **Fail-Fast Security:** Server startup is blocked if `ADMIN_API_KEY` is missing or if `SLICE_SERVICE_API_KEY` is missing, not 32-256 printable-ASCII bytes, or equal to the admin key.
-- **Security Logging:** Admin auth failures log client IP with forwarded-header-aware parsing (requires `TRUST_PROXY=true` behind proxy).
-- **Timing-Safe Auth:** Admin and slice-service API key comparisons use timing-safe comparison. Slice-auth rejection logs contain only request ID and resolved client IP.
+- **Scoped Security:** Slice, pricing, artifact, and operations audiences each
+  require a distinct active credential and accept only their optional previous
+  rotation slot.
+- **Scoped Browser CORS:** no-Origin service calls are allowed; browser-origin
+  protected calls use only the matching audience allowlist. Exact-origin
+  matching rejects cross-audience, opaque, scheme, host-case, and port drift.
+- **Artifact Access:** `GET /admin/output-files` and
+  `GET /admin/download/:fileName` require `ARTIFACT_API_KEY`; `ALL` ZIP export
+  retains configured safety limits.
+- **Operations Access:** detailed health, actionable readiness, and metrics
+  require `OPERATIONS_API_KEY`.
+- **Fail-Fast Security:** normal startup requires all four valid active scoped
+  keys. The legacy admin migration is one non-slice audience, expires within 90
+  days, and is disabled by default.
+- **Timing-Safe Auth:** supplied material is compared with fixed-length digests
+  against active and previous slots; structured rejection events never contain
+  credentials.
 - **Upload Validation:** Multer accepts only a single file on the `choosenFile` field with file extension validation at upload time.
 - **Request Rate Limit:** Slicing endpoints are IP-rate-limited (default `3` requests / `60s`). Expired rate-limit buckets are automatically pruned.
 - **Admin Rate Limit:** Admin endpoints are IP-rate-limited (default `30` requests / `60s`) to reduce brute-force API-key attempts.
-- **Proxy Trust:** Set `TRUST_PROXY=true` only behind a reverse proxy and configure `TRUST_PROXY_CIDRS` to trusted proxy CIDRs/names; forwarded headers are ignored otherwise.
+- **Proxy Trust:** forwarded identity is disabled by default. `TRUST_PROXY=true`
+  requires a unique, validated set of explicit IP/CIDR peers or `loopback`;
+  wildcard, overbroad, malformed, or unknown trust refuses startup. Express
+  stops at the nearest untrusted hop, so an untrusted direct peer cannot select
+  a spoofed `X-Forwarded-For` prefix.
 - **Slicing Queue:** CPU-heavy slice jobs are queued in arrival order and processed FIFO (`MAX_CONCURRENT_SLICES`, default `1`).
 - **Queue Fairness:** Per-client queue ownership is bounded (`MAX_SLICE_QUEUE_PER_IP`) so one client cannot monopolize all pending capacity.
 - **Queue Safety Limits:** Queue length and wait timeout are bounded (`MAX_SLICE_QUEUE_LENGTH`, `MAX_SLICE_QUEUE_WAIT_MS`).
@@ -562,7 +617,6 @@ You can customize pricing, security, and slicing behavior without changing endpo
 - **Model Fidelity Policy:** Uploaded model data is never auto-healed or shape-corrected; invalid/non-printable source data is rejected with a clear error.
 - **Supply-Chain Integrity:** Docker build pins and verifies SHA256 checksums for downloaded PrusaSlicer and OrcaSlicer AppImages.
 - **Python Resolver Security:** `PYTHON_EXECUTABLE` must be absolute and existing when set; fallback resolution uses `VIRTUAL_ENV` and known absolute runtime paths.
-- **Command Debugging:** `DEBUG_COMMAND_LOGS=true` enables verbose converter/slicer stdout/stderr logging.
 
 Node HTTP envelope defaults and inclusive bounds:
 
@@ -579,21 +633,64 @@ Empty, non-decimal, unsafe, zero/negative, or out-of-range values fall back to t
 
 ---
 
+## Health, readiness, events, and metrics
+
+- `GET /health` is public process liveness.
+- `GET /ready` is public and returns only `{"status":"READY"}` or
+  `{"status":"NOT_READY"}` with HTTP `200` or `503`.
+- `GET /health/detailed` and `GET /operations/readiness` require the operations
+  key. Detailed readiness uses stable reason codes:
+  `SHUTDOWN`, `ADMISSION_CLOSED`, `QUEUE_UNAVAILABLE`,
+  `NATIVE_RUNTIME_QUARANTINED`, `STORAGE_UNSAFE`, `RETENTION_UNSAFE`,
+  `PRICING_UNAVAILABLE`, and `CONFIG_UNSAFE`.
+- `GET /operations/metrics` requires the operations key and emits bounded
+  Prometheus text with fixed labels for request audience/outcome, auth and queue
+  rejection reason, native outcome/duration, resource failures, retained
+  artifacts, cleanup, queue state, readiness, and shutdown.
+
+Structured JSON events use schema version `1` and an allowlisted vocabulary for
+request, auth, queue, native, artifact, pricing, resource, readiness, startup,
+and shutdown lifecycles. Safe inbound `X-Request-Id` values are echoed; invalid
+or injection-shaped values are replaced. Request, job, and artifact IDs
+correlate work without exposing filenames, paths, secrets, or unbounded labels.
+
+Repository implementation does not establish production alert thresholds.
+Operators must select thresholds from measured capacity and use the
+[S4 operator validation pack](docs/codex/i5-s4-operator-validation.md) before
+promotion.
+
+---
+
 ## 📝 Security and Runtime Change Snapshot (2026-07-23)
 
 This repository currently includes the following synchronized changes across implementation and docs:
 
-- **Admin security hardening:** mandatory startup guard for `ADMIN_API_KEY`, timing-safe API key verification, and request-id-aware unauthorized logging.
-- **Slice service authentication:** mandatory distinct bounded `SLICE_SERVICE_API_KEY`, exact `401` contract, timing-safe digest comparison, and rejection before workspace/upload/queue/native effects.
-- **Slice browser policy:** no-Origin service traffic remains allowed while browser-origin slice traffic uses only `SLICE_CORS_ALLOWED_ORIGINS`.
+- **Scoped service authentication:** mandatory per-audience active keys, optional
+  previous slots, exact protected-route mapping, two-restart revocation, and a
+  finite one-audience legacy admin migration.
+- **Protected browser policy:** no-Origin service traffic remains allowed while
+  browser-origin protected calls use exact audience-specific allowlists.
 - **HTTP server envelope:** bounded header/request/keep-alive timeouts, header count, connection count, and requests-per-socket with safe fallback behavior.
 - **Rate-limit controls:** dedicated admin limiter (`ADMIN_RATE_LIMIT_EXCEEDED`), slice limiter (`RATE_LIMIT_EXCEEDED`), and Retry-After-aware 429 responses.
-- **Proxy trust controls:** forwarded header trust only when `TRUST_PROXY=true` and `TRUST_PROXY_CIDRS` is configured, with shared normalized client IP resolution.
+- **Proxy trust controls:** invalid or overbroad topology refuses startup;
+  explicit trusted peers use nearest-untrusted-hop identity semantics and
+  spoof-resistant request-ID handling.
+- **Operational surfaces:** public liveness/minimal readiness plus
+  operations-scoped detailed readiness and fixed-cardinality metrics.
+- **Structured observability:** versioned, allowlisted, correlated, redacted
+  events for request/job/artifact/runtime lifecycles.
 - **Queue fairness and resilience:** FIFO queue with bounded concurrency, per-client queued+active cap (`MAX_SLICE_QUEUE_PER_IP`), queue wait timeout, and explicit queue error codes.
 - **Admin output download hardening:** extension allowlist (`.gcode`, `.sl1`), `ALL` ZIP bulk download support, path/symlink/realpath checks, and pre-stream bulk ZIP resource limits.
 - **Python subprocess execution hardening:** centralized Python executable resolution, absolute-path validation, startup fail-fast behavior, and secure converter/orientation/transform subprocess execution.
 - **Docker supply-chain validation:** build-time SHA256 verification for slicer AppImages.
 - **Documentation synchronization:** global guides, folder-local guides, and instruction overlays under `.github/instructions/*`.
+
+Compose intentionally remains loopback-published on an ordinary bridge. A local
+Docker Desktop 29.6.1 A/B proved that this topology retains API/native
+DNS/TCP/UDP egress; an internal bridge denied egress but exposed no loopback
+listener. The S4 topology exit is therefore
+`BLOCKED_S4_EGRESS_CAPABILITY`, not production-ready. No sidecar, deploy, or
+production firewall state is implied.
 
 ---
 

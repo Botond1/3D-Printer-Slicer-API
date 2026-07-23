@@ -27,6 +27,9 @@ This folder contains API-level Python integration and workflow tests.
 - `rate_limit/` — Rate-limit regression validations
   - rate_limit/rate_limit_regression_test_runner.py
 
+- `operations/` - Public readiness and operations-scoped diagnostics
+  - operations/operations_readiness_metrics_test_runner.py
+
 ## Shared Helpers
 
 Located in tests/testing-scripts/common/:
@@ -35,8 +38,9 @@ Located in tests/testing-scripts/common/:
 - http_utils.py
 - slice_matrix_runner.py
 
-Slicing helpers resolve `SLICE_SERVICE_API_KEY` and send it as
-`x-slicer-api-key`. Do not reuse `ADMIN_API_KEY` as the slice credential.
+Helpers resolve active then previous credentials for the matching audience.
+Slice uses `x-slicer-api-key`; pricing, artifact, and operations use
+`x-api-key`. Never reuse one audience's key for another.
 
 ## Reporting Contract
 
@@ -51,10 +55,14 @@ After execution, always read the generated markdown report file.
 ## Runtime Inputs
 
 - SLICER_BASE_URL from .env, fallback to default local base URL.
-- SLICE_SERVICE_API_KEY is required for matrix, queue, and unsupported-upload
+- SLICE_SERVICE_API_KEY and its optional previous slot are used for matrix,
+  queue, and unsupported-upload
   endpoint tests. The rate-limit regression intentionally omits it so it can
   prove exact pre-limit HTTP 401 responses before the limiter's HTTP 429.
-- ADMIN_API_KEY required for admin endpoint tests.
+- PRICING_API_KEY is required for pricing lifecycle tests.
+- ARTIFACT_API_KEY is required for artifact/admin-output tests.
+- OPERATIONS_API_KEY is required for detailed health/readiness/metrics tests.
+- Never print credential values in reports.
 
 ## Local Rules
 
@@ -67,3 +75,6 @@ After execution, always read the generated markdown report file.
 - Queue concurrency reports use staggered completion as the black-box signal for serialized queue processing; client start-order matching is informational.
 - Service-auth regression cases must preserve the exact HTTP 401 body:
   `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
+- Operations checks must prove public /ready is minimal, protected diagnostics
+  return OPERATIONS_AUTH_REQUIRED without a key, and response/report content is
+  bounded and secret/path/filename-safe.

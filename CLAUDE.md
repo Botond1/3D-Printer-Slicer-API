@@ -43,6 +43,7 @@ Do not introduce app/input, app/output, or app/configs.
 ## API Endpoint Snapshot
 Public endpoints:
 - GET /health
+- GET /ready
 - GET /pricing
 - GET /openapi.json
 - GET /docs
@@ -52,33 +53,72 @@ Slice-service-protected endpoints (x-slicer-api-key required):
 - POST /prusa/slice
 - POST /orca/slice
 
-Admin-protected endpoints (x-api-key required):
-- GET /health/detailed
+Pricing-protected endpoints (x-api-key with pricing audience):
 - POST /pricing/FDM
 - POST /pricing/SLA
 - PATCH /pricing/:technology/:material
 - DELETE /pricing/:technology/:material
+
+Artifact-protected endpoints (x-api-key with artifact audience):
 - GET /admin/output-files
 - GET /admin/download/:fileName
 
+Operations-protected endpoints (x-api-key with operations audience):
+- GET /health/detailed
+- GET /operations/readiness
+- GET /operations/metrics
+
 ## Security and Validation Rules
-- ADMIN_API_KEY must exist or server startup is refused.
-- SLICE_SERVICE_API_KEY must exist, contain 32-256 bytes of printable ASCII, and differ from ADMIN_API_KEY or server startup is refused.
+- Active scoped keys are mandatory for slice, pricing, artifact, and operations:
+  SLICE_SERVICE_API_KEY, PRICING_API_KEY, ARTIFACT_API_KEY, and
+  OPERATIONS_API_KEY. Each optional `_PREVIOUS` slot is accepted only for its
+  audience. All configured material must be unique, 32-256 printable-ASCII
+  bytes, and non-placeholder; invalid configuration refuses startup generically.
 - Slice requests must pass x-slicer-api-key matching SLICE_SERVICE_API_KEY. Missing or wrong credentials return HTTP 401 with `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
-- Slice service authentication uses a fixed-length SHA-256 digest plus crypto.timingSafeEqual. Rejections log only requestId and resolved client IP; credentials, method, and URL are not logged.
+- Pricing, artifact, and operations routes require x-api-key matching only their
+  scoped active or previous key. Cross-audience credentials are rejected.
+- Authentication uses fixed-length SHA-256 digest comparisons for active and
+  previous slots. Structured rejection events contain bounded correlation and
+  audience fields, never credentials, URLs, paths, filenames, or customer data.
+- Rotation is two-restart: restart with replacement active + former active in
+  previous, migrate the caller, then remove previous and restart to revoke.
+- ADMIN_API_KEY is allowed only for a finite migration of one non-slice
+  audience named by LEGACY_ADMIN_API_KEY_AUDIENCE with an ISO-8601
+  LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL no more than 90 days away. Normal
+  operation is scoped and fail closed; slice/broad/expired migration is refused.
 - Slice route order is rate limiter -> service authentication -> root-scoped workspace allocation -> Multer single-file upload -> queue -> native processing.
-- Admin operations must pass x-api-key header matching ADMIN_API_KEY.
-- Admin API key comparison uses crypto.timingSafeEqual (constant-time).
-- Admin authorization failures are rate-limited and logged with requestId + resolved client IP.
-- X-Forwarded-For is only trusted when TRUST_PROXY=true and TRUST_PROXY_CIDRS is configured.
-- Browser-origin requests to /admin/* must match ADMIN_CORS_ALLOWED_ORIGINS.
-- Slice requests without an Origin header are allowed. Browser-origin requests to the two slice endpoints must match SLICE_CORS_ALLOWED_ORIGINS; the admin allowlist does not grant slice access.
+- Forwarded identity defaults off. TRUST_PROXY=true requires a non-empty unique
+  set of validated explicit IP/CIDR entries or loopback; malformed, wildcard,
+  overbroad, duplicate, or unknown entries refuse startup. Express selects the
+  nearest untrusted hop, and direct untrusted peers cannot spoof X-Forwarded-For.
+- Safe inbound X-Request-Id values are 1-128 characters, start alphanumeric,
+  and then use only alphanumeric, dot, underscore, colon, or hyphen. Invalid
+  values are replaced; the resolved ID is returned as X-Request-Id.
+- Requests without Origin are allowed. Browser-origin protected calls use only
+  the exact audience allowlist: SLICE_, PRICING_, ARTIFACT_, or
+  OPERATIONS_CORS_ALLOWED_ORIGINS. ADMIN_CORS_ALLOWED_ORIGINS is legacy-only
+  for the single active migration audience.
 - Shell commands use execFile with argument arrays (no shell interpolation).
 - Upload accepts only a single file on choosenFile field with extension validation at upload time.
 - /admin/download/:fileName must pass filename extension validation (.gcode/.sl1), path containment checks, lstat non-symlink checks, and realpath containment checks.
 - /admin/download/ALL returns a ZIP stream of all valid output files and must preserve the same containment/symlink safety guarantees plus MAX_ZIP_ENTRIES and MAX_ZIP_UNCOMPRESSED_BYTES limits.
 - Fail-fast geometry policy: invalid geometry returns INVALID_SOURCE_GEOMETRY.
 - No automatic model healing/correction is allowed.
+
+## Readiness, Events, Metrics, and Topology
+- GET /health is public process liveness.
+- GET /ready is public minimal readiness and exposes only READY/NOT_READY.
+- Operations-scoped readiness reason codes are SHUTDOWN, ADMISSION_CLOSED,
+  QUEUE_UNAVAILABLE, NATIVE_RUNTIME_QUARANTINED, STORAGE_UNSAFE,
+  RETENTION_UNSAFE, PRICING_UNAVAILABLE, and CONFIG_UNSAFE.
+- Structured JSON events use version 1, a fixed event vocabulary, bounded
+  request/job/artifact correlation, allowlisted fields, and secret/path/customer
+  redaction. Metrics use fixed audience/outcome/reason/bucket labels only.
+- Compose intentionally remains loopback-published on its ordinary bridge. A
+  local Docker Desktop 29.6.1 A/B proved the ordinary bridge allows API/native
+  DNS/TCP/UDP egress; an internal bridge denied egress but exposed no host
+  listener. S4 is BLOCKED_S4_EGRESS_CAPABILITY. Do not invent a sidecar or claim
+  VPS/firewall/proxy/deployment proof; S5 owns the isolation architecture decision.
 
 ## Queue and Rate Protection
 Defaults:
@@ -120,7 +160,6 @@ Return and preserve queue/rate errors:
 - If PYTHON_EXECUTABLE is not set, runtime resolution checks VIRTUAL_ENV/bin/python3 and VIRTUAL_ENV/Scripts/python.exe.
 - Additional absolute-path fallbacks: /opt/venv/bin/python3, /usr/local/bin/python3, /usr/bin/python3.
 - Startup fails fast when no valid absolute Python executable can be resolved.
-- DEBUG_COMMAND_LOGS=true enables converter/slicer stdout/stderr command logging.
 
 ## Engine Boundaries
 Prusa:
@@ -135,11 +174,23 @@ Orca:
 
 ## Configuration Keys
 Core keys from .env:
-- ADMIN_API_KEY
 - SLICE_SERVICE_API_KEY
+- SLICE_SERVICE_API_KEY_PREVIOUS
+- PRICING_API_KEY
+- PRICING_API_KEY_PREVIOUS
+- ARTIFACT_API_KEY
+- ARTIFACT_API_KEY_PREVIOUS
+- OPERATIONS_API_KEY
+- OPERATIONS_API_KEY_PREVIOUS
+- ADMIN_API_KEY
+- LEGACY_ADMIN_API_KEY_AUDIENCE
+- LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL
 - PORT
-- ADMIN_CORS_ALLOWED_ORIGINS
 - SLICE_CORS_ALLOWED_ORIGINS
+- PRICING_CORS_ALLOWED_ORIGINS
+- ARTIFACT_CORS_ALLOWED_ORIGINS
+- OPERATIONS_CORS_ALLOWED_ORIGINS
+- ADMIN_CORS_ALLOWED_ORIGINS
 - HTTP_HEADERS_TIMEOUT_MS
 - HTTP_REQUEST_TIMEOUT_MS
 - HTTP_KEEP_ALIVE_TIMEOUT_MS
@@ -161,7 +212,6 @@ Core keys from .env:
 - MAX_ZIP_ENTRIES
 - MAX_ZIP_UNCOMPRESSED_BYTES
 - SLICE_COMMAND_TIMEOUT_MS
-- DEBUG_COMMAND_LOGS
 - PYTHON_EXECUTABLE
 - VIRTUAL_ENV
 - ORCA_MACHINE_PROFILE
@@ -187,6 +237,7 @@ Focused suites:
 - python tests/testing-scripts/pricing/pricing_cycle_test_runner.py
 - python tests/testing-scripts/admin/admin_output_files_test_runner.py
 - python tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
+- python tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py
 - python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count <N> --retry-on-429 3
 
 Test organization:

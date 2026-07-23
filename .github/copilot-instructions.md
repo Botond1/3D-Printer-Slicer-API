@@ -35,6 +35,7 @@ Slice IP rate limit -> x-slicer-api-key authentication -> root-scoped workspace/
 ## Endpoint Snapshot
 Public:
 - GET /health
+- GET /ready
 - GET /pricing
 - GET /openapi.json
 - GET /docs
@@ -44,14 +45,20 @@ Slice-service protected (x-slicer-api-key):
 - POST /prusa/slice
 - POST /orca/slice
 
-Admin protected (x-api-key):
-- GET /health/detailed
+Pricing protected (pricing x-api-key):
 - POST /pricing/FDM
 - POST /pricing/SLA
 - PATCH /pricing/:technology/:material
 - DELETE /pricing/:technology/:material
+
+Artifact protected (artifact x-api-key):
 - GET /admin/output-files
 - GET /admin/download/:fileName
+
+Operations protected (operations x-api-key):
+- GET /health/detailed
+- GET /operations/readiness
+- GET /operations/metrics
 
 ## Non-negotiable Constraints
 - Keep runtime folders root-scoped: input/, output/, configs/.
@@ -98,28 +105,56 @@ Orca:
 - Output mapping uses per-request isolated output directories to avoid cross-request artifact races.
 
 ## Security Rules
-- ADMIN_API_KEY must be present at startup.
-- SLICE_SERVICE_API_KEY must be present, contain 32-256 bytes of printable ASCII, and differ from ADMIN_API_KEY.
+- Normal startup requires distinct active SLICE_SERVICE_API_KEY,
+  PRICING_API_KEY, ARTIFACT_API_KEY, and OPERATIONS_API_KEY values. Optional
+  `_PREVIOUS` slots are audience-local; all configured values must be unique,
+  non-placeholder, and 32-256 printable-ASCII bytes.
 - Slice endpoints require x-slicer-api-key matching SLICE_SERVICE_API_KEY. Missing or wrong credentials return HTTP 401 with `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
-- Slice service comparison hashes both values to fixed-length SHA-256 digests and uses crypto.timingSafeEqual. Rejections log only requestId and resolved client IP.
+- Pricing, artifact, and operations endpoints require x-api-key matching only
+  their active or previous scoped slot. Cross-audience keys are rejected.
+- Authentication compares fixed-length SHA-256 digests for both slots.
+  Structured rejection events are bounded/redacted and contain no key, URL,
+  path, filename, or customer data.
+- Rotation uses two restarts: replacement active + former active previous,
+  caller migration, then previous removal and a second restart for revocation.
+- ADMIN_API_KEY is a finite legacy migration key only: one non-slice audience
+  named by LEGACY_ADMIN_API_KEY_AUDIENCE, with
+  LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL no more than 90 days away.
 - Preserve slice route order: rate limiter -> service authentication -> root-scoped workspace -> Multer -> queue -> native processing.
-- Admin routes require x-api-key equal to ADMIN_API_KEY.
-- Admin API key comparison uses crypto.timingSafeEqual (constant-time).
-- Admin middleware applies rate limiting and logs failures with requestId + resolved client IP.
-- X-Forwarded-For is only trusted when TRUST_PROXY=true and TRUST_PROXY_CIDRS is configured.
-- Browser-origin requests to /admin/* are restricted through ADMIN_CORS_ALLOWED_ORIGINS.
-- Slice requests without Origin remain allowed. Browser-origin slice requests must match SLICE_CORS_ALLOWED_ORIGINS only.
+- Forwarded identity defaults off. TRUST_PROXY=true requires unique validated
+  explicit IP/CIDR peers or loopback; malformed, wildcard, overbroad,
+  duplicate, or unknown entries refuse startup. Nearest-untrusted-hop
+  resolution prevents a direct untrusted peer selecting spoofed XFF prefixes.
+- Safe inbound X-Request-Id values are bounded; invalid input is replaced and
+  the resolved value is returned.
+- No-Origin requests remain allowed. Browser-origin protected calls use only
+  the matching SLICE_, PRICING_, ARTIFACT_, or
+  OPERATIONS_CORS_ALLOWED_ORIGINS list. ADMIN_CORS_ALLOWED_ORIGINS is
+  legacy-only for the one migrated audience.
 - /admin/download/:fileName must enforce extension validation, path containment checks, non-symlink checks, and realpath containment checks.
 - /admin/download/ALL must return ZIP output while preserving the same containment/symlink safety checks plus MAX_ZIP_ENTRIES and MAX_ZIP_UNCOMPRESSED_BYTES limits.
 - Shell commands use execFile with argument arrays (no shell interpolation).
 - Upload accepts only a single file on choosenFile field with extension validation at upload time.
+
+## Readiness, Observability, and Topology
+- Public /health is liveness; public /ready exposes only READY/NOT_READY.
+- Operations readiness reasons are SHUTDOWN, ADMISSION_CLOSED,
+  QUEUE_UNAVAILABLE, NATIVE_RUNTIME_QUARANTINED, STORAGE_UNSAFE,
+  RETENTION_UNSAFE, PRICING_UNAVAILABLE, and CONFIG_UNSAFE.
+- Versioned structured events use fixed names, bounded request/job/artifact
+  correlation, and allowlisted/redacted fields. Runtime metrics use only fixed
+  audience/outcome/reason/duration labels.
+- Compose intentionally remains loopback-published on an ordinary bridge. Local
+  Docker Desktop 29.6.1 proved ordinary-bridge API/native DNS/TCP/UDP egress;
+  an internal bridge denied egress but exposed no host listener. S4 is
+  BLOCKED_S4_EGRESS_CAPABILITY. VPS/proxy/firewall/deployment are UNVERIFIED;
+  S5 owns any isolation architecture change.
 
 ## Python Runtime Resolution
 - PYTHON_EXECUTABLE is optional but must be an existing absolute path when set.
 - Fallback resolution checks VIRTUAL_ENV/bin/python3 and VIRTUAL_ENV/Scripts/python.exe.
 - Additional fallback candidates are absolute paths: /opt/venv/bin/python3, /usr/local/bin/python3, /usr/bin/python3.
 - Server startup fails if no valid absolute Python executable can be resolved.
-- DEBUG_COMMAND_LOGS=true enables verbose subprocess command logging.
 
 ## Preferred Skills
 Skills (operational playbooks mapped to agent definitions):
@@ -158,6 +193,7 @@ Focused test runners:
 - tests/testing-scripts/slicing/unsupported_upload_test_runner.py
 - tests/testing-scripts/admin/admin_output_files_test_runner.py
 - tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
+- tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py
 
 Test organization:
 - Keep focused runners small and behavior-specific.
@@ -165,11 +201,23 @@ Test organization:
 - Keep stable deterministic runners unchanged unless endpoint behavior requires updates.
 
 ## Environment and Config Keys
-- ADMIN_API_KEY
 - SLICE_SERVICE_API_KEY
+- SLICE_SERVICE_API_KEY_PREVIOUS
+- PRICING_API_KEY
+- PRICING_API_KEY_PREVIOUS
+- ARTIFACT_API_KEY
+- ARTIFACT_API_KEY_PREVIOUS
+- OPERATIONS_API_KEY
+- OPERATIONS_API_KEY_PREVIOUS
+- ADMIN_API_KEY
+- LEGACY_ADMIN_API_KEY_AUDIENCE
+- LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL
 - PORT
-- ADMIN_CORS_ALLOWED_ORIGINS
 - SLICE_CORS_ALLOWED_ORIGINS
+- PRICING_CORS_ALLOWED_ORIGINS
+- ARTIFACT_CORS_ALLOWED_ORIGINS
+- OPERATIONS_CORS_ALLOWED_ORIGINS
+- ADMIN_CORS_ALLOWED_ORIGINS
 - HTTP_HEADERS_TIMEOUT_MS
 - HTTP_REQUEST_TIMEOUT_MS
 - HTTP_KEEP_ALIVE_TIMEOUT_MS
@@ -191,7 +239,6 @@ Test organization:
 - MAX_ZIP_ENTRIES
 - MAX_ZIP_UNCOMPRESSED_BYTES
 - SLICE_COMMAND_TIMEOUT_MS
-- DEBUG_COMMAND_LOGS
 - PYTHON_EXECUTABLE
 - VIRTUAL_ENV
 - ORCA_MACHINE_PROFILE

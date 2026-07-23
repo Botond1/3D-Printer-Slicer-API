@@ -168,6 +168,31 @@ CPU/log/stop settings. Exact active-job container stop orchestration remains
 hosted exact-candidate validation, and deployment remain unverified. See
 [`docs/codex/evidence/i4-s2-resource-state-envelope.md`](docs/codex/evidence/i4-s2-resource-state-envelope.md).
 
+The current I5/S4 worktree is based on exact I4 baseline
+`5be7b19d13616f06504c18217e25bf95c97c6e96` on branch
+`codex/i5-s4-trust-topology-observability`. Repository controls now define four
+scoped credential audiences (slice, pricing, artifact, operations), active plus
+optional previous rotation slots, exact per-audience CORS, fail-closed explicit
+proxy peer trust, safe request-ID propagation, public liveness/minimal
+readiness, operations-scoped diagnostics/metrics, and versioned redacted
+correlation events. The legacy `ADMIN_API_KEY` path is finite: one named
+non-slice audience, a maximum 90-day expiry, and no slice/broad/default use.
+
+Baseline hosted Source run `30022045664` and Image run `30022045578` passed for
+exact baseline source and image
+`sha256:5f159e1051233811ad663175311059829aecdbff16706e39aceba4aac77f9aa3`.
+Local Docker Desktop 29.6.1 A/B on that image proved ordinary loopback-published
+bridge ingress plus API/native DNS/TCP/UDP egress. An internal bridge denied
+egress but exposed no loopback listener. Compose intentionally remains
+unchanged and loopback-published on its ordinary bridge; S4 is therefore
+`BLOCKED_S4_EGRESS_CAPABILITY`, not production-ready. S5 owns the isolated
+worker/firewall architecture decision. Exact candidate SHA, hosted candidate
+validation, VPS/proxy/firewall/secret delivery/deployed state,
+branch policy, and S3b promotion/readiness/rollback remain pending or
+`UNVERIFIED`. No production, push, or deployment authorization is inferred.
+See
+[`docs/codex/evidence/i5-s4-trust-topology-observability.md`](docs/codex/evidence/i5-s4-trust-topology-observability.md).
+
 ## Read before changing
 
 - Any change: this file, the three Codex knowledge files, root `CLAUDE.md`, and
@@ -195,8 +220,16 @@ hosted exact-candidate validation, and deployment remain unverified. See
 - Preserve the slice route order: rate limiter, `x-slicer-api-key`
   authentication, root-scoped workspace/Multer upload, queue, then native
   processing. Authentication rejection must allocate no request workspace.
-- Keep `SLICE_SERVICE_API_KEY` separate from `ADMIN_API_KEY`; never log either
-  key or a rejected request's method/URL.
+- Keep active and previous slice, pricing, artifact, and operations credentials
+  unique and audience-scoped. Rotation is two-restart; previous removal revokes
+  the old key. `ADMIN_API_KEY` is legacy-only for one non-slice audience with a
+  <=90-day expiry. Never log any credential.
+- Keep browser Origin allowlists separate by audience and preserve no-Origin
+  service behavior.
+- Keep proxy trust disabled by default and compile only explicit validated
+  IP/CIDR peers or loopback. Preserve nearest-untrusted-hop spoof resistance.
+- Keep public `/ready` minimal and operations diagnostics/metrics protected.
+  Events must remain allowlisted/redacted and metrics fixed-cardinality.
 - Execute commands with `execFile` and argument arrays; never add shell
   interpolation for request-controlled data.
 - Reject invalid geometry fail-fast as `INVALID_SOURCE_GEOMETRY`; do not heal,

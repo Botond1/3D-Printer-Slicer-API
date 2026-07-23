@@ -1,5 +1,38 @@
 # Verified project map
 
+## Current I5/S4 scoped-trust candidate
+
+- Exact baseline: `5be7b19d13616f06504c18217e25bf95c97c6e96`;
+  branch: `codex/i5-s4-trust-topology-observability`.
+- Protected routes are method-aware and audience-scoped:
+  slice (`x-slicer-api-key`), pricing/artifact/operations (`x-api-key`).
+  Each audience has one mandatory active and optional previous key. Startup
+  rejects missing, malformed, placeholder-like, duplicate, or cross-audience
+  reuse. Rotation accepts old+new after restart 1 and revokes old after previous
+  removal plus restart 2.
+- `ADMIN_API_KEY` is only a finite compatibility migration for one named
+  non-slice audience, with a future ISO timestamp no more than 90 days away.
+  Normal operation requires all scoped active keys and is fail closed.
+- Browser Origin is exact and isolated per audience. No-Origin service requests
+  remain allowed. Proxy trust defaults false and true requires explicit unique
+  validated IP/CIDR peers or loopback. Express stops identity at the nearest
+  untrusted hop; invalid request IDs are replaced and the safe value is echoed.
+- Public `/health` is liveness and `/ready` returns only READY/NOT_READY.
+  Operations scope protects detailed health, full readiness reasons, and
+  fixed-cardinality Prometheus metrics. Versioned events correlate bounded
+  request/job/artifact IDs and exclude credentials, paths, filenames, customer
+  data, arbitrary event names, and unbounded labels.
+- Hosted baseline Source `30022045664` and Image `30022045578` passed. The exact
+  local A/B image was
+  `sha256:5f159e1051233811ad663175311059829aecdbff16706e39aceba4aac77f9aa3`.
+  Docker Desktop 29.6.1 ordinary bridge preserved loopback ingress but allowed
+  API/native DNS/TCP/UDP sentinel egress. Internal bridge denied egress but
+  exposed no loopback listener. Exact resources were removed.
+- Compose intentionally remains unchanged, loopback-published, and ordinary
+  bridge. Status is `BLOCKED_S4_EGRESS_CAPABILITY`; no sidecar was invented.
+  Final candidate SHA and hosted topology evidence are pending. Deployed
+  caller/proxy/firewall/secret/digest/VPS state and S3b remain `UNVERIFIED`.
+
 ## Current I4/S2 resource-state candidate
 
 - Exact baseline: `780d64dd786440cb80ddd4df38cb489c16070a07`;
@@ -210,7 +243,10 @@ Branch protection and required-check settings, signature/attestation,
 immutable registry promotion, S4, S3b, VPS/deployed state, and production
 readiness remain `UNVERIFIED`. I2 did not deploy or promote.
 
-## Current I3 service-auth and HTTP-envelope checkpoint
+## Historical I3 service-auth and HTTP-envelope checkpoint
+
+I5 supersedes this checkpoint's S4 credential, Origin, proxy, readiness, and
+observability status. The section remains as historical evidence.
 
 I3 is based on exact commit
 `6241685f1af0c0a1d4be6f1c229d66ca922fbb88` on
@@ -218,8 +254,8 @@ I3 is based on exact commit
 authentication/browser-Origin subset of S4 and the Node HTTP-server subset of
 S2. The worktree has no exact implementation commit yet.
 
-Startup now requires `SLICE_SERVICE_API_KEY` to contain 32-256 printable-ASCII
-bytes and differ from `ADMIN_API_KEY`. Both slice endpoints require
+At I3, startup required `SLICE_SERVICE_API_KEY` to contain 32-256
+printable-ASCII bytes and differ from the then-broad credential. Both slice endpoints required
 `x-slicer-api-key` after the IP limiter and before root-scoped workspace
 allocation. Missing or wrong credentials return exact HTTP 401
 `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
@@ -227,9 +263,9 @@ The middleware hashes supplied and configured values to fixed-length SHA-256
 digests before `crypto.timingSafeEqual`; its rejection event contains only
 sanitized request ID and resolved client IP.
 
-Requests without `Origin` remain allowed. Browser-origin slice calls use only
-`SLICE_CORS_ALLOWED_ORIGINS`; `ADMIN_CORS_ALLOWED_ORIGINS` is not accepted for
-slice routes. The Node server applies these defaults/inclusive bounds:
+Requests without `Origin` remained allowed. Browser-origin slice calls used
+only `SLICE_CORS_ALLOWED_ORIGINS`. I5 later completed exact protected-audience
+Origin isolation. The Node server applied these defaults/inclusive bounds:
 headers timeout 60000 `[1000,60000]`, request timeout 600000
 `[60000,600000]`, keep-alive timeout 5000 `[1000,60000]`, header count 2000
 `[16,2000]`, connections 128 `[1,1024]`, and requests/socket 100
@@ -403,12 +439,13 @@ Runtime route registration, not README lists, is canonical:
   [`server.js`](../../app/server.js), [`slice.routes.js`](../../app/routes/slice.routes.js),
   [`pricing.routes.js`](../../app/routes/pricing.routes.js), and
   [`system.routes.js`](../../app/routes/system.routes.js);
-- protected pricing mutations and `/health/detailed` / `/admin/**` apply
-  `adminRateLimiter` then `requireAdmin` in their route definitions;
+- protected pricing mutations apply `adminRateLimiter` then pricing audience
+  authentication; `/admin/**` uses artifact audience; `/health/detailed` and
+  `/operations/**` use operations audience;
 - `/prusa/slice` and `/orca/slice` apply rate limiting then mandatory
   `x-slicer-api-key` authentication before workspace/Multer/queue/native work;
-  private binding, credential rotation/revocation, and reverse-proxy topology
-  remain separate S4 controls and are `UNVERIFIED`;
+  active/previous rotation and revocation are repository-tested; deployed
+  private binding, proxy/firewall, and egress remain `UNVERIFIED`;
 - `choosenFile`, stable status/error mappings, Prusa FDM/SLA, Orca FDM-only,
   profile pairing, pricing behavior, and argument semantics are compatibility
   invariants for behavior-preserving stages;
@@ -439,12 +476,13 @@ Runtime route registration, not README lists, is canonical:
   [`image-validation.yml`](../../.github/workflows/image-validation.yml)).
 
 The remaining delivery cycle is formally separated: S3a repository-only
-build-once/no-deploy controls are integrated. I3 implements the S4
-slice-service authentication/browser-Origin subset. I4 implements the local S2
+build-once/no-deploy controls are integrated. I4 implements the local S2
 resource/state and container-envelope candidate; exact active-job container
-stop orchestration and live host/proxy evidence remain unproven. Credential
-lifecycle, protected pricing policy, proxy/private ingress/egress, and
-observability remain incomplete. S3b owns
+stop orchestration and live host/proxy evidence remain unproven. I5 implements
+and deterministic-tests the repository credential lifecycle, protected Origin
+policy, proxy/request identity, readiness, events, and metrics. Private ingress
+plus denied API/native egress is blocked by the locally available Docker
+capability and remains unverified on the target host. S3b owns
 staging, promotion, readiness, and rollback only after complete S4 evidence and
 separate explicit user/owner authorization. No repository result verifies
 production topology or authorizes promotion.
@@ -480,36 +518,35 @@ delta above for present test and audit status.
 
 ## Verified documentation/code discrepancies
 
-1. Browser CORS classification covers `/admin/**` and the two slice routes,
-   but not protected `/pricing/**`
-   mutations ([`server.js`](../../app/server.js), `resolveCorsOptions`). API-key
-   authentication still applies.
-2. `/health` is liveness only; even `/health/detailed` checks profile directories,
-   Python, output, and queue rather than a real native slice readiness proof.
-3. OpenAPI omits health/docs/root routes and several 413/429/503 responses. It
+1. `/health` is liveness only. `/ready` is intentionally minimal; operations
+   readiness checks queue/native/storage/retention/pricing/config, while detailed
+   health additionally checks Python. This is not a real synthetic native slice.
+2. OpenAPI omits docs/root routes and several 413/429/503 responses. It
    also claims default pricing entries cannot be deleted, but route/catalog code
    contains no such guard.
-4. Historically, README's “zero-downtime” and broad supply-chain claims exceeded
+3. Historically, README's “zero-downtime” and broad supply-chain claims exceeded
    the in-place, floating-input deployment then implemented by
    `deploy.yml`/`Dockerfile`. S3a removed that automatic deploy path, but did not
    verify production readiness or the remaining supply-chain claims.
-5. `docker-compose.dev.yml` live-mounts three Python helpers but not
+4. `docker-compose.dev.yml` live-mounts three Python helpers but not
    `scale_model.py`.
-6. README/config example pricing differs from the code fallback in
+5. README/config example pricing differs from the code fallback in
    [`app/config/constants.js`](../../app/config/constants.js), `DEFAULT_PRICING`.
 
 ## Open unknowns
 
 - `UNVERIFIED`: active GitHub secrets, required checks, branch protection,
   environment approvals, and workflow token defaults.
-- `UNVERIFIED`: deployed commit/image, VPS checkout cleanliness, reverse proxy,
-  proxy timeout behavior, actual host capacity, firewall/egress, quotas,
-  backups, monitoring, and rollback readiness.
+- `UNVERIFIED`: deployed commit/image and digest, intended/denied callers, VPS
+  checkout cleanliness, exact reverse-proxy CIDRs/hops/timeouts, actual host
+  capacity, firewall/egress, quotas, backups, monitoring, and rollback readiness.
+- `UNVERIFIED`: production secret source, ownership, filesystem mode, and
+  current/previous/revoked key state.
 - Locally tested process-tree cancellation does not verify hostile
   archive/model parser behavior, exact Prusa/Orca metadata variants, or the
   production/container egress boundary.
-- `UNVERIFIED`: required output retention, artifact correlation identifier, and
-  product policy for browser-origin protected pricing mutations.
+- Product/browser policy now has separate protected-audience Origin controls;
+  the actual deployed allowlists remain `UNVERIFIED`.
 
 The S1a/S3a manifest freeze was wave-scoped and is closed. The serialized
 dependency-maintenance patch is integrated exactly once. Future advisory work

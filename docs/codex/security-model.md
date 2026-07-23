@@ -1,5 +1,28 @@
 # Security model
 
+## I5/S4 scoped-trust and observability control delta
+
+Exact repository baseline:
+`5be7b19d13616f06504c18217e25bf95c97c6e96`.
+
+| Current control | Classification | Evidence and remaining boundary |
+| --- | --- | --- |
+| Scoped active/previous credentials | `IMPLEMENTED_AND_TESTED` for repository contracts | Slice, pricing, artifact, and operations have distinct mandatory active and optional previous slots; exact route/header mapping, cross-audience rejection, fixed-digest comparison, generic startup failure, and previous-slot removal/restart revocation have deterministic tests. Production secret delivery and caller migration remain `UNVERIFIED`. |
+| Finite legacy admin migration | `IMPLEMENTED_AND_TESTED` | `ADMIN_API_KEY` may replace one missing non-slice active key only when a named audience and future expiry <=90 days are valid. Slice, broad, expired, or malformed migration refuses startup. Default operation uses scoped keys only. |
+| Protected Origin policy | `IMPLEMENTED_AND_TESTED` | Exact per-audience allowlists cover slice, protected pricing, artifacts, and operations; no-Origin services remain allowed; cross-audience, opaque, scheme/host/port drift, and OPTIONS confusion are rejected. Deployed allowlists remain `UNVERIFIED`. |
+| Proxy and request identity | `IMPLEMENTED_AND_TESTED` | Proxy trust defaults false; enabled trust requires unique validated IP/CIDR peers or `loopback` and rejects wildcard/overbroad/malformed/unknown values. Nearest-untrusted-hop and spoofed-prefix cases are tested. Unsafe request IDs are replaced and the safe resolved ID is returned. Deployed CIDRs/hops remain `UNVERIFIED`. |
+| Readiness and operational disclosure | `IMPLEMENTED_AND_TESTED` | Public `/health` is liveness and public `/ready` exposes only READY/NOT_READY. Operations scope protects detailed health, stable readiness reasons, and metrics. No repository result proves production readiness. |
+| Structured events and metrics | `IMPLEMENTED_AND_TESTED` | Version-1 fixed event names, bounded request/job/artifact correlation, field allowlists, injection neutralization, secret/path/filename/customer-data exclusion, fixed metric enums, and output bounds have deterministic tests. Production collection, retention, access, alert routing, and thresholds remain `UNVERIFIED`. |
+| Private ingress plus denied API/native egress | `BLOCKED_S4_EGRESS_CAPABILITY` | Hosted baseline Source `30022045664` and Image `30022045578` passed; local Docker Desktop 29.6.1 used exact image `sha256:5f159e1051233811ad663175311059829aecdbff16706e39aceba4aac77f9aa3`. Ordinary bridge preserved loopback ingress but allowed API/native DNS/TCP/UDP egress. Internal bridge denied egress but exposed no host listener. Exact resources were removed. |
+
+Compose remains unchanged, loopback-published, and ordinary bridge. No sidecar,
+production firewall, deployed proxy, or worker isolation is invented. The final
+candidate SHA and hosted topology result are pending. Intended/denied
+deployed caller, reverse-proxy CIDRs/hops/timeouts, host egress/firewall,
+production secret source/ownership/mode/current/previous/revoked state, deployed
+digest/VPS state, branch policy, S3b, and production readiness remain
+`UNVERIFIED`. S5 owns the isolated-worker/firewall architecture decision.
+
 ## I4/S2 resource and mutable-state controls
 
 The current I4 candidate fails closed on malformed explicit resource settings,
@@ -155,21 +178,22 @@ Branch protection/required checks, signature/attestation, registry promotion,
 S4, S3b, VPS topology, deployment, and production readiness remain
 `UNVERIFIED`.
 
-## Current I3 service-auth and HTTP-envelope delta
+## Historical I3 service-auth and HTTP-envelope delta
 
 I3 is based on exact commit
 `6241685f1af0c0a1d4be6f1c229d66ca922fbb88` on branch
 `codex/i3-s4a-service-auth-http-envelope`. The current worktree has focused
 evidence but no exact implementation commit, final aggregate, or hosted
 exact-SHA result. Controls below are therefore
-`PENDING_LOCAL_VALIDATION`, not stage-level `VERIFIED`.
+`PENDING_LOCAL_VALIDATION`, not stage-level `VERIFIED`. I5 supersedes these S4
+rows; they remain only as checkpoint history.
 
-| Current control | Classification | Local evidence and remaining boundary |
+| I3 control | Classification at I3 | Evidence and boundary at I3 |
 | --- | --- | --- |
-| Separate slice-service credential | `PENDING_LOCAL_VALIDATION` | Startup requires `SLICE_SERVICE_API_KEY` containing 32-256 printable-ASCII bytes and different from `ADMIN_API_KEY`. Missing/invalid/equal configuration fails closed through one generic message. Rotation, revocation, audience, and secret delivery remain S4 work. |
+| Separate slice-service credential | `PENDING_LOCAL_VALIDATION` | I3 required `SLICE_SERVICE_API_KEY` containing 32-256 printable-ASCII bytes and different from the then-broad admin key. I5 later replaced that startup model with four scoped active/previous audiences and finite legacy migration. |
 | Authenticated slice admission order | `PENDING_LOCAL_VALIDATION` | Both routes are limiter -> `x-slicer-api-key` auth -> root-scoped workspace -> Multer -> queue -> native processing. Missing/wrong keys return exact HTTP 401 `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}` and allocate no workspace. Supplied/configured values are SHA-256-digested before `crypto.timingSafeEqual`. |
-| Slice-auth logging | `PENDING_LOCAL_VALIDATION` | Rejection emits one fixed message with only sanitized request ID and resolved client IP; credentials, method, and URL are excluded. Wider structured request/job/artifact observability remains open. |
-| Slice browser-Origin policy | `PENDING_LOCAL_VALIDATION` | Requests without Origin are allowed. Browser-origin slice calls must match only `SLICE_CORS_ALLOWED_ORIGINS`; the admin allowlist is separate. Protected pricing Origin policy remains open. |
+| Slice-auth logging | `PENDING_LOCAL_VALIDATION` | I3 emitted a fixed sanitized rejection. I5 later added the bounded/redacted event and correlation vocabulary. |
+| Slice browser-Origin policy | `PENDING_LOCAL_VALIDATION` | I3 isolated slice Origin behavior. I5 later completed exact slice/pricing/artifact/operations policy. |
 | Node HTTP envelope | `PENDING_LOCAL_VALIDATION` | Defaults/inclusive bounds are headers timeout 60000 `[1000,60000]`, request timeout 600000 `[60000,600000]`, keep-alive timeout 5000 `[1000,60000]`, header count 2000 `[16,2000]`, connections 128 `[1,1024]`, requests/socket 100 `[1,1000]`. Invalid values fall back to defaults and headers timeout is capped at request timeout. Actual VPS capacity, proxy timeouts, total streamed upload duration, and measured CPU/RAM/disk limits remain `UNVERIFIED`. |
 
 Focused evidence currently reports 469/469 integrated tests, 6/6 focused
@@ -185,8 +209,7 @@ See
 | --- | --- | --- | --- |
 | Uploaded model/CAD/archive | customer-confidential, untrusted | containment, bounded processing, cleanup | Multer and pipeline in [`slice.routes.js`](../../app/routes/slice.routes.js) / [`slice.service.js`](../../app/services/slice.service.js) |
 | Generated `.gcode` / `.sl1` | customer-confidential, integrity-sensitive | authorized disclosure, correlation, retention | [`admin-output.service.js`](../../app/services/admin-output.service.js) |
-| Admin API key / historical deployment credentials | secret | non-disclosure, rotation, least privilege | [`requireAdmin.js`](../../app/middleware/requireAdmin.js); current repository workflows request no production credential, while external secret state remains `UNVERIFIED` |
-| Slice service API key | secret, separate from admin key | caller authentication, non-disclosure, rotation/revocation | [`service-auth.js`](../../app/config/service-auth.js), [`requireSliceService.js`](../../app/middleware/requireSliceService.js); repository validation uses only an inert distinct value, while production delivery/rotation state is `UNVERIFIED` |
+| Scoped service API keys / historical admin migration | secret | non-disclosure, per-audience rotation/revocation, least privilege | [`service-auth.js`](../../app/config/service-auth.js), [`requireAudience.js`](../../app/middleware/requireAudience.js); repository validation uses inert distinct values, while production source/ownership/mode and rollout state are `UNVERIFIED` |
 | Pricing data | business-confidential mutable state | authenticated, atomic, recoverable writes | [`pricing.service.js`](../../app/services/pricing.service.js) and repository/catalog modules |
 | Slicer profiles | safety/integrity configuration | trusted, read-only to runtime where possible | [`configs`](../../configs), [`profiles.js`](../../app/services/slice/profiles.js) |
 | Application/native binaries | executable trusted computing base | provenance, immutability, isolation | [`Dockerfile`](../../Dockerfile), manifests |
@@ -206,14 +229,14 @@ Material trust boundaries:
 2. Express process to mutable `input/`, `output/`, and `configs/` bind mounts.
 3. JavaScript to Python, `trimesh`/`gmsh`, PrusaSlicer, and OrcaSlicer native
    processes via `execFile`.
-4. Admin key boundary protecting pricing, detailed health, and artifact access.
+4. Separate pricing, artifact, and operations key boundaries protecting their exact routes.
 5. Separate slice-service key boundary protecting both native slicing routes.
 6. Proxy-to-app boundary controlling forwarded client identity.
 7. Source/lockfiles/build network to the run-local validation image. The former
    GitHub-workflow-to-mutable-VPS path is historical and has been removed from
    the repository; any external deployment path is `UNVERIFIED`.
-8. API/monitoring containers to the default Compose network and unrestricted
-   outbound network.
+8. API/native processing to the ordinary Compose network and outbound network.
+   Local evidence proves unrestricted egress on the ingress-capable topology.
 
 ## Attack surface
 
@@ -237,15 +260,15 @@ delta above when reading test classifications.
 | ZIP bomb, traversal, encryption, multiple/unsupported entries | High | `IMPLEMENTED_UNTESTED`: lazy entry inspection, path/entry/declared-size limits, exact one supported file | [`zip.js`](../../app/services/slice/zip.js), `inspectZipFile` | declared sizes can be deceptive; 3MF/native archives bypass this ZIP-specific guard; extraction/runtime disk not quota-bound | S2 generated archive tests, streaming/actual-byte caps, model/archive policy |
 | Admin output traversal, symlink, realpath escape, TOCTOU | High | `PARTIAL`: filename extension, containment, lstat non-symlink, realpath containment | [`admin-output.service.js`](../../app/services/admin-output.service.js), `resolveValidatedOutputFile` | validate-then-open race; hard links/mount changes not addressed | S0 filesystem-helper/temp-dir tests; S2 descriptor-based or equivalent race-safe open |
 | Native parser/slicer compromise | Critical | `PARTIAL`: non-root container, cap drop, PID cap | [`Dockerfile`](../../Dockerfile), [`docker-compose.yml`](../../docker-compose.yml) | runtime user owns app/config; writable mounts, shared service process, no CPU/RAM/disk/egress isolation | S2 read-only/root-owned layout and quotas; S5 isolated worker decision |
-| Command injection through request data | Critical | Current `IMPLEMENTED_AND_TESTED`: centralized `execFile`, exact arrays, explicit minimal environment, and exact-tree cancellation | [`command.js`](../../app/services/slice/command.js), [`process-tree.js`](../../app/services/slice/process-tree.js), [`engine.js`](../../app/services/slice/engine.js) | executable provenance, unescaped debug native output, and network egress remain open; unverifiable tree termination intentionally quarantines capacity | S1c local contract verified; S3a executable provenance and S4 egress remain |
+| Command injection through request data | Critical | Current `IMPLEMENTED_AND_TESTED`: centralized `execFile`, exact arrays, explicit minimal environment, and exact-tree cancellation | [`command.js`](../../app/services/slice/command.js), [`process-tree.js`](../../app/services/slice/process-tree.js), [`engine.js`](../../app/services/slice/engine.js) | executable provenance and network egress remain open; unverifiable tree termination intentionally quarantines capacity | S1c local contract verified; S3a executable provenance and S4/S5 egress remain |
 | CPU/RAM/disk/PID exhaustion | Critical | `PARTIAL`: upload/ZIP caps, queue/rate bounds, real wait timers, command timeout/tree cancellation, container PID limit, and pending I3 HTTP connection/header/socket limits | constants, [`http-server.js`](../../app/services/http-server.js), [`queue-scheduler.js`](../../app/services/slice/queue-scheduler.js), Compose | 500 MB defaults are large; no measured VPS/proxy capacity, CPU/RAM/tmpfs-size/disk/output quota; fail-closed tree quarantine can consume capacity | S2 measured envelope/quotas/streaming; S5 isolation decision |
 | Queue starvation, monopolization, or false timeout | High | Current `IMPLEMENTED_AND_TESTED` for FIFO/caps/deadlines/abort/counters and active-slot retention | [`queue-scheduler.js`](../../app/services/slice/queue-scheduler.js); [`slice.routes.js`](../../app/routes/slice.routes.js) | IP identity remains coarse; an unverified native tree deliberately keeps a slot occupied | S1b/S1c local contract verified; S4 proxy identity and S5 isolation remain |
 | Proxy spoofing / rate-limit evasion | High | `IMPLEMENTED_UNTESTED`: forwarded headers trusted only with explicit boolean plus CIDR/name list | [`server.js`](../../app/server.js), `resolveTrustProxySetting`; [`client-ip.js`](../../app/utils/client-ip.js) | actual proxy chain/CIDRs are external and `UNVERIFIED` | S4 topology test and proxy-header matrix |
-| Admin/internal key compromise or brute force | Critical | `PARTIAL`: mandatory admin key plus pending I3 separate bounded slice-service key, timing-safe comparisons, slice/admin limiters, and request ID/IP rejection logs | [`requireAdmin.js`](../../app/middleware/requireAdmin.js), [`requireSliceService.js`](../../app/middleware/requireSliceService.js), route chains | static shared keys, no rotation/revocation/audience delivery proof; pricing CORS classification gap; admin responses lack stable codes | Complete S4 credential lifecycle, proxy/topology, and consistent protected-route policy |
+| Scoped credential compromise or brute force | Critical | Current repository `IMPLEMENTED_AND_TESTED`: distinct active/previous slice, pricing, artifact, and operations slots, fixed-digest comparison, protected-route throttling, exact errors, two-restart revocation, and finite legacy migration | [`service-auth.js`](../../app/config/service-auth.js), [`requireAudience.js`](../../app/middleware/requireAudience.js), route chains | production secret source/ownership/mode, deployed caller migration, and rotation evidence remain `UNVERIFIED` | Complete operator secret/topology evidence before S3b |
 | Output disclosure or cross-job collision | High | `PARTIAL`: admin auth plus extension/path checks | [`system.routes.js`](../../app/routes/system.routes.js), [`common.js`](../../app/services/slice/common.js) | no job ownership, artifact ID, response correlation, TTL; millisecond same-name collision | S2 unique IDs, quotas/TTL/correlation; S4 service authorization contract |
 | Cleanup residue after rejection/failure | High | Historical `PARTIAL`; current tested S1a centralizes marked-workspace cleanup after parser, queue, processing, response, and success settlement | [`workspace.js`](../../app/services/slice/workspace.js); [`slice.routes.js`](../../app/routes/slice.routes.js) | stale production deletion, abort deadlines, and final artifact retention/quota remain deferred | S1a local lifecycle verification; S1b deadline ownership; S2 retention/quota |
 | Supply-chain compromise | Critical | `PARTIAL`: npm lock integrity and AppImage SHA-256 | [`package-lock.json`](../../package-lock.json), [`Dockerfile`](../../Dockerfile) | floating base/Apt/NodeSource/Python/Actions/Compose inputs; no SBOM/sign/scan/provenance | S3a verified pins/hashes, immutable image, SBOM, signing, scan |
-| Log injection or confidential-data leakage | Medium | `PARTIAL`: slice-auth rejection logs are sanitized and contain only request ID/resolved IP; normal subprocess failures and unclassified slice failures emit stable path-free messages; native stdout/stderr remains gated and truncated behind `DEBUG_COMMAND_LOGS=true` | [`requireSliceService.js`](../../app/middleware/requireSliceService.js), [`command.js`](../../app/services/slice/command.js), [`errors.js`](../../app/services/slice/errors.js), [`logger.js`](../../app/utils/logger.js) | debug native output is unescaped and generic unknown 5xx logging can still include raw error metadata; no centralized structured redaction/correlation | S4 structured/redacted logs, correlation and injection tests |
+| Log injection or confidential-data leakage | Medium | Current `IMPLEMENTED_AND_TESTED` repository controls use versioned allowlisted events, bounded identifiers/tokens, injection neutralization, secret/path/filename/customer-data exclusion, and no raw native stdout/stderr emission | [`events.js`](../../app/services/observability/events.js), [`logger.js`](../../app/utils/logger.js), [`command.js`](../../app/services/slice/command.js) | external log transport, access, retention, and deployed collector policy remain `UNVERIFIED` | S4 repository contract tested; operator/deployment evidence still required |
 | Deploy/readiness/rollback failure | Critical | Historical S0 `ABSENT`: the former deploy used fixed sleep plus liveness curl; current S3a workflow is no-deploy validation only | [`deploy.yml`](../../.github/workflows/deploy.yml), [`image-validation.yml`](../../.github/workflows/image-validation.yml) | automatic deploy is removed, but no approval, immutable registry identity, signature/attestation, readiness, rollback, or verified production topology exists; hosted image validation is fail-closed red for both persistent liveness and HIGH scanning paths | S3a image/runtime and supply-chain diagnosis without weakening either gate; S4 topology; S3b only after S4 and separate explicit authorization |
 | Protected pricing browser-origin policy bypass | High | `PARTIAL`: API key and admin limiter still apply; I3 makes slice/admin browser allowlists explicit and separate | [`pricing.routes.js`](../../app/routes/pricing.routes.js), [`corsPolicy.js`](../../app/middleware/corsPolicy.js) | CORS classifies `/admin/**` and slice routes but not protected pricing mutations | Complete S4 unified protected-route browser policy |
 
@@ -253,8 +276,8 @@ delta above when reading test classifications.
 
 | Risk | Severity | Current evidence | Required exit / owner |
 | --- | --- | --- | --- |
-| Native Python/slicer compromise can use unrestricted egress. | Critical | S1c supplies and dynamically tests a minimal environment that excludes `ADMIN_API_KEY`, inert secret markers, and unrelated API variables. Parser/slicer processes still share the API container network boundary. | **S4 topology/container gate:** verify restricted egress before promotion; S5 owns any isolated-worker decision. |
-| Slice-service trust and private topology are incomplete. | Critical | I3 locally implements a separate bounded `SLICE_SERVICE_API_KEY`, exact auth order/401, timing-safe comparison, sanitized rejection logs, and slice Origin policy. Final aggregate/exact-SHA evidence, rotation/revocation, proxy/private ingress/egress, and production secret delivery are absent or `UNVERIFIED`. | **S4 service trust/topology + S3b promotion gate:** complete credential lifecycle and private ingress/egress/proxy evidence before production promotion, or obtain explicit human owner/user-approved, documented risk acceptance. An agent cannot grant the exception. No current worktree result is authorization. |
+| Native Python/slicer compromise can use unrestricted egress. | Critical | I5 local A/B proves API/native DNS/TCP/UDP egress succeeds on the ordinary bridge required for loopback ingress. Internal networking denies egress but removes the Docker Desktop host listener. | **S4/S5 topology gate:** `BLOCKED_S4_EGRESS_CAPABILITY`; choose and verify the isolated-worker/firewall architecture before promotion. |
+| Scoped service trust is repository-tested but deployed topology is incomplete. | Critical | I5 tests active/previous audiences, two-restart revocation, finite legacy migration, Origin policy, proxy identity, readiness, and observability. Final candidate/hosted evidence, deployed callers/proxy/firewall, and production secret lifecycle are pending or `UNVERIFIED`. | **S4 service trust/topology + S3b promotion gate:** prove final deployed private ingress, denied unintended caller, denied API/native egress, secret ownership/mode/state, and exact digest before production. An agent cannot grant an exception. |
 | Multipart/HTTP ingress can exhaust resources beyond the application subset. | High | S1a covers bounded multipart fields and cleanup. I3 applies bounded Node header/request/keep-alive timeouts, headers, connections, and requests/socket with fallback. Actual VPS capacity/proxy timeouts, total streamed upload duration, and measured memory/disk/CPU envelopes remain unverified. | **S2:** measure and enforce host/proxy upload duration, connection/concurrency, memory, CPU, and disk envelopes under synthetic load. |
 | Validation is not yet a production promotion chain. | Critical | S3a removed automatic deployment and exact source S3a-B2 passed, but its hosted image failed both persistent runtime liveness and the HIGH scanner path. Branch protection and required checks remain external `UNVERIFIED`. | **S3a image/runtime + repository administrator:** resolve liveness and vulnerability evidence without weakening gates, then verify policy. **S4/S3b:** only after S4 evidence and separate explicit user/owner authorization, prove immutable promotion, staging readiness, and rollback. |
 
@@ -285,7 +308,8 @@ above is authoritative for controls tested by S0/S0.1.
 - Use `execFile` and argument arrays; never shell-interpolate request data.
 - Reject invalid geometry without automatic healing.
 - Preserve Prusa FDM/SLA and Orca FDM-only profile boundaries.
-- Refuse startup without an admin key; keep admin throttling and timing-safe compare.
+- Refuse startup without all scoped active keys; keep audience separation,
+  protected-route throttling, fixed-digest comparison, and finite legacy limits.
 - Do not expose output without extension/path/symlink/realpath validation.
 - Do not treat delayed expiry, upload residue, zero-stat success, timestamp
   collision, or unbounded retention as a desirable characterization.
@@ -313,9 +337,9 @@ single-settlement abort/shutdown, minimal subprocess environment, absolute
 helper resolution, and bounded exact-tree cancellation. Fail-closed capacity
 quarantine after unverified termination, output/stat weaknesses,
 retention/correlation, pricing atomicity,
-protected-pricing CORS, measured VPS/proxy/upload/resource limits, container
-resource gaps, supply-chain immutability, subprocess egress, slice-credential
-rotation/revocation, private ingress, and production promotion,
+measured VPS/proxy/upload/resource limits, container resource gaps,
+supply-chain immutability, private ingress plus denied API/native egress,
+production secret delivery/ownership/mode/rollout, and production promotion,
 readiness, and rollback safety remain
 open. Their secure expectations and owners are in
 [`hardening-plan.md`](hardening-plan.md).
@@ -327,9 +351,9 @@ not implicit scope.
 
 Delivery ownership is separated: S1b/S1c runtime contracts are integrated and
 locally verified. S3a repository-only build-once/no-deploy controls are
-integrated. I3 adds only pending-local-validation S4 slice auth/browser-Origin
-and S2 Node HTTP subsets; complete S4 still requires credential lifecycle,
-protected-route policy, proxy/private ingress/egress, and observability. S3b is
+integrated. I5 repository-tests scoped credentials, protected Origin policy,
+proxy/request identity, readiness, events, and metrics, but S4 remains blocked
+on simultaneous required ingress and denied API/native egress. S3b is
 staging/promotion/readiness/rollback only after complete S4 evidence and
 separate explicit user/owner authorization. The old
 S1a/S3a manifest freeze is closed; its serialized dependency patch is integrated

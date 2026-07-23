@@ -12,12 +12,20 @@ Last synchronized: 2026-07-23
 - app/routes/system.routes.js delegates admin output listing/download validation to app/services/admin-output.service.js.
 - app/services/pricing.service.js remains the facade API; pricing persistence and pricing-domain logic live in app/services/pricing/ submodules.
 - app/services/slice/ contains modular pipeline logic (options, queue, transform, profiles, errors).
-- app/middleware uses shared client IP parsing based on Express trust-proxy configuration (TRUST_PROXY + TRUST_PROXY_CIDRS).
-- app/middleware/requireAdmin.js uses timing-safe API key comparison.
-- app/middleware/requireSliceService.js enforces x-slicer-api-key through fixed-size SHA-256 digests and crypto.timingSafeEqual.
-- app/middleware/corsPolicy.js keeps admin and slice browser-origin allowlists separate while permitting requests without Origin.
+- app/config/service-auth.js resolves one immutable active/previous key ring for
+  slice, pricing, artifact, and operations plus a finite one-audience legacy migration.
+- app/middleware uses nearest-untrusted-hop client IP parsing from fail-closed
+  Express trust-proxy configuration.
+- app/middleware/requireAudience.js provides fixed-digest, audience-scoped active/previous comparison.
+- app/middleware/corsPolicy.js keeps all four protected audience allowlists
+  separate while permitting requests without Origin.
+- app/middleware/requestId.js validates/replaces inbound request IDs before
+  requestObservability emits lifecycle events.
 - app/middleware/rateLimit.js includes periodic expired-bucket cleanup and separate admin throttling middleware.
 - app/services/http-server.js applies bounded HTTP timeouts, header/connection counts, and requests per socket before listen.
+- app/services/readiness.service.js provides cached admission-aware probes and
+  stable reason codes; app/services/observability provides redacted events and
+  fixed-cardinality metrics.
 
 ## Endpoint Rules
 - Keep upload field name as choosenFile.
@@ -27,19 +35,17 @@ Last synchronized: 2026-07-23
   - POST /prusa/slice
   - POST /orca/slice
   - GET /pricing
-  - GET /health (public) and GET /health/detailed (admin-protected)
-  - POST /pricing/FDM (admin-protected)
-  - POST /pricing/SLA (admin-protected)
-  - PATCH /pricing/:technology/:material (admin-protected)
-  - DELETE /pricing/:technology/:material (admin-protected)
-  - GET /admin/output-files (admin-protected)
-  - GET /admin/download/:fileName (admin-protected)
+  - GET /health and GET /ready (public)
+  - GET /health/detailed, GET /operations/readiness, GET /operations/metrics (operations)
+  - POST /pricing/FDM, POST /pricing/SLA, PATCH/DELETE /pricing/:technology/:material (pricing)
+  - GET /admin/output-files and GET /admin/download/:fileName (artifact)
   - GET /admin/download/:fileName supports `ALL` token for ZIP bulk download
 
 ## Safety Rules
 - Preserve queue and rate-limit protections.
-- Preserve the distinct mandatory 32-256 printable-ASCII SLICE_SERVICE_API_KEY and reject reuse of ADMIN_API_KEY.
-- Preserve requestId/resolved-IP-only slice-auth rejection logging and the separate SLICE_CORS_ALLOWED_ORIGINS policy.
+- Preserve mandatory distinct 32-256 printable-ASCII active keys, audience-local
+  previous slots, two-restart revocation, and the one-audience <=90-day legacy limit.
+- Preserve bounded/redacted auth events and exact per-audience CORS policies.
 - Preserve HTTP defaults/bounds: 60000 [1000,60000] headers ms; 600000 [60000,600000] request ms; 5000 [1000,60000] keep-alive ms; 2000 [16,2000] headers; 128 [1,1024] connections; 100 [1,1000] requests/socket.
 - Invalid HTTP envelope overrides fall back to defaults; effective headers timeout is capped at request timeout. VPS capacity and proxy timeouts remain UNVERIFIED.
 - Preserve per-client queue fairness cap (MAX_SLICE_QUEUE_PER_IP).
@@ -50,3 +56,8 @@ Last synchronized: 2026-07-23
 - Preserve Orca per-request isolated output directory handling.
 - Preserve error code names used by clients.
 - Do not auto-heal invalid geometry.
+- Preserve public minimal readiness and operations-only detailed reasons/metrics.
+- Never add request/job/artifact/customer values as metric labels.
+- Preserve fail-closed proxy CIDR/loopback compilation and safe request-ID validation.
+- Compose remains loopback-only; ordinary bridge egress is an unresolved
+  BLOCKED_S4_EGRESS_CAPABILITY, not authority to invent a sidecar.

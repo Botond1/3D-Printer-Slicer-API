@@ -20,15 +20,23 @@ Last synchronized: 2026-07-23
 - Preserve slice route order: limiter -> x-slicer-api-key authentication -> root-scoped workspace/Multer -> queue -> native processing.
 
 ## Security
-- ADMIN_API_KEY is mandatory at startup.
-- SLICE_SERVICE_API_KEY is mandatory, must contain 32-256 printable-ASCII bytes, and must differ from ADMIN_API_KEY.
+- Normal startup requires distinct active slice, pricing, artifact, and
+  operations keys. Optional previous slots are audience-local; every configured
+  value must be unique, non-placeholder, and 32-256 printable-ASCII bytes.
 - Both slice routes require x-slicer-api-key. Missing or wrong values return exact HTTP 401 `SLICE_SERVICE_AUTH_REQUIRED` before workspace allocation.
-- Slice-auth comparison uses fixed-size SHA-256 digests plus crypto.timingSafeEqual; rejection logs contain only requestId and resolved client IP.
-- No-Origin requests are allowed. Browser-origin slice calls use only SLICE_CORS_ALLOWED_ORIGINS.
-- Admin routes require x-api-key header (timing-safe comparison).
-- Admin routes are IP-rate-limited to reduce brute-force API key attempts.
-- X-Forwarded-For is only trusted when TRUST_PROXY=true and TRUST_PROXY_CIDRS is configured.
-- Unauthorized admin access logging must include requestId + forwarded-header-aware client IP parsing.
+- Pricing, artifact, and operations routes require x-api-key for only their
+  active or previous audience slot. All comparisons use fixed-size digests.
+- Rotate through two restarts; removing previous before restart revokes the old key.
+- ADMIN_API_KEY is only a <=90-day, explicitly named, one non-slice audience
+  migration. Normal behavior is scoped and fail closed.
+- No-Origin requests are allowed. Browser-origin protected calls use only their
+  SLICE_, PRICING_, ARTIFACT_, or OPERATIONS_CORS_ALLOWED_ORIGINS list.
+- Protected x-api-key routes remain IP-rate-limited.
+- Forwarded identity defaults off. TRUST_PROXY=true must compile unique,
+  validated explicit IP/CIDR peers or loopback and refuse wildcard/overbroad/
+  malformed/unknown values. Use nearest-untrusted-hop client identity.
+- Accept only bounded safe inbound request IDs; replace unsafe values and return
+  the resolved X-Request-Id.
 - Python executable resolution must use absolute validated paths (PYTHON_EXECUTABLE or trusted fallbacks).
 - Admin output download must preserve extension allowlist and path/symlink containment checks.
 - Admin output download supports special token ALL for ZIP bulk export while preserving the same containment/symlink safety checks plus MAX_ZIP_ENTRIES and MAX_ZIP_UNCOMPRESSED_BYTES limits.
@@ -36,6 +44,14 @@ Last synchronized: 2026-07-23
 - Upload accepts only a single file on choosenFile field with extension validation.
 - HTTP defaults/bounds are headers timeout 60000 [1000,60000], request timeout 600000 [60000,600000], keep-alive timeout 5000 [1000,60000], header count 2000 [16,2000], connections 128 [1,1024], and requests/socket 100 [1,1000].
 - Invalid HTTP envelope overrides fall back to defaults and effective headers timeout is capped at request timeout. Actual VPS capacity and reverse-proxy timeouts are UNVERIFIED.
+- Public /health is liveness and /ready is minimal readiness. Detailed
+  health/readiness/metrics require operations scope. Keep readiness reason codes
+  stable and all event/metric fields bounded, allowlisted, redacted, and
+  fixed-cardinality.
+- Compose remains loopback-published on an ordinary bridge. Local Docker Desktop
+  29.6.1 shows this permits API/native DNS/TCP/UDP egress; internal networking
+  removes the host listener. S4 is BLOCKED_S4_EGRESS_CAPABILITY. S5 owns any
+  isolation architecture decision.
 
 ## Testing
 - Use Python test runners under tests/testing-scripts/.
