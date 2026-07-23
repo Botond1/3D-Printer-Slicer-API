@@ -8,93 +8,17 @@ const { adminRateLimiter } = require('../middleware/rateLimit');
 const { getClientIp } = require('../utils/client-ip');
 const {
     getPricing,
-    savePricingToDisk,
-    normalizeTechnology,
-    findMaterialKey,
-    updateMaterialPrice,
-    removeMaterial
+    commitPricingMutation,
+    findMaterialKey
 } = require('../services/pricing.service');
+const {
+    parseMaterialOrResponse,
+    parsePriceOrResponse,
+    parseTechnologyOrResponse,
+    persistenceFailure
+} = require('./pricing-request');
 
 const router = express.Router();
-
-/**
- * Parse and validate required material field.
- * @param {import('express').Response} res Express response object.
- * @param {unknown} rawMaterial Material input value.
- * @returns {{response: import('express').Response | null, material?: string}} Parse result.
- */
-function parseMaterialOrResponse(res, rawMaterial) {
-    let material = '';
-    if (typeof rawMaterial === 'string') {
-        material = rawMaterial.trim();
-    } else if (typeof rawMaterial === 'number' || typeof rawMaterial === 'boolean') {
-        material = `${rawMaterial}`.trim();
-    }
-
-    if (!material) {
-        return {
-            response: res.status(400).json({ success: false, error: 'material is required.' })
-        };
-    }
-
-    return {
-        response: null,
-        material
-    };
-}
-
-/**
- * Parse and validate positive price field.
- * @param {import('express').Response} res Express response object.
- * @param {unknown} rawPrice Price input value.
- * @returns {{response: import('express').Response | null, price?: number}} Parse result.
- */
-function parsePriceOrResponse(res, rawPrice) {
-    const price = Number(rawPrice);
-    if (!Number.isFinite(price) || price <= 0) {
-        return {
-            response: res.status(400).json({ success: false, error: 'price must be a valid positive number.' })
-        };
-    }
-
-    return {
-        response: null,
-        price
-    };
-}
-
-/**
- * Parse and validate technology route parameter.
- * @param {import('express').Response} res Express response object.
- * @param {unknown} rawTechnology Technology parameter value.
- * @returns {{response: import('express').Response | null, technology?: 'FDM'|'SLA'}} Parse result.
- */
-function parseTechnologyOrResponse(res, rawTechnology) {
-    const technology = normalizeTechnology(rawTechnology);
-    if (!technology) {
-        return {
-            response: res.status(400).json({ success: false, error: 'Technology must be FDM or SLA.' })
-        };
-    }
-
-    return {
-        response: null,
-        technology
-    };
-}
-
-/**
- * Persist pricing map and emit standardized HTTP response on write failure.
- * @param {import('express').Response} res Express response object.
- * @returns {import('express').Response | null} Error response when persistence fails.
- */
-function persistPricingOrResponse(res) {
-    if (savePricingToDisk()) {
-        return null;
-    }
-
-    return res.status(500).json({ success: false, error: 'Failed to persist pricing update.' });
-}
 
 /**
  * Log pricing mutation details with request trace context.
@@ -117,7 +41,7 @@ function logPricingUpdate(req, technology, materialKey, actionMessage) {
  * @param {'FDM'|'SLA'} technology Technology key.
  * @returns {import('express').Response}
  */
-function createMaterialForTechnology(req, res, technology) {
+async function createMaterialForTechnology(req, res, technology) {
     const materialResult = parseMaterialOrResponse(res, req.body?.material);
     if (materialResult.response) {
         return materialResult.response;
@@ -130,15 +54,24 @@ function createMaterialForTechnology(req, res, technology) {
     }
     const price = priceResult.price;
 
-    if (findMaterialKey(technology, materialParam)) {
-        return res.status(409).json({ success: false, error: 'Material already exists for this technology.' });
-    }
-
-    const materialKey = updateMaterialPrice(technology, materialParam, price);
-
-    const saveErrorResponse = persistPricingOrResponse(res);
-    if (saveErrorResponse) {
-        return saveErrorResponse;
+    let materialKey;
+    try {
+        materialKey = await commitPricingMutation((candidate) => {
+            const requested = String(materialParam).trim().toUpperCase();
+            const existing = Object.keys(candidate[technology]).find((key) => key.toUpperCase() === requested);
+            if (existing) {
+                const conflict = new Error('Material already exists for this technology.');
+                conflict.code = 'PRICING_CONFLICT';
+                throw conflict;
+            }
+            candidate[technology][requested] = price;
+            return requested;
+        });
+    } catch (error) {
+        if (error.code === 'PRICING_CONFLICT') {
+            return res.status(409).json({ success: false, error: error.message });
+        }
+        return persistenceFailure(res);
     }
 
     logPricingUpdate(req, technology, materialKey, `created at ${price} HUF/hour`);
@@ -184,7 +117,7 @@ router.post('/pricing/SLA', adminRateLimiter, requireAdmin, (req, res) => create
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-router.patch('/pricing/:technology/:material', adminRateLimiter, requireAdmin, (req, res) => {
+router.patch('/pricing/:technology/:material', adminRateLimiter, requireAdmin, async (req, res) => {
     const technologyResult = parseTechnologyOrResponse(res, req.params.technology);
     if (technologyResult.response) {
         return technologyResult.response;
@@ -211,11 +144,25 @@ router.patch('/pricing/:technology/:material', adminRateLimiter, requireAdmin, (
         });
     }
 
-    const materialKey = updateMaterialPrice(technology, existingMaterialKey, price);
-
-    const saveErrorResponse = persistPricingOrResponse(res);
-    if (saveErrorResponse) {
-        return saveErrorResponse;
+    let materialKey;
+    try {
+        materialKey = await commitPricingMutation((candidate) => {
+            const current = Object.keys(candidate[technology]).find(
+                (key) => key.toUpperCase() === String(existingMaterialKey).toUpperCase()
+            );
+            if (!current) {
+                const missing = new Error('Material does not exist for this technology.');
+                missing.code = 'PRICING_NOT_FOUND';
+                throw missing;
+            }
+            candidate[technology][current] = price;
+            return current;
+        });
+    } catch (error) {
+        if (error.code === 'PRICING_NOT_FOUND') {
+            return res.status(404).json({ success: false, error: error.message });
+        }
+        return persistenceFailure(res);
     }
 
     logPricingUpdate(req, technology, materialKey, `updated to ${price} HUF/hour`);
@@ -233,7 +180,7 @@ router.patch('/pricing/:technology/:material', adminRateLimiter, requireAdmin, (
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-router.delete('/pricing/:technology/:material', adminRateLimiter, requireAdmin, (req, res) => {
+router.delete('/pricing/:technology/:material', adminRateLimiter, requireAdmin, async (req, res) => {
     const technologyResult = parseTechnologyOrResponse(res, req.params.technology);
     if (technologyResult.response) {
         return technologyResult.response;
@@ -251,11 +198,24 @@ router.delete('/pricing/:technology/:material', adminRateLimiter, requireAdmin, 
         return res.status(404).json({ success: false, error: 'Material not found.' });
     }
 
-    removeMaterial(technology, materialKey);
-
-    const saveErrorResponse = persistPricingOrResponse(res);
-    if (saveErrorResponse) {
-        return saveErrorResponse;
+    try {
+        await commitPricingMutation((candidate) => {
+            const current = Object.keys(candidate[technology]).find(
+                (key) => key.toUpperCase() === String(materialKey).toUpperCase()
+            );
+            if (!current) {
+                const missing = new Error('Material not found.');
+                missing.code = 'PRICING_NOT_FOUND';
+                throw missing;
+            }
+            delete candidate[technology][current];
+            return current;
+        });
+    } catch (error) {
+        if (error.code === 'PRICING_NOT_FOUND') {
+            return res.status(404).json({ success: false, error: error.message });
+        }
+        return persistenceFailure(res);
     }
 
     logPricingUpdate(req, technology, materialKey, 'deleted');
