@@ -27,10 +27,11 @@ function step(id, source = WORKFLOW) {
 function helperContract(source) {
     for (const anchor of [
         "spawnSync('docker', args,", 'shell: false', 'maxBuffer: MAX_COMMAND_BYTES',
-        "new Set(['image inspect', 'run --rm', 'container inspect', 'container rm'])",
+        "new Set(['image inspect', 'run --rm', 'container inspect'])",
         "configuredUser !== 'slicer'", '!Number.isSafeInteger(value) || value <= 0',
         "--entrypoint', '/usr/bin/id'", "'--pull', 'never'", "'--network', 'none'",
         "'--cap-drop', 'ALL'", "'--security-opt', 'no-new-privileges'",
+        'io.s3a.validation-only=true', 'io.s3a.expected-image-id=${exactImageId}',
         'configured_user=${identity.configuredUser}', 'classification=success'
     ]) assert.ok(source.includes(anchor), `missing ${anchor}`);
     assert.doesNotMatch(source, /(?:^|[^\w.])exec(?:Sync)?\s*\(|\bshell\s*:\s*true|\beval\s*\(|\/bin\/(?:ba)?sh|\$\(/);
@@ -40,6 +41,7 @@ function helperContract(source) {
 
 function workflowContract(source) {
     const resolver = step('runtime_identity', source);
+    const orca = step('orca_cli_smoke', source);
     const start = step('container_start', source);
     const smoke = step('smoke_gate', source);
     const cleanup = step('exact_cleanup', source);
@@ -47,6 +49,7 @@ function workflowContract(source) {
     const boundary = step('artifact_boundary', source);
     const upload = step('evidence_upload', source);
     assert.match(resolver, /if: \$\{\{ always\(\) && steps\.build\.outcome == 'success' \}\}[\s\S]*continue-on-error: true[\s\S]*node scripts\/i2-image-runtime-diagnostics\.js/);
+    assert.match(orca, /if: \$\{\{ steps\.runtime_identity\.outcome == 'success' \}\}[\s\S]*continue-on-error: true[\s\S]*node scripts\/i2-orca-runtime-smoke\.js/);
     assert.match(start, /if: \$\{\{ steps\.runtime_identity\.outcome == 'success' \}\}/);
     for (const anchor of [
         'CONFIGURED_USER: ${{ steps.runtime_identity.outputs.configured_user }}',
@@ -55,6 +58,7 @@ function workflowContract(source) {
         '[[ ! "$SERVICE_UID" =~ ^[0-9]+$ ]]', '[[ ! "$SERVICE_GID" =~ ^[0-9]+$ ]]',
         '[ "$SERVICE_UID" = "0" ]', '[ "$SERVICE_GID" = "0" ]',
         '--pull never', '--network none', '--cap-drop ALL', '--security-opt no-new-privileges',
+        '--label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID"',
         "docker inspect --format '{{.State.Pid}}'", '/usr/bin/ps -o uid=,gid= -p "$container_pid"',
         '[ "$kernel_uid" != "$SERVICE_UID" ]', '[ "$kernel_gid" != "$SERVICE_GID" ]'
     ]) assert.ok(start.includes(anchor), `start missing ${anchor}`);
@@ -75,14 +79,22 @@ function workflowContract(source) {
     assert.match(boundary, /!\/\^\[1-9\]\[0-9\]\*\$\/\.test\(identity\.service_uid\)/);
     assert.match(boundary, /identity\.kernel_uid !== identity\.service_uid/);
     assert.match(cleanup, /if: \$\{\{ always\(\) \}\}[\s\S]*continue-on-error: true/);
-    for (const name of ['I2_UID_PROBE_NAME', 'I2_GID_PROBE_NAME', 'CONTAINER_NAME']) assert.ok(cleanup.includes(name));
+    for (const name of ['I2_UID_PROBE_NAME', 'I2_GID_PROBE_NAME',
+        'I2_ORCA_PROBE_NAME', 'CONTAINER_NAME']) assert.ok(cleanup.includes(name));
     assert.match(cleanup, /::error title=I2 exact cleanup::\$1/);
+    assert.match(cleanup, /container_ownership_failure/);
+    assert.match(cleanup, /\[ "\$validation_label" != "true" \]/);
+    assert.match(cleanup, /\[ "\$expected_label" != "\$EXPECTED_IMAGE_ID" \]/);
+    assert.match(cleanup, /docker container rm --force "\$container_id"/);
+    assert.doesNotMatch(cleanup, /docker container rm --force "\$exact_container"/);
     assert.equal((cleanup.match(/classification=cleanup_failure/g) || []).length, 1);
     assert.equal((cleanup.match(/classification=success/g) || []).length, 1);
     assert.ok(cleanup.indexOf('classification=cleanup_failure') > cleanup.indexOf('if [ "$cleanup_status" -ne 0 ]; then'));
     assert.ok(source.indexOf('id: exact_cleanup') < source.indexOf('id: final_enforcement'));
     for (const anchor of ['RUNTIME_IDENTITY_OUTCOME', 'RUNTIME_IDENTITY_CLASSIFICATION',
         "failures.push('runtime_identity_failure');", 'CLEANUP_OUTCOME', "failures.push('cleanup_failure');",
+        'ORCA_CLI_SMOKE_OUTCOME', 'ORCA_CLI_SMOKE_CLASSIFICATION',
+        "failures.push('orca_cli_smoke_failure');",
         "if (process.env.CLEANUP_OUTCOME !== 'success')",
         "process.env.SMOKE_OUTCOME !== 'success'", "process.env.SMOKE_CLASSIFICATION !== 'success'",
         'process.exit(1);']) assert.ok(final.includes(anchor), `final missing ${anchor}`);
@@ -108,7 +120,10 @@ test('resolver command is non-shell, exact-image-bound, isolated, bounded, and d
         assert.equal(args[0], 'run');
         assert.deepEqual(args.slice(-3), ['/usr/bin/id', ID, selector]);
         for (const token of ['--rm', '--pull', 'never', '--network', 'none', '--cap-drop', 'ALL',
-            '--security-opt', 'no-new-privileges', '--pids-limit', '64']) assert.ok(args.includes(token));
+            '--security-opt', 'no-new-privileges', '--pids-limit', '64',
+            'io.s3a.validation-only=true', `io.s3a.expected-image-id=${ID}`]) {
+            assert.ok(args.includes(token));
+        }
         assert.equal(args.filter((item) => item === '--entrypoint').length, 1);
     }
     assert.throws(() => identity.buildResolverArgs('uid-probe', REF, '-u'));
@@ -116,7 +131,7 @@ test('resolver command is non-shell, exact-image-bound, isolated, bounded, and d
     helperContract(SOURCE);
     const mutations = [
         ['shell: false', 'shell: true'], ['maxBuffer: MAX_COMMAND_BYTES', 'maxBuffer: Infinity'],
-        ["new Set(['image inspect', 'run --rm', 'container inspect', 'container rm'])", "new Set(['*'])"],
+        ["new Set(['image inspect', 'run --rm', 'container inspect'])", "new Set(['*'])"],
         ['!Number.isSafeInteger(value) || value <= 0', 'value <= 0'],
         ["spawnSync('docker', args,", "eval(args.join(' ')); spawnSync('docker', args,"]
     ];
@@ -159,9 +174,12 @@ test('required workflow mutations are rejected', async (t) => {
         ['health accepts exited container', 'if [ "$running" = "true" ] && [ "$health" = "healthy" ]; then', 'if [ "$health" = "healthy" ]; then'],
         ['health weakened', "process.env.SMOKE_OUTCOME !== 'success'", 'false'],
         ['final identity ignored', "failures.push('runtime_identity_failure');", ''],
+        ['final Orca smoke ignored', "failures.push('orca_cli_smoke_failure');", ''],
         ['cleanup outcome ignored', "if (process.env.CLEANUP_OUTCOME !== 'success')", 'if (false)'],
         ['cleanup skipped', '        id: exact_cleanup\n        if: ${{ always() }}', '        id: exact_cleanup\n        if: ${{ success() }}'],
-        ['cleanup probe omitted', '"$I2_UID_PROBE_NAME" "$I2_GID_PROBE_NAME" "$CONTAINER_NAME"', '"$I2_UID_PROBE_NAME" "$CONTAINER_NAME"']
+        ['cleanup probe omitted', '              "$I2_ORCA_PROBE_NAME" "$CONTAINER_NAME"', '              "$CONTAINER_NAME"'],
+        ['cleanup ownership removed', '[ "$validation_label" != "true" ]', 'false'],
+        ['cleanup switches to name', 'docker container rm --force "$container_id"', 'docker container rm --force "$exact_container"']
     ];
     for (const [name, from, to, occurrence = 1] of mutations) await t.test(name, () => {
         let mutated = WORKFLOW;

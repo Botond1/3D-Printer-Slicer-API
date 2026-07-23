@@ -55,6 +55,8 @@ const SUCCESS_ENV = Object.freeze({
     DIAGNOSTIC_OUTCOME: 'success',
     RUNTIME_IDENTITY_OUTCOME: 'success',
     RUNTIME_IDENTITY_CLASSIFICATION: 'success',
+    ORCA_CLI_SMOKE_OUTCOME: 'success',
+    ORCA_CLI_SMOKE_CLASSIFICATION: 'success',
     ARTIFACT_BOUNDARY_OUTCOME: 'success',
     EVIDENCE_UPLOAD_OUTCOME: 'success',
     CLEANUP_OUTCOME: 'success',
@@ -101,6 +103,9 @@ test('final enforcement preserves independent fail-closed classifications', asyn
             'evidence_boundary_failure'], ['scanner_infrastructure_failure']],
         ['unknown scanner classification fails closed', { SCAN_GATE_OUTCOME: 'failure',
             SCAN_CLASSIFICATION: 'unexpected' }, 1, ['scanner_infrastructure_failure'], []],
+        ['Orca CLI smoke fails independently', { ORCA_CLI_SMOKE_OUTCOME: 'failure',
+            ORCA_CLI_SMOKE_CLASSIFICATION: 'orca_cli_smoke_failure' }, 1,
+        ['orca_cli_smoke_failure'], ['runtime_liveness_failure']],
         ['cleanup outcome fails independently', { CLEANUP_OUTCOME: 'failure' }, 1,
             ['cleanup_failure'], ['evidence_boundary_failure']]
     ];
@@ -230,7 +235,9 @@ test('triage workflow remains observational and preserves scan, artifact, and cl
     assert.doesNotMatch(boundaryStep, /vulnerability-summary|triage-summary/);
     assert.match(cleanupStep, /no prune was run/);
     assert.match(cleanupStep,
-        /if exact_container_present "\$exact_container"; then[\s\S]*container_state=\$\?/);
+        /if container_record="\$\(exact_container_record "\$exact_container"\)"; then[\s\S]*container_state=\$\?/);
+    assert.match(cleanupStep, /container_ownership_failure/);
+    assert.match(cleanupStep, /docker container rm --force "\$container_id"/);
     assert.match(cleanupStep,
         /if exact_image_present "\$IMAGE_REF"; then[\s\S]*image_state=\$\?/);
     assert.doesNotMatch(cleanupStep,

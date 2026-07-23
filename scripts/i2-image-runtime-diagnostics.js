@@ -51,21 +51,20 @@ function buildInspectArgs(imageRef) {
 
 function buildResolverArgs(name, imageId, selector) {
     if (!['-u', '-g'].includes(selector)) throw new Error('resolver_selector');
+    const exactImageId = validateImageId(imageId);
     return ['run', '--rm', '--pull', 'never', '--network', 'none', '--cap-drop', 'ALL',
         '--security-opt', 'no-new-privileges', '--pids-limit', '64', '--name', validateName(name),
-        '--entrypoint', '/usr/bin/id', validateImageId(imageId), selector];
+        '--label', 'io.s3a.validation-only=true',
+        '--label', `io.s3a.expected-image-id=${exactImageId}`,
+        '--entrypoint', '/usr/bin/id', exactImageId, selector];
 }
 
 function buildPresenceArgs(name) {
     return ['container', 'inspect', '--format', '{{json .Id}}', validateName(name)];
 }
 
-function buildRemoveArgs(name) {
-    return ['container', 'rm', '--force', validateName(name)];
-}
-
 function runDocker(args, timeout = DOCKER_TIMEOUT_MS) {
-    const allowed = new Set(['image inspect', 'run --rm', 'container inspect', 'container rm']);
+    const allowed = new Set(['image inspect', 'run --rm', 'container inspect']);
     const signature = `${args[0]} ${args[1]}`;
     if (!allowed.has(signature)) throw new Error('docker_command_not_allowlisted');
     const result = spawnSync('docker', args, {
@@ -101,14 +100,6 @@ function isPresent(name) {
     return parsePresenceResult(runDocker(buildPresenceArgs(name), 10_000), name);
 }
 
-function removeExact(name) {
-    if (isPresent(name)) {
-        const removed = runDocker(buildRemoveArgs(name), 10_000);
-        if (removed.status !== 0) throw new Error('container_cleanup_failure');
-    }
-    if (isPresent(name)) throw new Error('container_cleanup_incomplete');
-}
-
 function resolveOne(name, imageId, selector, label) {
     if (isPresent(name)) throw new Error('probe_name_collision');
     let result;
@@ -117,7 +108,7 @@ function resolveOne(name, imageId, selector, label) {
         if (result.status !== 0 || result.stderr !== '') throw new Error(`${label}_lookup_failure`);
         return parsePositiveId(result.stdout, label);
     } finally {
-        removeExact(name);
+        if (isPresent(name)) throw new Error('container_cleanup_incomplete');
     }
 }
 
@@ -169,6 +160,6 @@ function main() {
 
 module.exports = Object.freeze({ MAX_COMMAND_BYTES, validateImageRef, validateImageId, validateName,
     parseInspectOutput, parsePositiveId, buildInspectArgs, buildResolverArgs, buildPresenceArgs,
-    buildRemoveArgs, parsePresenceResult, resolveRuntimeIdentity });
+    parsePresenceResult, isPresent, resolveRuntimeIdentity });
 
 if (require.main === module) main();

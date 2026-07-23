@@ -36,6 +36,7 @@ jobs:
       CONTAINER_NAME: s3a-validation-${{ github.run_id }}-${{ github.run_attempt }}
       I2_UID_PROBE_NAME: i2-uid-${{ github.run_id }}-${{ github.run_attempt }}
       I2_GID_PROBE_NAME: i2-gid-${{ github.run_id }}-${{ github.run_attempt }}
+      I2_ORCA_PROBE_NAME: i2-orca-${{ github.run_id }}-${{ github.run_attempt }}
       EVIDENCE_SUBDIR: s3a-image-evidence-${{ github.run_id }}-${{ github.run_attempt }}
       DOCKER_BUILD_RECORD_UPLOAD: 'false'
       DOCKER_BUILD_SUMMARY: 'false'
@@ -183,6 +184,7 @@ jobs:
           CONFIGURED_USER: ${{ steps.runtime_identity.outputs.configured_user }}
           SERVICE_UID: ${{ steps.runtime_identity.outputs.uid }}
           SERVICE_GID: ${{ steps.runtime_identity.outputs.gid }}
+          EXPECTED_IMAGE_ID: ${{ steps.image_identity.outputs.image_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -204,6 +206,7 @@ jobs:
             --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
             --env "ADMIN_API_KEY=$inert_admin_key" \
             --label io.s3a.validation-only=true \
+            --label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID" \
             "$IMAGE_REF"
 
           container_pid="$(docker inspect --format '{{.State.Pid}}' "$CONTAINER_NAME")"
@@ -230,6 +233,27 @@ jobs:
             echo "kernel_uid=$kernel_uid"
             echo "kernel_gid=$kernel_gid"
           } >> "$EVIDENCE_DIR/image-identity.txt"
+
+      - name: Run bounded isolated Orca CLI and synthetic slice smoke
+        id: orca_cli_smoke
+        if: ${{ steps.runtime_identity.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          EXPECTED_IMAGE_ID: ${{ steps.image_identity.outputs.image_id }}
+          SERVICE_UID: ${{ steps.runtime_identity.outputs.uid }}
+          SERVICE_GID: ${{ steps.runtime_identity.outputs.gid }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! node scripts/i2-orca-runtime-smoke.js; then
+            echo "classification=orca_cli_smoke_failure" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          {
+            echo "### Orca runtime smoke"
+            echo
+            echo "The exact non-root image passed bounded offline CLI help and customer-free synthetic cube slicing."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Wait for the bounded liveness-only health check
         id: smoke_gate
@@ -638,6 +662,8 @@ jobs:
         id: exact_cleanup
         if: ${{ always() }}
         continue-on-error: true
+        env:
+          EXPECTED_IMAGE_ID: ${{ steps.image_identity.outputs.image_id }}
         shell: bash
         run: |
           set -u
@@ -646,14 +672,19 @@ jobs:
             echo "::error title=I2 exact cleanup::$1"
             cleanup_status=1
           }
-          exact_container_present() {
-            local exact_name="$1" inspect_error inspect_status
-            inspect_error="$(docker container inspect "$exact_name" 2>&1 >/dev/null)"
+          exact_container_record() {
+            local exact_reference="$1" inspect_output inspect_status
+            inspect_output="$(docker container inspect --format \
+              '{{.Id}}|{{.Image}}|{{index .Config.Labels "io.s3a.validation-only"}}|{{index .Config.Labels "io.s3a.expected-image-id"}}' \
+              "$exact_reference" 2>&1)"
             inspect_status=$?
-            if [ "$inspect_status" -eq 0 ]; then return 0; fi
-            case "$inspect_error" in
-              "Error: No such object: $exact_name"|"Error: No such container: $exact_name"|\
-              "Error response from daemon: No such container: $exact_name") return 1 ;;
+            if [ "$inspect_status" -eq 0 ]; then
+              printf '%s\n' "$inspect_output"
+              return 0
+            fi
+            case "$inspect_output" in
+              "Error: No such object: $exact_reference"|"Error: No such container: $exact_reference"|\
+              "Error response from daemon: No such container: $exact_reference") return 1 ;;
               *) return 2 ;;
             esac
           }
@@ -668,18 +699,34 @@ jobs:
               *) return 2 ;;
             esac
           }
-          for exact_container in "$I2_UID_PROBE_NAME" "$I2_GID_PROBE_NAME" "$CONTAINER_NAME"; do
-            if exact_container_present "$exact_container"; then
+          for exact_container in "$I2_UID_PROBE_NAME" "$I2_GID_PROBE_NAME" \
+              "$I2_ORCA_PROBE_NAME" "$CONTAINER_NAME"; do
+            if container_record="$(exact_container_record "$exact_container")"; then
               container_state=0
             else
               container_state=$?
             fi
             if [ "$container_state" -eq 0 ]; then
-              docker container rm --force "$exact_container" || cleanup_error container_remove_failure
+              IFS='|' read -r container_id container_image validation_label expected_label <<< "$container_record"
+              if [[ ! "$container_id" =~ ^[0-9a-f]{64}$ ]] || \
+                 [ "$container_image" != "$EXPECTED_IMAGE_ID" ] || \
+                 [ "$validation_label" != "true" ] || [ "$expected_label" != "$EXPECTED_IMAGE_ID" ]; then
+                cleanup_error container_ownership_failure
+                continue
+              fi
+              docker container rm --force "$container_id" || cleanup_error container_remove_failure
             elif [ "$container_state" -ne 1 ]; then
               cleanup_error container_inspect_failure
             fi
-            if exact_container_present "$exact_container"; then
+            if [ "$container_state" -eq 0 ] && exact_container_record "$container_id" >/dev/null; then
+              container_id_state=0
+            else
+              container_id_state=$?
+            fi
+            if [ "$container_state" -eq 0 ] && [ "$container_id_state" -ne 1 ]; then
+              cleanup_error container_cleanup_verification_failure
+            fi
+            if exact_container_record "$exact_container" >/dev/null; then
               container_state=0
             else
               container_state=$?
@@ -751,6 +798,8 @@ jobs:
           DIAGNOSTIC_OUTCOME: ${{ steps.runtime_diagnostics.outcome }}
           RUNTIME_IDENTITY_OUTCOME: ${{ steps.runtime_identity.outcome }}
           RUNTIME_IDENTITY_CLASSIFICATION: ${{ steps.runtime_identity.outputs.classification }}
+          ORCA_CLI_SMOKE_OUTCOME: ${{ steps.orca_cli_smoke.outcome }}
+          ORCA_CLI_SMOKE_CLASSIFICATION: ${{ steps.orca_cli_smoke.outputs.classification }}
           ARTIFACT_BOUNDARY_OUTCOME: ${{ steps.artifact_boundary.outcome }}
           EVIDENCE_UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
           CLEANUP_OUTCOME: ${{ steps.exact_cleanup.outcome }}
@@ -781,6 +830,10 @@ jobs:
               || process.env.RUNTIME_IDENTITY_CLASSIFICATION !== 'success') {
             failures.push('runtime_identity_failure');
           }
+          if (process.env.ORCA_CLI_SMOKE_OUTCOME !== 'success'
+              || process.env.ORCA_CLI_SMOKE_CLASSIFICATION !== 'success') {
+            failures.push('orca_cli_smoke_failure');
+          }
           if (process.env.DIAGNOSTIC_OUTCOME !== 'success'
               || process.env.ARTIFACT_BOUNDARY_OUTCOME !== 'success'
               || process.env.EVIDENCE_UPLOAD_OUTCOME !== 'success') {
@@ -792,7 +845,7 @@ jobs:
 
           const classifications = [...new Set(failures)];
           const summary = classifications.length === 0
-            ? '\n### Final image validation enforcement\n\nAll independent runtime identity, liveness, SBOM, scanner, vulnerability, evidence, and cleanup gates passed.\n'
+            ? '\n### Final image validation enforcement\n\nAll independent runtime identity, Orca CLI/synthetic slice, liveness, SBOM, scanner, vulnerability, evidence, and cleanup gates passed.\n'
             : `\n### Final image validation enforcement\n\nFail-closed classifications: ${classifications.map((value) => `\`${value}\``).join(', ')}.\n`;
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
           if (classifications.length > 0) {

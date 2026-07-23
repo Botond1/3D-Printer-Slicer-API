@@ -102,8 +102,7 @@ and separate explicit user/owner authorization. S2 artifact work waits for the
 S1a ownership seam, and its container envelope waits for S3a image-control
 decisions.
 
-The current I2 executable checkpoint is
-`f4a5c7ab0aa0aab7a1f2eef9a56e5dded1201202`. It preserves the I1
+The current I2 branch preserves the I1
 queue/native/graceful-shutdown contracts, integrates the deterministic Swiper
 12.1.2 remediation into both Orca resource trees, and leaves the exact Orca
 v2.3.1 URL/SHA unchanged. Hosted A/B/C evidence verified that root-owned tmpfs
@@ -111,6 +110,11 @@ mount roots caused `/app/input/.slice-jobs` startup `EACCES`; the workflow now
 resolves nonzero service UID/GID from the immutable image, cross-checks the
 running process against host-kernel credentials, and mounts both 64 MiB runtime
 tmpfs paths with `rw,nosuid,nodev,noexec`, dynamic UID/GID, and mode `0700`.
+Image validation also runs a bounded, network-isolated, exact-image Orca 2.3.1
+help and customer-free manifold-cube slice smoke. It validates an Orca 2.3.1
+G-code signature plus real extrusion and binds cleanup to the captured
+container ID, immutable image ID, and run-owned labels; reusable names alone
+are never deletion authority.
 See [`docs/codex/evidence/i2-v2c-liveness-integration.md`](docs/codex/evidence/i2-v2c-liveness-integration.md).
 Branch protection/required checks, signature/attestation, registry promotion,
 S4, S3b, VPS/deployed state, and production readiness remain `UNVERIFIED`; I2

@@ -742,6 +742,23 @@ function validateImage(source) {
         }
     }
 
+    const orcaSmoke = stepById(document, 'orca_cli_smoke');
+    addError(errors, Boolean(orcaSmoke), 'image: missing exact Orca CLI/synthetic slice smoke step');
+    if (orcaSmoke) {
+        const orcaText = blockText(orcaSmoke);
+        addError(errors, stepScalar(orcaSmoke, 'if')
+            === "${{ steps.runtime_identity.outcome == 'success' }}",
+        'image: Orca smoke must be gated by the exact runtime identity outcome');
+        addError(errors, stepScalar(orcaSmoke, 'continue-on-error') === 'true',
+            'image: Orca smoke must return control to final enforcement');
+        addError(errors, orcaText.includes('node scripts/i2-orca-runtime-smoke.js')
+            && orcaText.includes('classification=orca_cli_smoke_failure')
+            && orcaText.includes('steps.image_identity.outputs.image_id')
+            && orcaText.includes('steps.runtime_identity.outputs.uid')
+            && orcaText.includes('steps.runtime_identity.outputs.gid'),
+        'image: Orca smoke must bind exact image identity, dynamic service IDs, and stable failure output');
+    }
+
     const smokeGate = stepById(document, 'smoke_gate');
     addError(errors, Boolean(smokeGate), 'image: missing explicit smoke_gate step');
     if (smokeGate) {
@@ -983,6 +1000,7 @@ function validateImage(source) {
             'image: final enforcement must not continue on error');
         for (const outcome of ['SMOKE_OUTCOME', 'SBOM_OUTCOME', 'SBOM_GATE_OUTCOME', 'SCAN_OUTCOME',
             'SCAN_GATE_OUTCOME', 'DIAGNOSTIC_OUTCOME', 'RUNTIME_IDENTITY_OUTCOME',
+            'ORCA_CLI_SMOKE_OUTCOME',
             'ARTIFACT_BOUNDARY_OUTCOME', 'EVIDENCE_UPLOAD_OUTCOME',
             'CLEANUP_OUTCOME']) {
             addError(errors, gateText.includes(`process.env.${outcome}`),
@@ -992,10 +1010,12 @@ function validateImage(source) {
             && gateText.includes('process.env.SBOM_CLASSIFICATION')
             && gateText.includes('process.env.SCAN_CLASSIFICATION')
             && gateText.includes('process.env.RUNTIME_IDENTITY_CLASSIFICATION')
+            && gateText.includes('process.env.ORCA_CLI_SMOKE_CLASSIFICATION')
             && gateText.includes('process.env.CLEANUP_OUTCOME'),
         'image: final enforcement must consume stable gate classifications');
         for (const classification of ['runtime_liveness_failure', 'sbom_infrastructure_failure',
             'scanner_infrastructure_failure', 'vulnerability_gate_failure', 'runtime_identity_failure',
+            'orca_cli_smoke_failure',
             'evidence_boundary_failure', 'cleanup_failure']) {
             addError(errors, gateText.includes(`failures.push('${classification}')`),
                 `image: final enforcement must report ${classification}`);
@@ -1024,9 +1044,14 @@ function validateImage(source) {
         addError(errors, /^\$\{\{\s*always\(\)\s*\}\}$/.test(directScalar(cleanup, 'if') || ''),
             'image: exact-resource cleanup must use if: always()');
         const cleanupText = blockText(cleanup);
-        addError(errors, /for exact_container in "\$I2_UID_PROBE_NAME" "\$I2_GID_PROBE_NAME" "\$CONTAINER_NAME"/.test(cleanupText)
-            && /docker container rm --force "\$exact_container"/.test(cleanupText),
-        'image: cleanup must target the exact identity probes and main container');
+        addError(errors, /for exact_container in "\$I2_UID_PROBE_NAME" "\$I2_GID_PROBE_NAME" \\\n\s+"\$I2_ORCA_PROBE_NAME" "\$CONTAINER_NAME"/.test(cleanupText)
+            && /docker container rm --force "\$container_id"/.test(cleanupText)
+            && /container_ownership_failure/.test(cleanupText)
+            && /\[ "\$container_image" != "\$EXPECTED_IMAGE_ID" \]/.test(cleanupText)
+            && /\[ "\$validation_label" != "true" \]/.test(cleanupText)
+            && /\[ "\$expected_label" != "\$EXPECTED_IMAGE_ID" \]/.test(cleanupText)
+            && !/docker container rm --force "\$exact_container"/.test(cleanupText),
+        'image: cleanup must target the exact identity, Orca, and main containers');
         addError(errors, /docker image rm --force "\$IMAGE_REF"/.test(cleanupText),
             'image: cleanup must target exact IMAGE_REF');
         addError(errors, /if \[ -n "\$\{IMAGE_REF:-\}" \]; then/.test(cleanupText),
@@ -1034,7 +1059,7 @@ function validateImage(source) {
         addError(errors, /exact_image_present\(\)[\s\S]*docker image inspect "\$exact_ref"/.test(cleanupText)
             && /if \[ -n "\$\{IMAGE_REF:-\}" \]; then[\s\S]*if exact_image_present "\$IMAGE_REF"; then[\s\S]*image_state=\$\?[\s\S]*docker image rm --force "\$IMAGE_REF"[\s\S]*if exact_image_present "\$IMAGE_REF"; then/.test(cleanupText),
         'image: cleanup must fail closed around exact image inspection, removal, and absence verification');
-        addError(errors, /if exact_container_present "\$exact_container"; then[\s\S]*container_state=\$\?/.test(cleanupText)
+        addError(errors, /if container_record="\$\(exact_container_record "\$exact_container"\)"; then[\s\S]*container_state=\$\?/.test(cleanupText)
             && /if exact_image_present "\$IMAGE_REF"; then[\s\S]*image_state=\$\?/.test(cleanupText)
             && !/^\s*exact_(?:container|image)_present [^\n]+\n\s*(?:container|image)_state=\$\?/m.test(cleanupText),
         'image: expected absent cleanup probes must be captured without triggering shell errexit');
@@ -1586,6 +1611,14 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
                 '/app/output:rw,size=1g,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700']
         ].map(([name, before, after]) => [name, (source) => mutateOnce(source, before, after, after),
             /docker run must retain isolation flag/]),
+        ['Orca CLI/synthetic smoke step removed', (source) => mutateOnce(source,
+            '        id: orca_cli_smoke', '        id: orca_cli_smoke_disabled',
+            'id: orca_cli_smoke_disabled'), /missing exact Orca CLI\/synthetic slice smoke/],
+        ['Orca smoke bypasses runtime identity', (source) => mutateOnce(source,
+            "        id: orca_cli_smoke\n        if: ${{ steps.runtime_identity.outcome == 'success' }}",
+            '        id: orca_cli_smoke\n        if: ${{ always() }}',
+            'id: orca_cli_smoke\n        if: ${{ always() }}'),
+        /Orca smoke must be gated by the exact runtime identity outcome/],
         ['smoke gate is skipped', (source) => mutateOnce(source,
             '        id: smoke_gate\n        continue-on-error: true',
             '        id: smoke_gate\n        if: ${{ false }}\n        continue-on-error: true',
@@ -1849,15 +1882,23 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ['cleanup targets another image', (source) => mutateOnce(source,
             'docker image rm --force "$IMAGE_REF"', 'docker image rm --force "$OTHER_IMAGE_REF"',
             'docker image rm --force "$OTHER_IMAGE_REF"'), /cleanup must target exact IMAGE_REF/],
+        ['cleanup removes a reusable name', (source) => mutateOnce(source,
+            'docker container rm --force "$container_id"', 'docker container rm --force "$exact_container"',
+            'docker container rm --force "$exact_container"'),
+        /cleanup must target the exact identity, Orca, and main containers/],
+        ['cleanup drops ownership label proof', (source) => mutateOnce(source,
+            '[ "$validation_label" != "true" ]', 'false',
+            '[ "$container_image" != "$EXPECTED_IMAGE_ID" ] || \\\n                 false'),
+        /cleanup must target the exact identity, Orca, and main containers/],
         ['cleanup dereferences unset image ref', (source) => source.replaceAll('${IMAGE_REF:-}', '$IMAGE_REF'),
         /guard an unset IMAGE_REF/],
         ['cleanup dereferences unset evidence directory', (source) => mutateOnce(source,
             '${EVIDENCE_DIR:-}', '$EVIDENCE_DIR', '[ -n "$EVIDENCE_DIR" ]'),
         /guard an unset EVIDENCE_DIR/],
         ['cleanup leaves an expected-absence probe exposed to shell errexit', (source) => mutateOnce(source,
-            '            if exact_container_present "$exact_container"; then\n              container_state=0\n            else\n              container_state=$?\n            fi',
-            '            exact_container_present "$exact_container"\n            container_state=$?',
-            'exact_container_present "$exact_container"\n            container_state=$?'),
+            '            if container_record="$(exact_container_record "$exact_container")"; then\n              container_state=0\n            else\n              container_state=$?\n            fi',
+            '            exact_container_record "$exact_container"\n            container_state=$?',
+            'exact_container_record "$exact_container"\n            container_state=$?'),
         /expected absent cleanup probes must be captured without triggering shell errexit/]
     ];
 

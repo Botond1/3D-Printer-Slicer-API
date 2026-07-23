@@ -7,8 +7,7 @@ I2 starts from exact I1 checkpoint
 `codex/i2-v2c-liveness-integration`. It integrates source commits
 `44024749ed99d0cf2a8caf1db85d89d16dbca665` and
 `73f33e856860cec3b1975af1abb98fa65839dac8` as `cf45524` and
-`9f8ae6b`, in that order. The executable I2 correction checkpoint is
-`f4a5c7ab0aa0aab7a1f2eef9a56e5dded1201202`.
+`9f8ae6b`, in that order.
 
 This is repository validation evidence only. I2 did not push an image, deploy,
 promote, merge, tag, release, contact a VPS, or change `main`.
@@ -89,19 +88,38 @@ absent-container and absent-image statuses are captured inside Bash conditional
 contexts so the GitHub runner's implicit `errexit` cannot abort before
 classification; unknown inspection or removal states still fail closed.
 
+Image validation now adds the two previously missing runtime gates. A bounded
+helper creates (rather than directly runs) an exact-image container so its
+64-hex container ID can be captured before execution. It then verifies the
+immutable image ID and both `io.s3a.validation-only=true` and
+`io.s3a.expected-image-id=<exact image ID>` labels before start and again before
+cleanup. Removal targets only that captured ID. The fallback workflow cleanup
+uses the same ownership tuple and refuses to remove a foreign container that
+reuses a predictable name.
+
+Inside that offline, non-root, read-only-rootfs container, Orca help must identify
+`OrcaSlicer-2.3.1`. The synthetic fixture is a closed 10 mm manifold cube with
+explicit, consistently wound unit normals and contains no customer data. Orca
+uses the repository's production machine/process profile pair. Success requires
+exactly one bounded regular G-code file, an OrcaSlicer 2.3.1 generator signature
+within a bounded prefix, and a real `G1` extrusion command; mere nonempty output
+cannot pass.
+
 ## Validation evidence
 
 - Exact npm 10.9.8 clean install added 175 packages, audited 176, and reported
   zero vulnerabilities; `package.json` and `package-lock.json` did not change.
-- Aggregate local tests: JavaScript 509/509; Python 43 discovered/run, 42 pass,
+- Aggregate local tests: JavaScript 533/533; Python 43 discovered/run, 42 pass,
   one Windows-only POSIX permission mutation skipped. The skip is not called a
   pass; hosted Linux Source Validation covers the POSIX gate.
-- Focused final workflow/liveness/mutation suite: 269/269. Required mutations
+- Focused final workflow/liveness/mutation suite: 293/293. Required mutations
   cover hard-coded/root identity, numeric/empty/multiline/error lookup, wrong or
   floating image, missing isolation, missing/unsafe tmpfs options, one-mount
-  repair, health/final weakening, cleanup omission, and shell injection.
-- Syntax: 92 tracked JavaScript and 31 tracked Python files. Repository safety:
-  210 tracked files; fix and correction stages separately passed staged safety.
+  repair, health/final weakening, cleanup omission, shell injection, invalid
+  synthetic normals, weak Orca/G-code signatures, foreign labels, and name
+  reuse.
+- Syntax: 94 tracked JavaScript and 31 tracked Python files. Repository safety:
+  213 tracked files; fix and correction stages separately passed staged safety.
 - The local Docker client had no reachable daemon, so local image, liveness,
   Orca CLI/synthetic slice, SBOM, and Grype runtime gates are
   `NOT_RUN_ENVIRONMENT`; hosted Image Validation owns those results.

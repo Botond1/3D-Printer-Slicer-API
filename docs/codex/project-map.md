@@ -162,8 +162,7 @@ SSH, or deployment change and authorizes none.
 
 ## Current I2 V2C and image-liveness checkpoint
 
-I2 is anchored at executable correction commit
-`f4a5c7ab0aa0aab7a1f2eef9a56e5dded1201202`, from exact I1 baseline
+I2 is anchored from exact I1 baseline
 `c6110e197ebe7e95d15ba597954108297251fb7b`. It integrates V2C equivalents
 `cf45524` and `9f8ae6b` in source order, preserves the I1 queue, native-process,
 and graceful-shutdown behavior, installs Swiper 12.1.2 into both Orca resource
@@ -178,6 +177,13 @@ host-kernel state, retains both restrictive 64 MiB tmpfs mounts, and requires
 both running and healthy. Exact evidence, tests, hosted runs, and remaining
 boundaries are recorded in
 [`evidence/i2-v2c-liveness-integration.md`](evidence/i2-v2c-liveness-integration.md).
+
+The exact candidate image also runs an offline, non-root Orca 2.3.1 help and
+customer-free manifold-cube slice smoke with bounded resources and output. The
+gate requires the expected Orca version, one bounded regular G-code file, its
+Orca 2.3.1 generator signature, and real extrusion. Smoke and final cleanup
+remove only a captured container ID whose immutable image ID and two run-owned
+labels match; a reused container name is reported but never removed.
 
 Branch protection and required-check settings, signature/attestation,
 immutable registry promotion, S4, S3b, VPS/deployed state, and production
