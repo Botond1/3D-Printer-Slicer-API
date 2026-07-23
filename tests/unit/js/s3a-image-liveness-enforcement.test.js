@@ -53,10 +53,8 @@ const SUCCESS_ENV = Object.freeze({
     TRIAGE_OUTCOME: 'success',
     TRIAGE_CLASSIFICATION: 'success',
     DIAGNOSTIC_OUTCOME: 'success',
-    OWNERSHIP_CHARACTERIZATION_OUTCOME: 'success',
-    OWNERSHIP_CHARACTERIZATION_CLASSIFICATION: 'success',
-    OWNERSHIP_FINALIZATION_OUTCOME: 'success',
-    OWNERSHIP_FINALIZATION_CLASSIFICATION: 'success',
+    RUNTIME_IDENTITY_OUTCOME: 'success',
+    RUNTIME_IDENTITY_CLASSIFICATION: 'success',
     ARTIFACT_BOUNDARY_OUTCOME: 'success',
     EVIDENCE_UPLOAD_OUTCOME: 'success',
     CLEANUP_OUTCOME: 'success',
@@ -225,7 +223,6 @@ test('triage workflow remains observational and preserves scan, artifact, and cl
     assert.match(scanStep, /grype-version: v0\.110\.0/);
     assert.match(boundaryStep, /'image-identity\.txt': 16 \* 1024/);
     assert.match(boundaryStep, /'runtime-diagnostics\.json': 96 \* 1024/);
-    assert.match(boundaryStep, /'runtime-ownership\.json': 128 \* 1024/);
     assert.match(boundaryStep, /'sbom\.spdx\.json': 100 \* 1024 \* 1024/);
     assert.match(boundaryStep, /'grype\.json': 100 \* 1024 \* 1024/);
     assert.doesNotMatch(boundaryStep, /vulnerability-summary|triage-summary/);
@@ -274,34 +271,6 @@ function validDiagnostic() {
     };
 }
 
-function validOwnership() {
-    const uid = 1001;
-    const gid = 1002;
-    const paths = (scenario) => ['/app', '/app/input', '/app/output', '/app/configs'].map((item) => ({
-        path: item, isDirectory: true, isSymbolicLink: false, realpath: item,
-        uid: scenario === 'C' && /\/(?:input|output)$/.test(item) ? uid : 0,
-        gid: scenario === 'C' && /\/(?:input|output)$/.test(item) ? gid : 0,
-        mode: scenario === 'C' && /\/(?:input|output)$/.test(item) ? '0700' : '0755',
-        write: { directoryCreated: true, fileWritten: true, statUid: uid, statGid: gid,
-            statMode: '0600', fileRemoved: true, directoryRemoved: true, errorCode: null }
-    }));
-    const probe = (scenario) => {
-        const options = ['rw', 'nosuid', 'nodev', 'noexec', 'size=64m'];
-        if (scenario === 'C') options.push(`uid=${uid}`, `gid=${gid}`, 'mode=0700');
-        return { version: 1, paths: paths(scenario), mounts: scenario === 'A' ? { input: null, output: null } : {
-            input: { type: 'tmpfs', options }, output: { type: 'tmpfs', options: [...options] }
-        } };
-    };
-    const removed = (name, present = false) => ({ name, presentBefore: present, removeAttempted: present,
-        removeExitCode: present ? 0 : null, absentAfter: true });
-    return { version: 1, image: { reference: IMAGE_REF, id: `sha256:${'b'.repeat(64)}`,
-        configuredUser: 'slicer', uid, gid }, probes: {
-        A: { name: 'probe-a', result: probe('A') }, B: { name: 'probe-b', result: probe('B') },
-        C: { name: 'probe-c', result: probe('C') }
-    }, cleanup: { uid: removed('uid-probe'), gid: removed('gid-probe'), A: removed('probe-a'),
-        B: removed('probe-b'), C: removed('probe-c'), main: removed('main-container', true) } };
-}
-
 function createEvidence() {
     const runnerTemp = fs.mkdtempSync(path.join(os.tmpdir(), 's3a-boundary-'));
     const subdir = 'run-evidence';
@@ -316,6 +285,11 @@ function createEvidence() {
         'registry_digest=not_applicable_no_push',
         'signature=not_created',
         'attestation=not_created',
+        'configured_user=slicer',
+        'service_uid=1001',
+        'service_gid=1002',
+        'kernel_uid=1001',
+        'kernel_gid=1002',
         ''
     ].join('\n'));
     fs.writeFileSync(path.join(evidenceDir, 'sbom.spdx.json'), JSON.stringify({
@@ -323,7 +297,6 @@ function createEvidence() {
     }));
     fs.writeFileSync(path.join(evidenceDir, 'grype.json'), JSON.stringify({ matches: [] }));
     fs.writeFileSync(path.join(evidenceDir, 'runtime-diagnostics.json'), JSON.stringify(validDiagnostic()));
-    fs.writeFileSync(path.join(evidenceDir, 'runtime-ownership.json'), JSON.stringify(validOwnership()));
     return { runnerTemp, subdir, evidenceDir };
 }
 
@@ -336,12 +309,9 @@ function runBoundary(evidence, overrides = {}) {
         EVIDENCE_DIR: evidence.evidenceDir,
         CANDIDATE_SHA,
         IMAGE_REF,
-        I2_UID_PROBE_NAME: 'uid-probe',
-        I2_GID_PROBE_NAME: 'gid-probe',
-        I2_PROBE_A_NAME: 'probe-a',
-        I2_PROBE_B_NAME: 'probe-b',
-        I2_PROBE_C_NAME: 'probe-c',
-        CONTAINER_NAME: 'main-container',
+        CONFIGURED_USER: 'slicer',
+        SERVICE_UID: '1001',
+        SERVICE_GID: '1002',
         GITHUB_OUTPUT: output,
         ...overrides
     });

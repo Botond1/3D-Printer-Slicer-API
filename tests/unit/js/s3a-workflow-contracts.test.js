@@ -733,8 +733,8 @@ function validateImage(source) {
             '--cap-drop ALL',
             '--security-opt no-new-privileges',
             '--pids-limit 512',
-            '--tmpfs /app/input:rw,nosuid,nodev,noexec,size=64m',
-            '--tmpfs /app/output:rw,nosuid,nodev,noexec,size=64m'
+            '/app/input:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700',
+            '/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700'
         ];
         for (const requiredFlag of requiredIsolation) {
             addError(errors, dockerRun.includes(requiredFlag),
@@ -747,7 +747,8 @@ function validateImage(source) {
     if (smokeGate) {
         const smokeText = blockText(smokeGate);
         addError(errors, /for\s+attempt\s+in\s+\$\(seq\s+1\s+120\)/.test(smokeText)
-            && /\.State\.Health\.Status/.test(smokeText) && /sleep\s+2/.test(smokeText),
+            && /\.State\.Health\.Status/.test(smokeText) && /sleep\s+2/.test(smokeText)
+            && /\[ "\$running" = "true" \] && \[ "\$health" = "healthy" \]/.test(smokeText),
         'image: smoke_gate must retain the bounded liveness-only health loop');
         addError(errors, stepKeyBlock(smokeGate, 'if') === null,
             'image: smoke_gate must not have a skippable if condition');
@@ -915,19 +916,17 @@ function validateImage(source) {
         addError(errors, directScalar(withBlock, 'name')
             === 's3a-image-evidence-${{ steps.candidate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}',
         'image: artifact name must be unique across candidate, run, and rerun attempt');
-        for (const fileName of ['image-identity.txt', 'runtime-diagnostics.json', 'runtime-ownership.json',
-            'sbom.spdx.json', 'grype.json']) {
+        for (const fileName of ['image-identity.txt', 'runtime-diagnostics.json', 'sbom.spdx.json', 'grype.json']) {
             addError(errors, artifactPaths.includes(fileName), `image: bounded artifact must include ${fileName}`);
         }
         const expectedUploadPaths = [
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt',
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/runtime-diagnostics.json',
-            '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/runtime-ownership.json',
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json',
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json'
         ].sort();
         addError(errors, JSON.stringify(uploadedPathLines.sort()) === JSON.stringify(expectedUploadPaths),
-            'image: artifact upload must use the exact five runner.temp evidence paths');
+            'image: artifact upload must use the exact four runner.temp evidence paths');
         addError(errors, !/(?:\.tar\b|\.oci\b|\*\*|^\s*\.\s*$)/im.test(artifactPaths),
             'image: full image or broad directory artifact upload is forbidden');
     }
@@ -941,8 +940,7 @@ function validateImage(source) {
             'image: artifact boundary must use the exact always/build-success condition');
         addError(errors, stepScalar(artifactBoundary, 'continue-on-error') === 'true',
             'image: artifact boundary must return control to final enforcement');
-        for (const fileName of ['image-identity.txt', 'runtime-diagnostics.json', 'runtime-ownership.json',
-            'sbom.spdx.json', 'grype.json']) {
+        for (const fileName of ['image-identity.txt', 'runtime-diagnostics.json', 'sbom.spdx.json', 'grype.json']) {
             addError(errors, boundaryText.includes(fileName),
                 `image: artifact boundary must enumerate ${fileName}`);
         }
@@ -954,10 +952,15 @@ function validateImage(source) {
             'image: artifact boundary must prove realpath containment');
         addError(errors, /stat\.size\s*<=\s*0\s*\|\|\s*stat\.size\s*>\s*limit/.test(boundaryText),
             'image: artifact boundary must enforce file-size bounds');
-        addError(errors, (boundaryText.match(/JSON\.parse/g) || []).length >= 4,
+        addError(errors, (boundaryText.match(/JSON\.parse/g) || []).length >= 3,
             'image: artifact boundary must parse machine-readable JSON before upload');
-        addError(errors, boundaryText.includes('validateOwnershipDocument(ownership, { requireMainCleanup: true })'),
-            'image: artifact boundary must validate the finalized ownership schema');
+        addError(errors, boundaryText.includes("'configured_user', 'service_uid', 'service_gid', 'kernel_uid', 'kernel_gid'")
+            && boundaryText.includes("identity.configured_user !== 'slicer'")
+            && boundaryText.includes("identity.service_uid !== process.env.SERVICE_UID")
+            && boundaryText.includes("identity.service_gid !== process.env.SERVICE_GID")
+            && boundaryText.includes('identity.kernel_uid !== identity.service_uid')
+            && boundaryText.includes('identity.kernel_gid !== identity.service_gid'),
+        'image: artifact boundary must validate and bind the exact service identity');
         addError(errors, boundaryText.includes('diagnosticKeys') && boundaryText.includes('healthLog')
             && boundaryText.includes('containerLog'),
         'image: artifact boundary must validate the diagnostic field allowlist');
@@ -979,8 +982,8 @@ function validateImage(source) {
         addError(errors, stepKeyBlock(finalEnforcement, 'continue-on-error') === null,
             'image: final enforcement must not continue on error');
         for (const outcome of ['SMOKE_OUTCOME', 'SBOM_OUTCOME', 'SBOM_GATE_OUTCOME', 'SCAN_OUTCOME',
-            'SCAN_GATE_OUTCOME', 'DIAGNOSTIC_OUTCOME', 'OWNERSHIP_CHARACTERIZATION_OUTCOME',
-            'OWNERSHIP_FINALIZATION_OUTCOME', 'ARTIFACT_BOUNDARY_OUTCOME', 'EVIDENCE_UPLOAD_OUTCOME',
+            'SCAN_GATE_OUTCOME', 'DIAGNOSTIC_OUTCOME', 'RUNTIME_IDENTITY_OUTCOME',
+            'ARTIFACT_BOUNDARY_OUTCOME', 'EVIDENCE_UPLOAD_OUTCOME',
             'CLEANUP_OUTCOME']) {
             addError(errors, gateText.includes(`process.env.${outcome}`),
                 `image: final enforcement must check ${outcome}`);
@@ -988,13 +991,12 @@ function validateImage(source) {
         addError(errors, gateText.includes('process.env.SMOKE_CLASSIFICATION')
             && gateText.includes('process.env.SBOM_CLASSIFICATION')
             && gateText.includes('process.env.SCAN_CLASSIFICATION')
-            && gateText.includes('process.env.OWNERSHIP_CHARACTERIZATION_CLASSIFICATION')
-            && gateText.includes('process.env.OWNERSHIP_FINALIZATION_CLASSIFICATION')
+            && gateText.includes('process.env.RUNTIME_IDENTITY_CLASSIFICATION')
             && gateText.includes('process.env.CLEANUP_CLASSIFICATION'),
         'image: final enforcement must consume stable gate classifications');
         for (const classification of ['runtime_liveness_failure', 'sbom_infrastructure_failure',
-            'scanner_infrastructure_failure', 'vulnerability_gate_failure', 'ownership_characterization_failure',
-            'ownership_finalization_failure', 'evidence_boundary_failure', 'cleanup_failure']) {
+            'scanner_infrastructure_failure', 'vulnerability_gate_failure', 'runtime_identity_failure',
+            'evidence_boundary_failure', 'cleanup_failure']) {
             addError(errors, gateText.includes(`failures.push('${classification}')`),
                 `image: final enforcement must report ${classification}`);
         }
@@ -1022,10 +1024,9 @@ function validateImage(source) {
         addError(errors, /^\$\{\{\s*always\(\)\s*\}\}$/.test(directScalar(cleanup, 'if') || ''),
             'image: exact-resource cleanup must use if: always()');
         const cleanupText = blockText(cleanup);
-        addError(errors, /for exact_container in "\$I2_UID_PROBE_NAME" "\$I2_GID_PROBE_NAME" "\$I2_PROBE_A_NAME"/.test(cleanupText)
-            && /"\$I2_PROBE_B_NAME" "\$I2_PROBE_C_NAME" "\$CONTAINER_NAME"/.test(cleanupText)
+        addError(errors, /for exact_container in "\$I2_UID_PROBE_NAME" "\$I2_GID_PROBE_NAME" "\$CONTAINER_NAME"/.test(cleanupText)
             && /docker container rm --force "\$exact_container"/.test(cleanupText),
-        'image: cleanup must target the exact ownership probes and main container');
+        'image: cleanup must target the exact identity probes and main container');
         addError(errors, /docker image rm --force "\$IMAGE_REF"/.test(cleanupText),
             'image: cleanup must target exact IMAGE_REF');
         addError(errors, /if \[ -n "\$\{IMAGE_REF:-\}" \]; then/.test(cleanupText),
@@ -1033,7 +1034,7 @@ function validateImage(source) {
         addError(errors, /exact_image_present\(\)[\s\S]*docker image inspect "\$exact_ref"/.test(cleanupText)
             && /if \[ -n "\$\{IMAGE_REF:-\}" \]; then[\s\S]*exact_image_present "\$IMAGE_REF"[\s\S]*image_state=\$\?[\s\S]*docker image rm --force "\$IMAGE_REF"[\s\S]*exact_image_present "\$IMAGE_REF"/.test(cleanupText),
         'image: cleanup must fail closed around exact image inspection, removal, and absence verification');
-        addError(errors, /if \[ -n "\$\{EVIDENCE_DIR:-\}" \]; then/.test(cleanupText),
+        addError(errors, /\[ -n "\$\{EVIDENCE_DIR:-\}" \]/.test(cleanupText),
             'image: cleanup must guard an unset EVIDENCE_DIR before evidence inspection');
         addError(errors, stepScalar(cleanup, 'continue-on-error') === 'true'
             && cleanupText.includes('classification=success'),
@@ -1572,10 +1573,10 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             ['capability drop removed', '--cap-drop ALL', '--cap-drop NET_RAW'],
             ['no-new-privileges removed', '--security-opt no-new-privileges', '--security-opt label=disable'],
             ['PID limit removed', '--pids-limit 512', '--pids-limit -1'],
-            ['input tmpfs boundary changed', '--tmpfs /app/input:rw,nosuid,nodev,noexec,size=64m',
-                '--tmpfs /app/input:rw,size=1g'],
-            ['output tmpfs boundary changed', '--tmpfs /app/output:rw,nosuid,nodev,noexec,size=64m',
-                '--tmpfs /app/output:rw,size=1g']
+            ['input tmpfs boundary changed', '/app/input:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700',
+                '/app/input:rw,size=1g,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700'],
+            ['output tmpfs boundary changed', '/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700',
+                '/app/output:rw,size=1g,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700']
         ].map(([name, before, after]) => [name, (source) => mutateOnce(source, before, after, after),
             /docker run must retain isolation flag/]),
         ['smoke gate is skipped', (source) => mutateOnce(source,
@@ -1752,11 +1753,11 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ['artifact upload reads from workspace', (source) => mutateOnce(source,
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt',
             '${{ github.workspace }}/image-identity.txt', '${{ github.workspace }}/image-identity.txt'),
-        /exact five runner\.temp evidence paths/],
+        /exact four runner\.temp evidence paths/],
         ['artifact upload permits parent-path exfil', (source) => mutateStringOccurrence(source,
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json',
             2, '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/../synthetic-link',
-            '../synthetic-link'), /exact five runner\.temp evidence paths/],
+            '../synthetic-link'), /exact four runner\.temp evidence paths/],
         ['artifact name collides across reruns', (source) => mutateOnce(source,
             's3a-image-evidence-${{ steps.candidate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}',
             's3a-image-evidence-${{ steps.candidate.outputs.sha }}',
@@ -1844,7 +1845,7 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ['cleanup dereferences unset image ref', (source) => source.replaceAll('${IMAGE_REF:-}', '$IMAGE_REF'),
         /guard an unset IMAGE_REF/],
         ['cleanup dereferences unset evidence directory', (source) => mutateOnce(source,
-            '${EVIDENCE_DIR:-}', '$EVIDENCE_DIR', 'if [ -n "$EVIDENCE_DIR" ]'),
+            '${EVIDENCE_DIR:-}', '$EVIDENCE_DIR', '[ -n "$EVIDENCE_DIR" ]'),
         /guard an unset EVIDENCE_DIR/]
     ];
 
