@@ -4,7 +4,7 @@ applyTo: "app/**"
 
 # App Folder Instructions
 
-Last synchronized: 2026-05-14
+Last synchronized: 2026-07-23
 
 ## Responsibilities
 - app/server.js handles bootstrap, middleware, routes, docs, and static output serving.
@@ -14,10 +14,15 @@ Last synchronized: 2026-05-14
 - app/services/slice/ contains modular pipeline logic (options, queue, transform, profiles, errors).
 - app/middleware uses shared client IP parsing based on Express trust-proxy configuration (TRUST_PROXY + TRUST_PROXY_CIDRS).
 - app/middleware/requireAdmin.js uses timing-safe API key comparison.
+- app/middleware/requireSliceService.js enforces x-slicer-api-key through fixed-size SHA-256 digests and crypto.timingSafeEqual.
+- app/middleware/corsPolicy.js keeps admin and slice browser-origin allowlists separate while permitting requests without Origin.
 - app/middleware/rateLimit.js includes periodic expired-bucket cleanup and separate admin throttling middleware.
+- app/services/http-server.js applies bounded HTTP timeouts, header/connection counts, and requests per socket before listen.
 
 ## Endpoint Rules
 - Keep upload field name as choosenFile.
+- Keep both slice routes ordered as sliceRateLimiter -> requireSliceService -> root-scoped workspace/Multer -> queue -> native processing.
+- Keep exact missing/wrong slice-auth response HTTP 401 `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
 - Keep endpoint contracts stable:
   - POST /prusa/slice
   - POST /orca/slice
@@ -33,6 +38,10 @@ Last synchronized: 2026-05-14
 
 ## Safety Rules
 - Preserve queue and rate-limit protections.
+- Preserve the distinct mandatory 32-256 printable-ASCII SLICE_SERVICE_API_KEY and reject reuse of ADMIN_API_KEY.
+- Preserve requestId/resolved-IP-only slice-auth rejection logging and the separate SLICE_CORS_ALLOWED_ORIGINS policy.
+- Preserve HTTP defaults/bounds: 60000 [1000,60000] headers ms; 600000 [60000,600000] request ms; 5000 [1000,60000] keep-alive ms; 2000 [16,2000] headers; 128 [1,1024] connections; 100 [1,1000] requests/socket.
+- Invalid HTTP envelope overrides fall back to defaults; effective headers timeout is capped at request timeout. VPS capacity and proxy timeouts remain UNVERIFIED.
 - Preserve per-client queue fairness cap (MAX_SLICE_QUEUE_PER_IP).
 - Preserve queue/status mapping: SLICE_QUEUE_FULL (503), SLICE_QUEUE_CLIENT_LIMIT (429), SLICE_QUEUE_TIMEOUT (503).
 - Preserve rate-limit response shape and Retry-After behavior for slice/admin throttling.

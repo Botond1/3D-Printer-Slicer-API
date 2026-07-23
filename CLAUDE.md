@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Operating Guide
 
-Last synchronized: 2026-05-14
+Last synchronized: 2026-07-23
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -30,25 +30,27 @@ Use root-scoped runtime folders only:
 Do not introduce app/input, app/output, or app/configs.
 
 ## Main Data Flow
-1. Receive multipart upload (field name: choosenFile).
-2. Validate extension and request options.
-3. Apply rate limit and enqueue in FIFO queue.
-4. Convert source to STL when needed.
-5. Run orientation optimization.
-6. Apply transform/scale/rotation and bounds validation.
-7. Slice with selected engine/profile.
-8. Parse generated output stats.
-9. Return stats and calculated price.
+1. Apply the slice IP rate limiter.
+2. Authenticate `x-slicer-api-key`.
+3. Allocate a root-scoped request workspace and receive one multipart upload (field name: choosenFile).
+4. Enqueue the uploaded request in the FIFO queue.
+5. Validate options and convert source to STL when needed.
+6. Run orientation optimization.
+7. Apply transform/scale/rotation and bounds validation.
+8. Slice with selected engine/profile.
+9. Parse generated output stats and return stats with calculated price.
 
 ## API Endpoint Snapshot
 Public endpoints:
 - GET /health
 - GET /pricing
-- POST /prusa/slice
-- POST /orca/slice
 - GET /openapi.json
 - GET /docs
 - GET /
+
+Slice-service-protected endpoints (x-slicer-api-key required):
+- POST /prusa/slice
+- POST /orca/slice
 
 Admin-protected endpoints (x-api-key required):
 - GET /health/detailed
@@ -61,11 +63,16 @@ Admin-protected endpoints (x-api-key required):
 
 ## Security and Validation Rules
 - ADMIN_API_KEY must exist or server startup is refused.
+- SLICE_SERVICE_API_KEY must exist, contain 32-256 bytes of printable ASCII, and differ from ADMIN_API_KEY or server startup is refused.
+- Slice requests must pass x-slicer-api-key matching SLICE_SERVICE_API_KEY. Missing or wrong credentials return HTTP 401 with `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
+- Slice service authentication uses a fixed-length SHA-256 digest plus crypto.timingSafeEqual. Rejections log only requestId and resolved client IP; credentials, method, and URL are not logged.
+- Slice route order is rate limiter -> service authentication -> root-scoped workspace allocation -> Multer single-file upload -> queue -> native processing.
 - Admin operations must pass x-api-key header matching ADMIN_API_KEY.
 - Admin API key comparison uses crypto.timingSafeEqual (constant-time).
 - Admin authorization failures are rate-limited and logged with requestId + resolved client IP.
 - X-Forwarded-For is only trusted when TRUST_PROXY=true and TRUST_PROXY_CIDRS is configured.
 - Browser-origin requests to /admin/* must match ADMIN_CORS_ALLOWED_ORIGINS.
+- Slice requests without an Origin header are allowed. Browser-origin requests to the two slice endpoints must match SLICE_CORS_ALLOWED_ORIGINS; the admin allowlist does not grant slice access.
 - Shell commands use execFile with argument arrays (no shell interpolation).
 - Upload accepts only a single file on choosenFile field with extension validation at upload time.
 - /admin/download/:fileName must pass filename extension validation (.gcode/.sl1), path containment checks, lstat non-symlink checks, and realpath containment checks.
@@ -82,6 +89,12 @@ Defaults:
 - Max queued+active slice jobs per client IP: 5
 - Max queue wait: 300000 ms
 - Slice command timeout: 600000 ms (10 minutes)
+- HTTP headers timeout: 60000 ms, bounded 1000..60000
+- HTTP request timeout: 600000 ms, bounded 60000..600000
+- HTTP keep-alive timeout: 5000 ms, bounded 1000..60000
+- HTTP header count: 2000, bounded 16..2000
+- HTTP connections: 128, bounded 1..1024
+- HTTP requests per socket: 100, bounded 1..1000
 - ZIP entry limit: 500 files
 - ZIP cumulative size limit: 500 MB
 
@@ -91,6 +104,8 @@ Behavior:
 - Queue overflow returns SLICE_QUEUE_FULL (HTTP 503).
 - Per-client queue cap returns SLICE_QUEUE_CLIENT_LIMIT (HTTP 429).
 - Queue wait timeout returns SLICE_QUEUE_TIMEOUT (HTTP 503).
+- Invalid, empty, non-decimal, unsafe, or out-of-range HTTP envelope overrides fall back to their safe defaults; effective headers timeout is capped at request timeout.
+- Actual VPS capacity and reverse-proxy timeouts remain UNVERIFIED.
 
 Return and preserve queue/rate errors:
 - RATE_LIMIT_EXCEEDED
@@ -121,8 +136,16 @@ Orca:
 ## Configuration Keys
 Core keys from .env:
 - ADMIN_API_KEY
+- SLICE_SERVICE_API_KEY
 - PORT
 - ADMIN_CORS_ALLOWED_ORIGINS
+- SLICE_CORS_ALLOWED_ORIGINS
+- HTTP_HEADERS_TIMEOUT_MS
+- HTTP_REQUEST_TIMEOUT_MS
+- HTTP_KEEP_ALIVE_TIMEOUT_MS
+- HTTP_MAX_HEADERS_COUNT
+- HTTP_MAX_CONNECTIONS
+- HTTP_MAX_REQUESTS_PER_SOCKET
 - JSON_BODY_LIMIT
 - FORM_BODY_LIMIT
 - MAX_UPLOAD_BYTES

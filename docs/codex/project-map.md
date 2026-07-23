@@ -189,6 +189,41 @@ Branch protection and required-check settings, signature/attestation,
 immutable registry promotion, S4, S3b, VPS/deployed state, and production
 readiness remain `UNVERIFIED`. I2 did not deploy or promote.
 
+## Current I3 service-auth and HTTP-envelope checkpoint
+
+I3 is based on exact commit
+`6241685f1af0c0a1d4be6f1c229d66ca922fbb88` on
+`codex/i3-s4a-service-auth-http-envelope`. It implements only the slice-service
+authentication/browser-Origin subset of S4 and the Node HTTP-server subset of
+S2. The worktree has no exact implementation commit yet.
+
+Startup now requires `SLICE_SERVICE_API_KEY` to contain 32-256 printable-ASCII
+bytes and differ from `ADMIN_API_KEY`. Both slice endpoints require
+`x-slicer-api-key` after the IP limiter and before root-scoped workspace
+allocation. Missing or wrong credentials return exact HTTP 401
+`{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
+The middleware hashes supplied and configured values to fixed-length SHA-256
+digests before `crypto.timingSafeEqual`; its rejection event contains only
+sanitized request ID and resolved client IP.
+
+Requests without `Origin` remain allowed. Browser-origin slice calls use only
+`SLICE_CORS_ALLOWED_ORIGINS`; `ADMIN_CORS_ALLOWED_ORIGINS` is not accepted for
+slice routes. The Node server applies these defaults/inclusive bounds:
+headers timeout 60000 `[1000,60000]`, request timeout 600000
+`[60000,600000]`, keep-alive timeout 5000 `[1000,60000]`, header count 2000
+`[16,2000]`, connections 128 `[1,1024]`, and requests/socket 100
+`[1,1000]`. Empty, non-decimal, unsafe, zero/negative, or out-of-range
+overrides use defaults; effective headers timeout is capped at request timeout.
+
+Focused results currently report 469/469 integrated tests, 6/6 focused
+Python-runner tests, 5/5 I3 mutation tests, and passing HTTP assertions/repeats.
+Final aggregate and hosted exact-SHA results are pending. Root-scoped
+`input/`, `output/`, and `configs/` are preserved. No Docker local build,
+deployment, or production proof is claimed; actual VPS capacity, proxy
+timeouts, private ingress/egress, the remaining S2/S4 exits, and production
+state are `UNVERIFIED`. Detailed evidence is in
+[`evidence/i3-service-auth-and-http-envelope.md`](evidence/i3-service-auth-and-http-envelope.md).
+
 ## System context
 
 The service is a synchronous HTTP API that accepts model/CAD input, invokes
@@ -201,12 +236,15 @@ Actual request-to-artifact sequence:
 
 1. Express applies security headers, CORS, request ID, and body parsers
    ([`app/server.js`](../../app/server.js), middleware registration).
-2. A slicing route applies the IP limiter, allocates a marked job directory
-   under root `input/.slice-jobs`, and then Multer writes one `choosenFile` into
-   that request-owned workspace
+2. A slicing route applies the IP limiter, authenticates `x-slicer-api-key`,
+   allocates a marked job directory under root `input/.slice-jobs`, and then
+   Multer writes one `choosenFile` into that request-owned workspace
    ([`app/routes/slice.routes.js`](../../app/routes/slice.routes.js),
-   `createSliceRouter`; [`workspace.js`](../../app/services/slice/workspace.js),
-   `createJobWorkspace`).
+   `createSliceRouter`;
+   [`requireSliceService.js`](../../app/middleware/requireSliceService.js);
+   [`workspace.js`](../../app/services/slice/workspace.js),
+   `createJobWorkspace`). Authentication rejection allocates no workspace and
+   cannot reach Multer, queue admission, or native work.
 3. The awaited handler binds request/response disconnects to one abort signal,
    then enqueues the already-uploaded request by resolved client IP
    ([`app/services/slice.service.js`](../../app/services/slice.service.js),
@@ -238,9 +276,10 @@ code order is authoritative.
 
 | Surface | Canonical responsibility and evidence |
 | --- | --- |
-| Bootstrap | [`app/server.js`](../../app/server.js): startup guard, middleware order, docs/routes, listener. |
-| Runtime configuration | [`app/config/constants.js`](../../app/config/constants.js), [`paths.js`](../../app/config/paths.js), [`python.js`](../../app/config/python.js). |
+| Bootstrap | [`app/server.js`](../../app/server.js): admin/service-key startup guards, middleware order, docs/routes, bounded listener. |
+| Runtime configuration | [`app/config/constants.js`](../../app/config/constants.js), [`service-auth.js`](../../app/config/service-auth.js), [`paths.js`](../../app/config/paths.js), [`python.js`](../../app/config/python.js). |
 | HTTP contract | [`app/routes`](../../app/routes), [`app/middleware`](../../app/middleware), and [`swagger-docs.js`](../../app/docs/swagger-docs.js). |
+| HTTP server envelope | [`http-server.js`](../../app/services/http-server.js) validates and applies header/request/keep-alive timeouts, header/connection counts, and requests/socket before listen. |
 | Slice orchestration | [`app/services/slice.service.js`](../../app/services/slice.service.js) owns queue settlement and delegates to [`pipeline.js`](../../app/services/slice/pipeline.js), [`output-lifecycle.js`](../../app/services/slice/output-lifecycle.js), and [`response-lifecycle.js`](../../app/services/slice/response-lifecycle.js). |
 | Request workspace ownership | [`workspace.js`](../../app/services/slice/workspace.js) owns marked job allocation, containment, output-candidate custody, idempotent cleanup, and audit-only stale classification. |
 | Pricing | [`pricing.service.js`](../../app/services/pricing.service.js) facade plus [`pricing/repository.js`](../../app/services/pricing/repository.js) and [`pricing/catalog.js`](../../app/services/pricing/catalog.js). |
@@ -256,17 +295,19 @@ code order is authoritative.
 - `app/config/paths.js` selects the repository root locally and `/app` in the
   flattened image, preserving root-scoped `input/`, `output/`, and `configs/`;
   S1a adds only the internal `input/.slice-jobs` ownership root.
-- Multer persists input before queue admission, but allocation and persistence
-  now occur inside one route-owned lifecycle. Full/client-limit rejection and
-  dequeue-time expiry settle before its `finally`, so they no longer bypass
-  request-owned workspace cleanup
+- Slice authentication now precedes allocation. Multer persists input before
+  queue admission, but allocation and persistence occur inside one route-owned
+  lifecycle. Full/client-limit rejection and dequeue-time expiry settle before
+  its `finally`, so they no longer bypass request-owned workspace cleanup
   ([`slice.routes.js`](../../app/routes/slice.routes.js), `lifecycle`;
   [`queue.js`](../../app/services/slice/queue.js), `enqueueSliceJob`).
-- Multer now configures finite file/field/part/name/value limits and fixed
+- Multer configures finite file/field/part/name/value limits and fixed
   `fieldNestingDepth: 0`; live synthetic evidence exercises the real parser and
-  global error mapping. Busboy's header-pair boundary remains the internal fixed
-  value 2000. Total upload time, request/header/socket deadlines, connection
-  limits, and a measured memory/disk envelope remain S2 work.
+  global error mapping. Busboy's header-pair boundary remains its internal fixed
+  value 2000. I3 separately bounds the Node server's header/request/keep-alive
+  timeouts, header count, connections, and requests/socket. Actual proxy/VPS
+  behavior, total streamed upload duration, and measured memory/disk/CPU
+  envelopes remain S2 work.
 - Queue expiry has an immediate per-job timer and a dequeue-time defense in
   depth. Shutdown and client disconnect use the same effective abort contract;
   active capacity remains occupied until the active task actually settles
@@ -301,9 +342,10 @@ Runtime route registration, not README lists, is canonical:
   [`system.routes.js`](../../app/routes/system.routes.js);
 - protected pricing mutations and `/health/detailed` / `/admin/**` apply
   `adminRateLimiter` then `requireAdmin` in their route definitions;
-- public `/prusa/slice` and `/orca/slice` have rate limiting but no
-  application-layer service authentication; private binding or reverse-proxy
-  topology would be a separate external control and remains `UNVERIFIED`;
+- `/prusa/slice` and `/orca/slice` apply rate limiting then mandatory
+  `x-slicer-api-key` authentication before workspace/Multer/queue/native work;
+  private binding, credential rotation/revocation, and reverse-proxy topology
+  remain separate S4 controls and are `UNVERIFIED`;
 - `choosenFile`, stable status/error mappings, Prusa FDM/SLA, Orca FDM-only,
   profile pairing, pricing behavior, and argument semantics are compatibility
   invariants for behavior-preserving stages;
@@ -334,12 +376,13 @@ Runtime route registration, not README lists, is canonical:
   [`image-validation.yml`](../../.github/workflows/image-validation.yml)).
 
 The remaining delivery cycle is formally separated: S3a repository-only
-build-once/no-deploy controls are integrated but its hosted image gate and wider
-supply-chain exits are incomplete; S4 owns service authentication
-plus proxy/private ingress and egress topology; S3b owns staging, promotion,
-readiness, and rollback drill only after S4 evidence and separate explicit
-user/owner authorization. None of those stages, the production topology, or
-promotion readiness is verified by S1a.
+build-once/no-deploy controls are integrated. I3 implements only S4
+slice-service authentication/browser-Origin and S2 application HTTP-envelope
+subsets. Credential lifecycle, protected pricing policy, proxy/private ingress
+and egress, observability, and the remaining S2 exits are incomplete. S3b owns
+staging, promotion, readiness, and rollback only after complete S4 evidence and
+separate explicit user/owner authorization. No repository result verifies
+production topology or authorizes promotion.
 
 ## Historical S0 test and CI capability matrix
 
@@ -372,29 +415,22 @@ delta above for present test and audit status.
 
 ## Verified documentation/code discrepancies
 
-1. `CLAUDE.md`/`app/CLAUDE.md` describe option validation before queueing; code
-   uploads, queues, then validates inside the worker.
-2. README calls queue wait bounded, but expiry is evaluated only when a worker
-   slot becomes available (`queue.js::runNextSliceJob`).
-3. Root `npm start` runs from the repository root while Python script arguments
-   are bare names; Docker works only because `COPY app/ ./` flattens them into
-   its working directory ([`input-processing.js`](../../app/services/slice/input-processing.js),
-   [`Dockerfile`](../../Dockerfile)).
-4. Browser CORS classification covers `/admin/**`, not protected `/pricing/**`
+1. Browser CORS classification covers `/admin/**` and the two slice routes,
+   but not protected `/pricing/**`
    mutations ([`server.js`](../../app/server.js), `resolveCorsOptions`). API-key
    authentication still applies.
-5. `/health` is liveness only; even `/health/detailed` checks profile directories,
+2. `/health` is liveness only; even `/health/detailed` checks profile directories,
    Python, output, and queue rather than a real native slice readiness proof.
-6. OpenAPI omits health/docs/root routes and several 413/429/503 responses. It
+3. OpenAPI omits health/docs/root routes and several 413/429/503 responses. It
    also claims default pricing entries cannot be deleted, but route/catalog code
    contains no such guard.
-7. Historically, README's “zero-downtime” and broad supply-chain claims exceeded
+4. Historically, README's “zero-downtime” and broad supply-chain claims exceeded
    the in-place, floating-input deployment then implemented by
    `deploy.yml`/`Dockerfile`. S3a removed that automatic deploy path, but did not
    verify production readiness or the remaining supply-chain claims.
-8. `docker-compose.dev.yml` live-mounts three Python helpers but not
+5. `docker-compose.dev.yml` live-mounts three Python helpers but not
    `scale_model.py`.
-9. README/config example pricing differs from the code fallback in
+6. README/config example pricing differs from the code fallback in
    [`app/config/constants.js`](../../app/config/constants.js), `DEFAULT_PRICING`.
 
 ## Open unknowns
@@ -402,7 +438,8 @@ delta above for present test and audit status.
 - `UNVERIFIED`: active GitHub secrets, required checks, branch protection,
   environment approvals, and workflow token defaults.
 - `UNVERIFIED`: deployed commit/image, VPS checkout cleanliness, reverse proxy,
-  firewall/egress, quotas, backups, monitoring, and rollback readiness.
+  proxy timeout behavior, actual host capacity, firewall/egress, quotas,
+  backups, monitoring, and rollback readiness.
 - Locally tested process-tree cancellation does not verify hostile
   archive/model parser behavior, exact Prusa/Orca metadata variants, or the
   production/container egress boundary.

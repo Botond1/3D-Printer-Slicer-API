@@ -4,7 +4,7 @@ applyTo: "tests/testing-scripts/**"
 
 # Testing Scripts Instructions
 
-Last synchronized: 2026-05-14
+Last synchronized: 2026-07-23
 
 ## Test Entry Points
 - slicing/full_api_test_runner.py
@@ -31,4 +31,10 @@ Last synchronized: 2026-05-14
 
 ## Environment Inputs
 - SLICER_BASE_URL
+- SLICE_SERVICE_API_KEY for matrix, queue, and unsupported-upload requests; send
+  it only in x-slicer-api-key. The rate-limit regression intentionally omits it
+  to prove exact pre-limit HTTP 401 responses before HTTP 429.
 - ADMIN_API_KEY for admin endpoint tests
+
+Service-auth negative cases must assert exact HTTP 401
+`{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.

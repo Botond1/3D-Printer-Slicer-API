@@ -1,6 +1,6 @@
 # Testing Scripts - Local Claude Guide
 
-Last synchronized: 2026-05-14
+Last synchronized: 2026-07-23
 
 ## Scope
 
@@ -35,6 +35,9 @@ Located in tests/testing-scripts/common/:
 - http_utils.py
 - slice_matrix_runner.py
 
+Slicing helpers resolve `SLICE_SERVICE_API_KEY` and send it as
+`x-slicer-api-key`. Do not reuse `ADMIN_API_KEY` as the slice credential.
+
 ## Reporting Contract
 
 All test outputs must be written to tests/testing-scripts/results/.
@@ -48,6 +51,9 @@ After execution, always read the generated markdown report file.
 ## Runtime Inputs
 
 - SLICER_BASE_URL from .env, fallback to default local base URL.
+- SLICE_SERVICE_API_KEY is required for matrix, queue, and unsupported-upload
+  endpoint tests. The rate-limit regression intentionally omits it so it can
+  prove exact pre-limit HTTP 401 responses before the limiter's HTTP 429.
 - ADMIN_API_KEY required for admin endpoint tests.
 
 ## Local Rules
@@ -59,3 +65,5 @@ After execution, always read the generated markdown report file.
 - Keep stable deterministic runners unchanged unless changed endpoint behavior requires edits.
 - Full slice matrix reports may mark explicitly declared fail-fast rejections as passing only when status and `errorCode` match the expected case exactly.
 - Queue concurrency reports use staggered completion as the black-box signal for serialized queue processing; client start-order matching is informational.
+- Service-auth regression cases must preserve the exact HTTP 401 body:
+  `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.

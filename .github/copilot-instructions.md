@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Copilot Instructions
 
-Last synchronized: 2026-05-14
+Last synchronized: 2026-07-23
 
 ## Architecture Notice
 This project uses both GitHub Copilot and Claude as primary agentic tools.
@@ -30,17 +30,19 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
 - .github/: CI workflow + Copilot instructions + skill mirrors + instruction overlays
 
 ## Runtime Flow
-Accept upload -> validate options -> rate limit -> queue -> convert/orient -> transform -> slice -> parse stats -> compute pricing -> return response.
+Slice IP rate limit -> x-slicer-api-key authentication -> root-scoped workspace/Multer upload -> queue -> validate options -> convert/orient -> transform -> native slice -> parse stats -> compute pricing -> return response.
 
 ## Endpoint Snapshot
 Public:
 - GET /health
 - GET /pricing
-- POST /prusa/slice
-- POST /orca/slice
 - GET /openapi.json
 - GET /docs
 - GET /
+
+Slice-service protected (x-slicer-api-key):
+- POST /prusa/slice
+- POST /orca/slice
 
 Admin protected (x-api-key):
 - GET /health/detailed
@@ -66,6 +68,12 @@ Admin protected (x-api-key):
 - MAX_SLICE_QUEUE_PER_IP default: 5
 - MAX_SLICE_QUEUE_WAIT_MS default: 300000
 - Slice command timeout default: 600000 ms
+- HTTP headers timeout: 60000 ms, bounded 1000..60000
+- HTTP request timeout: 600000 ms, bounded 60000..600000
+- HTTP keep-alive timeout: 5000 ms, bounded 1000..60000
+- HTTP header count: 2000, bounded 16..2000
+- HTTP connections: 128, bounded 1..1024
+- HTTP requests per socket: 100, bounded 1..1000
 - MAX_ZIP_ENTRIES default: 500
 - MAX_ZIP_UNCOMPRESSED_BYTES default: 524288000
 
@@ -75,6 +83,8 @@ Admin protected (x-api-key):
 - Queue overflow returns SLICE_QUEUE_FULL (HTTP 503).
 - Per-client queue cap returns SLICE_QUEUE_CLIENT_LIMIT (HTTP 429).
 - Queue wait timeout returns SLICE_QUEUE_TIMEOUT (HTTP 503).
+- Invalid, empty, non-decimal, unsafe, or out-of-range HTTP envelope values fall back to the documented defaults; effective headers timeout is capped at request timeout.
+- Actual VPS capacity and reverse-proxy timeouts remain UNVERIFIED.
 
 ## Engine Boundaries
 Prusa:
@@ -89,11 +99,16 @@ Orca:
 
 ## Security Rules
 - ADMIN_API_KEY must be present at startup.
+- SLICE_SERVICE_API_KEY must be present, contain 32-256 bytes of printable ASCII, and differ from ADMIN_API_KEY.
+- Slice endpoints require x-slicer-api-key matching SLICE_SERVICE_API_KEY. Missing or wrong credentials return HTTP 401 with `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
+- Slice service comparison hashes both values to fixed-length SHA-256 digests and uses crypto.timingSafeEqual. Rejections log only requestId and resolved client IP.
+- Preserve slice route order: rate limiter -> service authentication -> root-scoped workspace -> Multer -> queue -> native processing.
 - Admin routes require x-api-key equal to ADMIN_API_KEY.
 - Admin API key comparison uses crypto.timingSafeEqual (constant-time).
 - Admin middleware applies rate limiting and logs failures with requestId + resolved client IP.
 - X-Forwarded-For is only trusted when TRUST_PROXY=true and TRUST_PROXY_CIDRS is configured.
 - Browser-origin requests to /admin/* are restricted through ADMIN_CORS_ALLOWED_ORIGINS.
+- Slice requests without Origin remain allowed. Browser-origin slice requests must match SLICE_CORS_ALLOWED_ORIGINS only.
 - /admin/download/:fileName must enforce extension validation, path containment checks, non-symlink checks, and realpath containment checks.
 - /admin/download/ALL must return ZIP output while preserving the same containment/symlink safety checks plus MAX_ZIP_ENTRIES and MAX_ZIP_UNCOMPRESSED_BYTES limits.
 - Shell commands use execFile with argument arrays (no shell interpolation).
@@ -151,8 +166,16 @@ Test organization:
 
 ## Environment and Config Keys
 - ADMIN_API_KEY
+- SLICE_SERVICE_API_KEY
 - PORT
 - ADMIN_CORS_ALLOWED_ORIGINS
+- SLICE_CORS_ALLOWED_ORIGINS
+- HTTP_HEADERS_TIMEOUT_MS
+- HTTP_REQUEST_TIMEOUT_MS
+- HTTP_KEEP_ALIVE_TIMEOUT_MS
+- HTTP_MAX_HEADERS_COUNT
+- HTTP_MAX_CONNECTIONS
+- HTTP_MAX_REQUESTS_PER_SOCKET
 - JSON_BODY_LIMIT
 - FORM_BODY_LIMIT
 - MAX_UPLOAD_BYTES

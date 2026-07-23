@@ -96,10 +96,11 @@ its image gate remains blocked. Branch protection, required checks, immutable
 registry digest, signature, attestation, promotion, S4, S3b, production
 readiness, VPS topology, and deployed state remain `UNVERIFIED`. I1 changes
 neither `main` nor the running VPS and grants no deployment permission.
-S4 owns service authentication and proxy/private-ingress/egress topology. S3b
-owns staging, promotion, readiness, and rollback drills only after S4 evidence
-and separate explicit user/owner authorization. S2 artifact work waits for the
-S1a ownership seam, and its container envelope waits for S3a image-control
+S4 owns service trust and proxy/private-ingress/egress topology; I3 later
+implements only its slice-auth/browser-Origin subset. S3b owns staging,
+promotion, readiness, and rollback drills only after complete S4 evidence and
+separate explicit user/owner authorization. S2 artifact work waits for the S1a
+ownership seam, and its container envelope waits for S3a image-control
 decisions.
 
 The current I2 branch preserves the I1
@@ -121,6 +122,31 @@ See [`docs/codex/evidence/i2-v2c-liveness-integration.md`](docs/codex/evidence/i
 Branch protection/required checks, signature/attestation, registry promotion,
 S4, S3b, VPS/deployed state, and production readiness remain `UNVERIFIED`; I2
 does not authorize deployment or promotion.
+
+The current I3 worktree is based on exact commit
+`6241685f1af0c0a1d4be6f1c229d66ca922fbb88` on branch
+`codex/i3-s4a-service-auth-http-envelope`. It implements only bounded S4
+service-auth/browser-origin and S2 Node HTTP-envelope subsets. Startup now
+requires a separate `SLICE_SERVICE_API_KEY` containing 32-256 bytes of
+printable ASCII and different from `ADMIN_API_KEY`. Both slice endpoints use
+`x-slicer-api-key`; rejection is exact HTTP 401
+`{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`,
+uses fixed-length SHA-256 digest comparison with `crypto.timingSafeEqual`, and
+logs only request ID plus resolved client IP.
+Requests without `Origin` remain allowed; browser-origin slice calls use only
+`SLICE_CORS_ALLOWED_ORIGINS`.
+
+Slice admission order is limiter, service authentication, root-scoped
+workspace, Multer, queue, then native processing. The application HTTP
+defaults/bounds are: headers timeout 60000 `[1000,60000]`, request timeout
+600000 `[60000,600000]`, keep-alive timeout 5000 `[1000,60000]`, header count
+2000 `[16,2000]`, connections 128 `[1,1024]`, and requests/socket 100
+`[1,1000]`. Invalid overrides fall back to their defaults, and effective
+headers timeout cannot exceed request timeout. Focused evidence is green, but
+the final aggregate, exact implementation SHA, hosted validation, actual VPS
+capacity, reverse-proxy timeouts, private ingress/egress topology, deployment,
+and production readiness remain pending or `UNVERIFIED`. See
+[`docs/codex/evidence/i3-service-auth-and-http-envelope.md`](docs/codex/evidence/i3-service-auth-and-http-envelope.md).
 
 ## Read before changing
 
@@ -146,6 +172,11 @@ does not authorize deployment or promotion.
 - Preserve public endpoint, response-field, status-code, error-code, pricing,
   profile, and slicer-command semantics unless a contract-change stage says
   otherwise.
+- Preserve the slice route order: rate limiter, `x-slicer-api-key`
+  authentication, root-scoped workspace/Multer upload, queue, then native
+  processing. Authentication rejection must allocate no request workspace.
+- Keep `SLICE_SERVICE_API_KEY` separate from `ADMIN_API_KEY`; never log either
+  key or a rejected request's method/URL.
 - Execute commands with `execFile` and argument arrays; never add shell
   interpolation for request-controlled data.
 - Reject invalid geometry fail-fast as `INVALID_SOURCE_GEOMETRY`; do not heal,

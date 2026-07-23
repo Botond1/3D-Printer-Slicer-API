@@ -23,9 +23,9 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1a - upload and job-workspace lifecycle | `VERIFIED` | `S0/S0.1 VERIFIED` | committed slice upload/workspace lifecycle, focused tests, and canonical wave reconciliation | Commit `e7a409566bb8795a22f38bbf9f514b42c51bda74` allocates marked ownership before persistence, fixes `fieldNestingDepth: 0`, bounds parser counts/sizes, contains transient/output custody, cleans admission/rejection/error/response/success paths, and keeps startup stale recovery audit-only. Exact clean install/audit/full-suite/syntax/safety gates passed; Docker was explicitly environment-unavailable. |
 | S1b - queue deadlines and abort contract | `VERIFIED` | S1a workspace ownership | integrated queue scheduling/deadline/counter/runtime lifecycle | Independent deadlines, request/shutdown AbortSignal propagation, typed `SLICE_QUEUE_SHUTDOWN`, single settlement, active-slot retention, and timer/listener/counter/workspace cleanup have deterministic local evidence. |
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
-| S2 - resource/state envelope | `NOT_STARTED` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | resource/archive lane; artifact/pricing lane; container-permission lane | Measured HTTP/CPU/RAM/PID/disk/archive/model/output caps fail closed; streaming/actual-byte limits apply; unique artifact correlation plus TTL/count/byte quotas exist; output validity is required before success; pricing writes are atomic with rollback; root filesystem/code/profiles are read-only/root-owned and mutable pricing/input/output are separated. |
+| S2 - resource/state envelope | `IN_PROGRESS` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | I3 implements a bounded Node HTTP-server subset; resource/archive, artifact/pricing, and container-permission exits remain open | I3 locally implements and focuses tests on header/request/keep-alive timeouts, header/connection counts, and requests/socket with bounded fallback. Final aggregate and exact-SHA evidence are pending; measured VPS/proxy/CPU/RAM/PID/disk/archive/model/output caps, streaming limits, artifact retention/correlation, atomic pricing, and read-only state separation remain incomplete. |
 | S3a - repository build/provenance and automatic-deploy separation | `BLOCKED` | S0.1; integrated through I1 | exact-candidate, build-once, no-push/no-deploy validation and Node 24 action maintenance are integrated; remaining image/runtime and supply-chain evidence stays fail closed | Exact S3a-B2 source validation is green, but hosted image validation has both an unresolved persistent liveness failure and a HIGH scanner path. Swiper 7.2.0 is known, but is not claimed as the sole failure. Immutable registry digest, signature/attestation, branch policy, promotion, topology, readiness, and rollback are unverified. |
-| S4 - service trust and topology | `NOT_STARTED` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | service auth/policy; proxy/private-ingress and egress topology; observability | Rotatable scoped service auth protects slice and sensitive operations; protected-route policy is consistent; logs/metrics/traces correlate request/job/artifact; proxy trust is tested; private sidecar ingress and egress are restricted. No production promotion without this evidence or explicit human owner/user-approved, documented risk acceptance; an agent cannot grant the exception. |
+| S4 - service trust and topology | `IN_PROGRESS` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | I3 implements the slice-service-auth and slice browser-origin subset; proxy/private-ingress/egress, rotation/revocation, full protected-route policy, and observability remain open | I3 requires a separate bounded slice-service key, exact authenticated route order, timing-safe comparison, sanitized rejection logs, and a distinct slice Origin allowlist. Final aggregate and exact-SHA evidence are pending; private topology, proxy hops, egress, credential lifecycle, protected pricing policy, and observability are not verified. No production promotion is authorized. |
 | S3b - staging and promotion drill | `NOT_STARTED` | S3a evidence; S4 evidence; separate explicit user/owner authorization | staging/promotion/readiness/rollback drill only | Promote a verified immutable artifact through a human-authorized staging gate; readiness is bounded and meaningful; failure restores the prior artifact; the drill is recorded. No authorization or verification is inferred from S1a/S3a/S4 repository work. |
 | S5 - optional isolated worker and async API | `NOT_STARTED` | explicit architecture decision after S1a-S4 and S3b evidence | API-version lane; worker-isolation lane; migration lane | Decision record approves cost/complexity; isolated worker enforces resource/network boundaries; versioned async job states, idempotency, cancellation, retention, and compatibility migration are tested without silently changing current endpoints. |
 
@@ -173,6 +173,36 @@ authentication, or authorize a `main` promotion.
   signature/attestation, registry promotion, S4, S3b, VPS/deployed state, and
   production readiness remain `UNVERIFIED`; deployment is not authorized.
 
+## Current I3 S2/S4 partial implementation
+
+- Exact baseline:
+  `6241685f1af0c0a1d4be6f1c229d66ca922fbb88`; branch:
+  `codex/i3-s4a-service-auth-http-envelope`.
+- S4 subset: startup requires a separate `SLICE_SERVICE_API_KEY` containing
+  32-256 printable-ASCII bytes and different from `ADMIN_API_KEY`.
+  `x-slicer-api-key` protects both slice routes after the limiter and before
+  workspace/Multer/queue/native effects. Missing or wrong credentials return
+  exact HTTP 401
+  `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`;
+  comparison uses fixed-size SHA-256 digests plus `crypto.timingSafeEqual`;
+  rejection logs contain only request ID and resolved client IP.
+- Browser-origin subset: no-Origin requests remain allowed. Browser-origin
+  slice requests use only `SLICE_CORS_ALLOWED_ORIGINS`; the admin allowlist
+  does not grant slice access. Protected pricing browser policy remains open.
+- S2 subset: the Node server applies defaults/bounds for headers timeout 60000
+  `[1000,60000]`, request timeout 600000 `[60000,600000]`, keep-alive timeout
+  5000 `[1000,60000]`, header count 2000 `[16,2000]`, connections 128
+  `[1,1024]`, and requests/socket 100 `[1,1000]`. Invalid overrides fall back
+  to defaults and effective headers timeout is capped at request timeout.
+- Current focused evidence reports 469/469 integrated tests, 6/6 focused
+  Python-runner tests, 5/5 I3 mutations, and passing HTTP assertions/repeats.
+  The final aggregate, exact implementation SHA, and hosted exact-SHA
+  validation are pending; this is not a `VERIFIED` stage exit.
+- Root-scoped `input/`, `output/`, and `configs/` remain unchanged. Docker local
+  build, deployment, production proof, actual VPS capacity, proxy timeouts,
+  private ingress/egress, rotation/revocation, and full S2/S4 exits are
+  `UNVERIFIED`.
+
 ## S0 work package and gates
 
 S0 is behavior-preserving. Production edits are limited to exporting an
@@ -274,6 +304,9 @@ S1c follows that AbortSignal contract and owns native process execution:
 
 ## S2 detailed exit criteria
 
+- I3 completes only the application HTTP-server configuration subset described
+  above. It does not establish actual VPS or reverse-proxy behavior and does
+  not close the remaining criteria below.
 - Establish measured per-request/model/archive limits, including actual streamed
   bytes, nesting/type policy, finite geometry/stat validation, and bounded output
   reads. No healing is introduced.
@@ -311,8 +344,13 @@ S1c follows that AbortSignal contract and owns native process execution:
 
 ## S4 detailed exit criteria
 
+- I3 completes only the separate slice-service credential, timing-safe route
+  guard, exact 401 response, request-ID/resolved-IP-only rejection logging, and
+  slice browser-Origin subset. Credential rotation/revocation/audience
+  lifecycle, protected pricing policy, topology, proxy, egress, and
+  observability remain open.
 - Define key audience/scope/rotation/revocation and authorize every protected
-  route consistently, including public slice endpoints; avoid distributing a
+  route consistently, including both slice endpoints; avoid distributing a
   single broad admin key.
 - Apply one explicit browser-origin policy to all protected operations, including
   pricing, while preserving non-browser service behavior and stable errors.
@@ -366,12 +404,14 @@ S1b and S1c are integrated at I1: real queue deadlines, abort propagation,
 graceful runtime shutdown, process-tree cancellation, exact command integrity,
 and subprocess-environment minimization are locally verified.
 S2 artifact lifecycle waits for S1a, while its container envelope waits for S3a
-image-control decisions. S4 then supplies service authentication and verified
-proxy/private ingress/egress topology. S3b may run staging, promotion, readiness,
-and rollback drills only after S4 evidence and separate explicit user/owner
-authorization. No production promotion occurs without those verified gates or
-explicit human owner/user-approved, documented risk acceptance; an agent cannot
-grant itself the exception.
+image-control decisions. I3 supplies only the application HTTP and slice-service
+authentication/browser-Origin subsets; verified proxy/private ingress/egress,
+credential lifecycle, observability, and the remaining S2/S4 exits are still
+required. S3b may run staging, promotion, readiness, and rollback drills only
+after complete S4 evidence and separate explicit user/owner authorization. No
+production promotion occurs without those verified gates or explicit human
+owner/user-approved, documented risk acceptance; an agent cannot grant itself
+the exception.
 
 ## Decision and risk log
 
@@ -389,11 +429,12 @@ grant itself the exception.
 | D-010 | Promotion to `main` was not part of S0 completion. | At S0 the workflow could deploy every `main` push. S3a has since removed that repository path without creating a replacement promotion mechanism. | S4 then separately authorized S3b promotion design |
 | D-011 | S0.1 remediated the registry/audit findings, but that result alone did not complete the application mitigation for deeply nested multipart fields. | Commit `f9ed1ee6791e531670d5d7703f994bfb51986ebb` locks Multer 2.2.0 and the other verified non-major fixes, and its production audit is zero. S1a commit `e7a409566bb8795a22f38bbf9f514b42c51bda74` separately configures and live-tests fixed `limits.fieldNestingDepth: 0`. | S0.1 registry/audit remediation and S1a application mitigation locally verified |
 | D-012 | Native children require both secret minimization and egress control. | I1 supplies a tested minimal environment excluding API secrets, but parser/slicer processes still share unrestricted container egress. | S1c environment verified; S4 topology/container egress gate before promotion |
-| D-013 | Public slice routes have no application service authentication. | Rate limiting is not caller authentication, and private/localhost topology is an independent external control currently `UNVERIFIED`. | S4 service-auth/private-topology evidence, or explicit human owner/user-approved, documented risk acceptance; an agent cannot grant the exception. S3b blocks promotion meanwhile. |
-| D-014 | `fileSize` alone was not a complete multipart/HTTP resource envelope. | S1a now locally verifies finite file/field/part/name/value limits and fixed `fieldNestingDepth: 0`, with live file-first rejection/cleanup evidence; Busboy keeps a fixed 2000 header-pair boundary. Total upload time, request/header/socket timeouts, connection limits, and measured resource envelopes remain open. | S2 measured server and connection envelope |
+| D-013 | Slice routes require a separate application service credential, but the wider service-trust stage is incomplete. | I3 requires bounded distinct `SLICE_SERVICE_API_KEY`, timing-safe `x-slicer-api-key`, exact 401, rejection before workspace allocation, and request-ID/resolved-IP-only logs. Private topology, rotation/revocation, proxy hops, protected pricing policy, and egress remain `UNVERIFIED`. | Complete S4 topology/credential-lifecycle/policy evidence before S3b; no production authorization is inferred. |
+| D-014 | `fileSize` alone was not a complete multipart/HTTP resource envelope. | S1a verifies finite multipart limits. I3 adds bounded Node header/request/keep-alive timeouts, header count, connection count, and requests/socket with fallback, but actual VPS/proxy behavior, total streamed upload duration, and measured CPU/RAM/disk envelopes remain open. | Complete S2 measured server, proxy, and resource envelope. |
 | D-015 | A `main` push could historically deploy independently of validation CI. | S3a removed that path. Exact S3a-B2 source is green, but image liveness and HIGH scanning remain red; required checks and branch protection are external `UNVERIFIED`. | S3a image/runtime diagnosis plus repository policy verification; S3b only after S4 and separate authorization |
 | D-016 | The manifest/lock freeze was limited to the S1a/S3a parallel wave. | The dependency patch is now integrated once by patch ID; duplicate `306b799` was not picked. | Future advisory work requires a new serialized owner and audit evidence |
 | D-017 | Parallel lanes return evidence; the integrator owns canonical reconciliation. | I1 reconciliation supersedes historical stage status without rewriting historical evidence files. | Integrator maintains `AGENTS.md` and `docs/codex/**` after integration |
 | D-018 | Graceful shutdown must drain both HTTP and queue work without early capacity release. | `SIGTERM`/`SIGINT` are single-flight; queue shutdown aborts queued/active work, closes HTTP, and awaits both drains while active slots remain owned until task settlement. | I1 runtime lifecycle locally verified |
 | D-019 | A known image advisory does not explain away an independent liveness failure. | Hosted Image run `29957927370` shows both persistent liveness exit 1 and the HIGH scanner path. Swiper 7.2.0 is known, but S3a-V2C is not integrated. | S3a remains blocked; diagnose/fix both paths without weakening gates |
 | D-020 | I2 separates the verified tmpfs liveness root cause from the Swiper advisory. | Exact A/B/C and main-container evidence proves root-owned tmpfs mount roots caused startup `EACCES`; V2C independently produces zero `GHSA-hmx5-qpq5-p643` findings. Dynamic nonzero UID/GID plus kernel cross-check and mode `0700` fix liveness without root or world-writable state. | I2 repository image validation closed; external policy, provenance/promotion, S4/S3b, and production evidence remain required |
+| D-021 | Application defaults do not prove host or proxy capacity. | I3 tests the Node HTTP envelope in-process, but no exact-SHA hosted result, VPS measurement, or reverse-proxy timeout inspection exists. | Keep VPS capacity and proxy timeouts `UNVERIFIED`; complete measured S2/S4 topology evidence before promotion. |

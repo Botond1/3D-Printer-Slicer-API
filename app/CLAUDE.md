@@ -1,6 +1,6 @@
 # App Folder - Local Claude Guide
 
-Last synchronized: 2026-05-14
+Last synchronized: 2026-07-23
 
 ## Scope
 
@@ -8,8 +8,8 @@ This document describes the application runtime inside app/.
 
 ## Runtime Summary
 
-- HTTP stack: Express + helmet + cors + request-id middleware + global error handler.
-- Upload flow: route-level multer single-file upload on choosenFile, then option validation, queueing, conversion/orientation, transform, slicing, stats parsing, and pricing response.
+- HTTP stack: bounded Node HTTP server + Express + helmet + route-aware cors + request-id middleware + global error handler.
+- Upload flow: slice limiter, x-slicer-api-key authentication, root-scoped workspace allocation, route-level multer single-file upload on choosenFile, queueing, option validation, conversion/orientation, transform, native slicing, stats parsing, and pricing response.
 - Slicing engines: PrusaSlicer (FDM/SLA) and OrcaSlicer (FDM only).
 - Runtime folder contract: root-scoped input/, output/, configs/ only.
 
@@ -18,17 +18,21 @@ This document describes the application runtime inside app/.
 ### Bootstrap and wiring
 
 - app/server.js
-  - Starts the Express app, enforces mandatory ADMIN_API_KEY at startup, and initializes required directories and pricing cache.
+  - Starts the Express app, enforces mandatory ADMIN_API_KEY plus a distinct bounded SLICE_SERVICE_API_KEY at startup, and initializes required directories and pricing cache.
   - Applies helmet policies (standard for API, dedicated CSP for /docs and /openapi.json).
   - Resolves trust proxy from TRUST_PROXY + TRUST_PROXY_CIDRS.
-  - Applies dynamic CORS policy and requestId propagation via X-Request-Id.
+  - Applies separate ADMIN_CORS_ALLOWED_ORIGINS and SLICE_CORS_ALLOWED_ORIGINS policies while allowing requests without Origin, then propagates requestId via X-Request-Id.
+  - Creates one bounded Node HTTP server before listening.
   - Registers JSON and urlencoded body limits, Swagger endpoints, business routes, 404 handler, and global error handler.
 
 ### Configuration modules
 
 - app/config/constants.js
-  - Defines DEFAULTS for rate limits, queue limits, upload limits, timeouts, layer heights, and default materials.
+  - Defines DEFAULTS for rate limits, queue limits, upload limits, command/HTTP timeouts, HTTP connection/header/socket limits, layer heights, and default materials.
   - Defines extension groups, Orca process-profile defaults, and default pricing matrix.
+- app/config/service-auth.js
+  - Requires SLICE_SERVICE_API_KEY to contain 32-256 bytes of printable ASCII.
+  - Rejects a missing/invalid value and any value equal to ADMIN_API_KEY with one generic startup error.
 - app/config/paths.js
   - Resolves absolute runtime paths for input/, output/, configs/, and pricing files.
   - Ensures required directories exist before request processing.
@@ -48,6 +52,13 @@ This document describes the application runtime inside app/.
   - Enforces x-api-key for admin-protected operations.
   - Uses timing-safe comparison to reduce timing side-channel risk.
   - Logs unauthorized attempts with resolved client IP + requestId.
+- app/middleware/requireSliceService.js
+  - Enforces x-slicer-api-key for both slice endpoints.
+  - Hashes supplied/configured values to fixed-size SHA-256 digests before crypto.timingSafeEqual.
+  - Returns exact HTTP 401 `SLICE_SERVICE_AUTH_REQUIRED` and logs only requestId + resolved client IP.
+- app/middleware/corsPolicy.js
+  - Allows requests without Origin.
+  - Uses only SLICE_CORS_ALLOWED_ORIGINS for browser-origin slice requests and only ADMIN_CORS_ALLOWED_ORIGINS for /admin routes.
 - app/middleware/errorHandler.js
   - Normalizes CORS, payload parse/size, and multer upload errors.
   - Keeps stable JSON error payload shape for clients.
@@ -56,7 +67,7 @@ This document describes the application runtime inside app/.
 
 - app/routes/slice.routes.js
   - Declares POST /prusa/slice and POST /orca/slice.
-  - Applies sliceRateLimiter before multer upload.
+  - Applies sliceRateLimiter -> requireSliceService -> root-scoped workspace -> multer upload -> queue/native handler.
   - Enforces upload.single('choosenFile') and extension whitelist.
 - app/routes/pricing.routes.js
   - Declares GET /pricing (public).
@@ -85,6 +96,9 @@ This document describes the application runtime inside app/.
 - app/services/admin-output.service.js
   - Validates generated output artifacts for admin listing, single-file download, and ALL-token ZIP export.
   - Applies extension allowlist, path containment, non-symlink target checks, realpath containment, and bulk ZIP resource limits.
+- app/services/http-server.js
+  - Applies validated Node HTTP header/request/keep-alive timeouts, header count, connection count, and requests-per-socket before listen.
+  - Falls back to defaults for empty, non-decimal, unsafe, or out-of-range values and caps headers timeout at request timeout.
 
 ### Services: slice submodules
 
@@ -147,6 +161,9 @@ This document describes the application runtime inside app/.
 ## Endpoint Behavior Notes
 
 - Upload field name must stay choosenFile (multer single-file mode with extension filter).
+- SLICE_SERVICE_API_KEY is mandatory, 32-256 printable-ASCII bytes, and distinct from ADMIN_API_KEY.
+- Missing/wrong x-slicer-api-key returns HTTP 401 with `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}` before workspace/upload/queue/native side effects.
+- No-Origin slice requests are allowed; browser-origin slice requests must match SLICE_CORS_ALLOWED_ORIGINS only.
 - /prusa/slice allows FDM and SLA based on layerHeight.
 - /orca/slice is FDM-only and profile compatibility aware.
 - /orca/slice resolves generated output from per-request isolated output directory before final filename alignment.
@@ -161,11 +178,14 @@ Public endpoints:
 
 - GET /health -> handler
 - GET /pricing -> handler
-- POST /prusa/slice -> sliceRateLimiter -> multer.single(choosenFile) -> handleSlicePrusa
-- POST /orca/slice -> sliceRateLimiter -> multer.single(choosenFile) -> handleSliceOrca
 - GET /openapi.json -> handler
 - GET /docs -> swagger-ui middleware chain
 - GET / -> redirect to /docs
+
+Slice-service-protected endpoints:
+
+- POST /prusa/slice -> sliceRateLimiter -> requireSliceService -> allocate workspace -> multer.single(choosenFile) -> enqueue -> native processing
+- POST /orca/slice -> sliceRateLimiter -> requireSliceService -> allocate workspace -> multer.single(choosenFile) -> enqueue -> native processing
 
 Admin-protected endpoints:
 
@@ -186,6 +206,16 @@ Queue and rate status semantics:
 - SLICE_QUEUE_TIMEOUT -> HTTP 503
 - FILE_PROCESSING_TIMEOUT -> HTTP 422
 
+HTTP server defaults and inclusive bounds:
+
+- HTTP_HEADERS_TIMEOUT_MS: 60000, bounded 1000..60000
+- HTTP_REQUEST_TIMEOUT_MS: 600000, bounded 60000..600000
+- HTTP_KEEP_ALIVE_TIMEOUT_MS: 5000, bounded 1000..60000
+- HTTP_MAX_HEADERS_COUNT: 2000, bounded 16..2000
+- HTTP_MAX_CONNECTIONS: 128, bounded 1..1024
+- HTTP_MAX_REQUESTS_PER_SOCKET: 100, bounded 1..1000
+- Actual VPS capacity and reverse-proxy timeouts remain UNVERIFIED.
+
 ## Local Rules
 
 - Keep route handlers thin; put logic in services/.
@@ -193,4 +223,6 @@ Queue and rate status semantics:
 - Keep queueing and rate-limit protections active.
 - Preserve per-client queue fairness cap (MAX_SLICE_QUEUE_PER_IP).
 - Keep admin throttling and requestId logging behavior active on admin routes.
+- Keep slice authentication before workspace allocation and keep rejection logs limited to requestId + resolved client IP.
+- Keep no-Origin service behavior and the separate slice/admin browser-origin allowlists.
 - Do not bypass geometry validation rules.

@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Instructions
 
-Last synchronized: 2026-05-14
+Last synchronized: 2026-07-23
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -23,17 +23,19 @@ Keep slicing behavior safe, deterministic, and production-friendly while preserv
 - Docker Compose runtime
 
 ## Data Flow
-Request upload -> option validation -> IP rate limit -> FIFO queue -> converter/orientation -> transform/bounds check -> slicer execution -> output parsing -> pricing response.
+IP rate limit -> x-slicer-api-key authentication -> root-scoped workspace/Multer upload -> FIFO queue -> option validation -> converter/orientation -> transform/bounds check -> native slicer execution -> output parsing -> pricing response.
 
 ## Endpoint Reference
 Public endpoints:
 - GET /health
 - GET /pricing
-- POST /prusa/slice
-- POST /orca/slice
 - GET /openapi.json
 - GET /docs
 - GET /
+
+Slice-service endpoints (x-slicer-api-key required):
+- POST /prusa/slice
+- POST /orca/slice
 
 Admin endpoints (x-api-key required):
 - GET /health/detailed
@@ -53,11 +55,16 @@ Admin endpoints (x-api-key required):
 
 ## Security
 - ADMIN_API_KEY must be configured to start API.
+- SLICE_SERVICE_API_KEY must be configured, contain 32-256 bytes of printable ASCII, and differ from ADMIN_API_KEY.
+- Slice endpoints require x-slicer-api-key matching SLICE_SERVICE_API_KEY. Missing or wrong credentials return HTTP 401 with `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
+- Slice service comparison uses fixed-length SHA-256 digests with crypto.timingSafeEqual. Rejection logs contain only requestId and resolved client IP.
+- Preserve slice route order: rate limiter -> service authentication -> root-scoped workspace -> Multer -> queue -> native processing.
 - Admin operations require matching x-api-key header.
 - Admin API key comparison uses crypto.timingSafeEqual (constant-time).
 - Admin auth failures are rate-limited and logged with requestId + resolved client IP.
 - X-Forwarded-For is only trusted when TRUST_PROXY=true and TRUST_PROXY_CIDRS is configured.
 - Browser-origin requests to /admin/* are restricted by ADMIN_CORS_ALLOWED_ORIGINS.
+- Slice requests without Origin are allowed. Browser-origin slice calls must match SLICE_CORS_ALLOWED_ORIGINS only.
 - Shell commands use execFile with argument arrays (no shell interpolation).
 - Upload accepts only a single file on choosenFile field with extension validation at upload time.
 - /admin/download/:fileName enforces extension checks, path containment checks, non-symlink target checks, and realpath containment checks.
@@ -81,6 +88,12 @@ Orca:
 - MAX_SLICE_QUEUE_PER_IP: 5
 - MAX_SLICE_QUEUE_WAIT_MS: 300000
 - Slice timeout: 600000 ms
+- HTTP_HEADERS_TIMEOUT_MS: 60000, bounded 1000..60000
+- HTTP_REQUEST_TIMEOUT_MS: 600000, bounded 60000..600000
+- HTTP_KEEP_ALIVE_TIMEOUT_MS: 5000, bounded 1000..60000
+- HTTP_MAX_HEADERS_COUNT: 2000, bounded 16..2000
+- HTTP_MAX_CONNECTIONS: 128, bounded 1..1024
+- HTTP_MAX_REQUESTS_PER_SOCKET: 100, bounded 1..1000
 - MAX_ZIP_ENTRIES: 500
 - MAX_ZIP_UNCOMPRESSED_BYTES: 524288000
 
@@ -90,6 +103,8 @@ Queue and rate behavior:
 - SLICE_QUEUE_FULL returns HTTP 503.
 - SLICE_QUEUE_CLIENT_LIMIT returns HTTP 429.
 - SLICE_QUEUE_TIMEOUT returns HTTP 503.
+- Invalid, empty, non-decimal, unsafe, or out-of-range HTTP envelope values fall back to their defaults; headers timeout is capped at request timeout.
+- Actual VPS capacity and reverse-proxy timeouts are UNVERIFIED.
 
 ## Python Runtime Resolution
 - PYTHON_EXECUTABLE is optional but must be an existing absolute path when set.
@@ -100,8 +115,16 @@ Queue and rate behavior:
 
 ## Environment Keys
 - ADMIN_API_KEY
+- SLICE_SERVICE_API_KEY
 - PORT
 - ADMIN_CORS_ALLOWED_ORIGINS
+- SLICE_CORS_ALLOWED_ORIGINS
+- HTTP_HEADERS_TIMEOUT_MS
+- HTTP_REQUEST_TIMEOUT_MS
+- HTTP_KEEP_ALIVE_TIMEOUT_MS
+- HTTP_MAX_HEADERS_COUNT
+- HTTP_MAX_CONNECTIONS
+- HTTP_MAX_REQUESTS_PER_SOCKET
 - JSON_BODY_LIMIT
 - FORM_BODY_LIMIT
 - MAX_UPLOAD_BYTES
