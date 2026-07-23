@@ -16,11 +16,13 @@ const errorHandler = require('./middleware/errorHandler');
 const { createCorsOptionsResolver, parseAllowedOrigins } = require('./middleware/corsPolicy');
 const { createRequireSliceService } = require('./middleware/requireSliceService');
 const { PORT, DEFAULTS } = require('./config/constants');
-const { ensureRequiredDirectories } = require('./config/paths');
+const { ensureRequiredDirectories, JOB_SCRATCH_DIR } = require('./config/paths');
 const { resolveSliceServiceApiKey } = require('./config/service-auth');
+const { resolveResourcePolicy } = require('./config/resource-policy');
 const { loadPricingFromDisk, getPricing } = require('./services/pricing.service');
 const { createBoundedHttpServer } = require('./services/http-server');
-const { auditWorkspacesThenListen } = require('./services/slice/workspace');
+const { auditStaleWorkspaces, auditWorkspacesThenListen } = require('./services/slice/workspace');
+const { cleanupManagedArtifacts } = require('./services/artifact-store');
 const { beginSliceQueueShutdown } = require('./services/slice/queue');
 const { createRuntimeLifecycle } = require('./services/runtime-lifecycle');
 
@@ -39,6 +41,13 @@ try {
 }
 
 // Initialize required directories and load pricing data
+let resourcePolicy;
+try {
+    resourcePolicy = resolveResourcePolicy(process.env);
+} catch {
+    console.error('[SECURITY] Resource policy configuration is invalid. Refusing to start server.');
+    process.exit(1);
+}
 ensureRequiredDirectories();
 loadPricingFromDisk();
 
@@ -46,7 +55,8 @@ loadPricingFromDisk();
 const app = express();
 const runtimeLifecycle = createRuntimeLifecycle({ beginQueueShutdown: beginSliceQueueShutdown });
 const sliceRoutes = createSliceRouter({
-    authenticate: createRequireSliceService({ apiKey: sliceServiceApiKey })
+    authenticate: createRequireSliceService({ apiKey: sliceServiceApiKey }),
+    resourcePolicy
 });
 
 const standardHelmet = helmet();
@@ -121,8 +131,8 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || DEFAULTS.JSON_BODY_LIMIT }));
-app.use(express.urlencoded({ extended: false, limit: process.env.FORM_BODY_LIMIT || DEFAULTS.FORM_BODY_LIMIT }));
+app.use(express.json({ limit: resourcePolicy.JSON_BODY_LIMIT }));
+app.use(express.urlencoded({ extended: false, limit: resourcePolicy.FORM_BODY_LIMIT }));
 
 // Swagger UI setup
 const swaggerUiOptions = {
@@ -188,6 +198,21 @@ const httpServer = createBoundedHttpServer(app);
  * S1a intentionally keeps production startup audit-only because total request lifetime is not bounded yet.
  */
 async function startServer() {
+    const scratchCleanup = await auditStaleWorkspaces({
+        jobsRoot: JOB_SCRATCH_DIR,
+        delete: true,
+        deleteMarkedRegardlessAge: true,
+        boundedLifetimeMs: resourcePolicy.UPLOAD_TOTAL_TIMEOUT_MS,
+        verifyExclusiveLease: async () => true,
+        resourcePolicy,
+        logger: console
+    });
+    console.info('[STARTUP] Slice scratch cleanup complete.', scratchCleanup);
+    const artifactCleanup = await cleanupManagedArtifacts({
+        resourcePolicy,
+        logger: console
+    });
+    console.info('[STARTUP] Managed artifact cleanup complete.', artifactCleanup);
     return auditWorkspacesThenListen({
         auditOptions: {
             staleAgeMs: process.env.JOB_WORKSPACE_STALE_AGE_MS,

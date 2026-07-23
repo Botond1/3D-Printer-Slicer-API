@@ -78,6 +78,42 @@ test('minimal environment passes runtime essentials and excludes secret/applicat
         'NODE_OPTIONS', 'PYTHONPATH']) assert.equal(env[key], undefined, key);
 });
 
+test('POSIX child environment uses fixed writable homes and never inherits parent HOME/XDG paths', () => {
+    const env = createChildEnvironment({
+        PATH: '/usr/bin',
+        TMPDIR: '/tmp',
+        HOME: '/secret/home',
+        XDG_CACHE_HOME: '/secret/cache',
+        XDG_CONFIG_HOME: '/secret/config',
+        XDG_RUNTIME_DIR: '/secret/runtime'
+    }, 'linux');
+    assert.deepEqual({
+        TMPDIR: env.TMPDIR,
+        TEMP: env.TEMP,
+        TMP: env.TMP,
+        HOME: env.HOME,
+        XDG_CACHE_HOME: env.XDG_CACHE_HOME,
+        XDG_CONFIG_HOME: env.XDG_CONFIG_HOME,
+        XDG_RUNTIME_DIR: env.XDG_RUNTIME_DIR
+    }, {
+        TMPDIR: '/tmp',
+        TEMP: '/tmp',
+        TMP: '/tmp',
+        HOME: '/tmp/slicer-home',
+        XDG_CACHE_HOME: '/tmp/xdg-cache',
+        XDG_CONFIG_HOME: '/tmp/xdg-config',
+        XDG_RUNTIME_DIR: '/tmp/xdg-runtime'
+    });
+});
+
+test('POSIX child environment rejects arbitrary, normalized, relative, and NUL TMPDIR authorities', () => {
+    for (const candidate of ['/app/output', '/etc', '/tmp/../etc', '../../secret', '/tmp\0/escape']) {
+        const env = createChildEnvironment({ TMPDIR: candidate, HOME: '/secret/home' }, 'linux');
+        assert.equal(env.TMPDIR, '/tmp', candidate);
+        assert.equal(env.HOME, '/tmp/slicer-home', candidate);
+    }
+});
+
 test('real child sees required allowlist values but no inert secret markers', async () => {
     const keys = ['ADMIN_API_KEY', 'SLICE_SERVICE_API_KEY', 'SECRET_MARKER', 'DATABASE_URL'];
     const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
@@ -113,7 +149,7 @@ test('helper resolution is absolute, allowlisted, cwd-independent, and Docker-la
     }
     const docker = fs.readFileSync(path.join(ROOT, 'Dockerfile'), 'utf8');
     assert.match(docker, /WORKDIR \/app/);
-    assert.match(docker, /COPY --chown=slicer:slicer app\/ \.\//);
+    assert.match(docker, /COPY --chown=0:0 app\/ \.\//);
     assert.equal(path.posix.resolve('/app/services/slice', '../..'), '/app');
 });
 

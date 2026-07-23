@@ -20,15 +20,13 @@ test('multipart overrides accept only strict bounded integers and preserve parts
         fileSize: 1024, files: 1, fields: 64, parts: 66,
         fieldNameSize: 256, fieldSize: 1_048_576, fieldNestingDepth: 0
     });
-    const fallback = resolveMultipartLimits({
-        MAX_UPLOAD_BYTES: '524288001', MULTIPART_MAX_FIELDS: '34', MULTIPART_MAX_PARTS: '1',
-        MULTIPART_MAX_FIELD_NAME_CHARS: '-1', MULTIPART_MAX_FIELD_BYTES: '1.5'
-    });
-    assert.equal(fallback.fileSize, 500 * 1024 * 1024);
-    assert.equal(fallback.fields, 40);
-    assert.equal(fallback.parts, 42);
-    assert.equal(fallback.fieldNameSize, 64);
-    assert.equal(fallback.fieldSize, 65_536);
+    for (const env of [
+        { MAX_UPLOAD_BYTES: '524288001' },
+        { MULTIPART_MAX_FIELDS: '34' },
+        { MULTIPART_MAX_PARTS: '1' },
+        { MULTIPART_MAX_FIELD_NAME_CHARS: '-1' },
+        { MULTIPART_MAX_FIELD_BYTES: '1.5' }
+    ]) assert.throws(() => resolveMultipartLimits(env));
 });
 
 const mappings = [

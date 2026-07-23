@@ -41,31 +41,32 @@ test('exclusive output ownership cleans promoted candidate but release preserves
 
 test('registration rejects existing generated output and unsafe technology-derived nesting', async (t) => {
     const dirs = await fixture(t);
-    t.mock.method(Date, 'now', () => 123456);
-    await fs.writeFile(path.join(dirs.outputRoot, 'taken-output-123456.gcode'), 'foreign');
-    const ws = await createJobWorkspace(dirs);
+    const artifactId = 'artifact-11111111111111111111111111111111';
+    await fs.writeFile(path.join(dirs.outputRoot, `taken-output-${artifactId}.gcode`), 'foreign');
+    const ws = await createJobWorkspace({ ...dirs, artifactIdFactory: () => artifactId });
     await assert.rejects(ws.registerOutputCandidate('taken.stl', 'FDM'), /exists/);
     await ws.cleanup();
 });
 
 test('external registration remains a direct generated child and rejects existing directories or links', async (t) => {
     const dirs = await fixture(t);
-    let now = 234567;
-    t.mock.method(Date, 'now', () => now);
-    const ws = await createJobWorkspace(dirs);
+    const identifiers = [
+        'artifact-22222222222222222222222222222222',
+        'artifact-33333333333333333333333333333333',
+        'artifact-44444444444444444444444444444444'
+    ];
+    const ws = await createJobWorkspace({ ...dirs, artifactIdFactory: () => identifiers.shift() });
 
     const candidate = await ws.registerOutputCandidate('../../nested/evil.stl', 'FDM');
     assert.equal(path.dirname(candidate), path.resolve(dirs.outputRoot));
-    assert.equal(path.basename(candidate), 'evil-output-234567.gcode');
+    assert.equal(path.basename(candidate), 'evil-output-artifact-22222222222222222222222222222222.gcode');
 
-    now = 234568;
-    const occupied = path.join(dirs.outputRoot, 'directory-output-234568.gcode');
+    const occupied = path.join(dirs.outputRoot, 'directory-output-artifact-33333333333333333333333333333333.gcode');
     await fs.mkdir(occupied);
     await assert.rejects(ws.registerOutputCandidate('directory.stl', 'FDM'), /exists/);
 
-    now = 234569;
     const outside = path.join(dirs.root, 'outside-directory');
-    const linked = path.join(dirs.outputRoot, 'linked-output-234569.gcode');
+    const linked = path.join(dirs.outputRoot, 'linked-output-artifact-44444444444444444444444444444444.gcode');
     await fs.mkdir(outside);
     try {
         await fs.symlink(outside, linked, process.platform === 'win32' ? 'junction' : 'dir');

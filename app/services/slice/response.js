@@ -3,8 +3,10 @@
  */
 
 const path = require('node:path');
+const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { getRate } = require('../pricing.service');
 const { roundDimensions, roundToThree } = require('./common');
+const RESOURCE_POLICY = resolveResourcePolicy(process.env);
 
 /**
  * Price calculator strategy: minimum quarter-hour billing with upward rounding to nearest 10 HUF.
@@ -41,7 +43,24 @@ function resolvePricingStrategy(technology) {
  */
 function calculateSlicePricing(technology, material, stats) {
     const hourlyRate = getRate(technology, material);
+    if (
+        !Number.isFinite(hourlyRate)
+        || hourlyRate <= 0
+        || hourlyRate > RESOURCE_POLICY.MAX_HOURLY_PRICE_HUF
+    ) {
+        const error = new Error('Pricing rate is outside the allowed range.');
+        error.code = 'INVALID_SLICE_STATS';
+        throw error;
+    }
     const totalPrice = resolvePricingStrategy(technology)(hourlyRate, stats);
+    const maximumTotal = Math.ceil(
+        ((RESOURCE_POLICY.MAX_PRINT_TIME_SECONDS / 3600) * RESOURCE_POLICY.MAX_HOURLY_PRICE_HUF) / 10
+    ) * 10;
+    if (!Number.isSafeInteger(totalPrice) || totalPrice <= 0 || totalPrice > maximumTotal) {
+        const error = new Error('Calculated price is outside the allowed range.');
+        error.code = 'INVALID_SLICE_STATS';
+        throw error;
+    }
 
     return {
         hourlyRate,
@@ -105,6 +124,8 @@ function buildSliceSuccessResponse(context) {
 
     return {
         success: true,
+        job_id: context.jobId,
+        artifact_id: context.artifactId,
         slicer_engine: engine,
         technology,
         material,

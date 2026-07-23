@@ -114,6 +114,52 @@ test('partial file upload abort settles cleanup after persisted-byte event witho
     await harness.assertClean();
 });
 
+test('live slow multipart upload returns stable 408, closes the connection, and leaves no residue', async (t) => {
+    const policy = {
+        ...require('../../../app/config/resource-policy').resolveResourcePolicy({}),
+        UPLOAD_TOTAL_TIMEOUT_MS: 30
+    };
+    const harness = await createHarness(t, {
+        multipartLimits: limits({ fileSize: 256 * 1024 }),
+        resourcePolicy: policy
+    });
+    const boundary = 'i4-live-upload-timeout';
+    const prefix = Buffer.concat([
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="choosenFile"; filename="slow.stl"\r\nContent-Type: application/octet-stream\r\n\r\n`),
+        Buffer.alloc(1024, 0x61)
+    ]);
+    const response = await new Promise((resolve, reject) => {
+        const req = http.request({
+            hostname: '127.0.0.1',
+            port: harness.port,
+            path: '/prusa/slice',
+            method: 'POST',
+            headers: {
+                'content-type': `multipart/form-data; boundary=${boundary}`,
+                'content-length': prefix.length + 64 * 1024
+            }
+        }, (res) => {
+            const chunks = [];
+            res.on('data', (chunk) => chunks.push(chunk));
+            res.on('end', () => {
+                req.destroy();
+                resolve({
+                    status: res.statusCode,
+                    connection: res.headers.connection,
+                    body: JSON.parse(Buffer.concat(chunks).toString('utf8'))
+                });
+            });
+        });
+        req.on('error', reject);
+        req.write(prefix);
+    });
+    assert.equal(response.status, 408);
+    assert.equal(response.connection, 'close');
+    assert.equal(response.body.errorCode, 'UPLOAD_TOTAL_TIMEOUT');
+    await harness.waitSettled();
+    await harness.assertClean();
+});
+
 test('real downstream option validation response settles before cleanup', (t) => expectCase(t, [
     file(),
     { name: 'sizeUnit', value: 'parsecs' }

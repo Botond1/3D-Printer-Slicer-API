@@ -57,10 +57,11 @@ function sanitizeOutputBaseName(fileName) {
  * @param {'FDM'|'SLA'} technology Active technology.
  * @returns {string} Generated output file name.
  */
-function buildOutputFilename(originalFileName, technology) {
+function buildOutputFilename(originalFileName, technology, artifactId) {
     const extension = technology === 'SLA' ? 'sl1' : 'gcode';
     const baseName = sanitizeOutputBaseName(originalFileName);
-    const uniqueSuffix = Date.now();
+    const uniqueSuffix = artifactId || `artifact-${require('node:crypto').randomBytes(16).toString('hex')}`;
+    if (!/^artifact-[a-f0-9]{32}$/.test(uniqueSuffix)) throw new Error('Invalid artifact identifier.');
 
     return `${baseName}-output-${uniqueSuffix}.${extension}`;
 }

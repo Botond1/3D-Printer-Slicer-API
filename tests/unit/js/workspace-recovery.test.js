@@ -134,8 +134,8 @@ test('mutation proof rejects stale audit variants that accept unmarked or fresh 
 
     const source = await fs.readFile(WORKSPACE_MODULE_PATH, 'utf8');
     const unmarkedVariant = source.replace(
-        'if (!marker || now - marker.createdAt <= staleAgeMs) { summary.skipped++; continue; }',
-        'if (marker && now - marker.createdAt <= staleAgeMs) { summary.skipped++; continue; }'
+        'if (!marker || (!deleteEveryMarked && now - marker.createdAt <= staleAgeMs)) {',
+        'if (marker && (!deleteEveryMarked && now - marker.createdAt <= staleAgeMs)) {'
     );
     const freshVariant = source.replace(
         'now - marker.createdAt <= staleAgeMs',

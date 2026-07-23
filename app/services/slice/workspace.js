@@ -5,7 +5,8 @@ const { lstatSync } = require('node:fs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { DEFAULTS } = require('../../config/constants');
-const { JOB_WORKSPACES_DIR, OUTPUT_DIR } = require('../../config/paths');
+const { resolveResourcePolicy } = require('../../config/resource-policy');
+const { JOB_WORKSPACES_DIR, JOB_SCRATCH_DIR, OUTPUT_DIR } = require('../../config/paths');
 const { OutputCandidateRegistry } = require('./workspace-output');
 
 const MARKER_NAME = '.workspace-owner.json';
@@ -14,6 +15,7 @@ const JOB_PATTERN = /^job-[a-f0-9]{32}$/;
 const REQUEST_WORKSPACE = Symbol('sliceJobWorkspace');
 const MIN_STALE_MS = 60_000;
 const MAX_STALE_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_MARKER_BYTES = 4 * 1024;
 
 function isSameResolvedPath(left, right) {
     const normalize = (value) => process.platform === 'win32'
@@ -66,14 +68,41 @@ async function lstatOrNull(target) {
 
 async function readValidMarker(directory, expectedId) {
     const markerPath = path.join(directory, MARKER_NAME);
-    const markerStat = await lstatOrNull(markerPath);
-    if (!markerStat?.isFile() || markerStat.isSymbolicLink()) return null;
+    const markerStat = await fs.lstat(markerPath, { bigint: true }).catch(() => null);
+    if (
+        !markerStat?.isFile()
+        || markerStat.isSymbolicLink()
+        || Number(markerStat.size) <= 0
+        || Number(markerStat.size) > MAX_MARKER_BYTES
+    ) return null;
+    let handle;
     try {
-        const marker = JSON.parse(await fs.readFile(markerPath, 'utf8'));
+        handle = await fs.open(markerPath, 'r');
+        const opened = await handle.stat({ bigint: true });
+        if (
+            String(opened.dev) !== String(markerStat.dev)
+            || String(opened.ino) !== String(markerStat.ino)
+            || opened.size !== markerStat.size
+        ) return null;
+        const content = Buffer.alloc(Number(opened.size));
+        let offset = 0;
+        while (offset < content.length) {
+            const { bytesRead } = await handle.read(content, offset, content.length - offset, offset);
+            if (bytesRead <= 0) return null;
+            offset += bytesRead;
+        }
+        const after = await handle.stat({ bigint: true });
+        if (
+            String(after.dev) !== String(opened.dev)
+            || String(after.ino) !== String(opened.ino)
+            || after.size !== opened.size
+        ) return null;
+        const marker = JSON.parse(content.toString('utf8'));
         return marker.version === MARKER_VERSION && marker.id === expectedId
             && Number.isSafeInteger(marker.createdAt) && marker.createdAt >= 0
             ? marker : null;
     } catch { return null; }
+    finally { await handle?.close().catch(() => {}); }
 }
 
 function resolveWorkspaceStaleAgeMs(value) {
@@ -82,7 +111,15 @@ function resolveWorkspaceStaleAgeMs(value) {
         ? parsed : DEFAULTS.WORKSPACE_STALE_AGE_MS;
 }
 
-function createWorkspaceCleanup({ id, directory, outputCandidates, options }) {
+async function removeOwnedDirectory(directory, id) {
+    const stat = await lstatOrNull(directory);
+    if (!stat) return true;
+    if (!stat.isDirectory() || stat.isSymbolicLink() || !await readValidMarker(directory, id)) return false;
+    await fs.rm(directory, { recursive: true, force: true });
+    return true;
+}
+
+function createWorkspaceCleanup({ id, directory, scratchDirectory, outputCandidates, options }) {
     let cleanupPromise;
     return async function cleanup(reason = 'settled') {
         if (cleanupPromise) return cleanupPromise;
@@ -90,15 +127,9 @@ function createWorkspaceCleanup({ id, directory, outputCandidates, options }) {
             let cleanupFailed = await outputCandidates.cleanup();
             let workspaceRemoved = false;
             try {
-                const stat = await lstatOrNull(directory);
-                if (!stat) {
-                    workspaceRemoved = true;
-                } else if (stat.isDirectory() && !stat.isSymbolicLink() && await readValidMarker(directory, id)) {
-                    await fs.rm(directory, { recursive: true, force: true });
-                    workspaceRemoved = true;
-                } else {
-                    cleanupFailed = true;
-                }
+                workspaceRemoved = await removeOwnedDirectory(directory, id);
+                if (!workspaceRemoved) cleanupFailed = true;
+                if (!await removeOwnedDirectory(scratchDirectory, id)) cleanupFailed = true;
             } catch {
                 cleanupFailed = true;
             }
@@ -120,9 +151,12 @@ function createWorkspaceCleanup({ id, directory, outputCandidates, options }) {
 
 async function createJobWorkspace(options = {}) {
     const jobsRoot = path.resolve(options.jobsRoot || JOB_WORKSPACES_DIR);
+    const scratchRoot = path.resolve(options.scratchRoot || JOB_SCRATCH_DIR);
     const outputRoot = path.resolve(options.outputRoot || OUTPUT_DIR);
     await fs.mkdir(jobsRoot, { recursive: true, mode: 0o700 });
     await assertCanonicalDirectory(jobsRoot, 'job workspace root');
+    await fs.mkdir(scratchRoot, { recursive: true, mode: 0o700 });
+    await assertCanonicalDirectory(scratchRoot, 'job scratch root');
 
     let id;
     let directory;
@@ -134,15 +168,25 @@ async function createJobWorkspace(options = {}) {
         }
     }
     const marker = { version: MARKER_VERSION, id, createdAt: (options.clock || Date.now)() };
+    const scratchDirectory = path.join(scratchRoot, id);
     try {
         await fs.writeFile(path.join(directory, MARKER_NAME), `${JSON.stringify(marker)}\n`, { flag: 'wx', mode: 0o600 });
+        await fs.mkdir(scratchDirectory, { mode: 0o700 });
+        await fs.writeFile(
+            path.join(scratchDirectory, MARKER_NAME),
+            `${JSON.stringify(marker)}\n`,
+            { flag: 'wx', mode: 0o600 }
+        );
     } catch (error) {
         await fs.rm(directory, { recursive: true, force: true });
+        await fs.rm(scratchDirectory, { recursive: true, force: true }).catch(() => {});
         throw error;
     }
 
     const assertContainedPath = (candidate) => assertInside(directory, candidate);
     const resolvePath = (...segments) => assertContainedPath(path.resolve(directory, ...segments));
+    const assertScratchContainedPath = (candidate) => assertInside(scratchDirectory, candidate);
+    const resolveScratchPath = (...segments) => assertScratchContainedPath(path.resolve(scratchDirectory, ...segments));
 
     async function createUniquePath(extension = '') {
         if (extension && (!/^\.[a-z0-9]+$/i.test(extension))) throw new Error('Invalid temporary extension');
@@ -153,23 +197,28 @@ async function createJobWorkspace(options = {}) {
         await assertCanonicalDirectory(outputRoot, 'output root');
     }
     const outputCandidates = new OutputCandidateRegistry({
+        jobId: id,
         outputRoot,
         assertContainedPath,
         assertSafeOutputRoot,
         options
     });
 
-    const cleanup = createWorkspaceCleanup({ id, directory, outputCandidates, options });
+    const cleanup = createWorkspaceCleanup({ id, directory, scratchDirectory, outputCandidates, options });
 
     return {
         id,
         directory,
+        scratchDirectory,
         resolvePath,
         assertContainedPath,
+        resolveScratchPath,
+        assertScratchContainedPath,
         createUniquePath,
         registerOutputCandidate: outputCandidates.register.bind(outputCandidates),
         promoteOutputCandidate: outputCandidates.promote.bind(outputCandidates),
         releaseOutputCandidate: outputCandidates.release.bind(outputCandidates),
+        getOutputCandidateInfo: outputCandidates.getInfo.bind(outputCandidates),
         cleanup
     };
 }
@@ -183,21 +232,35 @@ async function auditStaleWorkspaces(options = {}) {
     const now = (options.clock || Date.now)();
     const staleAgeMs = resolveWorkspaceStaleAgeMs(options.staleAgeMs);
     const summary = { inspected: 0, stale: 0, removed: 0, skipped: 0, failed: 0 };
-    let entries;
+    const policy = options.resourcePolicy || resolveResourcePolicy(options.env || process.env);
+    const maxEntries = options.maxEntries || policy.STARTUP_CLEANUP_MAX_ENTRIES;
+    const maxMs = options.maxMs || policy.STARTUP_CLEANUP_MAX_MS;
+    const started = (options.clock || Date.now)();
+    let directoryHandle;
     try {
         await assertCanonicalDirectory(jobsRoot, 'job workspace root');
-        entries = await fs.readdir(jobsRoot, { withFileTypes: true });
+        directoryHandle = await fs.opendir(jobsRoot);
     } catch (error) {
         if (error.code === 'ENOENT') return summary;
         throw error;
     }
     let mayDelete = false;
     if (options.delete === true) {
-        const bounded = Number(options.boundedLifetimeMs);
-        mayDelete = Number.isSafeInteger(bounded) && bounded >= 0 && staleAgeMs >= bounded + MIN_STALE_MS
-            && typeof options.verifyExclusiveLease === 'function' && await options.verifyExclusiveLease(jobsRoot) === true;
+        const exclusive = typeof options.verifyExclusiveLease === 'function'
+            && await options.verifyExclusiveLease(jobsRoot) === true;
+        if (options.deleteMarkedRegardlessAge === true) {
+            mayDelete = exclusive;
+        } else {
+            const bounded = Number(options.boundedLifetimeMs);
+            mayDelete = Number.isSafeInteger(bounded) && bounded >= 0 && staleAgeMs >= bounded + MIN_STALE_MS
+                && exclusive;
+        }
     }
-    for (const entry of entries) {
+    for await (const entry of directoryHandle) {
+        if (summary.inspected >= maxEntries || (options.clock || Date.now)() - started >= maxMs) {
+            summary.bounded = true;
+            break;
+        }
         summary.inspected++;
         if (!entry.isDirectory() || entry.isSymbolicLink?.() || !JOB_PATTERN.test(entry.name)) { summary.skipped++; continue; }
         const directory = path.join(jobsRoot, entry.name);
@@ -206,7 +269,11 @@ async function auditStaleWorkspaces(options = {}) {
             if (!stat.isDirectory() || stat.isSymbolicLink()) { summary.skipped++; continue; }
             if (!isSameResolvedPath(await fs.realpath(directory), directory)) { summary.skipped++; continue; }
             const marker = await readValidMarker(directory, entry.name);
-            if (!marker || now - marker.createdAt <= staleAgeMs) { summary.skipped++; continue; }
+            const deleteEveryMarked = mayDelete && options.deleteMarkedRegardlessAge === true;
+            if (!marker || (!deleteEveryMarked && now - marker.createdAt <= staleAgeMs)) {
+                summary.skipped++;
+                continue;
+            }
             summary.stale++;
             if (mayDelete) {
                 const removeWorkspace = options.removeWorkspace || ((target) => fs.rm(target, { recursive: true }));

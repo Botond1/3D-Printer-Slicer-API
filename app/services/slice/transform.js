@@ -17,7 +17,7 @@ const { roundDimensions } = require('./common');
  * @returns {boolean} True when all axes are strictly positive.
  */
 function hasPositiveDimensions(dimensions) {
-    return dimensions.x > 0 && dimensions.y > 0 && dimensions.z > 0;
+    return Object.values(dimensions).every((value) => Number.isFinite(value) && value > 0);
 }
 
 /**
@@ -117,9 +117,9 @@ function resolveScaleFromOptions(baseDimensions, transformOptions) {
  */
 function buildModelTransformPlan(modelInfo, transformOptions) {
     const baseDimensions = {
-        x: Number.parseFloat(modelInfo.x) || 0,
-        y: Number.parseFloat(modelInfo.y) || 0,
-        z: Number.parseFloat(modelInfo.z) || 0
+        x: Number(modelInfo.x),
+        y: Number(modelInfo.y),
+        z: Number(modelInfo.z)
     };
 
     const isSizingRequested = hasTargetSizing(transformOptions.targetSizeMm) || transformOptions.scalePercent !== null;
@@ -245,7 +245,7 @@ async function applyTransformAndValidateModel(
     throwIfAborted(signal);
 
     const hasKnownFinalDimensions = [effectiveModelInfo.x, effectiveModelInfo.y, effectiveModelInfo.z]
-        .every((value) => Number.parseFloat(value) > 0);
+        .every((value) => Number.isFinite(Number(value)) && Number(value) > 0);
     if (!hasKnownFinalDimensions) {
         return {
             isValid: false,

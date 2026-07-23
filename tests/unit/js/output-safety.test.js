@@ -37,22 +37,23 @@ function removeTempRoot(tempRoot) {
 }
 
 test('output filenames sanitize the source basename and select FDM/SLA extensions', () => {
+    const artifactId = 'artifact-0123456789abcdef0123456789abcdef';
     withFixedNow(1735689600000, () => {
         assert.equal(
-            buildOutputFilename('../../My unsafe ! model.stl', 'FDM'),
-            'My-unsafe-model-output-1735689600000.gcode'
+            buildOutputFilename('../../My unsafe ! model.stl', 'FDM', artifactId),
+            `My-unsafe-model-output-${artifactId}.gcode`
         );
         assert.equal(
-            buildOutputFilename('resin.part.stl', 'SLA'),
-            'resin-part-output-1735689600000.sl1'
+            buildOutputFilename('resin.part.stl', 'SLA', artifactId),
+            `resin-part-output-${artifactId}.sl1`
         );
         assert.equal(
-            buildOutputFilename('   .stl', 'FDM'),
-            'output-output-1735689600000.gcode'
+            buildOutputFilename('   .stl', 'FDM', artifactId),
+            `output-output-${artifactId}.gcode`
         );
 
-        const crossPlatformUnsafe = buildOutputFilename('..\\private\\part (copy).stl', 'FDM');
-        assert.match(crossPlatformUnsafe, /^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*-output-1735689600000\.gcode$/);
+        const crossPlatformUnsafe = buildOutputFilename('..\\private\\part (copy).stl', 'FDM', artifactId);
+        assert.match(crossPlatformUnsafe, /^[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*-output-artifact-[a-f0-9]{32}\.gcode$/);
         assert.doesNotMatch(crossPlatformUnsafe, /[\\/]/);
         assert.doesNotMatch(crossPlatformUnsafe, /\.\./);
     });

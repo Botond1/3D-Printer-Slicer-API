@@ -15,6 +15,8 @@ const { resolveBuildVolumeLimits, resolveProfileSelection } = require('./profile
 const { resolveSliceOutputTargets, runSlicerAndParseStats } = require('./output-lifecycle');
 const { writeJsonAndWaitForFinish, setResponseSettlement } = require('./response-lifecycle');
 const { throwIfAborted, isAbortError } = require('./command');
+const { resolveResourcePolicy } = require('../../config/resource-policy');
+const { resourceLimit } = require('./resource-errors');
 
 function findUploadedModelFile(req) {
     return req.file?.fieldname === 'choosenFile' ? req.file : null;
@@ -44,13 +46,27 @@ async function prepareProcessableModel(inputFile, technology, workspace, signal)
         throwIfAborted(signal);
     }
     processableFile = await convertInputToStl(processableFile, workspace, signal);
+    await assertBoundedModelFile(processableFile, workspace);
     throwIfAborted(signal);
     processableFile = await tryOptimizeOrientation(processableFile, technology, workspace, signal);
+    await assertBoundedModelFile(processableFile, workspace);
     throwIfAborted(signal);
     workspace.assertContainedPath(processableFile);
     const originalModelInfo = await getModelInfo(processableFile, signal);
     throwIfAborted(signal);
     return { processableFile, originalModelInfo };
+}
+
+async function assertBoundedModelFile(filePath, workspace, policy = resolveResourcePolicy()) {
+    const safePath = workspace.assertContainedPath(filePath);
+    const stat = await fs.lstat(safePath);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0 || stat.size > policy.MAX_MODEL_FILE_BYTES) {
+        throw resourceLimit('Model or intermediate file exceeds the configured byte limit.');
+    }
+    if (workspace.assertContainedPath(await fs.realpath(safePath)) !== safePath) {
+        throw resourceLimit('Model or intermediate file failed canonical containment.');
+    }
+    return safePath;
 }
 
 function resolveProfilesOrResponse(res, engine, technology, layerHeight, profileOverrides) {
@@ -83,6 +99,8 @@ async function prepareModelOrResponse(res, request, processableFile, originalMod
     );
     throwIfAborted(signal);
     if (!model.isValid) return { response: res.status(model.status).json(model.response) };
+    await assertBoundedModelFile(model.processableFile, workspace);
+    throwIfAborted(signal);
     return { response: null, buildVolumeLimits, model };
 }
 
@@ -171,7 +189,8 @@ async function executePreparedSlice(req, res, job, workspace, signal) {
         originalModelInfo: source.originalModelInfo,
         modelBoundsValidation: model.modelBoundsValidation,
         buildVolumeLimits,
-        stats
+        stats,
+        ...workspace.getOutputCandidateInfo(targets.outputCandidate)
     });
     throwIfAborted(signal);
     setResponseSettlement(
@@ -212,4 +231,6 @@ module.exports = {
     resolveRequestOrResponse,
     prepareSliceJob,
     executePreparedSlice
+    ,
+    assertBoundedModelFile
 };

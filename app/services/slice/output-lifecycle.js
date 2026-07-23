@@ -7,6 +7,9 @@ const { resolveSingleOutputFile } = require('./common');
 const { parseOutputDetailed } = require('./model-stats');
 const { resolveSlicerExecutable, buildSlicerCommandArgs } = require('./engine');
 const { createRuntimeSlicerProfile, logEngineProfileSelection } = require('./profiles');
+const { resolveResourcePolicy } = require('../../config/resource-policy');
+const { invalidOutput } = require('./resource-errors');
+const { cleanupManagedArtifacts } = require('../artifact-store');
 
 async function resolveSliceOutputTargets(engine, originalName, technology, workspace) {
     const outputCandidate = await workspace.registerOutputCandidate(originalName, technology);
@@ -26,11 +29,19 @@ async function resolveSliceOutputTargets(engine, originalName, technology, works
     return { outputCandidate, engineOutputDir, slicerOutputPath };
 }
 
-async function assertValidContainedArtifact(filePath, workspace) {
+async function assertValidContainedArtifact(filePath, workspace, technology, policy = resolveResourcePolicy()) {
     const safePath = workspace.assertContainedPath(filePath);
     const stats = await fs.lstat(safePath);
-    if (!stats.isFile() || stats.isSymbolicLink() || stats.size === 0) {
-        throw new Error('Slicer did not produce a valid output artifact.');
+    const expectedExtension = technology === 'SLA' ? '.sl1' : '.gcode';
+    if (path.extname(safePath).toLowerCase() !== expectedExtension) {
+        throw invalidOutput('Slicer output has an invalid extension.');
+    }
+    if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0 || stats.size > policy.MAX_OUTPUT_BYTES) {
+        throw invalidOutput('Slicer did not produce a bounded regular output artifact.');
+    }
+    const realPath = await fs.realpath(safePath);
+    if (workspace.assertContainedPath(realPath) !== safePath) {
+        throw invalidOutput('Slicer output failed canonical containment validation.');
     }
     return safePath;
 }
@@ -64,7 +75,7 @@ async function runSlicerAndParseStats(context) {
         : slicerOutputPath;
     throwIfAborted(signal);
     if (!generatedPath) throw new Error('Slicer did not produce an output artifact.');
-    const effectiveOutputPath = await assertValidContainedArtifact(generatedPath, workspace);
+    const effectiveOutputPath = await assertValidContainedArtifact(generatedPath, workspace, technology);
     throwIfAborted(signal);
     const stats = await parseOutputDetailed(
         effectiveOutputPath,
@@ -76,6 +87,10 @@ async function runSlicerAndParseStats(context) {
     throwIfAborted(signal);
     await workspace.promoteOutputCandidate(outputCandidate, effectiveOutputPath);
     throwIfAborted(signal);
+    const cleanup = await cleanupManagedArtifacts();
+    if (!cleanup.quotaSatisfied) {
+        throw invalidOutput('Managed artifact retention quota could not be enforced safely.');
+    }
     return { stats };
 }
 

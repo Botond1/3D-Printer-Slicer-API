@@ -25,8 +25,9 @@ async function fixture(t) {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 's1a-transient-'));
     const jobsRoot = path.join(root, 'input', '.slice-jobs');
     const outputRoot = path.join(root, 'output');
+    const scratchRoot = path.join(root, 'tmp', 'slice-jobs');
     await fs.mkdir(outputRoot, { recursive: true });
-    const workspace = await createJobWorkspace({ jobsRoot, outputRoot });
+    const workspace = await createJobWorkspace({ jobsRoot, outputRoot, scratchRoot });
     t.after(() => fs.rm(root, { recursive: true, force: true }));
     return { root, outputRoot, workspace };
 }
@@ -55,16 +56,16 @@ test('every upload, preprocessing, engine, and runtime-profile path stays contai
         oriented,
         transformed,
         extraction,
-        profilePath,
         prusaTargets.slicerOutputPath,
         orcaTargets.engineOutputDir,
         orcaTargets.slicerOutputPath
     ]) assertContained(workspace, candidate);
+    assert.equal(workspace.assertScratchContainedPath(profilePath), path.resolve(profilePath));
 
     const baseIni = path.join(workspace.directory, 'base.ini');
     await fs.writeFile(baseIni, 'layer_height = 0.3\nfill_density = 10%\n');
     const runtimeIni = await createRuntimeSlicerProfile('prusa', baseIni, 'FDM', 0.2, '20%', workspace);
-    assertContained(workspace, runtimeIni);
+    assert.equal(workspace.assertScratchContainedPath(runtimeIni), path.resolve(runtimeIni));
     assert.match(await fs.readFile(runtimeIni, 'utf8'), /layer_height = 0\.2/);
 
     await workspace.cleanup();
@@ -72,7 +73,7 @@ test('every upload, preprocessing, engine, and runtime-profile path stays contai
 
 test('adversarial profile and extraction seams cannot escape to a naive-prefix sibling', async (t) => {
     const { workspace } = await fixture(t);
-    const sibling = `${workspace.directory}-foreign`;
+    const sibling = `${workspace.scratchDirectory}-foreign`;
     const escape = () => path.join(sibling, 'escaped');
 
     assert.throws(
@@ -96,9 +97,11 @@ test('all transient helper families reject an intermediate junction escape', asy
     const { root, workspace } = await fixture(t);
     const outside = path.join(root, 'outside');
     const link = path.join(workspace.directory, 'linked');
+    const scratchLink = path.join(workspace.scratchDirectory, 'linked');
     await fs.mkdir(outside);
     try {
         await fs.symlink(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
+        await fs.symlink(outside, scratchLink, process.platform === 'win32' ? 'junction' : 'dir');
     } catch (error) {
         t.skip(`symlink creation unavailable: ${error.code || 'unknown'}`);
         await workspace.cleanup();
@@ -114,7 +117,7 @@ test('all transient helper families reject an intermediate junction escape', asy
         /Symlink paths/
     );
     assert.throws(
-        () => resolveRuntimeProfilePath(workspace, 'prusa-runtime', '.ini', () => path.join(link, 'profile.ini')),
+        () => resolveRuntimeProfilePath(workspace, 'prusa-runtime', '.ini', () => path.join(scratchLink, 'profile.ini')),
         /Symlink paths/
     );
     assert.throws(

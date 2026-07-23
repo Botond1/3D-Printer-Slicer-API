@@ -13,6 +13,8 @@ const {
     MIN_BUILD_VOLUMES
 } = require('../../config/constants');
 const { PRUSA_CONFIGS_DIR, ORCA_CONFIGS_DIR } = require('../../config/paths');
+const { resolveResourcePolicy } = require('../../config/resource-policy');
+const { readProfileText, readProfileJson, readIniKeyValues } = require('./profile-readers');
 const { parseNumberLike } = require('./value-parsers');
 const { roundToThree } = require('./common');
 
@@ -104,31 +106,6 @@ function parsePlanarCoordinates(rawPoints) {
 }
 
 /**
- * Read INI file into lowercase key/value map.
- * @param {string} filePath INI file path.
- * @returns {Record<string, string>} Parsed INI map.
- */
-function readIniKeyValues(filePath) {
-    const map = {};
-    const content = fs.readFileSync(filePath, 'utf8');
-    const lines = content.split(/\r?\n/);
-
-    for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith(';')) continue;
-        const separatorIndex = trimmed.indexOf('=');
-        if (separatorIndex < 0) continue;
-
-        const key = trimmed.slice(0, separatorIndex).trim();
-        const value = trimmed.slice(separatorIndex + 1).trim();
-        if (!key) continue;
-        map[key.toLowerCase()] = value;
-    }
-
-    return map;
-}
-
-/**
  * Build default min/max build-volume limits for technology.
  * @param {string} profilePath Source profile path.
  * @param {'FDM'|'SLA'} technology Active technology.
@@ -152,7 +129,7 @@ function createDefaultBuildVolumeLimits(profilePath, technology) {
  * @returns {void}
  */
 function assignPositiveAxisValue(target, axis, value) {
-    if (Number.isFinite(value) && value > 0) {
+    if (Number.isFinite(value) && value > 0 && value <= resolveResourcePolicy().MAX_MODEL_DIMENSION_MM) {
         target[axis] = value;
     }
 }
@@ -195,7 +172,7 @@ function parseDimensionLimitsFromOrcaMachineProfile(machineConfigPath, technolog
 
     if (!machineConfigPath || !fs.existsSync(machineConfigPath)) return limits;
 
-    const profileData = JSON.parse(fs.readFileSync(machineConfigPath, 'utf8'));
+    const profileData = readProfileJson(machineConfigPath);
     const printableArea = parsePlanarCoordinates(profileData.printable_area);
     if (printableArea) {
         limits.max.x = printableArea.x;
@@ -274,10 +251,19 @@ function resolveBuildVolumeLimits(engine, technology, configFile, orcaMachineCon
  */
 function validateModelDimensionsAgainstLimits(modelInfo, buildVolumeLimits) {
     const dimensions = {
-        x: Number.parseFloat(modelInfo.x) || 0,
-        y: Number.parseFloat(modelInfo.y) || 0,
-        z: Number.parseFloat(modelInfo.z) || 0
+        x: Number(modelInfo.x),
+        y: Number(modelInfo.y),
+        z: Number(modelInfo.z)
     };
+    const dimensionLimit = resolveResourcePolicy().MAX_MODEL_DIMENSION_MM;
+    if (!Object.values(dimensions).every((value) => Number.isFinite(value) && value > 0 && value <= dimensionLimit)) {
+        return {
+            isValid: false,
+            dimensions,
+            tooSmall: ['Model dimensions must be finite and positive.'],
+            tooLarge: []
+        };
+    }
 
     const axes = ['x', 'y', 'z'];
     const tooSmall = [];
@@ -318,7 +304,7 @@ function validateModelDimensionsAgainstLimits(modelInfo, buildVolumeLimits) {
  * @returns {Promise<string>} Runtime profile path.
  */
 async function createOrcaRuntimeProcessProfile(baseProcessProfilePath, layerHeight, infillPercentage, workspace, options = {}) {
-    const profileData = JSON.parse(fs.readFileSync(baseProcessProfilePath, 'utf8'));
+    const profileData = readProfileJson(baseProcessProfilePath);
     profileData.layer_height = `${layerHeight}`;
     profileData.sparse_infill_density = infillPercentage;
     profileData.layer_gcode = 'G92 E0';
@@ -376,7 +362,7 @@ function upsertIniKey(content, key, value) {
  * @returns {Promise<string>} Runtime profile path.
  */
 async function createPrusaRuntimeProfile(baseConfigPath, technology, layerHeight, infillPercentage, workspace, options = {}) {
-    let iniContent = fs.readFileSync(baseConfigPath, 'utf8');
+    let iniContent = readProfileText(baseConfigPath);
     iniContent = upsertIniKey(iniContent, 'layer_height', `${layerHeight}`);
 
     if (technology === 'FDM') {
@@ -402,9 +388,11 @@ async function createPrusaRuntimeProfile(baseConfigPath, technology, layerHeight
  */
 function resolveRuntimeProfilePath(workspace, prefix, extension, pathFactory) {
     const suffix = randomBytes(8).toString('hex');
-    const defaultPath = workspace.resolvePath(`${prefix}-${suffix}${extension}`);
+    const resolvePath = workspace.resolveScratchPath || workspace.resolvePath;
+    const assertPath = workspace.assertScratchContainedPath || workspace.assertContainedPath;
+    const defaultPath = resolvePath(`${prefix}-${suffix}${extension}`);
     const candidatePath = pathFactory ? pathFactory(defaultPath) : defaultPath;
-    return workspace.assertContainedPath(candidatePath);
+    return assertPath(candidatePath);
 }
 
 /**

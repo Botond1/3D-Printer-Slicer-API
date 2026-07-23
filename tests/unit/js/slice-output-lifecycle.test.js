@@ -72,7 +72,11 @@ test('finish releases exactly one final artifact while workspace cleanup preserv
 
     await awaitResponseSettlement(req);
     await workspace.cleanup();
-    assert.deepEqual((await fs.readdir(outputRoot)).sort(), [path.basename(candidate), 'neighbor.gcode'].sort());
+    const artifactId = /artifact-[a-f0-9]{32}/.exec(path.basename(candidate))[0];
+    assert.deepEqual(
+        (await fs.readdir(outputRoot)).sort(),
+        [`.${artifactId}.json`, path.basename(candidate), 'neighbor.gcode'].sort()
+    );
     assert.equal(await fs.readFile(candidate, 'utf8'), '; generated');
     await assert.rejects(fs.access(workspace.directory));
 });

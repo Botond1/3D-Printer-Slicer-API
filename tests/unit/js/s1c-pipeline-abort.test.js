@@ -76,8 +76,12 @@ test('genuine non-abort orientation and metadata failures retain their safe fall
     assert.deepEqual(await getModelInfo('model.stl'), { x: 0, y: 0, z: 0, height_mm: 0 });
 });
 
-test('orientation abort stops preprocessing before model-info, transform, or slicing', async () => {
+test('orientation abort stops preprocessing before model-info, transform, or slicing', async (t) => {
     resetModules();
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), 's1c-pipeline-abort-'));
+    t.after(() => fsp.rm(root, { recursive: true, force: true }));
+    const modelPath = path.join(root, 'model.stl');
+    await fsp.writeFile(modelPath, 'solid bounded');
     const reason = new Error('orientation abort'); reason.name = 'AbortError';
     const controller = new AbortController();
     const launches = [];
@@ -86,10 +90,10 @@ test('orientation abort stops preprocessing before model-info, transform, or sli
         controller.abort(reason);
         throw reason;
     };
-    const workspace = { assertContainedPath(candidate) { return candidate; } };
+    const workspace = { assertContainedPath(candidate) { return path.resolve(candidate); } };
     const { prepareProcessableModel } = require(PIPELINE_PATH);
     await assert.rejects(
-        prepareProcessableModel('model.stl', 'FDM', workspace, controller.signal),
+        prepareProcessableModel(modelPath, 'FDM', workspace, controller.signal),
         (error) => error === reason
     );
     assert.equal(launches.length, 1);

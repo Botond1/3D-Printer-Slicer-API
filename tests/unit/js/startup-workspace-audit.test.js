@@ -35,5 +35,6 @@ test('server creates required directories before invoking the audit-before-liste
     assert.ok(ensureIndex >= 0);
     assert.ok(startIndex > ensureIndex);
     assert.match(source, /auditOptions:\s*\{[\s\S]*JOB_WORKSPACE_STALE_AGE_MS/);
-    assert.doesNotMatch(source, /delete:\s*true/);
+    assert.match(source, /jobsRoot:\s*JOB_SCRATCH_DIR,[\s\S]*delete:\s*true/);
+    assert.doesNotMatch(source, /auditOptions:\s*\{[\s\S]{0,200}delete:\s*true/);
 });

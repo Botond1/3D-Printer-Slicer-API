@@ -57,6 +57,8 @@ async function createHarness(t, options = {}) {
         authenticate(req, res, next) { next(); },
         createWorkspace: allocate,
         multipartLimits: options.multipartLimits,
+        resourcePolicy: options.resourcePolicy,
+        timers: options.timers,
         cleanupWorkspace: options.cleanupWorkspace,
         handlePrusa: options.handler || ((req, res) => res.status(200).json({ success: true, fields: Object.keys(req.body), file: Boolean(req.file) })),
         onLifecycleSettled(info) { settlements.push(info); settledResolve(info); }

@@ -8,6 +8,7 @@ const { EXTENSIONS } = require('../../config/constants');
 const { PYTHON_EXECUTABLE } = require('../../config/python');
 const { runCommand, throwIfAborted, isAbortError } = require('./command');
 const { resolvePythonHelper } = require('./helper-paths');
+const { inspectThreeMfArchive } = require('./three-mf');
 
 /**
  * Convert supported non-STL inputs to STL for downstream slicing.
@@ -21,6 +22,10 @@ async function convertInputToStl(processableFile, workspace, signal) {
     let finalStlPath = processableFile;
 
     if (['.obj', '.3mf', '.ply'].includes(currentExt)) {
+        if (currentExt === '.3mf') {
+            await inspectThreeMfArchive(workspace.assertContainedPath(processableFile));
+            throwIfAborted(signal);
+        }
         console.log('[INFO] Converting Mesh to STL...');
         finalStlPath = resolveConvertedPath(processableFile, workspace);
         await runCommand(

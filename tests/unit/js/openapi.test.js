@@ -26,8 +26,8 @@ const EXPECTED_RESPONSE_KEYS = {
     'DELETE /pricing/FDM/{material}': ['200', '400', '401', '404', '500'],
     'PATCH /pricing/SLA/{material}': ['200', '400', '401', '500'],
     'DELETE /pricing/SLA/{material}': ['200', '400', '401', '404', '500'],
-    'POST /prusa/slice': ['200', '400', '401', '422', '500'],
-    'POST /orca/slice': ['200', '400', '401', '422', '500'],
+    'POST /prusa/slice': ['200', '400', '401', '408', '413', '422', '500'],
+    'POST /orca/slice': ['200', '400', '401', '408', '413', '422', '500'],
     'GET /admin/output-files': ['200', '401', '500', '503'],
     'GET /admin/download/{fileName}': ['200', '400', '401', '404', '413', '500', '503']
 };

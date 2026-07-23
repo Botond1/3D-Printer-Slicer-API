@@ -93,6 +93,17 @@ const KNOWN_ERROR_RULES = Object.freeze([
         message: 'Upload request was aborted.', errorCode: 'UPLOAD_REQUEST_ABORTED'
     },
     {
+        match: (err) => err?.code === 'UPLOAD_TOTAL_TIMEOUT', status: 408,
+        message: 'Multipart upload exceeded its total lifetime.',
+        errorCode: 'UPLOAD_TOTAL_TIMEOUT',
+        closeConnection: true
+    },
+    {
+        match: (err) => err?.code === 'UPLOAD_RESOURCE_LIMIT_EXCEEDED', status: 413,
+        message: 'Uploaded bytes exceeded the configured resource limit.',
+        errorCode: 'UPLOAD_RESOURCE_LIMIT_EXCEEDED'
+    },
+    {
         match: (err) => err?.code === 'UPLOAD_STORAGE_ERROR', status: 500,
         message: 'File upload could not be stored.', errorCode: 'UPLOAD_STORAGE_ERROR'
     },
@@ -123,7 +134,8 @@ function resolveKnownErrorRule(err) {
             return {
                 status: rule.status,
                 message: rule.message,
-                errorCode: rule.errorCode
+                errorCode: rule.errorCode,
+                closeConnection: rule.closeConnection === true
             };
         }
     }
@@ -146,6 +158,7 @@ function errorHandler(err, req, res, next) {
 
     const knownError = resolveKnownErrorRule(err);
     if (knownError) {
+        if (knownError.closeConnection) res.setHeader('Connection', 'close');
         return res.status(knownError.status).json(buildErrorResponse(knownError.message, knownError.errorCode));
     }
 

@@ -1,13 +1,12 @@
 /** Minimal environment supplied to converter and slicer child processes. */
 
+const path = require('node:path');
+
 const POSIX_KEYS = Object.freeze([
     'PATH',
     'LANG',
     'LC_ALL',
-    'LC_CTYPE',
-    'TMPDIR',
-    'TEMP',
-    'TMP'
+    'LC_CTYPE'
 ]);
 const WINDOWS_KEYS = Object.freeze([
     'PATH',
@@ -46,6 +45,19 @@ function createChildEnvironment(source = process.env, platform = process.platfor
     for (const key of keys) {
         const value = readEnvironmentValue(source, key, platform);
         if (value !== undefined && value !== '') environment[key] = String(value);
+    }
+    if (platform !== 'win32') {
+        const configuredTmp = String(source.TMPDIR || '');
+        const trustedTmp = configuredTmp === '/tmp' ? configuredTmp : '/tmp';
+        Object.assign(environment, {
+            TMPDIR: trustedTmp,
+            TEMP: trustedTmp,
+            TMP: trustedTmp,
+            HOME: path.posix.join(trustedTmp, 'slicer-home'),
+            XDG_CACHE_HOME: path.posix.join(trustedTmp, 'xdg-cache'),
+            XDG_CONFIG_HOME: path.posix.join(trustedTmp, 'xdg-config'),
+            XDG_RUNTIME_DIR: path.posix.join(trustedTmp, 'xdg-runtime')
+        });
     }
     return { ...environment, ...SAFE_PYTHON_ENV };
 }

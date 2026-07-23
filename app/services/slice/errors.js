@@ -40,7 +40,7 @@ function isSourceGeometryError(err) {
  */
 function isZipInputError(err) {
     const combined = `${err?.message || ''}\n${err?.stderr || ''}`.toLowerCase();
-    return (
+    return err?.code === 'INVALID_SOURCE_ARCHIVE' || (
         combined.includes('zip_guard|') ||
         combined.includes('zip does not contain a supported') ||
         combined.includes('encrypted zip files are not supported') ||
@@ -98,6 +98,30 @@ function isOrcaPresetCompatibilityError(err) {
  * @returns {import('express').Response} Serialized error response.
  */
 function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, getSupportedInputExtensionsText) {
+
+    if (err?.code === 'SLICE_RESOURCE_LIMIT_EXCEEDED') {
+        return res.status(413).json({
+            success: false,
+            error: 'Slice processing exceeded a configured resource limit.',
+            errorCode: 'SLICE_RESOURCE_LIMIT_EXCEEDED'
+        });
+    }
+
+    if (err?.code === 'INVALID_SLICE_OUTPUT') {
+        return res.status(422).json({
+            success: false,
+            error: 'Slicer output failed artifact validation.',
+            errorCode: 'INVALID_SLICE_OUTPUT'
+        });
+    }
+
+    if (err?.code === 'INVALID_SLICE_STATS') {
+        return res.status(422).json({
+            success: false,
+            error: 'Slicer output statistics failed validation.',
+            errorCode: 'INVALID_SLICE_STATS'
+        });
+    }
 
     if (isProcessingTimeoutError(err)) {
         return res.status(422).json({
