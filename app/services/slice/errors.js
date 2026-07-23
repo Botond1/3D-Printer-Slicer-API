@@ -3,7 +3,6 @@
  */
 
 const { DEFAULTS } = require('../../config/constants');
-const { logError } = require('../../utils/logger');
 
 /**
  * Detect converter-level geometry failures from command output.
@@ -161,16 +160,6 @@ function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, g
             error: 'Orca profile preset combination is incompatible. Please check machine/process profile pairing.',
             errorCode: 'ORCA_PROFILE_INCOMPATIBLE'
         });
-    }
-
-    try {
-        logError({
-            message: 'Slicing pipeline failed',
-            stderr: 'Contained request failed with an unclassified processing error.',
-            path: 'request-owned workspace'
-        });
-    } catch (error_) {
-        console.error('[LOGGER ERROR] Failed to record sanitized slicing failure.');
     }
 
     return res.status(500).json({

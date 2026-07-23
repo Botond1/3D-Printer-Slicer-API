@@ -5,6 +5,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const originalPythonExecutable = process.env.PYTHON_EXECUTABLE;
+process.env.PYTHON_EXECUTABLE = process.execPath;
+test.after(() => {
+    if (originalPythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;
+    else process.env.PYTHON_EXECUTABLE = originalPythonExecutable;
+});
 const { createJobWorkspace } = require('../../../app/services/slice/workspace');
 const {
     appendOriginalExtensionToUpload,

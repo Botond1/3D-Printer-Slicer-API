@@ -148,7 +148,6 @@ function resolveExtractionDirectory(workspace, pathFactory) {
  * @returns {Promise<string>} Extracted file path.
  */
 async function extractFirstSupportedFromZip(inputFile, workspace, options = {}) {
-    console.log('[INFO] Extracting ZIP...');
     workspace.assertContainedPath(inputFile);
     const zipPath = await resolveExistingZipPath(inputFile, workspace);
 
@@ -175,7 +174,6 @@ async function extractFirstSupportedFromZip(inputFile, workspace, options = {}) 
         throw invalidArchive('Failed to extract validated source file from ZIP.');
     }
 
-    console.log('[INFO] Extracted one validated model from ZIP.');
     return extractedPath;
 }
 

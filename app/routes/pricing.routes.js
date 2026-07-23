@@ -5,7 +5,7 @@
 const express = require('express');
 const requireAdmin = require('../middleware/requireAdmin');
 const { adminRateLimiter } = require('../middleware/rateLimit');
-const { getClientIp } = require('../utils/client-ip');
+const { emitEvent } = require('../services/observability/events');
 const {
     getPricing,
     commitPricingMutation,
@@ -18,8 +18,6 @@ const {
     persistenceFailure
 } = require('./pricing-request');
 
-const router = express.Router();
-
 /**
  * Log pricing mutation details with request trace context.
  * @param {import('express').Request} req Express request object.
@@ -28,10 +26,14 @@ const router = express.Router();
  * @param {string} actionMessage Mutation summary message.
  * @returns {void}
  */
-function logPricingUpdate(req, technology, materialKey, actionMessage) {
-    const clientIp = getClientIp(req);
-    const requestId = req.requestId || 'n/a';
-    console.log(`[PRICING UPDATE] ${technology}.${materialKey} ${actionMessage} by ${clientIp} (requestId=${requestId})`);
+function recordPricingMutation(req, technology, action, outcome, errorCode) {
+    emitEvent('pricing.mutated', {
+        request_id: req.requestId,
+        audience: 'pricing',
+        outcome,
+        error_code: errorCode,
+        extra: { technology, action }
+    });
 }
 
 /**
@@ -44,12 +46,14 @@ function logPricingUpdate(req, technology, materialKey, actionMessage) {
 async function createMaterialForTechnology(req, res, technology) {
     const materialResult = parseMaterialOrResponse(res, req.body?.material);
     if (materialResult.response) {
+        recordPricingMutation(req, technology, 'create', 'failure', 'PRICING_VALIDATION_FAILED');
         return materialResult.response;
     }
     const materialParam = materialResult.material;
 
     const priceResult = parsePriceOrResponse(res, req.body?.price);
     if (priceResult.response) {
+        recordPricingMutation(req, technology, 'create', 'failure', 'PRICING_VALIDATION_FAILED');
         return priceResult.response;
     }
     const price = priceResult.price;
@@ -69,12 +73,14 @@ async function createMaterialForTechnology(req, res, technology) {
         });
     } catch (error) {
         if (error.code === 'PRICING_CONFLICT') {
+            recordPricingMutation(req, technology, 'create', 'failure', 'PRICING_CONFLICT');
             return res.status(409).json({ success: false, error: error.message });
         }
+        recordPricingMutation(req, technology, 'create', 'failure', 'PRICING_PERSISTENCE_FAILED');
         return persistenceFailure(res);
     }
 
-    logPricingUpdate(req, technology, materialKey, `created at ${price} HUF/hour`);
+    recordPricingMutation(req, technology, 'create', 'success');
     return res.status(201).json({
         success: true,
         technology,
@@ -90,9 +96,13 @@ async function createMaterialForTechnology(req, res, technology) {
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-router.get('/pricing', (req, res) => {
-    res.status(200).json(getPricing());
-});
+function createPricingRouter(options = {}) {
+    const router = express.Router();
+    const authenticatePricing = options.authenticate || requireAdmin;
+
+    router.get('/pricing', (req, res) => {
+        res.status(200).json(getPricing());
+    });
 
 /**
  * Create a new FDM material.
@@ -100,7 +110,7 @@ router.get('/pricing', (req, res) => {
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-router.post('/pricing/FDM', adminRateLimiter, requireAdmin, (req, res) => createMaterialForTechnology(req, res, 'FDM'));
+    router.post('/pricing/FDM', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'FDM'));
 
 /**
  * Create a new SLA material.
@@ -108,7 +118,7 @@ router.post('/pricing/FDM', adminRateLimiter, requireAdmin, (req, res) => create
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-router.post('/pricing/SLA', adminRateLimiter, requireAdmin, (req, res) => createMaterialForTechnology(req, res, 'SLA'));
+    router.post('/pricing/SLA', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'SLA'));
 
 /**
  * Update an existing material hourly pricing entry.
@@ -117,27 +127,31 @@ router.post('/pricing/SLA', adminRateLimiter, requireAdmin, (req, res) => create
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-router.patch('/pricing/:technology/:material', adminRateLimiter, requireAdmin, async (req, res) => {
+    router.patch('/pricing/:technology/:material', adminRateLimiter, authenticatePricing, async (req, res) => {
     const technologyResult = parseTechnologyOrResponse(res, req.params.technology);
     if (technologyResult.response) {
+        recordPricingMutation(req, undefined, 'update', 'failure', 'PRICING_VALIDATION_FAILED');
         return technologyResult.response;
     }
     const technology = technologyResult.technology;
 
     const priceResult = parsePriceOrResponse(res, req.body?.price);
     if (priceResult.response) {
+        recordPricingMutation(req, technology, 'update', 'failure', 'PRICING_VALIDATION_FAILED');
         return priceResult.response;
     }
     const price = priceResult.price;
 
     const materialResult = parseMaterialOrResponse(res, req.params.material);
     if (materialResult.response) {
+        recordPricingMutation(req, technology, 'update', 'failure', 'PRICING_VALIDATION_FAILED');
         return materialResult.response;
     }
     const materialParam = materialResult.material;
 
     const existingMaterialKey = findMaterialKey(technology, materialParam);
     if (!existingMaterialKey) {
+        recordPricingMutation(req, technology, 'update', 'failure', 'PRICING_NOT_FOUND');
         return res.status(400).json({
             success: false,
             error: 'Material does not exist for this technology. Only existing materials can be updated.'
@@ -160,19 +174,21 @@ router.patch('/pricing/:technology/:material', adminRateLimiter, requireAdmin, a
         });
     } catch (error) {
         if (error.code === 'PRICING_NOT_FOUND') {
+            recordPricingMutation(req, technology, 'update', 'failure', 'PRICING_NOT_FOUND');
             return res.status(404).json({ success: false, error: error.message });
         }
+        recordPricingMutation(req, technology, 'update', 'failure', 'PRICING_PERSISTENCE_FAILED');
         return persistenceFailure(res);
     }
 
-    logPricingUpdate(req, technology, materialKey, `updated to ${price} HUF/hour`);
+    recordPricingMutation(req, technology, 'update', 'success');
     return res.status(200).json({
         success: true,
         technology,
         material: materialKey,
         price
     });
-});
+    });
 
 /**
  * Delete a material pricing entry from selected technology.
@@ -180,21 +196,24 @@ router.patch('/pricing/:technology/:material', adminRateLimiter, requireAdmin, a
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-router.delete('/pricing/:technology/:material', adminRateLimiter, requireAdmin, async (req, res) => {
+    router.delete('/pricing/:technology/:material', adminRateLimiter, authenticatePricing, async (req, res) => {
     const technologyResult = parseTechnologyOrResponse(res, req.params.technology);
     if (technologyResult.response) {
+        recordPricingMutation(req, undefined, 'delete', 'failure', 'PRICING_VALIDATION_FAILED');
         return technologyResult.response;
     }
     const technology = technologyResult.technology;
 
     const materialResult = parseMaterialOrResponse(res, req.params.material);
     if (materialResult.response) {
+        recordPricingMutation(req, technology, 'delete', 'failure', 'PRICING_VALIDATION_FAILED');
         return materialResult.response;
     }
     const materialParam = materialResult.material;
 
     const materialKey = findMaterialKey(technology, materialParam);
     if (!materialKey) {
+        recordPricingMutation(req, technology, 'delete', 'failure', 'PRICING_NOT_FOUND');
         return res.status(404).json({ success: false, error: 'Material not found.' });
     }
 
@@ -213,18 +232,24 @@ router.delete('/pricing/:technology/:material', adminRateLimiter, requireAdmin, 
         });
     } catch (error) {
         if (error.code === 'PRICING_NOT_FOUND') {
+            recordPricingMutation(req, technology, 'delete', 'failure', 'PRICING_NOT_FOUND');
             return res.status(404).json({ success: false, error: error.message });
         }
+        recordPricingMutation(req, technology, 'delete', 'failure', 'PRICING_PERSISTENCE_FAILED');
         return persistenceFailure(res);
     }
 
-    logPricingUpdate(req, technology, materialKey, 'deleted');
+    recordPricingMutation(req, technology, 'delete', 'success');
     return res.status(200).json({
         success: true,
         technology,
         material: materialKey,
         message: 'Material deleted successfully.'
     });
-});
+    });
+    return router;
+}
 
+const router = createPricingRouter();
 module.exports = router;
+module.exports.createPricingRouter = createPricingRouter;

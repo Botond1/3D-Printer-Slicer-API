@@ -3,6 +3,7 @@
 const { createPricingPaths } = require('./pricing-openapi');
 const { createSlicePaths } = require('./slice-openapi');
 const { createAdminPaths } = require('./admin-openapi');
+const { createSystemPaths } = require('./system-openapi');
 
 /**
  * Build OpenAPI document for pricing and slicing endpoints.
@@ -21,12 +22,15 @@ function createSwaggerDocument(pricing) {
         tags: [
             { name: 'Pricing', description: 'Runtime pricing configuration endpoints' },
             { name: 'Slicing', description: 'Explicit FDM/SLA slicing and print estimation endpoints' },
-            { name: 'Admin', description: 'Protected operational endpoints requiring x-api-key' }
+            { name: 'Admin', description: 'Protected operational endpoints requiring x-api-key' },
+            { name: 'Operations', description: 'Protected readiness and metrics endpoints' },
+            { name: 'System', description: 'Public liveness and readiness endpoints' }
         ],
         paths: {
             ...createPricingPaths(),
             ...createSlicePaths(),
-            ...createAdminPaths()
+            ...createAdminPaths(),
+            ...createSystemPaths()
         },
         components: {
             securitySchemes: {
@@ -35,6 +39,18 @@ function createSwaggerDocument(pricing) {
                     in: 'header',
                     name: 'x-slicer-api-key',
                     description: 'Scoped service credential required only for slicing operations.'
+                },
+                PricingApiKey: {
+                    type: 'apiKey', in: 'header', name: 'x-api-key',
+                    description: 'Scoped credential for pricing mutations.'
+                },
+                ArtifactApiKey: {
+                    type: 'apiKey', in: 'header', name: 'x-api-key',
+                    description: 'Scoped credential for artifact listing and download.'
+                },
+                OperationsApiKey: {
+                    type: 'apiKey', in: 'header', name: 'x-api-key',
+                    description: 'Scoped credential for readiness details and metrics.'
                 }
             }
         }

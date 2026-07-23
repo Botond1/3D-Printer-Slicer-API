@@ -18,6 +18,16 @@ function buildErrorResponse(message, errorCode) {
 }
 
 const KNOWN_ERROR_RULES = Object.freeze([
+    ...[
+        ['PRICING_CORS_ORIGIN_NOT_ALLOWED', 'Origin is not allowed for pricing endpoints.'],
+        ['ARTIFACT_CORS_ORIGIN_NOT_ALLOWED', 'Origin is not allowed for artifact endpoints.'],
+        ['OPERATIONS_CORS_ORIGIN_NOT_ALLOWED', 'Origin is not allowed for operations endpoints.']
+    ].map(([errorCode, message]) => ({
+        match: (err) => err?.code === errorCode,
+        status: 403,
+        message,
+        errorCode
+    })),
     {
         match: (err) => err?.code === 'ADMIN_CORS_ORIGIN_NOT_ALLOWED',
         status: 403,
@@ -158,16 +168,20 @@ function errorHandler(err, req, res, next) {
 
     const knownError = resolveKnownErrorRule(err);
     if (knownError) {
+        const { incrementResourceFailure } = require('../services/observability/metrics');
+        if (knownError.errorCode.includes('RESOURCE_LIMIT') || knownError.errorCode.includes('TOO_LARGE')) {
+            incrementResourceFailure('limit');
+        } else if (knownError.errorCode === 'INVALID_SLICE_OUTPUT') {
+            incrementResourceFailure('invalid_output');
+        } else if (knownError.errorCode === 'INVALID_SLICE_STATS') {
+            incrementResourceFailure('invalid_stats');
+        }
         if (knownError.closeConnection) res.setHeader('Connection', 'close');
         return res.status(knownError.status).json(buildErrorResponse(knownError.message, knownError.errorCode));
     }
 
     const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
     const isServerError = status >= 500;
-
-    if (isServerError) {
-        console.error(`[ERROR] Unhandled request failure (${req.method} ${req.originalUrl}):`, err);
-    }
 
     const payload = isServerError
         ? buildErrorResponse('Internal server error.', 'INTERNAL_SERVER_ERROR')

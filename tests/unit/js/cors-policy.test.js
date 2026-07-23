@@ -13,12 +13,16 @@ const {
 } = require('../../../app/middleware/corsPolicy');
 const errorHandler = require('../../../app/middleware/errorHandler');
 
-const ADMIN_ORIGIN = 'https://admin.example.test';
 const SLICE_ORIGIN = 'https://slice.example.test';
+const PRICING_ORIGIN = 'https://pricing.example.test';
+const ARTIFACT_ORIGIN = 'https://artifact.example.test';
+const OPERATIONS_ORIGIN = 'https://operations.example.test';
+const LEGACY_ORIGIN = 'https://legacy-admin.example.test';
 
-function resolvePolicy(resolver, requestPath, origin) {
+function resolvePolicy(resolver, method, requestPath, origin) {
     return new Promise((resolve) => {
         resolver({
+            method,
             path: requestPath,
             header(name) {
                 assert.equal(name, 'Origin');
@@ -30,8 +34,8 @@ function resolvePolicy(resolver, requestPath, origin) {
 
 test('origin parsing and protected-route classification remain exact', () => {
     assert.deepEqual(
-        parseAllowedOrigins(` ${ADMIN_ORIGIN},, ${SLICE_ORIGIN} `),
-        [ADMIN_ORIGIN, SLICE_ORIGIN]
+        parseAllowedOrigins(` ${ARTIFACT_ORIGIN},, ${SLICE_ORIGIN} `),
+        [ARTIFACT_ORIGIN, SLICE_ORIGIN]
     );
     assert.deepEqual(parseAllowedOrigins(undefined), []);
 
@@ -50,49 +54,79 @@ test('origin parsing and protected-route classification remain exact', () => {
     }
 });
 
-test('CORS policy keeps admin and slice allowlists separate and permits requests without Origin', async () => {
+test('CORS policy isolates every protected audience and permits requests without Origin', async () => {
     const resolver = createCorsOptionsResolver({
-        adminAllowedOrigins: [ADMIN_ORIGIN],
-        sliceAllowedOrigins: [SLICE_ORIGIN]
+        sliceAllowedOrigins: [SLICE_ORIGIN],
+        pricingAllowedOrigins: [PRICING_ORIGIN],
+        artifactAllowedOrigins: [ARTIFACT_ORIGIN],
+        operationsAllowedOrigins: [OPERATIONS_ORIGIN]
     });
     const cases = [
-        ['slice allowlist on Prusa', '/prusa/slice', SLICE_ORIGIN, null],
-        ['slice allowlist on Orca', '/orca/slice', SLICE_ORIGIN, null],
-        ['admin allowlist', '/admin/output-files', ADMIN_ORIGIN, null],
-        ['admin origin cannot enter slice', '/prusa/slice', ADMIN_ORIGIN, 'SLICE_CORS_ORIGIN_NOT_ALLOWED'],
-        ['slice origin cannot enter admin', '/admin/output-files', SLICE_ORIGIN, 'ADMIN_CORS_ORIGIN_NOT_ALLOWED'],
-        ['unknown slice origin', '/orca/slice', 'https://unknown.example.test', 'SLICE_CORS_ORIGIN_NOT_ALLOWED'],
-        ['unknown admin origin', '/admin/download/file.gcode', 'https://unknown.example.test', 'ADMIN_CORS_ORIGIN_NOT_ALLOWED'],
-        ['slice without Origin', '/prusa/slice', undefined, null],
-        ['admin without Origin', '/admin/output-files', undefined, null],
-        ['unprotected route remains public', '/health', 'https://unknown.example.test', null]
+        ['slice allowlist', 'POST', '/prusa/slice', SLICE_ORIGIN, null],
+        ['pricing allowlist', 'PATCH', '/pricing/FDM/PLA', PRICING_ORIGIN, null],
+        ['artifact allowlist', 'GET', '/admin/output-files', ARTIFACT_ORIGIN, null],
+        ['operations allowlist', 'GET', '/operations/metrics', OPERATIONS_ORIGIN, null],
+        ['artifact cannot enter slice', 'POST', '/orca/slice', ARTIFACT_ORIGIN, 'SLICE_CORS_ORIGIN_NOT_ALLOWED'],
+        ['slice cannot enter pricing', 'POST', '/pricing/FDM', SLICE_ORIGIN, 'PRICING_CORS_ORIGIN_NOT_ALLOWED'],
+        ['pricing cannot enter artifact', 'GET', '/admin/download/file.gcode', PRICING_ORIGIN, 'ARTIFACT_CORS_ORIGIN_NOT_ALLOWED'],
+        ['artifact cannot enter operations', 'GET', '/health/detailed', ARTIFACT_ORIGIN, 'OPERATIONS_CORS_ORIGIN_NOT_ALLOWED'],
+        ['slice without Origin', 'POST', '/prusa/slice', undefined, null],
+        ['artifact without Origin', 'GET', '/admin/output-files', undefined, null],
+        ['public route remains public', 'GET', '/health', 'https://unknown.example.test', null]
     ];
 
-    for (const [name, requestPath, origin, expectedCode] of cases) {
-        const { error, options } = await resolvePolicy(resolver, requestPath, origin);
+    for (const [name, method, requestPath, origin, expectedCode] of cases) {
+        const { error, options } = await resolvePolicy(resolver, method, requestPath, origin);
         if (expectedCode) {
             assert.equal(error?.code, expectedCode, name);
             assert.equal(error?.status, 403, name);
             assert.equal(options, undefined, name);
         } else {
             assert.equal(error, null, name);
-            assert.deepEqual(options, { origin: true }, name);
+            assert.equal(options.origin, origin !== undefined, name);
+            assert.equal(options.credentials, origin !== undefined && requestPath !== '/health', name);
         }
     }
 });
 
-test('live CORS middleware enforces disjoint allowlists with stable errors and no-Origin support', async (t) => {
+test('legacy admin Origin migration is finite and grants exactly one configured audience', async () => {
+    for (const legacyAdminAudience of ['pricing', 'artifact', 'operations']) {
+        const resolver = createCorsOptionsResolver({
+            adminAllowedOrigins: [LEGACY_ORIGIN],
+            legacyAdminAudience
+        });
+        for (const [audience, method, requestPath, errorCode] of [
+            ['pricing', 'POST', '/pricing/FDM', 'PRICING_CORS_ORIGIN_NOT_ALLOWED'],
+            ['artifact', 'GET', '/admin/output-files', 'ARTIFACT_CORS_ORIGIN_NOT_ALLOWED'],
+            ['operations', 'GET', '/operations/readiness', 'OPERATIONS_CORS_ORIGIN_NOT_ALLOWED']
+        ]) {
+            const result = await resolvePolicy(resolver, method, requestPath, LEGACY_ORIGIN);
+            assert.equal(result.error?.code || null,
+                audience === legacyAdminAudience ? null : errorCode,
+                `${legacyAdminAudience} migration cannot grant ${audience}`);
+        }
+    }
+
+    const disabled = createCorsOptionsResolver({ adminAllowedOrigins: [LEGACY_ORIGIN] });
+    const result = await resolvePolicy(disabled, 'GET', '/admin/output-files', LEGACY_ORIGIN);
+    assert.equal(result.error?.code, 'ARTIFACT_CORS_ORIGIN_NOT_ALLOWED');
+});
+
+test('live CORS middleware enforces scoped allowlists with stable errors', async (t) => {
     const resolver = createCorsOptionsResolver({
-        adminAllowedOrigins: [ADMIN_ORIGIN],
-        sliceAllowedOrigins: [SLICE_ORIGIN]
+        sliceAllowedOrigins: [SLICE_ORIGIN],
+        pricingAllowedOrigins: [PRICING_ORIGIN],
+        artifactAllowedOrigins: [ARTIFACT_ORIGIN],
+        operationsAllowedOrigins: [OPERATIONS_ORIGIN]
     });
     const handlerCalls = new Map();
     const app = express();
     app.use(cors(resolver));
     for (const [method, requestPath] of [
         ['post', '/prusa/slice'],
-        ['post', '/orca/slice'],
+        ['post', '/pricing/FDM'],
         ['get', '/admin/output-files'],
+        ['get', '/operations/metrics'],
         ['get', '/health']
     ]) {
         app[method](requestPath, (req, res) => {
@@ -108,12 +142,13 @@ test('live CORS middleware enforces disjoint allowlists with stable errors and n
     const baseUrl = `http://127.0.0.1:${server.address().port}`;
     const cases = [
         ['allowed Prusa browser call', 'POST', '/prusa/slice', SLICE_ORIGIN, 200, null],
-        ['allowed Orca browser call', 'POST', '/orca/slice', SLICE_ORIGIN, 200, null],
-        ['admin origin rejected from slice', 'POST', '/prusa/slice', ADMIN_ORIGIN, 403, 'SLICE_CORS_ORIGIN_NOT_ALLOWED'],
-        ['allowed admin browser call', 'GET', '/admin/output-files', ADMIN_ORIGIN, 200, null],
-        ['slice origin rejected from admin', 'GET', '/admin/output-files', SLICE_ORIGIN, 403, 'ADMIN_CORS_ORIGIN_NOT_ALLOWED'],
+        ['allowed pricing browser call', 'POST', '/pricing/FDM', PRICING_ORIGIN, 200, null],
+        ['slice rejected from pricing', 'POST', '/pricing/FDM', SLICE_ORIGIN, 403, 'PRICING_CORS_ORIGIN_NOT_ALLOWED'],
+        ['allowed artifact browser call', 'GET', '/admin/output-files', ARTIFACT_ORIGIN, 200, null],
+        ['slice rejected from artifact', 'GET', '/admin/output-files', SLICE_ORIGIN, 403, 'ARTIFACT_CORS_ORIGIN_NOT_ALLOWED'],
+        ['allowed operations browser call', 'GET', '/operations/metrics', OPERATIONS_ORIGIN, 200, null],
         ['Prusa service call without Origin', 'POST', '/prusa/slice', undefined, 200, null],
-        ['admin service call without Origin', 'GET', '/admin/output-files', undefined, 200, null],
+        ['artifact service call without Origin', 'GET', '/admin/output-files', undefined, 200, null],
         ['public route accepts unrelated Origin', 'GET', '/health', 'https://unknown.example.test', 200, null]
     ];
 

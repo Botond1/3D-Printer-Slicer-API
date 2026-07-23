@@ -17,6 +17,8 @@ const {
     getRequestWorkspace,
     detachWorkspaceFromRequest
 } = require('../services/slice/workspace');
+const { setCorrelationIds } = require('../services/observability/context');
+const { emitEvent } = require('../services/observability/events');
 
 const ALLOWED_UPLOAD_EXTENSIONS = new Set([...EXTENSIONS.direct, ...EXTENSIONS.cad, ...EXTENSIONS.archive]);
 const ABORT_ACTIVE_UPLOAD = Symbol('abortActiveUpload');
@@ -237,7 +239,12 @@ function createSliceRouter(options = {}) {
     const cleanupWorkspace = options.cleanupWorkspace || ((workspace) => workspace.cleanup());
     const observer = options.onLifecycleSettled || (() => {});
     const reportCleanupFailure = options.reportCleanupFailure || ((event) => {
-        console.error('[CLEANUP] Slice workspace cleanup was incomplete.', event);
+        emitEvent('artifact.cleanup', {
+            job_id: event?.jobId,
+            audience: 'artifact',
+            outcome: 'failure',
+            error_code: 'WORKSPACE_CLEANUP_FAILED'
+        });
     });
     const handlers = {
         prusa: options.handlePrusa || handleSlicePrusa,
@@ -259,6 +266,8 @@ function createSliceRouter(options = {}) {
                     throw workspaceAllocationError();
                 }
                 attach(req, workspace);
+                req.sliceJobId = workspace.id;
+                setCorrelationIds({ jobId: workspace.id });
                 try {
                     await runUploadWithinDeadline(
                         upload.single('choosenFile'),

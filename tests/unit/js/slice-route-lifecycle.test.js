@@ -8,6 +8,12 @@ const path = require('node:path');
 const { once } = require('node:events');
 const express = require('express');
 const cors = require('cors');
+const originalPythonExecutable = process.env.PYTHON_EXECUTABLE;
+process.env.PYTHON_EXECUTABLE = process.execPath;
+test.after(() => {
+    if (originalPythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;
+    else process.env.PYTHON_EXECUTABLE = originalPythonExecutable;
+});
 const { createSliceRouter } = require('../../../app/routes/slice.routes');
 const { createJobWorkspace } = require('../../../app/services/slice/workspace');
 const {

@@ -12,6 +12,8 @@ const {
 } = require('../artifact-store');
 const { resourceLimit } = require('./resource-errors');
 const { acquireArtifactLease } = require('../artifact-leases');
+const { emitEvent } = require('../observability/events');
+const { setCorrelationIds } = require('../observability/context');
 
 function isDirectChild(parent, candidate) {
     const relative = path.relative(path.resolve(parent), path.resolve(candidate));
@@ -108,7 +110,30 @@ class OutputCandidateRegistry {
 
     async promote(candidate, source) {
         const record = this.candidates.get(path.resolve(candidate));
-        if (!record || record.promoted) throw new Error('Output candidate is not registered');
+        if (!record || record.promoted) {
+            emitEvent('artifact.promoted', {
+                job_id: this.jobId,
+                audience: 'artifact',
+                outcome: 'failure',
+                error_code: 'ARTIFACT_PROMOTION_FAILED'
+            });
+            throw new Error('Output candidate is not registered');
+        }
+        try {
+            return await this.promoteRecord(candidate, source, record);
+        } catch (error) {
+            emitEvent('artifact.promoted', {
+                job_id: record.jobId,
+                artifact_id: record.artifactId,
+                audience: 'artifact',
+                outcome: 'failure',
+                error_code: 'ARTIFACT_PROMOTION_FAILED'
+            });
+            throw error;
+        }
+    }
+
+    async promoteRecord(candidate, source, record) {
         await this.assertSafeOutputRoot();
         const sourcePath = this.assertContainedPath(source);
         const sourceStat = await fs.lstat(sourcePath, { bigint: true });
@@ -143,8 +168,18 @@ class OutputCandidateRegistry {
             fileName: record.fileName,
             tempToken: randomBytes(8).toString('hex')
         });
-        record.activeLease = acquireArtifactLease([record.metadata.realPath]);
+        setCorrelationIds({ artifactId: record.artifactId });
+        record.activeLease = acquireArtifactLease([record.metadata.realPath], [{
+            jobId: record.jobId,
+            artifactId: record.artifactId
+        }]);
         await fs.rm(sourcePath, { force: true });
+        emitEvent('artifact.promoted', {
+            job_id: record.jobId,
+            artifact_id: record.artifactId,
+            audience: 'artifact',
+            outcome: 'success'
+        });
         return candidate;
     }
 

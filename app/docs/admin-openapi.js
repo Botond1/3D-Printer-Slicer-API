@@ -17,6 +17,7 @@ function createAdminPaths() {
                 summary: 'List generated files under output directory.',
                 description: 'Protected endpoint. Requires x-api-key header.',
                 parameters: [adminKeyParameter()],
+                security: [{ ArtifactApiKey: [] }],
                 responses: {
                     200: {
                         description: 'Output files listed successfully',
@@ -82,6 +83,7 @@ function createAdminPaths() {
                     },
                     adminKeyParameter()
                 ],
+                security: [{ ArtifactApiKey: [] }],
                 responses: {
                     200: {
                         description: 'Binary output stream (`application/octet-stream` for single file or `application/zip` for `ALL` token).',

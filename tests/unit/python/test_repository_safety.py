@@ -96,31 +96,16 @@ class RepositorySafetyContentTests(unittest.TestCase):
             with self.subTest(path=path, content=content):
                 self.assert_no_secret_assignment(path, content)
 
-    def test_only_exact_path_scoped_inert_sentinel_is_allowed(self) -> None:
-        self.assert_no_secret_assignment(
-            ".env.example",
+    def test_no_literal_credential_assignment_is_exempt_in_env_example(self) -> None:
+        candidates = (
             b"ADMIN_API_KEY=exampleKEY-6.7.\n",
-        )
-        self.assert_no_secret_assignment(
-            ".env.example",
-            b"SLICE_SERVICE_API_KEY=example-inert-slice-service-key-000000000001\n",
-        )
-        self.assert_secret_assignment(
-            ".env.example",
             b"ADMIN_API_KEY=example-not-an-approved-sentinel\n",
-        )
-        self.assert_secret_assignment(
-            "candidate.env",
-            b"ADMIN_API_KEY=exampleKEY-6.7.\n",
-        )
-        self.assert_secret_assignment(
-            ".env.example",
+            b"SLICE_SERVICE_API_KEY=example-inert-slice-service-key-000000000001\n",
             b"SLICE_SERVICE_API_KEY=example-inert-slice-service-key-000000000002\n",
         )
-        self.assert_secret_assignment(
-            "candidate.env",
-            b"SLICE_SERVICE_API_KEY=example-inert-slice-service-key-000000000001\n",
-        )
+        for content in candidates:
+            with self.subTest(content=content):
+                self.assert_secret_assignment(".env.example", content)
 
     def test_structured_and_unquoted_literals_are_detected(self) -> None:
         candidates = (

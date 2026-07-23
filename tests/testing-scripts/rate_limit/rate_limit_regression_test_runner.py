@@ -17,7 +17,7 @@ from urllib import error, request
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common.env_utils import read_dotenv, resolve_admin_key_candidates, resolve_base_url
+from common.env_utils import read_dotenv, resolve_artifact_api_key_candidates, resolve_base_url
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_ROOT.parent.parent.parent
@@ -440,12 +440,12 @@ def main() -> int:
     base_url = resolve_base_url(PROJECT_ROOT)
     config = resolve_rate_limit_config()
 
-    admin_keys = resolve_admin_key_candidates(PROJECT_ROOT)
-    if not admin_keys:
-        print("[RATE LIMIT TEST] ERROR: ADMIN_API_KEY not found in .env or process environment.")
+    artifact_keys = resolve_artifact_api_key_candidates(PROJECT_ROOT)
+    if not artifact_keys:
+        print("[RATE LIMIT TEST] ERROR: ARTIFACT_API_KEY not found in .env or process environment.")
         return 1
 
-    admin_headers = {"x-api-key": admin_keys[0]}
+    admin_headers = {"x-api-key": artifact_keys[0]}
 
     admin_probe = probe_until_rate_limited(
         label="Admin limiter on /admin/download/ALL",

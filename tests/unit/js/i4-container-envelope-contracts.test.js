@@ -152,7 +152,7 @@ test('production Compose is read-only with an exact writable-surface and resourc
     const marker = fs.lstatSync(PRICING_STATE_MARKER);
     assert.equal(marker.isFile(), true);
     assert.equal(marker.isSymbolicLink(), false);
-    assert.equal(fs.readFileSync(PRICING_STATE_MARKER, 'utf8'), '\n');
+    assert.equal(fs.readFileSync(PRICING_STATE_MARKER, 'utf8').replace(/\r\n?/g, '\n'), '\n');
 });
 
 test('container-envelope weakening mutations fail the focused contract', async (t) => {

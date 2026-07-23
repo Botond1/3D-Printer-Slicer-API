@@ -1,6 +1,7 @@
 /**
  * Shared client IP resolution utility for request logging and rate-limiting.
  */
+const net = require('node:net');
 
 /**
  * Normalize IPv6-mapped IPv4 addresses for cleaner log output.
@@ -8,8 +9,9 @@
  * @returns {string} Normalized IP string.
  */
 function normalizeIp(ip) {
-    if (!ip) return 'unknown';
-    return ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+    if (typeof ip !== 'string' || !ip) return null;
+    const normalized = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+    return net.isIP(normalized) ? normalized : null;
 }
 
 /**
@@ -19,9 +21,10 @@ function normalizeIp(ip) {
  * @returns {string} Client IP string.
  */
 function getClientIp(req) {
-    return normalizeIp(req.ip || req.socket?.remoteAddress || 'unknown');
+    return normalizeIp(req.ip) || normalizeIp(req.socket?.remoteAddress) || 'unknown';
 }
 
 module.exports = {
-    getClientIp
+    getClientIp,
+    normalizeIp
 };

@@ -15,18 +15,20 @@ function loadQueueForScenario() {
         throw new Error(`Unknown queue test mutation: ${mutation}`);
     }
 
-    const source = fs.readFileSync(QUEUE_SCHEDULER_PATH, 'utf8');
+    const source = fs.readFileSync(QUEUE_SCHEDULER_PATH, 'utf8').replace(/\r\n?/g, '\n');
     let mutatedSource = source.replace(
-        'if (queuedJobs.length >= config.maxQueueLength) return Promise.reject(config.createFullError());',
+        '        if (queuedJobs.length >= config.maxQueueLength) {\n'
+            + '            return rejectAdmission(config.createFullError(), correlation);\n'
+            + '        }',
         'if (queuedJobs.length >= config.maxQueueLength) {\n'
             + '            Promise.resolve().then(() => task());\n'
-            + '            return Promise.reject(config.createFullError());\n'
+            + '            return rejectAdmission(config.createFullError(), correlation);\n'
             + '        }'
     );
     mutatedSource = mutatedSource.replace(
-        '            return Promise.reject(config.createClientLimitError());',
+        '            return rejectAdmission(config.createClientLimitError(), correlation);',
         '            Promise.resolve().then(() => task());\n'
-            + '            return Promise.reject(config.createClientLimitError());'
+            + '            return rejectAdmission(config.createClientLimitError(), correlation);'
     );
 
     if (mutatedSource === source || !mutatedSource.includes('Promise.resolve().then(() => task());')) {

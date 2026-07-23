@@ -48,10 +48,11 @@ function validateS1bSources(sources) {
     assert.match(scheduler, /rejectQueuedJob\(job, abortReason\(controller\.signal\)\)/);
     assert.equal(count(scheduler, /decrement\(queuedByKey, job\.queueKey\);/g), 2);
     assert.equal(count(scheduler, /cleanJobResources\(job\);/g), 2);
-    assert.match(scheduler, /job\.task\(job\.controller\.signal\)/);
+    assert.equal(count(scheduler, /job\.task\(job\.controller\.signal\)/g), 2);
     assert.match(scheduler, /if \(job\.controller\.signal\.aborted\) job\.reject\(abortReason\(job\.controller\.signal\)\)/);
     assert.match(scheduler, /job\.controller\.abort\(abortReason\(job\.externalSignal\)\)/);
-    assert.match(scheduler, /if \(shuttingDown\) return Promise\.reject\(config\.createShutdownError\(\)\)/);
+    assert.match(scheduler,
+        /if \(shuttingDown\) return rejectAdmission\(config\.createShutdownError\(\), correlation\)/);
     assert.match(scheduler, /while \(!shuttingDown && activeJobs\.size < config\.maxConcurrent/);
     assert.match(scheduler, /for \(const job of \[\.\.\.queuedJobs, \.\.\.activeJobs\]\)/);
     assert.match(service, /const taskSignal = effectiveSignal \|\| binding\.signal/);
@@ -85,7 +86,9 @@ test('S1b source contracts reject deadline, abort, shutdown, response, counter, 
         ['task AbortSignal omitted', 'scheduler', 'job.task(job.controller.signal)', 'job.task()'],
         ['abort-after-success accepted', 'scheduler', 'if (job.controller.signal.aborted) job.reject(abortReason(job.controller.signal))', "if (outcome === 'resolve') job.resolve(value)"],
         ['disconnected response write admitted', 'service', 'if (isResponseWritable(res) && !binding.signal.aborted)', 'if (true)'],
-        ['shutdown admission reopened', 'scheduler', 'if (shuttingDown) return Promise.reject(config.createShutdownError())', 'if (false) return Promise.reject(config.createShutdownError())'],
+        ['shutdown admission reopened', 'scheduler',
+            'if (shuttingDown) return rejectAdmission(config.createShutdownError(), correlation)',
+            'if (false) return rejectAdmission(config.createShutdownError(), correlation)'],
         ['shutdown starts queued work', 'scheduler', 'while (!shuttingDown && activeJobs.size < config.maxConcurrent', 'while (activeJobs.size < config.maxConcurrent'],
         ['route cleanup no longer awaits safe settlement', 'service', 'settlementError = await safelyAwaitResponseSettlement(', 'settlementError = safelyAwaitResponseSettlement('],
         ['route cleanup duplicated', 'route', 'cleanupError = await finalizeLifecycle(', 'cleanupError = await finalizeLifecycle(\n                    {});\n                cleanupError = await finalizeLifecycle(']
@@ -102,7 +105,14 @@ test('S1b source contracts reject deadline, abort, shutdown, response, counter, 
 
 test('global error-handler source retains selected middleware mappings', () => {
     const source = readSource('app/middleware/errorHandler.js');
-    assertNearestRuleStatus(source, 'ADMIN_CORS_ORIGIN_NOT_ALLOWED', 403);
+    for (const code of [
+        'PRICING_CORS_ORIGIN_NOT_ALLOWED',
+        'ARTIFACT_CORS_ORIGIN_NOT_ALLOWED',
+        'OPERATIONS_CORS_ORIGIN_NOT_ALLOWED'
+    ]) {
+        assert.match(source, new RegExp(`\\['${code}',`));
+    }
+    assert.match(source, /\.map\(\(\[errorCode, message\]\) => \(\{[\s\S]{0,160}?status: 403,/);
     assertNearestRuleStatus(source, 'INVALID_JSON_BODY', 400);
     assertNearestRuleStatus(source, 'PAYLOAD_TOO_LARGE', 413);
     assertNearestRuleStatus(source, 'UPLOADED_FILE_TOO_LARGE', 413);

@@ -1,3 +1,6 @@
+// Keep the child-process stdout channel reserved for the scenario JSON result.
+console.info = () => {};
+
 const {
     loadQueueForScenario
 } = require('../helpers/load-queue-for-scenario');

@@ -4,18 +4,14 @@ const { execFile } = require('node:child_process');
 const { DEFAULTS } = require('../../config/constants');
 const { createChildEnvironment } = require('./child-environment');
 const { createProcessTreeTerminator } = require('./process-tree');
+const { quarantineNativeRuntime } = require('./native-runtime-status');
+const { nativeFinished, nativeStarted, recordNativeQuarantine } = require('../observability/metrics');
+const { emitEvent } = require('../observability/events');
 
-const DEBUG_COMMAND_LOGS = process.env.DEBUG_COMMAND_LOGS === 'true';
-const MAX_LOG_OUTPUT = DEFAULTS.MAX_LOG_OUTPUT;
 const COMMAND_TIMEOUT_MS = Number.parseInt(
     process.env.SLICE_COMMAND_TIMEOUT_MS || `${DEFAULTS.SLICE_COMMAND_TIMEOUT_MS}`,
     10
 ) || DEFAULTS.SLICE_COMMAND_TIMEOUT_MS;
-
-function truncateLogOutput(text) {
-    if (!text || text.length <= MAX_LOG_OUTPUT) return text;
-    return `${text.slice(0, MAX_LOG_OUTPUT)}\n...[truncated]`;
-}
 
 function abortReason(signal) {
     if (signal?.reason instanceof Error) return signal.reason;
@@ -46,9 +42,14 @@ function createTimeoutError(timeoutMs) {
     return error;
 }
 
-function logCommandOutput(stdout, stderr, debug) {
-    if (debug && stdout) console.log(`[CMD LOG]:\n${truncateLogOutput(stdout)}`);
-    if (debug && stderr) console.error(`[CMD ERR]:\n${truncateLogOutput(stderr)}`);
+function elapsedMilliseconds(started) {
+    return Number(process.hrtime.bigint() - started) / 1e6;
+}
+
+function nativeErrorCode(outcome) {
+    if (outcome === 'timeout') return 'NATIVE_TIMEOUT';
+    if (outcome === 'aborted') return 'NATIVE_ABORTED';
+    return 'NATIVE_PROCESSING_FAILED';
 }
 
 class CommandExecution {
@@ -85,7 +86,6 @@ class CommandExecution {
             shell: false,
             windowsHide: true
         }, (error, stdout = '', stderr = '') => {
-            logCommandOutput(stdout, stderr, this.dependencies.debug);
             this.commandOutcome = { error, stdout, stderr };
             this.maybeSettle();
         });
@@ -113,16 +113,28 @@ class CommandExecution {
         this.signal?.removeEventListener('abort', this.onAbort);
         if (this.terminationStarted) return;
         this.terminationStarted = true;
+        const terminationStarted = process.hrtime.bigint();
         Promise.resolve()
             .then(() => this.dependencies.terminatorFactory(this.child).terminate())
             .then(() => {
                 this.terminationComplete = true;
+                emitEvent('native.termination_settled', {
+                    audience: 'slice',
+                    outcome: 'success',
+                    duration_ms: elapsedMilliseconds(terminationStarted)
+                });
                 this.maybeSettle();
             }, () => {
                 // An unverified tree is deliberately non-terminal: retaining the
                 // command promise also retains the queue slot instead of allowing
                 // another native job to start beside a possible orphan.
-                console.error('[EXEC ERROR] Slice subprocess tree termination failed.');
+                quarantineNativeRuntime();
+                recordNativeQuarantine();
+                emitEvent('native.quarantined', {
+                    audience: 'slice',
+                    outcome: 'quarantined',
+                    error_code: 'NATIVE_TERMINATION_UNVERIFIED'
+                });
             });
     }
 
@@ -145,7 +157,6 @@ class CommandExecution {
         if (error.killed) {
             error.message = `The slicing process timed out after ${Math.round(this.dependencies.timeoutMs / 60000)} minutes.`;
         }
-        console.error('[EXEC ERROR] Contained slice subprocess failed.');
         error.stderr = stderr || stdout || error.message;
         this.settle(this.reject, error);
     }
@@ -171,14 +182,39 @@ function createCommandRunner(overrides = {}) {
         clearTimer: overrides.clearTimeout || clearTimeout,
         platform: overrides.platform || process.platform,
         timeoutMs: overrides.timeoutMs || COMMAND_TIMEOUT_MS,
-        debug: overrides.debug ?? DEBUG_COMMAND_LOGS,
         environmentFactory: overrides.createChildEnvironment || createChildEnvironment,
         terminatorFactory: overrides.createProcessTreeTerminator
             || ((child) => createProcessTreeTerminator(child, overrides.terminationDependencies))
     };
     return function run(executable, args = [], options = {}) {
         if (options.signal?.aborted) return Promise.reject(abortReason(options.signal));
-        return new CommandExecution(dependencies, executable, args, options.signal).run();
+        const started = process.hrtime.bigint();
+        nativeStarted();
+        emitEvent('native.started', { audience: 'slice', outcome: 'started' });
+        return new CommandExecution(dependencies, executable, args, options.signal).run().then(
+            (value) => {
+                const duration = elapsedMilliseconds(started);
+                nativeFinished('success', duration);
+                emitEvent('native.completed', {
+                    audience: 'slice', outcome: 'success', duration_ms: duration
+                });
+                return value;
+            },
+            (error) => {
+                const outcome = error?.code === 'ETIMEDOUT'
+                    ? 'timeout'
+                    : isAbortError(error, options.signal) ? 'aborted' : 'failure';
+                const duration = elapsedMilliseconds(started);
+                nativeFinished(outcome, duration);
+                emitEvent('native.completed', {
+                    audience: 'slice',
+                    outcome,
+                    error_code: nativeErrorCode(outcome),
+                    duration_ms: duration
+                });
+                throw error;
+            }
+        );
     };
 }
 

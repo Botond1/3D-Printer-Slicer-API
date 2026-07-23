@@ -7,6 +7,7 @@ const path = require('node:path');
 const { resolveResourcePolicy } = require('../config/resource-policy');
 const { OUTPUT_DIR } = require('../config/paths');
 const { readFileSyncBounded } = require('../utils/bounded-file');
+const { emitEvent } = require('./observability/events');
 
 const ALLOWED_OUTPUT_EXTENSIONS = new Set(['.gcode', '.sl1']);
 const BULK_DOWNLOAD_ALL_TOKEN = 'ALL';
@@ -157,8 +158,11 @@ function listValidatedOutputFiles(resolvedOutputDir, resolvedOutputDirRealPath) 
         const validated = resolveValidatedOutputFile(entry.name, resolvedOutputDir, resolvedOutputDirRealPath);
         if (!validated.success) {
             if (shouldSkipUnsafeOutputEntry(validated) && validated.errorCode !== 'OUTPUT_FILE_NOT_FOUND') {
-                const logToken = entry.name || 'n/a';
-                console.warn(`[ADMIN OUTPUT] Skipping unsafe output entry: ${logToken}`);
+                emitEvent('resource.rejected', {
+                    audience: 'artifact',
+                    outcome: 'rejected',
+                    error_code: validated.errorCode
+                });
             }
 
             if (shouldSkipUnsafeOutputEntry(validated)) continue;

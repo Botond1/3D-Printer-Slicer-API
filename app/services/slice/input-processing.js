@@ -26,7 +26,6 @@ async function convertInputToStl(processableFile, workspace, signal) {
             await inspectThreeMfArchive(workspace.assertContainedPath(processableFile));
             throwIfAborted(signal);
         }
-        console.log('[INFO] Converting Mesh to STL...');
         finalStlPath = resolveConvertedPath(processableFile, workspace);
         await runCommand(
             PYTHON_EXECUTABLE,
@@ -39,7 +38,6 @@ async function convertInputToStl(processableFile, workspace, signal) {
     }
 
     if (EXTENSIONS.cad.includes(currentExt)) {
-        console.log('[INFO] Converting CAD to STL...');
         finalStlPath = resolveConvertedPath(processableFile, workspace);
         await runCommand(
             PYTHON_EXECUTABLE,
@@ -95,7 +93,6 @@ async function isRegularNonSymlink(filePath) {
  */
 async function tryOptimizeOrientation(processableFile, technology, workspace, signal) {
     throwIfAborted(signal);
-    console.log(`[INFO] Optimizing orientation for ${technology}...`);
     const orientedStlPath = resolveOrientedPath(processableFile, workspace);
 
     try {
@@ -113,7 +110,6 @@ async function tryOptimizeOrientation(processableFile, technology, workspace, si
             throwIfAborted(signal);
             throw error_;
         }
-        console.warn('[WARN] Orientation optimization failed; continuing with the contained source model.');
     }
 
     return processableFile;

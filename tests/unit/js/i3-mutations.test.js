@@ -15,11 +15,17 @@ const {
 
 const ROOT = path.resolve(__dirname, '../../..');
 const ROUTE_PATH = path.join(ROOT, 'app/routes/slice.routes.js');
-const AUTH_PATH = path.join(ROOT, 'app/middleware/requireSliceService.js');
+const AUTH_PATH = path.join(ROOT, 'app/middleware/requireAudience.js');
 const HTTP_SERVER_PATH = path.join(ROOT, 'app/services/http-server.js');
 const RUNTIME_PATH = path.join(ROOT, 'app/services/runtime-lifecycle.js');
 const SERVER_PATH = path.join(ROOT, 'app/server.js');
 const INERT_KEY = 'i3-inert-service-key-000000000000000000000000';
+const originalPythonExecutable = process.env.PYTHON_EXECUTABLE;
+process.env.PYTHON_EXECUTABLE = process.execPath;
+test.after(() => {
+    if (originalPythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;
+    else process.env.PYTHON_EXECUTABLE = originalPythonExecutable;
+});
 
 function readSource(filename) {
     return fs.readFileSync(filename, 'utf8');
@@ -114,7 +120,7 @@ function invokeAuth(middleware, suppliedKey) {
     return { status, nextCalls };
 }
 
-function observeTimingSafePrimitive(createRequireSliceService) {
+function observeTimingSafePrimitive(createRequireAudience) {
     const original = crypto.timingSafeEqual;
     let timingSafeCalls = 0;
     crypto.timingSafeEqual = (left, right) => {
@@ -122,9 +128,13 @@ function observeTimingSafePrimitive(createRequireSliceService) {
         return original(left, right);
     };
     try {
-        const middleware = createRequireSliceService({
-            apiKey: INERT_KEY,
-            logger: { warn() {} }
+        const middleware = createRequireAudience({
+            audience: 'slice',
+            headerName: 'x-slicer-api-key',
+            keyRing: { audiences: { slice: { active: INERT_KEY } } },
+            failure: { success: false },
+            logger: { warn() {} },
+            alwaysComparePrevious: false
         });
         return {
             accepted: invokeAuth(middleware, INERT_KEY),
@@ -136,8 +146,8 @@ function observeTimingSafePrimitive(createRequireSliceService) {
     }
 }
 
-function assertTimingSafePrimitive(createRequireSliceService) {
-    assert.deepEqual(observeTimingSafePrimitive(createRequireSliceService), {
+function assertTimingSafePrimitive(createRequireAudience) {
+    assert.deepEqual(observeTimingSafePrimitive(createRequireAudience), {
         accepted: { status: null, nextCalls: 1 },
         rejected: { status: 401, nextCalls: 0 },
         timingSafeCalls: 2
@@ -145,11 +155,11 @@ function assertTimingSafePrimitive(createRequireSliceService) {
 }
 
 function removeStartupServiceKeyGuard(source) {
-    const guardStart = source.indexOf('let sliceServiceApiKey;');
+    const guardStart = source.indexOf('let serviceKeyRing;');
     const guardEnd = source.indexOf('// Initialize required directories and load pricing data');
     assert.notEqual(guardStart, -1, 'Missing startup service-key guard start.');
     assert.ok(guardEnd > guardStart, 'Missing startup service-key guard end.');
-    return `${source.slice(0, guardStart)}let sliceServiceApiKey;\n${source.slice(guardEnd)}`;
+    return `${source.slice(0, guardStart)}let serviceKeyRing;\n${source.slice(guardEnd)}`;
 }
 
 function observeMissingKeyStartup(source) {
@@ -173,9 +183,12 @@ function observeMissingKeyStartup(source) {
     ].join('\n');
     const env = {
         ...process.env,
-        ADMIN_API_KEY: 'i3-inert-admin-key',
+        ARTIFACT_API_KEY: 'i3-artifact-active-000000000000000000000000',
         DOTENV_CONFIG_QUIET: 'true',
         I3_SERVER_PATH: SERVER_PATH,
+        OPERATIONS_API_KEY: 'i3-operations-active-0000000000000000000000',
+        PRICING_API_KEY: 'i3-pricing-active-0000000000000000000000000',
+        PYTHON_EXECUTABLE: process.execPath,
         SLICE_SERVICE_API_KEY: ''
     };
     const result = spawnSync(process.execPath, ['-e', runner], {
@@ -255,18 +268,18 @@ test('mutation rejects authentication moved after request lifecycle allocation',
 test('mutation rejects direct credential equality that bypasses timingSafeEqual', () => {
     const source = readSource(AUTH_PATH);
     const liveModule = require(AUTH_PATH);
-    assertTimingSafePrimitive(liveModule.createRequireSliceService);
+    assertTimingSafePrimitive(liveModule.createRequireAudience);
 
     const mutatedSource = mutate(
         source,
-        '&& timingSafeCompare(suppliedApiKey, configuredApiKey);',
-        '&& suppliedApiKey === configuredApiKey;',
+        'const activeMatch = compareDigests(suppliedDigest, activeDigest);',
+        'const activeMatch = supplied === keys.active;',
         'direct credential equality'
     );
     assert.match(mutatedSource, /crypto\.timingSafeEqual/);
     const mutatedModule = loadCommonJsFromSource(AUTH_PATH, mutatedSource);
     assert.throws(
-        () => assertTimingSafePrimitive(mutatedModule.createRequireSliceService),
+        () => assertTimingSafePrimitive(mutatedModule.createRequireAudience),
         assert.AssertionError
     );
 });

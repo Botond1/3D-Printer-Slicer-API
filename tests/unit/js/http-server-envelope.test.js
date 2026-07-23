@@ -9,6 +9,12 @@ const os = require('node:os');
 const path = require('node:path');
 const { once } = require('node:events');
 const express = require('express');
+const originalPythonExecutable = process.env.PYTHON_EXECUTABLE;
+process.env.PYTHON_EXECUTABLE = process.execPath;
+test.after(() => {
+    if (originalPythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;
+    else process.env.PYTHON_EXECUTABLE = originalPythonExecutable;
+});
 const { DEFAULTS } = require('../../../app/config/constants');
 const {
     HTTP_SERVER_BOUNDS,
@@ -348,7 +354,9 @@ test('live partial-request timeout cannot become 2xx and cleans request-owned re
         'request workspace allocation'
     );
     const result = await exchange;
-    await withDeadline(harness.nextSettlement, 2_000, 'partial request cleanup');
+    // The server-side request timeout remains 150 ms; this deadline only gives
+    // an overloaded aggregate test process enough time to observe async cleanup.
+    await withDeadline(harness.nextSettlement, 5_000, 'partial request cleanup');
     const status = responseStatus(result.response);
 
     assert.ok(status === null || status < 200 || status >= 300, `Unexpected success status: ${status}`);

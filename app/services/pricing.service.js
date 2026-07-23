@@ -6,6 +6,7 @@ const { PRICING_FILE, PRICING_STATE_DIR, LEGACY_PRICING_FILE } = require('../con
 const { DEFAULT_PRICING } = require('../config/constants');
 const { PricingRepository } = require('./pricing/repository');
 const { PricingCatalog } = require('./pricing/catalog');
+const { emitEvent } = require('./observability/events');
 
 const pricingRepository = new PricingRepository({
     primaryFile: PRICING_FILE,
@@ -42,8 +43,13 @@ function savePricingToDisk() {
     try {
         activePricingFile = pricingRepository.saveToPrimary(pricingCatalog.getPricing());
         return true;
-    } catch (err) {
-        console.error(`[PRICING UPDATE] Failed to save pricing file (${pricingRepository.primaryFile}): ${err.message}`);
+    } catch {
+        emitEvent('pricing.mutated', {
+            audience: 'pricing',
+            outcome: 'failure',
+            error_code: 'PRICING_PERSISTENCE_FAILED',
+            extra: { action: 'persist' }
+        });
         return false;
     }
 }
@@ -59,9 +65,11 @@ function loadPricingFromDisk() {
     if (existingCandidates.length === 0) {
         pricingCatalog.resetToDefault();
         if (savePricingToDisk()) {
-            console.log(`[PRICING UPDATE] Pricing file was missing. Default pricing created at ${activePricingFile}.`);
-        } else {
-            console.error('[PRICING UPDATE] Could not persist default pricing to any storage target.');
+            emitEvent('pricing.mutated', {
+                audience: 'pricing',
+                outcome: 'success',
+                extra: { action: 'initialize' }
+            });
         }
         return;
     }
@@ -75,12 +83,16 @@ function loadPricingFromDisk() {
                 savePricingToDisk();
             }
             return;
-        } catch (err) {
-            console.warn(`[PRICING UPDATE] Failed to read ${candidateFile}. Reason: ${err.message}`);
+        } catch {
+            emitEvent('pricing.mutated', {
+                audience: 'pricing',
+                outcome: 'failure',
+                error_code: 'PRICING_LOAD_FAILED',
+                extra: { action: 'load' }
+            });
         }
     }
 
-    console.warn('[PRICING UPDATE] All pricing files were unreadable, using defaults.');
     pricingCatalog.resetToDefault();
     savePricingToDisk();
 }

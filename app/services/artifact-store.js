@@ -9,6 +9,7 @@ const {
     endArtifactDeletion
 } = require('./artifact-leases');
 const { selectEvictions } = require('./artifact-retention-policy');
+const { emitEvent } = require('./observability/events');
 const {
     METADATA_VERSION,
     ARTIFACT_ID_PATTERN,
@@ -23,6 +24,17 @@ const {
 } = require('./artifact-metadata');
 
 let cleanupPromise;
+
+function emitArtifactLifecycle(eventName, record, outcome, errorCode, reason) {
+    emitEvent(eventName, {
+        job_id: record?.metadata?.jobId,
+        artifact_id: record?.metadata?.artifactId,
+        audience: 'artifact',
+        outcome,
+        error_code: errorCode,
+        extra: { reason }
+    });
+}
 
 async function scanManagedArtifacts(options, policy, summary) {
     const root = await assertCanonicalOutputRoot(options.outputRoot || OUTPUT_DIR);
@@ -61,13 +73,15 @@ async function scanManagedArtifacts(options, policy, summary) {
     return records;
 }
 
-async function removeOwnedRecord(record, summary, options) {
+async function removeOwnedRecord(record, summary, options, eventName, reason) {
     if (!record.partial && isArtifactLeased(record.realPath)) {
         summary.active++;
+        emitArtifactLifecycle(eventName, record, 'skipped', 'ARTIFACT_LEASE_ACTIVE', reason);
         return;
     }
     if (!record.missing && !beginArtifactDeletion(record.realPath)) {
         summary.active++;
+        emitArtifactLifecycle(eventName, record, 'skipped', 'ARTIFACT_DELETION_BUSY', reason);
         return;
     }
     try {
@@ -84,6 +98,7 @@ async function removeOwnedRecord(record, summary, options) {
                 || !samePath(await fs.realpath(record.metadataPath), record.metadataPath)
             ) {
                 summary.skipped++;
+                emitArtifactLifecycle(eventName, record, 'rejected', 'ARTIFACT_IDENTITY_CHANGED', reason);
                 return;
             }
             await (options.removeFile || fs.rm)(record.artifactPath, { force: true });
@@ -94,8 +109,16 @@ async function removeOwnedRecord(record, summary, options) {
         }
         await (options.removeFile || fs.rm)(record.metadataPath, { force: true });
         summary.removed++;
+        emitArtifactLifecycle(eventName, record, 'success', undefined, reason);
     } catch {
         summary.failed++;
+        emitArtifactLifecycle(
+            eventName,
+            record,
+            'failure',
+            eventName === 'artifact.evicted' ? 'ARTIFACT_EVICTION_FAILED' : 'ARTIFACT_CLEANUP_FAILED',
+            reason
+        );
     } finally {
         if (!record.missing) endArtifactDeletion(record.realPath);
     }
@@ -115,7 +138,14 @@ async function runCleanup(options = {}) {
         const stalePartial = record.partial
             && now - record.metadata.createdAt > policy.PARTIAL_ARTIFACT_STALE_MS;
         if (stalePartial || evictions.has(record)) {
-            await removeOwnedRecord(record, summary, options);
+            const evicted = evictions.has(record);
+            await removeOwnedRecord(
+                record,
+                summary,
+                options,
+                evicted ? 'artifact.evicted' : 'artifact.cleanup',
+                evicted ? 'retention' : 'partial'
+            );
         }
     }
     const complete = records.filter((record) => !record.partial);

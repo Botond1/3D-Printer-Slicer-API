@@ -140,7 +140,7 @@ test('correct and both wrong-length branches use one fixed SHA-256 timing-safe c
     }
 });
 
-test('rejection log is sanitized and contains only requestId and clientIp metadata', () => {
+test('rejection log rejects attacker IP text and contains only sanitized identity metadata', () => {
     const warnings = [];
     const middleware = createRequireSliceService({
         apiKey: SERVICE_KEY,
@@ -160,11 +160,18 @@ test('rejection log is sanitized and contains only requestId and clientIp metada
     assert.equal(warnings[0][0], '[SLICE AUTH] Authentication rejected.');
     assert.deepEqual(warnings[0][1], {
         requestId: 'request??forge',
-        clientIp: '203.0.113.7??spoof'
+        clientIp: 'unknown'
     });
     assert.deepEqual(Object.keys(warnings[0][1]).sort(), ['clientIp', 'requestId']);
     const serialized = JSON.stringify(warnings[0]);
     for (const forbidden of [SERVICE_KEY, supplied, 'DELETE', '/credential-bearing-url']) {
         assert.doesNotMatch(serialized, new RegExp(forbidden));
     }
+    assert.doesNotMatch(serialized, /spoof/);
+
+    invokeAuth(middleware, supplied, {
+        ip: 'malformed-attacker-text',
+        socket: { remoteAddress: '::ffff:192.0.2.44' }
+    });
+    assert.equal(warnings[1][1].clientIp, '192.0.2.44');
 });

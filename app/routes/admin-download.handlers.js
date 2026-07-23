@@ -1,7 +1,7 @@
 'use strict';
 
 const archiver = require('archiver');
-const { getClientIp } = require('../utils/client-ip');
+const { emitEvent } = require('../services/observability/events');
 const {
     BULK_DOWNLOAD_ALL_TOKEN,
     getValidatedOutputFile,
@@ -14,7 +14,12 @@ const { acquireArtifactLease } = require('../services/artifact-leases');
 function outputFilesHandler(req, res) {
     const outputFiles = listOutputFileSummaries();
     if (!outputFiles.success) {
-        console.error('[ADMIN OUTPUT FILES ERROR]', outputFiles.error);
+        emitEvent('resource.rejected', {
+            request_id: req.requestId,
+            audience: 'artifact',
+            outcome: 'rejected',
+            error_code: outputFiles.errorCode
+        });
         return res.status(outputFiles.status).json({
             success: false,
             error: outputFiles.error,
@@ -40,8 +45,29 @@ function artifactBusy(res) {
     });
 }
 
-function sendBulkDownloadFailure(res, error, requestId) {
-    console.error(`[ADMIN DOWNLOAD ERROR] ${error.message} (requestId=${requestId})`);
+function emitDownload(event, outcome, errorCode) {
+    emitEvent('artifact.downloaded', {
+        request_id: event?.requestId,
+        job_id: event?.jobId,
+        artifact_id: event?.artifactId,
+        audience: 'artifact',
+        outcome,
+        error_code: errorCode
+    });
+}
+
+function emitBulkDownloads(files, requestId, outcome, errorCode) {
+    const managed = files.filter((file) => file.artifactId && file.jobId);
+    if (!managed.length) {
+        emitDownload({ requestId }, outcome, errorCode);
+        return;
+    }
+    for (const file of managed) {
+        emitDownload({ requestId, jobId: file.jobId, artifactId: file.artifactId }, outcome, errorCode);
+    }
+}
+
+function sendBulkDownloadFailure(res, error) {
     if (res.headersSent) {
         res.destroy(error);
         return;
@@ -56,6 +82,7 @@ function sendBulkDownloadFailure(res, error, requestId) {
 function bulkDownloadHandler(req, res, requestContext) {
     const validatedFiles = getValidatedOutputFiles();
     if (!validatedFiles.success) {
+        emitDownload(requestContext, 'failure', validatedFiles.errorCode);
         return res.status(validatedFiles.status).json({
             success: false,
             error: validatedFiles.error,
@@ -63,6 +90,7 @@ function bulkDownloadHandler(req, res, requestContext) {
         });
     }
     if (validatedFiles.files.length === 0) {
+        emitDownload(requestContext, 'failure', 'OUTPUT_FILES_NOT_FOUND');
         return res.status(404).json({
             success: false,
             error: 'Output files not found.',
@@ -71,6 +99,7 @@ function bulkDownloadHandler(req, res, requestContext) {
     }
     const limits = validateBulkDownloadLimits(validatedFiles.files);
     if (!limits.success) {
+        emitBulkDownloads(validatedFiles.files, requestContext.requestId, 'failure', limits.errorCode);
         return res.status(limits.status).json({
             success: false,
             error: limits.error,
@@ -79,31 +108,50 @@ function bulkDownloadHandler(req, res, requestContext) {
     }
 
     const archiveFileName = `output-files-${Date.now()}.zip`;
-    console.log(
-        `[ADMIN DOWNLOAD] ${BULK_DOWNLOAD_ALL_TOKEN} requested by ${requestContext.clientIp} (requestId=${requestContext.requestId}) -> ${validatedFiles.files.length} files, ${limits.totalBytes} bytes`
-    );
     let lease;
     try {
-        lease = acquireArtifactLease(validatedFiles.files.map((file) => file.realPath));
+        lease = acquireArtifactLease(
+            validatedFiles.files.map((file) => file.realPath),
+            validatedFiles.files.map((file) => ({
+                requestId: requestContext.requestId,
+                jobId: file.jobId,
+                artifactId: file.artifactId
+            }))
+        );
     } catch {
+        emitBulkDownloads(
+            validatedFiles.files,
+            requestContext.requestId,
+            'failure',
+            'OUTPUT_ARTIFACT_BUSY'
+        );
         return artifactBusy(res);
     }
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${archiveFileName}"`);
     const archive = archiver('zip', { zlib: { level: 9 } });
-    archive.on('warning', (warning) => {
-        console.warn(`[ADMIN DOWNLOAD WARN] ${warning.message}`);
-    });
+    archive.on('warning', () => {});
+    let downloadSettled = false;
+    const settleDownload = (outcome, errorCode) => {
+        if (downloadSettled) return;
+        downloadSettled = true;
+        lease.release();
+        emitBulkDownloads(validatedFiles.files, requestContext.requestId, outcome, errorCode);
+    };
     archive.on('error', (error) => {
-        lease.release();
-        sendBulkDownloadFailure(res, error, requestContext.requestId);
+        settleDownload('failure', 'BULK_DOWNLOAD_FAILED');
+        sendBulkDownloadFailure(res, error);
     });
-    res.on('close', () => {
-        lease.release();
-        if (!res.writableEnded) archive.abort();
+    res.once('close', () => {
+        if (!res.writableFinished) {
+            settleDownload('failure', 'DOWNLOAD_ABORTED');
+            archive.abort();
+        }
     });
-    archive.on('end', () => lease.release());
+    res.once('finish', () => {
+        settleDownload('success');
+    });
     archive.pipe(res);
     for (const file of validatedFiles.files) {
         archive.file(file.realPath, { name: file.fileName });
@@ -111,7 +159,8 @@ function bulkDownloadHandler(req, res, requestContext) {
     const finalizeResult = archive.finalize();
     if (finalizeResult && typeof finalizeResult.catch === 'function') {
         finalizeResult.catch((error) => {
-            sendBulkDownloadFailure(res, error, requestContext.requestId);
+            settleDownload('failure', 'BULK_DOWNLOAD_FAILED');
+            sendBulkDownloadFailure(res, error);
         });
     }
     return undefined;
@@ -120,24 +169,44 @@ function bulkDownloadHandler(req, res, requestContext) {
 function singleDownloadHandler(res, fileName, requestContext) {
     const validatedFile = getValidatedOutputFile(fileName);
     if (!validatedFile.success) {
+        emitDownload(requestContext, 'failure', validatedFile.errorCode);
         return res.status(validatedFile.status).json({
             success: false,
             error: validatedFile.error,
             errorCode: validatedFile.errorCode
         });
     }
-    console.log(
-        `[ADMIN DOWNLOAD] ${validatedFile.fileName} requested by ${requestContext.clientIp} (requestId=${requestContext.requestId})`
-    );
     let lease;
     try {
-        lease = acquireArtifactLease([validatedFile.realPath]);
+        lease = acquireArtifactLease([validatedFile.realPath], [{
+            requestId: requestContext.requestId,
+            jobId: validatedFile.jobId,
+            artifactId: validatedFile.artifactId
+        }]);
     } catch {
+        emitDownload({
+            requestId: requestContext.requestId,
+            jobId: validatedFile.jobId,
+            artifactId: validatedFile.artifactId
+        }, 'failure', 'OUTPUT_ARTIFACT_BUSY');
         return artifactBusy(res);
     }
-    res.once('close', () => lease.release());
-    return res.download(validatedFile.realPath, validatedFile.fileName, (error) => {
+    let downloadSettled = false;
+    const settleDownload = (outcome, errorCode) => {
+        if (downloadSettled) return;
+        downloadSettled = true;
+        emitDownload({
+            requestId: requestContext.requestId,
+            jobId: validatedFile.jobId,
+            artifactId: validatedFile.artifactId
+        }, outcome, errorCode);
         lease.release();
+    };
+    res.once('close', () => {
+        if (!res.writableEnded) settleDownload('failure', 'DOWNLOAD_ABORTED');
+    });
+    return res.download(validatedFile.realPath, validatedFile.fileName, (error) => {
+        settleDownload(error ? 'failure' : 'success', error ? 'DOWNLOAD_FAILED' : undefined);
         if (error && !res.headersSent) {
             res.status(500).json({
                 success: false,
@@ -151,7 +220,6 @@ function singleDownloadHandler(res, fileName, requestContext) {
 function downloadHandler(req, res) {
     const fileName = String(req.params.fileName || '').trim();
     const requestContext = {
-        clientIp: getClientIp(req),
         requestId: req.requestId || 'n/a'
     };
     if (fileName.toUpperCase() === BULK_DOWNLOAD_ALL_TOKEN) {

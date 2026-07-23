@@ -24,6 +24,7 @@ function createMaterialOperation(technology, example, price) {
         summary: `Create a new ${technology} material.`,
         description: 'Protected endpoint. Requires x-api-key header.',
         parameters: [adminKeyParameter()],
+        security: [{ PricingApiKey: [] }],
         requestBody: {
             required: true,
             content: {
@@ -63,6 +64,7 @@ function updateMaterialOperation(technology, price) {
         summary: `Update existing ${technology} material price.`,
         description: 'Protected endpoint. Requires x-api-key header.',
         parameters: [materialPathParameter(), adminKeyParameter()],
+        security: [{ PricingApiKey: [] }],
         requestBody: {
             required: true,
             content: {
@@ -96,6 +98,7 @@ function deleteMaterialOperation(technology) {
         summary: `Delete an ${technology} material price.`,
         description: 'Protected endpoint. Requires x-api-key header. Deleting default is forbidden.',
         parameters: [materialPathParameter(), adminKeyParameter()],
+        security: [{ PricingApiKey: [] }],
         responses: {
             200: { description: 'Material deleted successfully' },
             400: { description: 'Validation error (including default deletion attempt)' },

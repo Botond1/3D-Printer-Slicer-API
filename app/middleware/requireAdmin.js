@@ -1,49 +1,61 @@
-/**
- * Middleware that validates admin API key access for protected routes.
- */
+'use strict';
+
+/** Compatibility facade and scoped x-api-key authentication factories. */
 
 const crypto = require('node:crypto');
-const { getClientIp } = require('../utils/client-ip');
+const { createRequireAudience } = require('./requireAudience');
 
-/**
- * Constant-time comparison of two strings to prevent timing side-channel attacks.
- * @param {string} a First string.
- * @param {string} b Second string.
- * @returns {boolean} True when strings are equal.
- */
+const AUDIENCE_FAILURES = Object.freeze({
+    pricing: Object.freeze({
+        success: false, error: 'Pricing authentication is required.',
+        errorCode: 'PRICING_AUTH_REQUIRED'
+    }),
+    artifact: Object.freeze({
+        success: false, error: 'Artifact authentication is required.',
+        errorCode: 'ARTIFACT_AUTH_REQUIRED'
+    }),
+    operations: Object.freeze({
+        success: false, error: 'Operations authentication is required.',
+        errorCode: 'OPERATIONS_AUTH_REQUIRED'
+    })
+});
+
 function timingSafeCompare(a, b) {
-    const bufA = Buffer.from(a, 'utf8');
-    const bufB = Buffer.from(b, 'utf8');
-    if (bufA.length !== bufB.length) {
-        crypto.timingSafeEqual(bufA, bufA);
+    const left = Buffer.from(a, 'utf8');
+    const right = Buffer.from(b, 'utf8');
+    if (left.length !== right.length) {
+        crypto.timingSafeEqual(left, left);
         return false;
     }
-    return crypto.timingSafeEqual(bufA, bufB);
+    return crypto.timingSafeEqual(left, right);
 }
 
-/**
- * Enforce `x-api-key` based authentication for admin operations.
- * @param {import('express').Request} req Express request object.
- * @param {import('express').Response} res Express response object.
- * @param {import('express').NextFunction} next Express next callback.
- * @returns {void}
+function createRequireAdminAudience(audience, keyRing, options = {}) {
+    if (!AUDIENCE_FAILURES[audience]) throw new TypeError('Unsupported admin audience.');
+    return createRequireAudience({
+        audience,
+        headerName: 'x-api-key',
+        keyRing,
+        failure: AUDIENCE_FAILURES[audience],
+        logger: options.logger,
+        compareDigests: options.compareDigests || crypto.timingSafeEqual
+    });
+}
+
+/*
+ * Fail-closed compatibility export for direct imports and router defaults.
+ * Runtime wiring must inject one finite audience from the startup key ring.
  */
 function requireAdmin(req, res, next) {
-    const adminApiKey = String(process.env.ADMIN_API_KEY || '').trim();
-
-    if (!adminApiKey) {
-        console.error('[SECURITY WARNING] ADMIN_API_KEY is not configured. Protected pricing endpoints are disabled.');
-        return res.status(503).json({ success: false, error: 'Admin API key is not configured on server.' });
-    }
-
-    const apiKey = String(req.header('x-api-key') || '').trim();
-    if (!apiKey || !timingSafeCompare(apiKey, adminApiKey)) {
-        const clientIp = getClientIp(req);
-        const requestId = req.requestId || 'n/a';
-        console.warn(`[SECURITY WARNING] Unauthorized admin access attempt from ${clientIp} on ${req.method} ${req.originalUrl} (requestId=${requestId})`);
-        return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-    next();
+    void req;
+    void next;
+    return res.status(503).json({
+        success: false,
+        error: 'Admin API key is not configured on server.'
+    });
 }
 
 module.exports = requireAdmin;
+module.exports.AUDIENCE_FAILURES = AUDIENCE_FAILURES;
+module.exports.createRequireAdminAudience = createRequireAdminAudience;
+module.exports.timingSafeCompare = timingSafeCompare;

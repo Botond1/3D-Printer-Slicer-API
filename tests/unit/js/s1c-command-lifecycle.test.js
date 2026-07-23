@@ -205,30 +205,37 @@ test('9 late abort cannot target a settled command PID', async () => {
     assert.equal(signal.listenerCount, 0);
 });
 
-test('22 command output logging stays bounded and debug remains opt-in', async () => {
+test('22 native telemetry stays bounded and never includes command output', async () => {
     const originalLog = console.log;
+    const originalInfo = console.info;
     const originalError = console.error;
     const lines = [];
     console.log = (line) => lines.push(String(line));
+    console.info = (line) => lines.push(String(line));
     console.error = (line) => lines.push(String(line));
     try {
         const quiet = fixture({ debug: false });
         const quietResult = quiet.runner('native-tool');
         quiet.callback()(null, 'secret output', 'secret error');
         await quietResult;
-        assert.deepEqual(lines, []);
+        assert.equal(lines.length, 2);
+        assert.deepEqual(lines.map((line) => JSON.parse(line).event),
+            ['native.started', 'native.completed']);
+        assert.doesNotMatch(lines.join('\n'), /secret output|secret error/);
 
+        lines.length = 0;
         const debug = fixture({ debug: true });
         const debugResult = debug.runner('native-tool');
         debug.callback()(null, 'x'.repeat(200_000), 'y'.repeat(200_000));
         await debugResult;
         assert.equal(lines.length, 2);
         assert.ok(lines.every((line) => line.length < 20_000));
-        assert.ok(lines.every((line) => line.includes('...[truncated]')));
+        assert.doesNotMatch(lines.join('\n'), /x{16}|y{16}|truncated/);
         assert.equal(debug.state.executions[0].options.maxBuffer, 10_240_000);
         assert.equal(debug.state.executions[0].options.shell, false);
     } finally {
         console.log = originalLog;
+        console.info = originalInfo;
         console.error = originalError;
     }
 });

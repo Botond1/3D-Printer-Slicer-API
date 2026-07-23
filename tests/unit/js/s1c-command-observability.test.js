@@ -5,10 +5,10 @@ const assert = require('node:assert/strict');
 const { createCommandRunner } = require('../../../app/services/slice/command');
 const { handleProcessingError } = require('../../../app/services/slice/errors');
 
-test('22 debug output remains bounded and never serializes the child environment', async () => {
+test('22 native telemetry remains bounded and never serializes output or child environment', async () => {
     const logs = [];
-    const originalLog = console.log;
-    console.log = (value) => logs.push(String(value));
+    const originalInfo = console.info;
+    console.info = (value) => logs.push(String(value));
     try {
         const runner = createCommandRunner({
             debug: true, timeoutMs: 1000, createChildEnvironment: () => ({ PATH: 'only-path' }),
@@ -21,12 +21,13 @@ test('22 debug output remains bounded and never serializes the child environment
         });
         await runner('inert', []);
     } finally {
-        console.log = originalLog;
+        console.info = originalInfo;
     }
-    assert.equal(logs.length, 1);
-    assert.match(logs[0], /\[truncated\]/);
-    assert.ok(logs[0].length < 20_000);
-    assert.doesNotMatch(logs[0], /only-path|ADMIN_API_KEY|SECRET_MARKER/);
+    assert.equal(logs.length, 2);
+    assert.deepEqual(logs.map((line) => JSON.parse(line).event),
+        ['native.started', 'native.completed']);
+    assert.ok(logs.every((line) => line.length < 20_000));
+    assert.doesNotMatch(logs.join('\n'), /x{16}|only-path|ADMIN_API_KEY|SECRET_MARKER/);
 });
 
 test('21 environment and native output never enter the public response or normal logs', async () => {

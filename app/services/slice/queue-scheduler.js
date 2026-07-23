@@ -32,6 +32,43 @@ function createQueueScheduler(config) {
     let shutdownPromise;
     let resolveShutdown;
 
+    function emitQueueEvent(eventName, data, correlation) {
+        try {
+            config.emitEvent?.(eventName, {
+                request_id: correlation?.requestId,
+                job_id: correlation?.jobId,
+                audience: 'slice',
+                ...data
+            });
+        } catch {
+            // Queue ownership and settlement cannot depend on telemetry.
+        }
+    }
+
+    function recordRejection(reason) {
+        try {
+            config.recordQueueRejection?.(reason);
+        } catch {
+            // Metrics cannot alter queue ownership or settlement.
+        }
+    }
+
+    function rejectAdmission(error, correlation) {
+        const reasonByCode = {
+            SLICE_QUEUE_FULL: 'full',
+            SLICE_QUEUE_CLIENT_LIMIT: 'client_limit',
+            SLICE_QUEUE_SHUTDOWN: 'shutdown'
+        };
+        const reason = reasonByCode[error?.errorCode];
+        if (reason) recordRejection(reason);
+        emitQueueEvent('queue.rejected', {
+            outcome: 'rejected',
+            error_code: error?.errorCode || 'SLICE_QUEUE_REJECTED',
+            extra: { reason: reason || 'admission' }
+        }, correlation);
+        return Promise.reject(error);
+    }
+
     function totalForKey(key) {
         return (queuedByKey.get(key) || 0) + (activeByKey.get(key) || 0);
     }
@@ -65,6 +102,22 @@ function createQueueScheduler(config) {
         if (!removeQueuedJob(job)) return;
         job.state = 'settled';
         cleanJobResources(job);
+        if (error?.errorCode === 'SLICE_QUEUE_TIMEOUT') {
+            recordRejection('timeout');
+            emitQueueEvent('queue.expired', {
+                outcome: 'expired',
+                error_code: 'SLICE_QUEUE_TIMEOUT',
+                duration_ms: Math.max(0, config.now() - job.enqueuedAt),
+                extra: { reason: 'timeout' }
+            }, job.correlation);
+        } else if (error?.errorCode === 'SLICE_QUEUE_SHUTDOWN') {
+            recordRejection('shutdown');
+            emitQueueEvent('queue.rejected', {
+                outcome: 'rejected',
+                error_code: 'SLICE_QUEUE_SHUTDOWN',
+                extra: { reason: 'shutdown' }
+            }, job.correlation);
+        }
         job.reject(error);
     }
 
@@ -95,7 +148,9 @@ function createQueueScheduler(config) {
 
     function runTask(job) {
         Promise.resolve()
-            .then(() => job.task(job.controller.signal))
+            .then(() => config.runWithContext
+                ? config.runWithContext(job.correlation, () => job.task(job.controller.signal))
+                : job.task(job.controller.signal))
             .then(
                 (value) => settleActiveJob(job, 'resolve', value),
                 (error) => settleActiveJob(job, 'reject', error)
@@ -138,7 +193,8 @@ function createQueueScheduler(config) {
         const controller = new AbortController();
         const job = {
             task, queueKey, externalSignal, resolve, reject, controller,
-            enqueuedAt: config.now(), state: 'queued', deadlineTimer: undefined
+            enqueuedAt: config.now(), state: 'queued', deadlineTimer: undefined,
+            correlation: config.captureContext?.() || {}
         };
         job.onEffectiveAbort = () => rejectQueuedJob(job, abortReason(controller.signal));
         job.onExternalAbort = () => forwardExternalAbort(job);
@@ -152,17 +208,24 @@ function createQueueScheduler(config) {
         queuedJobs.push(job);
         increment(queuedByKey, queueKey);
         startDeadline(job);
+        emitQueueEvent('queue.admitted', {
+            outcome: 'accepted',
+            extra: { queue_state: 'queued' }
+        }, job.correlation);
         runNextSliceJob();
     }
 
     function enqueueSliceJob(task, options = {}) {
         const queueKey = String(options.queueKey || 'anonymous');
         const signal = options.signal;
-        if (shuttingDown) return Promise.reject(config.createShutdownError());
+        const correlation = config.captureContext?.() || {};
+        if (shuttingDown) return rejectAdmission(config.createShutdownError(), correlation);
         if (signal?.aborted) return Promise.reject(abortReason(signal));
-        if (queuedJobs.length >= config.maxQueueLength) return Promise.reject(config.createFullError());
+        if (queuedJobs.length >= config.maxQueueLength) {
+            return rejectAdmission(config.createFullError(), correlation);
+        }
         if (totalForKey(queueKey) >= config.maxQueuePerClient) {
-            return Promise.reject(config.createClientLimitError());
+            return rejectAdmission(config.createClientLimitError(), correlation);
         }
         return new Promise((resolve, reject) => acceptJob(task, queueKey, signal, resolve, reject));
     }
@@ -170,6 +233,11 @@ function createQueueScheduler(config) {
     function beginSliceQueueShutdown() {
         if (shutdownPromise) return shutdownPromise;
         shuttingDown = true;
+        emitQueueEvent('queue.shutdown', {
+            outcome: 'started',
+            error_code: 'SLICE_QUEUE_SHUTDOWN',
+            extra: { queue_state: 'draining' }
+        }, config.captureContext?.() || {});
         shutdownPromise = new Promise((resolve) => { resolveShutdown = resolve; });
         for (const job of [...queuedJobs, ...activeJobs]) {
             if (!job.controller.signal.aborted) job.controller.abort(config.createShutdownError());
@@ -179,13 +247,18 @@ function createQueueScheduler(config) {
     }
 
     function getQueueStatus() {
-        return {
+        const status = {
             queueLength: queuedJobs.length,
             activeJobs: activeJobs.size,
             maxConcurrent: config.maxConcurrent,
             maxQueueLength: config.maxQueueLength,
             maxQueuePerClient: config.maxQueuePerClient
         };
+        Object.defineProperty(status, 'acceptingJobs', {
+            value: !shuttingDown,
+            enumerable: false
+        });
+        return status;
     }
 
     return {

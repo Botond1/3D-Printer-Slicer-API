@@ -15,7 +15,12 @@ const EXPECTED_METHODS = {
     '/prusa/slice': ['post'],
     '/orca/slice': ['post'],
     '/admin/output-files': ['get'],
-    '/admin/download/{fileName}': ['get']
+    '/admin/download/{fileName}': ['get'],
+    '/health': ['get'],
+    '/ready': ['get'],
+    '/health/detailed': ['get'],
+    '/operations/readiness': ['get'],
+    '/operations/metrics': ['get']
 };
 
 const EXPECTED_RESPONSE_KEYS = {
@@ -29,7 +34,12 @@ const EXPECTED_RESPONSE_KEYS = {
     'POST /prusa/slice': ['200', '400', '401', '408', '413', '422', '500'],
     'POST /orca/slice': ['200', '400', '401', '408', '413', '422', '500'],
     'GET /admin/output-files': ['200', '401', '500', '503'],
-    'GET /admin/download/{fileName}': ['200', '400', '401', '404', '413', '500', '503']
+    'GET /admin/download/{fileName}': ['200', '400', '401', '404', '413', '500', '503'],
+    'GET /health': ['200'],
+    'GET /ready': ['200', '503'],
+    'GET /health/detailed': ['200', '401', '503'],
+    'GET /operations/readiness': ['200', '401', '503'],
+    'GET /operations/metrics': ['200', '401']
 };
 
 function getOperation(operationKey) {
@@ -48,25 +58,34 @@ test('OpenAPI document exposes the current structured paths and methods', () => 
     }
 });
 
-test('OpenAPI protected operations declare a required x-api-key header', () => {
-    const protectedOperations = [
-        'POST /pricing/FDM',
-        'POST /pricing/SLA',
-        'PATCH /pricing/FDM/{material}',
-        'DELETE /pricing/FDM/{material}',
-        'PATCH /pricing/SLA/{material}',
-        'DELETE /pricing/SLA/{material}',
-        'GET /admin/output-files',
-        'GET /admin/download/{fileName}'
-    ];
+test('OpenAPI protected operations declare exact audience-scoped x-api-key security', () => {
+    const protectedOperations = {
+        'POST /pricing/FDM': 'PricingApiKey',
+        'POST /pricing/SLA': 'PricingApiKey',
+        'PATCH /pricing/FDM/{material}': 'PricingApiKey',
+        'DELETE /pricing/FDM/{material}': 'PricingApiKey',
+        'PATCH /pricing/SLA/{material}': 'PricingApiKey',
+        'DELETE /pricing/SLA/{material}': 'PricingApiKey',
+        'GET /admin/output-files': 'ArtifactApiKey',
+        'GET /admin/download/{fileName}': 'ArtifactApiKey',
+        'GET /health/detailed': 'OperationsApiKey',
+        'GET /operations/readiness': 'OperationsApiKey',
+        'GET /operations/metrics': 'OperationsApiKey'
+    };
 
-    for (const operationKey of protectedOperations) {
-        const header = getOperation(operationKey).parameters.find((parameter) => (
+    for (const [operationKey, scheme] of Object.entries(protectedOperations)) {
+        const operation = getOperation(operationKey);
+        assert.deepEqual(operation.security, [{ [scheme]: [] }], operationKey);
+        const header = operation.parameters.find((parameter) => (
             parameter.name === 'x-api-key' && parameter.in === 'header'
         ));
         assert.ok(header, operationKey);
         assert.equal(header.required, true, operationKey);
         assert.equal(header.schema.type, 'string', operationKey);
+    }
+
+    for (const operationKey of ['GET /pricing', 'GET /health', 'GET /ready']) {
+        assert.equal(getOperation(operationKey).security, undefined, operationKey);
     }
 });
 

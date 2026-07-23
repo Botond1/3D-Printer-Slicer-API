@@ -32,7 +32,9 @@ function createResponseRecorder() {
 
 test('global error middleware preserves known status and error-code mappings', async (t) => {
     const cases = [
-        ['admin CORS', { code: 'ADMIN_CORS_ORIGIN_NOT_ALLOWED' }, 403, 'ADMIN_CORS_ORIGIN_NOT_ALLOWED'],
+        ['pricing CORS', { code: 'PRICING_CORS_ORIGIN_NOT_ALLOWED' }, 403, 'PRICING_CORS_ORIGIN_NOT_ALLOWED'],
+        ['artifact CORS', { code: 'ARTIFACT_CORS_ORIGIN_NOT_ALLOWED' }, 403, 'ARTIFACT_CORS_ORIGIN_NOT_ALLOWED'],
+        ['operations CORS', { code: 'OPERATIONS_CORS_ORIGIN_NOT_ALLOWED' }, 403, 'OPERATIONS_CORS_ORIGIN_NOT_ALLOWED'],
         ['slice CORS', { code: 'SLICE_CORS_ORIGIN_NOT_ALLOWED' }, 403, 'SLICE_CORS_ORIGIN_NOT_ALLOWED'],
         ['invalid JSON', { type: 'entity.parse.failed' }, 400, 'INVALID_JSON_BODY'],
         ['large body', { type: 'entity.too.large' }, 413, 'PAYLOAD_TOO_LARGE'],

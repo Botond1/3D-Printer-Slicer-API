@@ -5,6 +5,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const http = require('node:http');
+const originalPythonExecutable = process.env.PYTHON_EXECUTABLE;
+process.env.PYTHON_EXECUTABLE = process.execPath;
+test.after(() => {
+    if (originalPythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;
+    else process.env.PYTHON_EXECUTABLE = originalPythonExecutable;
+});
 const { multipart, request, createHarness } = require('./helpers/s1a-live-http');
 const { createSliceHandlers } = require('../../../app/services/slice.service');
 const {

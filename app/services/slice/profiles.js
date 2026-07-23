@@ -469,8 +469,7 @@ function resolveProfileSelection(engine, technology, layerHeight, profileOverrid
  * @returns {void}
  */
 function logEngineProfileSelection(engine) {
-    const safeEngine = engine === 'orca' ? 'Orca' : 'Prusa';
-    console.log(`[INFO] Starting ${safeEngine} slicing with a contained runtime profile.`);
+    void engine;
 }
 
 module.exports = {

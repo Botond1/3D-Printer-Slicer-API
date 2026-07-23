@@ -45,6 +45,7 @@ function createRuntimeLifecycle(options = {}) {
     const processRef = options.processRef || process;
     const logger = options.logger || console;
     const beginQueueShutdown = options.beginQueueShutdown;
+    const onShutdownStart = options.onShutdownStart || (() => {});
     if (typeof beginQueueShutdown !== 'function') {
         throw new TypeError('beginQueueShutdown must be a function.');
     }
@@ -77,6 +78,11 @@ function createRuntimeLifecycle(options = {}) {
     function shutdown() {
         if (shutdownPromise) return shutdownPromise;
         shuttingDown = true;
+        try {
+            onShutdownStart();
+        } catch (error) {
+            logger.error?.('[SHUTDOWN] Readiness transition failed.', error);
+        }
 
         let queueDrain;
         try {

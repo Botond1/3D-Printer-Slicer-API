@@ -8,6 +8,7 @@ const { DEFAULTS } = require('../../config/constants');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { JOB_WORKSPACES_DIR, JOB_SCRATCH_DIR, OUTPUT_DIR } = require('../../config/paths');
 const { OutputCandidateRegistry } = require('./workspace-output');
+const { emitEvent } = require('../observability/events');
 
 const MARKER_NAME = '.workspace-owner.json';
 const MARKER_VERSION = 1;
@@ -134,14 +135,14 @@ function createWorkspaceCleanup({ id, directory, scratchDirectory, outputCandida
                 cleanupFailed = true;
             }
             if (workspaceRemoved) {
-                try {
-                    options.logger?.info?.('Slice workspace cleaned', {
-                        jobId: id,
+                emitEvent('artifact.cleanup', {
+                    job_id: id,
+                    audience: 'artifact',
+                    outcome: 'success',
+                    extra: {
                         reason: String(reason).replace(/[^a-z0-9_-]/gi, '').slice(0, 40)
-                    });
-                } catch {
-                    // Observability is not an ownership boundary and cannot undo cleanup.
-                }
+                    }
+                });
             }
             if (cleanupFailed) throw new Error('Slice workspace cleanup was incomplete.');
         })();
@@ -282,10 +283,18 @@ async function auditStaleWorkspaces(options = {}) {
             }
         } catch {
             summary.failed++;
+            emitEvent('artifact.cleanup', {
+                job_id: entry.name,
+                audience: 'artifact',
+                outcome: 'failure',
+                error_code: 'WORKSPACE_AUDIT_FAILED'
+            });
             try {
-                options.logger?.warn?.('Slice workspace audit entry failed', { jobId: entry.name });
+                options.logger?.warn?.('Slice workspace audit entry failed', {
+                    jobId: JOB_PATTERN.test(entry.name) ? entry.name : 'unknown'
+                });
             } catch {
-                // A logger failure must not abort inspection of later entries.
+                // Optional observers cannot abort inspection of later entries.
             }
         }
     }

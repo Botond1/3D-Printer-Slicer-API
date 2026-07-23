@@ -5,6 +5,12 @@
 const { DEFAULTS } = require('../../config/constants');
 const { parsePositiveInt } = require('./number-utils');
 const { createQueueScheduler } = require('./queue-scheduler');
+const { recordQueueRejection } = require('../observability/metrics');
+const { emitEvent } = require('../observability/events');
+const {
+    captureCorrelationContext,
+    runWithCorrelationContext
+} = require('../observability/context');
 
 const MAX_SLICE_QUEUE_LENGTH = parsePositiveInt(
     process.env.MAX_SLICE_QUEUE_LENGTH || `${DEFAULTS.MAX_SLICE_QUEUE_LENGTH}`,
@@ -147,6 +153,9 @@ function finiteLimit(value, fallback) {
  * @returns {object} Queue facade.
  */
 function createSliceQueue(options = {}) {
+    const eventEmitter = options.emitEvent || emitEvent;
+    const rejectionRecorder = options.recordQueueRejection || recordQueueRejection;
+    const readContext = options.captureContext || captureCorrelationContext;
     return createQueueScheduler({
         maxConcurrent: finiteLimit(options.maxConcurrent, MAX_CONCURRENT_SLICES),
         maxQueueLength: finiteLimit(options.maxQueueLength, MAX_SLICE_QUEUE_LENGTH),
@@ -158,7 +167,11 @@ function createSliceQueue(options = {}) {
         createFullError: () => new SliceQueueFullError(),
         createTimeoutError: () => new SliceQueueTimeoutError(),
         createClientLimitError: () => new SliceQueueClientLimitError(),
-        createShutdownError: () => new SliceQueueShutdownError()
+        createShutdownError: () => new SliceQueueShutdownError(),
+        emitEvent: eventEmitter,
+        recordQueueRejection: rejectionRecorder,
+        captureContext: readContext,
+        runWithContext: options.runWithContext || runWithCorrelationContext
     });
 }
 

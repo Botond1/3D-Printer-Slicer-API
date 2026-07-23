@@ -209,7 +209,6 @@ async function processSlice(req, res, options = {}) {
         const resolved = resolveRequestOrResponse(req, res, options, workspace);
         if (resolved.response) return resolved.response;
         throwIfAborted(options.signal);
-        console.log(`[INFO] Processing contained slice job ${workspace.id} with ${resolved.request.engine}.`);
         const job = await prepareSliceJob(res, resolved.request, workspace, options.signal);
         if (job.response) return job.response;
         throwIfAborted(options.signal);

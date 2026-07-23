@@ -34,16 +34,11 @@ def resolve_slice_service_api_key(project_root: Path) -> str | None:
     return dotenv_key or None
 
 
-def resolve_admin_keys(project_root: Path) -> tuple[str | None, str | None]:
+def resolve_api_key_candidates(project_root: Path, variable_name: str) -> list[str]:
     dotenv = read_dotenv(project_root)
-    env_key = os.getenv("ADMIN_API_KEY", "").strip() or None
-    dotenv_key = (dotenv.get("ADMIN_API_KEY") or "").strip() or None
-    return env_key, dotenv_key
-
-
-def resolve_admin_key_candidates(project_root: Path) -> list[str]:
-    env_key, dotenv_key = resolve_admin_keys(project_root)
-    ordered = [dotenv_key, env_key]
+    env_key = os.getenv(variable_name, "").strip() or None
+    dotenv_key = (dotenv.get(variable_name) or "").strip() or None
+    ordered = [env_key, dotenv_key]
     seen: set[str] = set()
     candidates: list[str] = []
 
@@ -56,8 +51,13 @@ def resolve_admin_key_candidates(project_root: Path) -> list[str]:
     return candidates
 
 
-def get_preferred_admin_key(project_root: Path) -> str:
-    candidates = resolve_admin_key_candidates(project_root)
-    if candidates:
-        return candidates[0]
-    raise RuntimeError("ADMIN_API_KEY not found in .env or process environment.")
+def resolve_pricing_api_key_candidates(project_root: Path) -> list[str]:
+    return resolve_api_key_candidates(project_root, "PRICING_API_KEY")
+
+
+def resolve_artifact_api_key_candidates(project_root: Path) -> list[str]:
+    return resolve_api_key_candidates(project_root, "ARTIFACT_API_KEY")
+
+
+def resolve_operations_api_key_candidates(project_root: Path) -> list[str]:
+    return resolve_api_key_candidates(project_root, "OPERATIONS_API_KEY")

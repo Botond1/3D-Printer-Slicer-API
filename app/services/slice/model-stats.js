@@ -66,7 +66,6 @@ async function getModelInfo(filePath, signal) {
             throwIfAborted(signal);
             throw err;
         }
-        console.warn('[WARN] Could not read model dimensions from the contained source.');
         return { x: 0, y: 0, z: 0, height_mm: 0 };
     }
 }
@@ -176,12 +175,8 @@ async function parseFdmOutputStats(stats, technology, filePath, engine = 'prusa'
         stats.print_time_readable = printTime.print_time_readable;
         stats.material_used_m = extractMaterialUsedMetersFromGcode(content);
 
-        if (engine === 'orca' && stats.print_time_seconds === 0) {
-            console.warn('[WARN] Orca output parsed without explicit print time metadata.');
-        }
     } catch (error_) {
         if (error_?.code === 'SLICE_RESOURCE_LIMIT_EXCEEDED') throw error_;
-        console.error('[PARSER ERROR] Could not parse the contained slicer artifact.');
         throw invalidStats('Slicer statistics could not be parsed.');
     }
 }
