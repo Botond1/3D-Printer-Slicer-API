@@ -88,7 +88,7 @@ absent-container and absent-image statuses are captured inside Bash conditional
 contexts so the GitHub runner's implicit `errexit` cannot abort before
 classification; unknown inspection or removal states still fail closed.
 
-Image validation now adds the two previously missing runtime gates. A bounded
+Image validation adds the two previously missing runtime gates. A bounded
 helper creates (rather than directly runs) an exact-image container so its
 64-hex container ID can be captured before execution. It then verifies the
 immutable image ID and both `io.s3a.validation-only=true` and
@@ -105,14 +105,29 @@ exactly one bounded regular G-code file, an OrcaSlicer 2.3.1 generator signature
 within a bounded prefix, and a real `G1` extrusion command; mere nonempty output
 cannot pass.
 
+Hosted Source run `30003526788` passed on gate-extension commit
+`4422d4018c98e594e666116fa3fd1bd2d7fcdaab`. Image run `30003526846`
+passed build, exact identity, dynamic identity, main start, liveness,
+diagnostics, SPDX, Grype, triage, evidence boundary/upload, and physical
+resource removal, but failed closed in two newly exposed contracts. The Orca
+child exceeded or otherwise failed within the smoke's 64 KiB capture envelope
+and was classified `orca_slice_execution_failure`; final cleanup combined
+Docker's absent-inspect `[]` stdout with its exact stderr, so safe absence was
+misclassified as an unknown inspection state. The correction aligns the
+internal Orca capture with production's bounded `1024 * 10000` bytes while
+keeping the outer Docker output at 64 KiB, and emits only an exact-schema,
+8 KiB-bounded, secret-free diagnostic on failure. Cleanup now captures inspect
+stdout and stderr separately, accepts only empty/`[]` stdout plus an exact
+not-found stderr, and retains the same ownership proof before deletion.
+
 ## Validation evidence
 
 - Exact npm 10.9.8 clean install added 175 packages, audited 176, and reported
   zero vulnerabilities; `package.json` and `package-lock.json` did not change.
-- Aggregate local tests: JavaScript 533/533; Python 43 discovered/run, 42 pass,
+- Aggregate local tests: JavaScript 537/537; Python 43 discovered/run, 42 pass,
   one Windows-only POSIX permission mutation skipped. The skip is not called a
   pass; hosted Linux Source Validation covers the POSIX gate.
-- Focused final workflow/liveness/mutation suite: 293/293. Required mutations
+- Focused final workflow/liveness/mutation suite: 297/297. Required mutations
   cover hard-coded/root identity, numeric/empty/multiline/error lookup, wrong or
   floating image, missing isolation, missing/unsafe tmpfs options, one-mount
   repair, health/final weakening, cleanup omission, shell injection, invalid

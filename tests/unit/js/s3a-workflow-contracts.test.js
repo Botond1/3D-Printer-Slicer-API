@@ -1061,6 +1061,8 @@ function validateImage(source) {
         'image: cleanup must fail closed around exact image inspection, removal, and absence verification');
         addError(errors, /if container_record="\$\(exact_container_record "\$exact_container"\)"; then[\s\S]*container_state=\$\?/.test(cleanupText)
             && /if exact_image_present "\$IMAGE_REF"; then[\s\S]*image_state=\$\?/.test(cleanupText)
+            && /"\$exact_reference" 2>\/dev\/null\)/.test(cleanupText)
+            && /inspect_error="\$\(docker container inspect "\$exact_reference" 2>&1 >\/dev\/null\)"/.test(cleanupText)
             && !/^\s*exact_(?:container|image)_present [^\n]+\n\s*(?:container|image)_state=\$\?/m.test(cleanupText),
         'image: expected absent cleanup probes must be captured without triggering shell errexit');
         addError(errors, /\[ -n "\$\{EVIDENCE_DIR:-\}" \]/.test(cleanupText),
@@ -1890,6 +1892,10 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             '[ "$validation_label" != "true" ]', 'false',
             '[ "$container_image" != "$EXPECTED_IMAGE_ID" ] || \\\n                 false'),
         /cleanup must target the exact identity, Orca, and main containers/],
+        ['cleanup merges absent inspect streams', (source) => mutateOnce(source,
+            '"$exact_reference" 2>/dev/null)', '"$exact_reference" 2>&1)',
+            '"$exact_reference" 2>&1)'),
+        /expected absent cleanup probes must be captured without triggering shell errexit/],
         ['cleanup dereferences unset image ref', (source) => source.replaceAll('${IMAGE_REF:-}', '$IMAGE_REF'),
         /guard an unset IMAGE_REF/],
         ['cleanup dereferences unset evidence directory', (source) => mutateOnce(source,

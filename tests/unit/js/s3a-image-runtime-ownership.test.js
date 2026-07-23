@@ -83,6 +83,8 @@ function workflowContract(source) {
         'I2_ORCA_PROBE_NAME', 'CONTAINER_NAME']) assert.ok(cleanup.includes(name));
     assert.match(cleanup, /::error title=I2 exact cleanup::\$1/);
     assert.match(cleanup, /container_ownership_failure/);
+    assert.match(cleanup, /"\$exact_reference" 2>\/dev\/null\)/);
+    assert.match(cleanup, /inspect_error="\$\(docker container inspect "\$exact_reference" 2>&1 >\/dev\/null\)"/);
     assert.match(cleanup, /\[ "\$validation_label" != "true" \]/);
     assert.match(cleanup, /\[ "\$expected_label" != "\$EXPECTED_IMAGE_ID" \]/);
     assert.match(cleanup, /docker container rm --force "\$container_id"/);
@@ -179,6 +181,7 @@ test('required workflow mutations are rejected', async (t) => {
         ['cleanup skipped', '        id: exact_cleanup\n        if: ${{ always() }}', '        id: exact_cleanup\n        if: ${{ success() }}'],
         ['cleanup probe omitted', '              "$I2_ORCA_PROBE_NAME" "$CONTAINER_NAME"', '              "$CONTAINER_NAME"'],
         ['cleanup ownership removed', '[ "$validation_label" != "true" ]', 'false'],
+        ['cleanup absence streams merged', '"$exact_reference" 2>/dev/null)', '"$exact_reference" 2>&1)'],
         ['cleanup switches to name', 'docker container rm --force "$container_id"', 'docker container rm --force "$exact_container"']
     ];
     for (const [name, from, to, occurrence = 1] of mutations) await t.test(name, () => {

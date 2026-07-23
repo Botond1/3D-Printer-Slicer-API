@@ -673,16 +673,25 @@ jobs:
             cleanup_status=1
           }
           exact_container_record() {
-            local exact_reference="$1" inspect_output inspect_status
+            local exact_reference="$1" inspect_output inspect_error inspect_status
             inspect_output="$(docker container inspect --format \
               '{{.Id}}|{{.Image}}|{{index .Config.Labels "io.s3a.validation-only"}}|{{index .Config.Labels "io.s3a.expected-image-id"}}' \
-              "$exact_reference" 2>&1)"
+              "$exact_reference" 2>/dev/null)"
             inspect_status=$?
             if [ "$inspect_status" -eq 0 ]; then
               printf '%s\n' "$inspect_output"
               return 0
             fi
             case "$inspect_output" in
+              ""|"[]") ;;
+              *) return 2 ;;
+            esac
+            inspect_error="$(docker container inspect "$exact_reference" 2>&1 >/dev/null)"
+            inspect_status=$?
+            if [ "$inspect_status" -ne 1 ]; then
+              return 2
+            fi
+            case "$inspect_error" in
               "Error: No such object: $exact_reference"|"Error: No such container: $exact_reference"|\
               "Error response from daemon: No such container: $exact_reference") return 1 ;;
               *) return 2 ;;

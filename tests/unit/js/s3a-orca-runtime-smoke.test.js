@@ -26,6 +26,8 @@ function helperContract(source) {
     for (const anchor of [
         "spawnSync('docker', args,", "spawnSync('/usr/local/bin/orca-slicer', args,",
         'shell: false', 'maxBuffer: MAX_OUTPUT_BYTES', 'timeout = DOCKER_TIMEOUT_MS',
+        'const MAX_ORCA_OUTPUT_BYTES = 1024 * 10000;',
+        'maxBuffer: MAX_ORCA_OUTPUT_BYTES', "emitFailure('slice', sliced)",
         "'--pull', 'never'", "'--network', 'none'", "'--cap-drop', 'ALL'",
         "'--security-opt', 'no-new-privileges'", "'--read-only'",
         'rw,nosuid,nodev,noexec,size=256m,uid=${uid},gid=${gid},mode=0700',
@@ -55,6 +57,24 @@ test('Orca smoke accepts only positive dynamic identity and an immutable image I
     assert.ok(args.includes('/tmp:rw,nosuid,nodev,noexec,size=256m,uid=1001,gid=1002,mode=0700'));
     assert.ok(args.includes(`${smoke.IMAGE_LABEL}=${ID}`));
     assert.throws(() => smoke.buildCreateArgs('orca-probe', 'local/image:latest', '1001', '1002'));
+});
+
+test('bounded Orca failure diagnostics accept only the exact sanitized schema', () => {
+    const payload = {
+        phase: 'slice',
+        status: null,
+        signal: null,
+        error_code: 'ENOBUFS',
+        stdout_bytes: 65536,
+        stderr_bytes: 1024,
+        stdout_tail: 'bounded stdout',
+        stderr_tail: 'bounded stderr'
+    };
+    assert.deepEqual(smoke.parseFailureDiagnostic(`${JSON.stringify(payload)}\n`), payload);
+    assert.equal(smoke.parseFailureDiagnostic(JSON.stringify({ ...payload, unexpected: true })), null);
+    assert.equal(smoke.parseFailureDiagnostic(JSON.stringify({ ...payload, status: 999 })), null);
+    assert.equal(smoke.parseFailureDiagnostic('not-json\n'), null);
+    assert.equal(smoke.parseFailureDiagnostic('x'.repeat(smoke.MAX_DIAGNOSTIC_BYTES + 1)), null);
 });
 
 test('synthetic cube is closed, consistently wound, and has exact nonzero normals', () => {
@@ -211,6 +231,7 @@ test('Orca smoke weakening mutations are rejected by the local contract', async 
         ['world-writable tmpfs', 'mode=0700', 'mode=0777'],
         ['synthetic slice removed', "'--slice', '0'", "'--info'"],
         ['output bound removed', 'stat.size > 32 * 1024 * 1024', 'false'],
+        ['native output bound removed', 'maxBuffer: MAX_ORCA_OUTPUT_BYTES', 'maxBuffer: Infinity'],
         ['version assertion removed', 'OrcaSlicer-2\\.3\\.1', 'OrcaSlicer'],
         ['ownership assertion removed', '    assertOwned(record, containerId, imageId);', '    void record;']
     ];

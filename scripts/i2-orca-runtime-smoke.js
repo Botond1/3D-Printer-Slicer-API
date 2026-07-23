@@ -5,6 +5,7 @@ const { spawnSync } = require('node:child_process');
 const { validateImageId, validateName } = require('./i2-image-runtime-diagnostics');
 
 const MAX_OUTPUT_BYTES = 64 * 1024;
+const MAX_DIAGNOSTIC_BYTES = 8 * 1024;
 const DOCKER_TIMEOUT_MS = 300_000;
 const SUCCESS_MARKER = '{"orca_cli_help":"pass","synthetic_slice":"pass"}\n';
 const VALIDATION_LABEL = 'io.s3a.validation-only';
@@ -58,7 +59,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const MAX_OUTPUT_BYTES = 64 * 1024;
+const MAX_ORCA_OUTPUT_BYTES = 1024 * 10000;
 const MAX_GCODE_PREFIX_BYTES = 256 * 1024;
 const root = '/tmp/orca-smoke';
 const input = path.join(root, 'input');
@@ -86,11 +87,33 @@ function runOrca(args, timeout) {
     return spawnSync('/usr/local/bin/orca-slicer', args, {
         encoding: 'utf8',
         env: childEnvironment,
-        maxBuffer: MAX_OUTPUT_BYTES,
+        maxBuffer: MAX_ORCA_OUTPUT_BYTES,
         shell: false,
         timeout,
         windowsHide: true
     });
+}
+
+function boundedText(value) {
+    const text = typeof value === 'string' ? value : '';
+    return text.slice(-2048).replace(/[^\x09\x0a\x20-\x7e]/g, '?');
+}
+
+function emitFailure(phase, result) {
+    const errorCode = typeof result?.error?.code === 'string' &&
+        /^[A-Z0-9_]{1,40}$/.test(result.error.code) ? result.error.code : null;
+    const payload = {
+        phase,
+        status: Number.isInteger(result?.status) ? result.status : null,
+        signal: typeof result?.signal === 'string' && /^[A-Z0-9]{1,20}$/.test(result.signal)
+            ? result.signal : null,
+        error_code: errorCode,
+        stdout_bytes: Buffer.byteLength(typeof result?.stdout === 'string' ? result.stdout : ''),
+        stderr_bytes: Buffer.byteLength(typeof result?.stderr === 'string' ? result.stderr : ''),
+        stdout_tail: boundedText(result?.stdout),
+        stderr_tail: boundedText(result?.stderr)
+    };
+    process.stderr.write(JSON.stringify(payload) + '\n');
 }
 
 function readPrefix(filePath, size) {
@@ -113,7 +136,10 @@ try {
     }
 
     const help = runOrca(['--help'], 60_000);
-    if (help.error || help.signal || help.status !== 0) exit(20);
+    if (help.error || help.signal || help.status !== 0) {
+        emitFailure('help', help);
+        exit(20);
+    }
     const helpOutput = (help.stdout || '') + (help.stderr || '');
     if (!/OrcaSlicer-2\.3\.1(?:\b|[-+])/.test(helpOutput) ||
         !/(?:Usage:|OPTIONS:|--help)/.test(helpOutput)) exit(21);
@@ -128,7 +154,10 @@ try {
         '--outputdir', output,
         model
     ], 180_000);
-    if (sliced.error || sliced.signal || sliced.status !== 0) exit(30);
+    if (sliced.error || sliced.signal || sliced.status !== 0) {
+        emitFailure('slice', sliced);
+        exit(30);
+    }
 
     const generated = fs.readdirSync(output)
         .filter((name) => name.toLowerCase().endsWith('.gcode'));
@@ -274,6 +303,38 @@ function parseSmokeResult(result) {
     }
 }
 
+function parseFailureDiagnostic(stderr) {
+    if (typeof stderr !== 'string' || Buffer.byteLength(stderr) > MAX_DIAGNOSTIC_BYTES) return null;
+    let payload;
+    try {
+        payload = JSON.parse(stderr.replace(/\r?\n$/, ''));
+    } catch {
+        return null;
+    }
+    const keys = Object.keys(payload).sort();
+    const expectedKeys = ['error_code', 'phase', 'signal', 'status', 'stderr_bytes',
+        'stderr_tail', 'stdout_bytes', 'stdout_tail'];
+    if (JSON.stringify(keys) !== JSON.stringify(expectedKeys.sort()) ||
+        !['help', 'slice'].includes(payload.phase) ||
+        !(payload.status === null || (Number.isInteger(payload.status) &&
+            payload.status >= 0 && payload.status <= 255)) ||
+        !(payload.signal === null || /^[A-Z0-9]{1,20}$/.test(payload.signal)) ||
+        !(payload.error_code === null || /^[A-Z0-9_]{1,40}$/.test(payload.error_code)) ||
+        !Number.isSafeInteger(payload.stdout_bytes) || payload.stdout_bytes < 0 ||
+        payload.stdout_bytes > 20 * 1024 * 1024 ||
+        !Number.isSafeInteger(payload.stderr_bytes) || payload.stderr_bytes < 0 ||
+        payload.stderr_bytes > 20 * 1024 * 1024 ||
+        typeof payload.stdout_tail !== 'string' || typeof payload.stderr_tail !== 'string' ||
+        Buffer.byteLength(payload.stdout_tail) > 4096 ||
+        Buffer.byteLength(payload.stderr_tail) > 4096) return null;
+    return payload;
+}
+
+function reportFailureDiagnostic(result) {
+    const payload = parseFailureDiagnostic(result?.stderr);
+    if (payload) process.stderr.write(`I2_ORCA_DIAGNOSTIC ${JSON.stringify(payload)}\n`);
+}
+
 function cleanupOwnedContainer(containerId, imageId, docker = runDocker) {
     const record = inspectContainer(containerId, docker);
     assertOwned(record, containerId, imageId);
@@ -301,7 +362,9 @@ function runSmoke(env = process.env, docker = runDocker) {
         containerId = parseCreateResult(docker(
             buildCreateArgs(name, imageId, env.SERVICE_UID, env.SERVICE_GID)));
         assertOwned(inspectContainer(containerId, docker), containerId, imageId);
-        parseSmokeResult(docker(buildStartArgs(containerId)));
+        const started = docker(buildStartArgs(containerId));
+        if (started.status !== 0) reportFailureDiagnostic(started);
+        parseSmokeResult(started);
         appendSuccess(env.GITHUB_OUTPUT);
     } catch (error) {
         failure = error;
@@ -335,6 +398,7 @@ module.exports = Object.freeze({
     DOCKER_TIMEOUT_MS,
     IMAGE_LABEL,
     INSPECT_FORMAT,
+    MAX_DIAGNOSTIC_BYTES,
     MAX_OUTPUT_BYTES,
     ORCA_CONTAINER_SCRIPT,
     SUCCESS_MARKER,
@@ -349,6 +413,7 @@ module.exports = Object.freeze({
     buildSyntheticStl,
     cleanupOwnedContainer,
     parseCreateResult,
+    parseFailureDiagnostic,
     parseInspectResult,
     parsePositiveEnvironmentId,
     parseSmokeResult,
