@@ -573,6 +573,9 @@ jobs:
           node <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');
+          const {
+            validateTopologyEvidence
+          } = require('./scripts/i5-topology-evidence-contract');
           const failBoundary = (code) => {
             if (!/^[a-z0-9_]{1,80}$/.test(code)) code = 'unclassified_boundary_failure';
             console.error(`::error title=I2 evidence boundary::${code}`);
@@ -661,25 +664,9 @@ jobs:
                 || typeof entry.output !== 'string' || entry.output.length > 2048)) {
             failBoundary('runtime_diagnostic_schema_failure');
           }
-          const topologyKeys = [
-            'classification', 'sentinelOperational', 'internalNetwork', 'loopbackIngress',
-            'authenticatedReadiness', 'apiEgressDenied', 'nativeEgressDenied'
-          ];
-          const topologyBooleanKeys = topologyKeys.filter((key) => key !== 'classification');
-          if (!topology || typeof topology !== 'object' || Array.isArray(topology)
-              || JSON.stringify(Object.keys(topology).sort()) !== JSON.stringify([...topologyKeys].sort())
-              || !['success', 'BLOCKED_S4_EGRESS_CAPABILITY', 'topology_gate_failure']
-                .includes(topology.classification)
-              || topologyBooleanKeys.some((key) => typeof topology[key] !== 'boolean')) {
-            failBoundary('topology_evidence_schema_failure');
-          }
-          const topologyProofs = topologyBooleanKeys.map((key) => topology[key]);
-          if ((topology.classification === 'success' && topologyProofs.some((value) => value !== true))
-              || (topology.classification === 'BLOCKED_S4_EGRESS_CAPABILITY'
-                && (topology.sentinelOperational !== true || topology.internalNetwork !== true
-                  || topology.loopbackIngress !== false || topology.authenticatedReadiness !== false
-                  || topology.apiEgressDenied !== true || topology.nativeEgressDenied !== true))) {
-            failBoundary('topology_evidence_classification_failure');
+          const topologyEvidenceError = validateTopologyEvidence(topology);
+          if (topologyEvidenceError) {
+            failBoundary(topologyEvidenceError);
           }
 
           const identityLines = fs.readFileSync(path.join(actualRoot, 'image-identity.txt'), 'utf8')
@@ -935,6 +922,7 @@ jobs:
           ORCA_CLI_SMOKE_CLASSIFICATION: ${{ steps.orca_cli_smoke.outputs.classification }}
           TOPOLOGY_OUTCOME: ${{ steps.topology_gate.outcome }}
           TOPOLOGY_CLASSIFICATION: ${{ steps.topology_gate.outputs.classification }}
+          TOPOLOGY_CONTRACT_REASON: ${{ steps.topology_gate.outputs.contract_reason }}
           TOPOLOGY_SENTINEL_OPERATIONAL: ${{ steps.topology_gate.outputs.sentinel_operational }}
           ARTIFACT_BOUNDARY_OUTCOME: ${{ steps.artifact_boundary.outcome }}
           EVIDENCE_UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
@@ -972,8 +960,21 @@ jobs:
           }
           if (process.env.TOPOLOGY_OUTCOME !== 'success'
               || process.env.TOPOLOGY_CLASSIFICATION !== 'success') {
-            failures.push(process.env.TOPOLOGY_CLASSIFICATION === 'BLOCKED_S4_EGRESS_CAPABILITY'
-              ? 'BLOCKED_S4_EGRESS_CAPABILITY' : 'topology_gate_failure');
+            const allowedBlockedReason = (
+              process.env.TOPOLOGY_CLASSIFICATION === 'BLOCKED_S4_EGRESS_CAPABILITY'
+              && [
+                'loopback_ingress_unavailable', 'authenticated_readiness_unavailable'
+              ].includes(process.env.TOPOLOGY_CONTRACT_REASON)
+            ) || (
+              process.env.TOPOLOGY_CLASSIFICATION === 'BLOCKED_S4_HOSTED_RUNTIME_CAPABILITY'
+              && [
+                'docker_command_unavailable', 'private_runtime_probe_unavailable'
+              ].includes(process.env.TOPOLOGY_CONTRACT_REASON)
+            );
+            failures.push(allowedBlockedReason
+              ? process.env.TOPOLOGY_CLASSIFICATION : 'topology_gate_failure');
+          } else if (process.env.TOPOLOGY_CONTRACT_REASON !== 'success') {
+            failures.push('topology_gate_failure');
           }
           if (Object.hasOwn(process.env, 'TOPOLOGY_SENTINEL_OPERATIONAL')
               && process.env.TOPOLOGY_SENTINEL_OPERATIONAL !== 'true') {

@@ -28,12 +28,22 @@
   Docker Desktop 29.6.1 ordinary bridge preserved loopback ingress but allowed
   API/native DNS/TCP/UDP sentinel egress. Internal bridge denied egress but
   exposed no loopback listener. Exact resources were removed.
-- Compose intentionally remains unchanged, loopback-published, and ordinary
-  bridge. Status is `BLOCKED_S4_EGRESS_CAPABILITY`; no sidecar was invented.
-  The final committed candidate SHA is recorded by the closing execution
-  report. Hosted topology evidence is `NOT_DISPATCHED` because the mandatory
-  local gate is blocked. Deployed caller/proxy/firewall/secret/digest/VPS state
-  and S3b remain `UNVERIFIED`.
+- Exact candidate `510e6110ef5c49cd03962627210d6db114554618`
+  passed hosted Source run `30037842766`. Hosted Image run `30037842526`
+  failed closed on independent semantic-abort and monolithic private-inspect
+  assertions while image identity, health, authenticated Prusa/Orca slicing,
+  egress sentinel, SBOM/Grype, evidence upload, and cleanup succeeded.
+- The corrective repository contract accepts only bounded abort termination
+  representations after active admission, explicit abort, native settlement,
+  queue-zero, and unchanged API/filesystem inventories. Private topology is a
+  pure allowlisted validator: canonical `HostConfig.PortBindings` proves the
+  requested fixed loopback publish; a bounded runtime projection separately
+  proves no external default route. Docker API 1.48 and Desktop 29 fixtures
+  cover the inspect-shape portability seam.
+- Compose remains unchanged and no sidecar was invented. Status is
+  `IN_PROGRESS` pending final exact-SHA hosted Source and Image success.
+  Deployed caller/proxy/firewall/secret/digest/VPS state and S3b remain
+  `UNVERIFIED`.
 
 ## Current I4/S2 resource-state candidate
 

@@ -3,6 +3,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const {
+    IMAGE_LABEL,
+    TOPOLOGY_CONTRACT_REASONS,
+    VALIDATION_LABEL,
+    validatePrivateTopology,
+    validateSentinelTopology
+} = require('./i5-topology-contract');
 
 const IMAGE_ID = /^sha256:[0-9a-f]{64}$/;
 const NAME = /^[a-z0-9][a-z0-9_.-]{0,62}$/;
@@ -14,8 +21,6 @@ const SENTINEL_SUBNET = '192.0.2.0/28';
 const SYNTHETIC_HOST = 'i5-egress-sentinel.validation';
 const SYNTHETIC_IP = '192.0.2.2';
 const ORIGIN = 'https://i5.validation.invalid';
-const VALIDATION_LABEL = 'io.s3a.validation-only';
-const IMAGE_LABEL = 'io.s3a.expected-image-id';
 const CREDENTIALS = Object.freeze({
     SLICE_SERVICE_API_KEY: 'i5-validation-slice-active-260723-a1',
     SLICE_SERVICE_API_KEY_PREVIOUS: 'i5-validation-slice-previous-260723-a2',
@@ -41,12 +46,16 @@ function run(args, options = {}) {
         timeout: options.timeout || 30_000,
         maxBuffer: MAX_OUTPUT
     });
-    if (result.error || result.signal || result.status !== (options.status ?? 0)) {
-        fail(options.failure || 'docker_command_failure');
-    }
     if (Buffer.byteLength(result.stdout || '') > MAX_OUTPUT
         || Buffer.byteLength(result.stderr || '') > MAX_OUTPUT) {
         fail('docker_output_unbounded');
+    }
+    if (result.error?.code === 'ETIMEDOUT' || result.error?.code === 'ENOENT') {
+        fail(options.capability || 'docker_command_unavailable',
+            'BLOCKED_S4_HOSTED_RUNTIME_CAPABILITY');
+    }
+    if (result.error || result.signal || result.status !== (options.status ?? 0)) {
+        fail(options.failure || 'docker_command_failure');
     }
     return result;
 }
@@ -184,6 +193,22 @@ if(child.error||child.signal||child.status!==0||child.stderr)process.exit(42);
 process.stdout.write(child.stdout);
 `;
 
+const PRIVATE_RUNTIME_PROBE = String.raw`
+const fs=require('node:fs');
+const text=fs.readFileSync('/proc/net/route','utf8');
+if(Buffer.byteLength(text,'utf8')>32768)process.exit(41);
+const externalDefaultRoute=text.split('\n').slice(1).some(line=>{
+  const fields=line.trim().split(/\s+/);
+  if(fields.length<8)return false;
+  const flags=Number.parseInt(fields[3],16);
+  return fields[1]==='00000000'&&fields[7]==='00000000'
+    &&Number.isSafeInteger(flags)&&(flags&1)===1;
+});
+process.stdout.write(JSON.stringify({
+  uid:process.getuid(),gid:process.getgid(),externalDefaultRoute
+}));
+`;
+
 function parseProbe(result, label, expected) {
     if (result.stderr || Buffer.byteLength(result.stdout || '') > 4096) fail(`${label}_output_failure`);
     let payload;
@@ -196,51 +221,52 @@ function parseProbe(result, label, expected) {
     return payload;
 }
 
-function exactImageMismatch(container, values) {
-    return container?.Image !== values.imageId;
-}
-
 function inspectSentinel(values) {
     const network = JSON.parse(run(['network', 'inspect', values.sentinelNetworkName]).stdout)[0];
     const container = JSON.parse(run(['container', 'inspect', values.sentinelName]).stdout)[0];
-    const attachment = container?.NetworkSettings?.Networks?.[values.sentinelNetworkName];
-    if (network?.Internal !== false || network?.Driver !== 'bridge'
-        || network?.Labels?.[VALIDATION_LABEL] !== 'true'
-        || network?.Labels?.[IMAGE_LABEL] !== values.imageId
-        || Object.keys(container?.NetworkSettings?.Networks || {}).length !== 1
-        || attachment?.IPAddress !== SYNTHETIC_IP
-        || exactImageMismatch(container, values)
-        || container?.Config?.Labels?.[VALIDATION_LABEL] !== 'true'
-        || container?.Config?.Labels?.[IMAGE_LABEL] !== values.imageId
-        || container?.HostConfig?.ReadonlyRootfs !== true
-        || JSON.stringify(container?.HostConfig?.CapDrop) !== JSON.stringify(['ALL'])
-        || container?.HostConfig?.Sysctls?.['net.ipv4.ip_unprivileged_port_start'] !== '0'
-        || !container?.HostConfig?.SecurityOpt?.includes('no-new-privileges')) {
-        fail('sentinel_topology_contract_failure');
+    const result = validateSentinelTopology({
+        network,
+        container,
+        networkName: values.sentinelNetworkName,
+        imageId: values.imageId,
+        syntheticIp: SYNTHETIC_IP
+    });
+    if (!result.ok) fail(result.reason);
+}
+
+function privateRuntimeProbe(values) {
+    const result = run([
+        'exec', values.containerName, 'node', '-e', ENCODED_EVAL,
+        encode(PRIVATE_RUNTIME_PROBE)
+    ], {
+        timeout: 10_000,
+        capability: 'private_runtime_probe_unavailable',
+        failure: 'private_runtime_probe_execution_failure'
+    });
+    if (result.stderr || Buffer.byteLength(result.stdout || '') > 4096) {
+        fail('private_runtime_probe_execution_failure');
+    }
+    try {
+        return JSON.parse(String(result.stdout || '').trim());
+    } catch {
+        fail('private_runtime_probe_execution_failure');
     }
 }
 
 function inspectTopology(values) {
     const network = JSON.parse(run(['network', 'inspect', values.networkName]).stdout)[0];
     const container = JSON.parse(run(['container', 'inspect', values.containerName]).stdout)[0];
-    const attachment = container?.NetworkSettings?.Networks?.[values.networkName];
-    const published = container?.NetworkSettings?.Ports?.['3000/tcp'];
-    const publish = Array.isArray(published) && published.length === 1 ? published[0] : null;
-    if (network?.Internal !== true || network?.Driver !== 'bridge'
-        || network?.Labels?.[VALIDATION_LABEL] !== 'true'
-        || network?.Labels?.[IMAGE_LABEL] !== values.imageId
-        || Object.keys(container?.NetworkSettings?.Networks || {}).length !== 1
-        || !attachment || attachment.Gateway !== ''
-        || exactImageMismatch(container, values)
-        || container?.Config?.Labels?.[VALIDATION_LABEL] !== 'true'
-        || container?.Config?.Labels?.[IMAGE_LABEL] !== values.imageId
-        || JSON.stringify(container?.HostConfig?.Dns) !== JSON.stringify([SYNTHETIC_IP])
-        || container?.HostConfig?.ReadonlyRootfs !== true
-        || JSON.stringify(container?.HostConfig?.CapDrop) !== JSON.stringify(['ALL'])
-        || !container?.HostConfig?.SecurityOpt?.includes('no-new-privileges')
-        || publish?.HostIp !== '127.0.0.1' || publish?.HostPort !== String(HOST_PORT)) {
-        fail('private_topology_contract_failure');
-    }
+    const result = validatePrivateTopology({
+        network,
+        container,
+        networkName: values.networkName,
+        imageId: values.imageId,
+        uid: values.uid,
+        gid: values.gid,
+        syntheticDns: SYNTHETIC_IP,
+        runtimeProbe: privateRuntimeProbe(values)
+    });
+    if (!result.ok) fail(result.reason);
 }
 
 function validationLabels(values) {
@@ -337,20 +363,36 @@ async function boundedFetch(route, key) {
 }
 
 async function awaitIngress() {
+    let loopbackIngress = false;
+    let authenticatedReadiness = false;
     for (let attempt = 0; attempt < 60; attempt += 1) {
         try {
             const live = await boundedFetch('/health');
+            loopbackIngress = live.status === 200;
+            if (!loopbackIngress) {
+                await new Promise((resolve) => setTimeout(resolve, 250));
+                continue;
+            }
             const ready = await boundedFetch('/ready');
             const operations = await boundedFetch('/operations/readiness', CREDENTIALS.OPERATIONS_API_KEY);
             if (live.status === 200 && ready.status === 200 && operations.status === 200) {
-                const body = JSON.parse(operations.text);
+                let body;
+                try {
+                    body = JSON.parse(operations.text);
+                } catch {
+                    fail('authenticated_readiness_shape_failure');
+                }
                 if (body?.ready !== true) fail('authenticated_readiness_shape_failure');
-                return true;
+                authenticatedReadiness = true;
+                break;
             }
-        } catch {}
+        } catch (error) {
+            if (error?.message === 'authenticated_readiness_shape_failure'
+                || error?.message === 'ingress_response_unbounded') throw error;
+        }
         await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    return false;
+    return { loopbackIngress, authenticatedReadiness };
 }
 
 function parseDenial(result, label) {
@@ -378,16 +420,18 @@ function writeEvidence(values, evidence) {
     }
 }
 
-function writeOutputs(classification, sentinelOperational) {
+function writeOutputs(classification, sentinelOperational, contractReason) {
     if (!process.env.GITHUB_OUTPUT) return;
     fs.appendFileSync(process.env.GITHUB_OUTPUT,
-        `classification=${classification}\nsentinel_operational=${sentinelOperational}\n`);
+        `classification=${classification}\nsentinel_operational=${sentinelOperational}\n`
+        + `contract_reason=${contractReason}\n`);
 }
 
 async function main() {
     let values;
     const evidence = {
         classification: 'topology_gate_failure',
+        contractReason: 'unclassified_failure',
         sentinelOperational: false,
         internalNetwork: false,
         loopbackIngress: false,
@@ -402,31 +446,44 @@ async function main() {
         evidence.sentinelOperational = true;
         inspectTopology(values);
         evidence.internalNetwork = true;
+        evidence.contractReason = 'success';
         const denied = runEgressProbes(values);
         evidence.apiEgressDenied = Object.values(denied.api).every((value) => value === false);
         evidence.nativeEgressDenied = Object.values(denied.native).every((value) => value === false);
-        evidence.loopbackIngress = await awaitIngress();
-        if (!evidence.loopbackIngress) {
+        const ingress = await awaitIngress();
+        evidence.loopbackIngress = ingress.loopbackIngress;
+        evidence.authenticatedReadiness = ingress.authenticatedReadiness;
+        if (!evidence.loopbackIngress || !evidence.authenticatedReadiness) {
             evidence.classification = 'BLOCKED_S4_EGRESS_CAPABILITY';
+            evidence.contractReason = evidence.loopbackIngress
+                ? 'authenticated_readiness_unavailable' : 'loopback_ingress_unavailable';
             writeEvidence(values, evidence);
-            fail('internal_network_loopback_ingress_unavailable', 'BLOCKED_S4_EGRESS_CAPABILITY');
+            fail(evidence.contractReason, 'BLOCKED_S4_EGRESS_CAPABILITY');
         }
-        evidence.authenticatedReadiness = true;
         evidence.classification = 'success';
+        evidence.contractReason = 'success';
         writeEvidence(values, evidence);
-        writeOutputs('success', true);
+        writeOutputs('success', true, 'success');
     } catch (error) {
+        const detail = TOPOLOGY_CONTRACT_REASONS.includes(error?.message)
+            ? error.message : 'unclassified_failure';
+        evidence.contractReason = detail;
         if (values && !fs.existsSync(path.join(values.evidenceDir, 'topology-evidence.json'))) {
             evidence.classification = error?.classification || 'topology_gate_failure';
             writeEvidence(values, evidence);
         }
         const classification = error?.classification || 'topology_gate_failure';
-        const detail = /^[a-z0-9_]{1,80}$/.test(error?.message || '')
-            ? error.message : 'unclassified_failure';
-        writeOutputs(classification, evidence.sentinelOperational);
+        writeOutputs(classification, evidence.sentinelOperational, detail);
         process.stderr.write(`::error title=I5 topology gate::${classification}:${detail}\n`);
         process.exitCode = 1;
     }
 }
 
-void main();
+if (require.main === module) void main();
+
+module.exports = {
+    PRIVATE_RUNTIME_PROBE,
+    awaitIngress,
+    inspectTopology,
+    privateRuntimeProbe
+};

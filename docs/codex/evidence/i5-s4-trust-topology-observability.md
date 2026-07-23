@@ -2,16 +2,42 @@
 
 ## Status
 
-- Stage result: `BLOCKED_S4_EGRESS_CAPABILITY`.
+- Stage result: `IN_PROGRESS` pending final exact-SHA hosted validation.
 - Exact source baseline:
   `5be7b19d13616f06504c18217e25bf95c97c6e96`.
 - Branch: `codex/i5-s4-trust-topology-observability`.
-- Final candidate source SHA: the committed branch tip recorded by the closing
-  execution report (`git rev-parse HEAD` after this evidence commit).
-- Authorization boundary: one normal non-force target-branch push and hosted
-  validation were authorized. They were not executed because the mandatory
-  local topology gate reached `BLOCKED_S4_EGRESS_CAPABILITY`. Deployment and
-  production actions were not authorized.
+- Prior candidate source SHA:
+  `510e6110ef5c49cd03962627210d6db114554618`.
+- Authorization boundary: one final normal non-force target-branch push and
+  hosted validation are authorized. Deployment and production actions are not.
+
+## Hosted corrective diagnosis
+
+Exact candidate `510e6110ef5c49cd03962627210d6db114554618`
+passed Source run `30037842766`. Image run `30037842526` failed closed with two
+independent final classifications:
+
+- `runtime_resource_contract_failure:container_probe_failure`;
+- `topology_gate_failure:private_topology_contract_failure`.
+
+The same image run proved exact image/non-root identity, health, authenticated
+Prusa and Orca slices, active abort admission and server/native settlement, no
+bounded post-abort promoted artifact, an operational egress sentinel, valid
+SBOM, Grype HIGH=0/CRITICAL=0, zero known Swiper advisories, bounded evidence
+upload, and exact cleanup. The old abort probe required one timing-dependent
+client exception. The old topology assertion also treated realized
+`NetworkSettings.Ports` as the requested binding contract.
+
+The corrective source preserves substantive abort invariants while accepting
+only allowlisted bounded abort exception, transport-close, or non-success
+terminal-response representations. A pure topology validator now uses exact
+`HostConfig.NetworkMode` and singleton
+`HostConfig.PortBindings['3000/tcp']={HostIp:127.0.0.1,HostPort:31000}`;
+external-default-route absence is a separate bounded runtime projection.
+Docker API 1.48 and Docker Desktop 29 disposable fixtures demonstrated that
+the canonical requested binding can coexist with an empty realized
+`NetworkSettings.Ports` list. Fixture resources and the port listener were
+removed exactly. Final hosted results are not pre-claimed.
 
 Repository source and deterministic test contracts are implemented for scoped
 credentials, Origin/proxy/request identity, readiness, structured events, and

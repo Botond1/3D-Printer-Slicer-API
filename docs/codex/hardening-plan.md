@@ -2,7 +2,7 @@
 
 ## I5/S4 scoped trust, topology, and observability checkpoint
 
-Status: `BLOCKED_S4_EGRESS_CAPABILITY`.
+Status: `IN_PROGRESS` pending final exact-SHA hosted validation.
 
 Exact baseline is `5be7b19d13616f06504c18217e25bf95c97c6e96`.
 Repository implementation and deterministic tests cover:
@@ -27,21 +27,24 @@ On Docker Desktop 29.6.1, ordinary bridge plus loopback publish preserved
 ingress but allowed API and native DNS/TCP/UDP egress. An internal bridge denied
 egress but exposed no loopback listener. Exact A/B resources were removed.
 Compose remains unchanged, loopback-published, and non-internal. No sidecar was
-invented. Therefore the repository cannot prove both required ingress and
-egress denial in this environment, and S4 is blocked on capability rather than
-verified.
+invented. Exact candidate `510e6110ef5c49cd03962627210d6db114554618`
+passed hosted Source run `30037842766`; Image run `30037842526` failed closed
+on two independent contracts: active-abort client transport representation and
+the monolithic private-inspect predicate. The corrective source now accepts
+only bounded semantic abort outcomes after the substantive server invariants,
+validates requested loopback publication from canonical
+`HostConfig.PortBindings`, proves external-default-route absence separately,
+and emits one allowlisted `contractReason`. Docker API 1.48 and Desktop 29
+fixtures cover the differing inspect representations. These are repository and
+local-test facts only; the final candidate is not complete until both hosted
+workflows pass on its exact SHA.
 
-The final committed candidate SHA is recorded by the closing execution report.
-Hosted candidate runs are `NOT_DISPATCHED` because the mandatory local
-topology gate is blocked. External
+External
 reverse-proxy CIDRs/hops and
 timeouts, intended/denied deployed callers, host firewall/egress, production
 secret source/ownership/mode, deployed digest/VPS state, branch protection/
 required checks, S3b promotion/readiness/rollback, and production readiness are
-`UNVERIFIED`. A normal non-force target-branch push and hosted validation were
-authorized but withheld by the fail-closed local gate; deploy and production
-actions were not authorized. S5 owns the isolated-worker/firewall architecture
-decision.
+`UNVERIFIED`. Deploy and production actions are not authorized.
 
 ## I4/S2 fast-track checkpoint
 

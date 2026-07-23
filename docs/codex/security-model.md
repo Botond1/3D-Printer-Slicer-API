@@ -13,11 +13,13 @@ Exact repository baseline:
 | Proxy and request identity | `IMPLEMENTED_AND_TESTED` | Proxy trust defaults false; enabled trust requires unique validated IP/CIDR peers or `loopback` and rejects wildcard/overbroad/malformed/unknown values. Nearest-untrusted-hop and spoofed-prefix cases are tested. Unsafe request IDs are replaced and the safe resolved ID is returned. Deployed CIDRs/hops remain `UNVERIFIED`. |
 | Readiness and operational disclosure | `IMPLEMENTED_AND_TESTED` | Public `/health` is liveness and public `/ready` exposes only READY/NOT_READY. Operations scope protects detailed health, stable readiness reasons, and metrics. No repository result proves production readiness. |
 | Structured events and metrics | `IMPLEMENTED_AND_TESTED` | Version-1 fixed event names, bounded request/job/artifact correlation, field allowlists, injection neutralization, secret/path/filename/customer-data exclusion, fixed metric enums, and output bounds have deterministic tests. Production collection, retention, access, alert routing, and thresholds remain `UNVERIFIED`. |
-| Private ingress plus denied API/native egress | `BLOCKED_S4_EGRESS_CAPABILITY` | Hosted baseline Source `30022045664` and Image `30022045578` passed; local Docker Desktop 29.6.1 used exact image `sha256:5f159e1051233811ad663175311059829aecdbff16706e39aceba4aac77f9aa3`. Ordinary bridge preserved loopback ingress but allowed API/native DNS/TCP/UDP egress. Internal bridge denied egress but exposed no host listener. Exact resources were removed. |
+| Private ingress plus denied API/native egress | `IN_PROGRESS` | Exact candidate `510e6110ef5c49cd03962627210d6db114554618` passed hosted Source run `30037842766`; Image run `30037842526` failed closed on independent abort-transport and private-inspect contracts. The corrective validator reads requested loopback publication only from canonical `HostConfig.PortBindings`, proves external-default-route absence separately, retains real ingress/readiness and API/native DNS/TCP/UDP denial probes, and emits one allowlisted reason. Final exact-SHA hosted proof is pending. |
 
 Compose remains unchanged, loopback-published, and ordinary bridge. No sidecar,
-production firewall, deployed proxy, or worker isolation is invented. The final
-candidate SHA and hosted topology result are pending. Intended/denied
+production firewall, deployed proxy, or worker isolation is invented. Docker
+API 1.48 and Desktop 29 fixture differences are local portability evidence, not
+production topology proof. The final candidate SHA and hosted topology result
+are pending. Intended/denied
 deployed caller, reverse-proxy CIDRs/hops/timeouts, host egress/firewall,
 production secret source/ownership/mode/current/previous/revoked state, deployed
 digest/VPS state, branch policy, S3b, and production readiness remain

@@ -7,8 +7,10 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '../../..');
 const SCRIPT_PATH = path.join(ROOT, 'scripts/i5-topology-runtime-gate.js');
+const CONTRACT_PATH = path.join(ROOT, 'scripts/i5-topology-contract.js');
 const WORKFLOW_PATH = path.join(ROOT, '.github/workflows/image-validation.yml');
 const SCRIPT = fs.readFileSync(SCRIPT_PATH, 'utf8').replace(/\r\n?/g, '\n');
+const CONTRACT = fs.readFileSync(CONTRACT_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const WORKFLOW = fs.readFileSync(WORKFLOW_PATH, 'utf8').replace(/\r\n?/g, '\n');
 
 function requireAnchors(source, anchors) {
@@ -46,9 +48,11 @@ function validateTopology(source) {
         'net.createServer',
         "dgram.createSocket('udp4')",
         'sentinelOperational: false',
-        'container?.Image !== values.imageId',
-        'Object.keys(container?.NetworkSettings?.Networks || {}).length !== 1',
-        'network?.Internal !== true',
+        'validatePrivateTopology({',
+        'validateSentinelTopology({',
+        'PRIVATE_RUNTIME_PROBE',
+        'externalDefaultRoute',
+        'contractReason: \'unclassified_failure\'',
         "const dns=require('node:dns').promises,net=require('node:net'),dgram=require('node:dgram');",
         'await dns.lookup(host)',
         'tcp:await tcp()',
@@ -78,6 +82,21 @@ function validateTopology(source) {
     ]);
 }
 
+function validateContract(source) {
+    requireAnchors(source, [
+        'container.Image !== imageId',
+        'host.NetworkMode !== networkName',
+        'host.PortBindings[PRIVATE_CONTAINER_PORT]',
+        'binding.HostIp !== PRIVATE_HOST_IP',
+        'binding.HostPort !== PRIVATE_HOST_PORT',
+        'JSON.stringify(Object.keys(networks)) !== JSON.stringify([networkName])',
+        'network.Internal !== true',
+        'runtimeProbe.externalDefaultRoute',
+        'private_port_binding_host_port_mismatch',
+        'private_default_route_present'
+    ]);
+}
+
 function validateWorkflow(source) {
     const topology = workflowStep(source, 'topology_gate');
     const boundary = workflowStep(source, 'artifact_boundary');
@@ -89,9 +108,9 @@ function validateWorkflow(source) {
     ]);
     requireAnchors(boundary, [
         "'topology-evidence.json': 16 * 1024",
-        "'classification', 'sentinelOperational', 'internalNetwork', 'loopbackIngress'",
-        "'authenticatedReadiness', 'apiEgressDenied', 'nativeEgressDenied'",
-        'topology_evidence_schema_failure'
+        "require('./scripts/i5-topology-evidence-contract')",
+        'validateTopologyEvidence(topology)',
+        'failBoundary(topologyEvidenceError)'
     ]);
     requireAnchors(cleanup, [
         '"$I5_TOPOLOGY_PROBE_NAME"',
@@ -110,10 +129,16 @@ function validateWorkflow(source) {
     requireAnchors(final, [
         'TOPOLOGY_OUTCOME: ${{ steps.topology_gate.outcome }}',
         'TOPOLOGY_CLASSIFICATION: ${{ steps.topology_gate.outputs.classification }}',
+        'TOPOLOGY_CONTRACT_REASON: ${{ steps.topology_gate.outputs.contract_reason }}',
         'CLEANUP_OUTCOME: ${{ steps.exact_cleanup.outcome }}',
         "if (process.env.TOPOLOGY_OUTCOME !== 'success'\n"
             + "              || process.env.TOPOLOGY_CLASSIFICATION !== 'success') {",
-        "failures.push(process.env.TOPOLOGY_CLASSIFICATION === 'BLOCKED_S4_EGRESS_CAPABILITY'",
+        "process.env.TOPOLOGY_CLASSIFICATION === 'BLOCKED_S4_EGRESS_CAPABILITY'",
+        "process.env.TOPOLOGY_CLASSIFICATION === 'BLOCKED_S4_HOSTED_RUNTIME_CAPABILITY'",
+        "'loopback_ingress_unavailable', 'authenticated_readiness_unavailable'",
+        "'docker_command_unavailable', 'private_runtime_probe_unavailable'",
+        "process.env.TOPOLOGY_CONTRACT_REASON !== 'success'",
+        'allowedBlockedReason',
         "failures.push('cleanup_failure');",
         'if (classifications.length > 0)',
         'process.exit(1);'
@@ -127,8 +152,8 @@ function mutate(source, from, to) {
 
 test('topology runtime gate rejects exact-image, private-ingress, and egress mutations', async (t) => {
     validateTopology(SCRIPT);
+    validateContract(CONTRACT);
     const cases = [
-        ['exact image identity ignored', 'container?.Image !== values.imageId', 'false'],
         ['sentinel container start removed', "'--name', values.sentinelName", "'--name', values.containerName"],
         ['sentinel network attachment removed',
             "'--network', values.sentinelNetworkName", "'--network', values.networkName"],
@@ -153,6 +178,18 @@ test('topology runtime gate rejects exact-image, private-ingress, and egress mut
     });
 });
 
+test('pure inspect validator rejects canonical binding and route mutations', async (t) => {
+    validateContract(CONTRACT);
+    const cases = [
+        ['network mode ignored', 'host.NetworkMode !== networkName', 'false'],
+        ['loopback binding broadened', 'binding.HostIp !== PRIVATE_HOST_IP', 'false'],
+        ['host port changed', 'binding.HostPort !== PRIVATE_HOST_PORT', 'false']
+    ];
+    for (const [name, from, to] of cases) await t.test(name, () => {
+        assert.throws(() => validateContract(mutate(CONTRACT, from, to)), assert.AssertionError);
+    });
+});
+
 test('image workflow rejects evidence, cleanup, and final aggregation mutations', async (t) => {
     validateWorkflow(WORKFLOW);
     const cases = [
@@ -160,6 +197,8 @@ test('image workflow rejects evidence, cleanup, and final aggregation mutations'
             'node scripts/i5-topology-runtime-gate.js', 'node --version'],
         ['topology evidence bound relaxed',
             "'topology-evidence.json': 16 * 1024", "'topology-evidence.json': 32 * 1024"],
+        ['topology reason validator removed',
+            'validateTopologyEvidence(topology)', 'null'],
         ['sentinel container omitted from cleanup',
             '"$I5_EGRESS_SENTINEL_NAME"', '"$I5_TOPOLOGY_PROBE_NAME"'],
         ['sentinel network omitted from cleanup',
@@ -176,6 +215,11 @@ test('image workflow rejects evidence, cleanup, and final aggregation mutations'
             "if (process.env.TOPOLOGY_OUTCOME !== 'success'\n"
                 + "              || process.env.TOPOLOGY_CLASSIFICATION !== 'success') {",
             'if (false) {'],
+        ['hosted runtime classification dropped',
+            "'docker_command_unavailable', 'private_runtime_probe_unavailable'",
+            "'docker_command_unavailable'"],
+        ['topology success reason enforcement dropped',
+            "process.env.TOPOLOGY_CONTRACT_REASON !== 'success'", 'false'],
         ['cleanup omitted from final aggregation',
             "failures.push('cleanup_failure');", 'failures.push();']
     ];

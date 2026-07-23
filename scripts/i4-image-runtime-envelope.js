@@ -3,6 +3,12 @@
 const fs = require('node:fs');
 const { spawnSync } = require('node:child_process');
 const { SYNTHETIC_STL } = require('./i2-orca-runtime-smoke');
+const { evaluateAbortTransport } = require('./i4-abort-transport-contract');
+const {
+    CONTAINER_PROBE_FAILURES,
+    evaluateProbeOutput,
+    expectedTmpfs
+} = require('./i4-runtime-probe-contract');
 
 const IMAGE_ID_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const CONTAINER_ID_PATTERN = /^[0-9a-f]{64}$/;
@@ -40,6 +46,10 @@ function run(command, args, options = {}) {
         timeout: options.timeout || DOCKER_TIMEOUT_MS,
         maxBuffer: MAX_COMMAND_BYTES
     });
+    if (Buffer.byteLength(result.stdout || '', 'utf8') > MAX_COMMAND_BYTES
+        || Buffer.byteLength(result.stderr || '', 'utf8') > MAX_COMMAND_BYTES) {
+        fail('runtime_command_output_unbounded');
+    }
     if (result.error?.code === 'ETIMEDOUT' || result.error?.code === 'ENOENT') {
         fail(options.capability || 'runtime_command_unavailable', true);
     }
@@ -47,11 +57,12 @@ function run(command, args, options = {}) {
         if (options.nonzeroCapability && !result.error && result.status !== (options.status ?? 0)) {
             fail(options.capability || 'runtime_command_unavailable', true);
         }
+        const innerReason = String(result.stderr || '').trim();
+        if (Array.isArray(options.stderrReasons)
+            && options.stderrReasons.includes(innerReason)) {
+            fail(innerReason);
+        }
         fail(options.failure || 'runtime_command_failure');
-    }
-    if (Buffer.byteLength(result.stdout || '', 'utf8') > MAX_COMMAND_BYTES
-        || Buffer.byteLength(result.stderr || '', 'utf8') > MAX_COMMAND_BYTES) {
-        fail('runtime_command_output_unbounded');
     }
     return result;
 }
@@ -80,16 +91,6 @@ function parseInspectOutput(output) {
 function normalizeTmpfsOptions(value) {
     if (typeof value !== 'string') fail('tmpfs_options_invalid');
     return [...new Set(value.split(','))].sort();
-}
-
-function expectedTmpfs(uid, gid) {
-    const restrictive = `rw,nosuid,nodev,noexec,size=64m,uid=${uid},gid=${gid},mode=0700`;
-    return {
-        '/app/input': restrictive,
-        '/app/output': restrictive,
-        '/app/configs/pricing-state': restrictive,
-        '/tmp': restrictive
-    };
 }
 
 function assertRuntimeInspect(record, expected) {
@@ -122,6 +123,7 @@ function assertRuntimeInspect(record, expected) {
 
 const CONTAINER_PROBE = String.raw`
 const fs = require('node:fs');
+const evaluateAbortTransport = ${evaluateAbortTransport.toString()};
 const [uidText, gidText, stl] = process.argv.slice(1);
 const uid = Number(uidText);
 const gid = Number(gidText);
@@ -255,7 +257,7 @@ async function proveClientAbortNoArtifact() {
   }).then(async (response) => ({
     response,
     text: await readBounded(response)
-  }), (error) => ({ error })).finally(() => { requestSettled = true; });
+  })).catch((error) => ({ error })).finally(() => { requestSettled = true; });
 
   let activeObserved = false;
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -273,10 +275,10 @@ async function proveClientAbortNoArtifact() {
     fail('abort_active_not_observed');
   }
   controller.abort();
+  if (!controller.signal.aborted) fail('abort_signal_not_set');
   const outcome = await awaitBoundedRequest(request);
-  if (outcome.timedOut || !outcome.error || outcome.error.name !== 'AbortError') {
-    fail('client_abort_not_observed');
-  }
+  const abortTransport = evaluateAbortTransport(controller.signal.aborted, outcome);
+  if (!abortTransport.ok) fail(abortTransport.reason);
 
   let settled = false;
   for (const delay of [100, 200, 400, 800, 1600, 3200, 6400]) {
@@ -294,36 +296,25 @@ async function proveClientAbortNoArtifact() {
       || JSON.stringify(afterEntries) !== JSON.stringify(beforeEntries)) {
     fail('post_abort_artifact_detected');
   }
+  return abortTransport.representation;
 }
 void (async () => {
   await slice('prusa');
   await slice('orca');
-  await proveClientAbortNoArtifact();
+  const abortTransport = await proveClientAbortNoArtifact();
   process.stdout.write(JSON.stringify({
     classification: 'success', immutableCount: immutable.length,
     writableCount: writable.length, authenticatedSliceCount: 2,
-    authenticatedClientAbortCount: 1, postAbortArtifactDelta: 0
+    authenticatedClientAbortCount: 1, postAbortArtifactDelta: 0,
+    abortTransport
   }) + '\n');
 })().catch(() => fail('slice_execution'));
 `;
 
 function parseProbeOutput(result) {
-    if (result.stderr) fail('container_probe_stderr');
-    const line = String(result.stdout || '').trimEnd();
-    if (!line || line.includes('\n') || Buffer.byteLength(line, 'utf8') > 4096) {
-        fail('container_probe_output');
-    }
-    let payload;
-    try { payload = JSON.parse(line); } catch { fail('container_probe_json'); }
-    if (JSON.stringify(payload) !== JSON.stringify({
-        classification: 'success',
-        immutableCount: 8,
-        writableCount: 9,
-        authenticatedSliceCount: 2,
-        authenticatedClientAbortCount: 1,
-        postAbortArtifactDelta: 0
-    })) fail('container_probe_contract');
-    return payload;
+    const evaluated = evaluateProbeOutput(result);
+    if (!evaluated.ok) fail(evaluated.reason);
+    return evaluated.payload;
 }
 
 function inspectContainer(reference) {
@@ -350,6 +341,7 @@ function appendSummary(payload) {
         + `writable allowlist checked: \`${payload.writableCount}\`; `
         + `authenticated synthetic slices: \`${payload.authenticatedSliceCount}\`; `
         + `active client-abort checks: \`${payload.authenticatedClientAbortCount}\`; `
+        + `abort transport: \`${payload.abortTransport}\`; `
         + `post-abort artifact delta: \`${payload.postAbortArtifactDelta}\`.\n`
         + 'Limits: `pids=512`, `memory=4g`, `swap=4g`, `cpus=2`, '
         + '`json-file=20m x 5`; tmpfs mounts are restrictive 64 MiB surfaces.\n');
@@ -466,7 +458,11 @@ function main(env = process.env) {
     const probe = run('docker', [
         'container', 'exec', '--user', `${uid}:${gid}`, '--env', 'NODE_NO_WARNINGS=1',
         record.id, '/usr/bin/node', '-e', CONTAINER_PROBE, String(uid), String(gid), SYNTHETIC_STL
-    ], { capability: 'docker_exec_unavailable', failure: 'container_probe_failure' });
+    ], {
+        capability: 'docker_exec_unavailable',
+        failure: 'container_probe_failure',
+        stderrReasons: CONTAINER_PROBE_FAILURES
+    });
     const payload = parseProbeOutput(probe);
     appendSummary(payload);
     proveNoPostAbortDescendants(record);

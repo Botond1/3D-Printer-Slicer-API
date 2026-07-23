@@ -84,7 +84,9 @@ function helperContract(source) {
         "process.env.OPERATIONS_API_KEY",
         "scopedJson('/health/detailed', process.env.OPERATIONS_API_KEY)",
         "scopedJson('/admin/output-files', process.env.ARTIFACT_API_KEY)",
-        'controller.abort();', "outcome.error.name !== 'AbortError'",
+        'controller.abort();', 'if (!controller.signal.aborted)',
+        'evaluateAbortTransport(controller.signal.aborted, outcome)',
+        'stderrReasons: CONTAINER_PROBE_FAILURES',
         'queue.activeJobs === 1', 'queue.activeJobs === 0 && queue.queueLength === 0',
         'sleep(5000).then(() => ({ timedOut: true }))',
         'JSON.stringify(afterInventory) !== JSON.stringify(beforeInventory)',
@@ -177,12 +179,12 @@ test('identity, probe output, helper source, and workflow orchestration remain f
         assert.throws(() => envelope.parsePositiveId(value, 'uid'));
     }
     assert.deepEqual(envelope.parseProbeOutput({
-        stdout: '{"classification":"success","immutableCount":8,"writableCount":9,"authenticatedSliceCount":2,"authenticatedClientAbortCount":1,"postAbortArtifactDelta":0}\n',
+        stdout: '{"classification":"success","immutableCount":8,"writableCount":9,"authenticatedSliceCount":2,"authenticatedClientAbortCount":1,"postAbortArtifactDelta":0,"abortTransport":"terminal_response"}\n',
         stderr: ''
     }), {
         classification: 'success', immutableCount: 8, writableCount: 9,
         authenticatedSliceCount: 2, authenticatedClientAbortCount: 1,
-        postAbortArtifactDelta: 0
+        postAbortArtifactDelta: 0, abortTransport: 'terminal_response'
     });
     assert.deepEqual(envelope.parseTopOutput('PID PPID COMMAND\n4321 1 node\n'), [
         { pid: 4321, ppid: 1, command: 'node' }
@@ -226,7 +228,8 @@ test('runtime-envelope and final-aggregation weakening mutations are rejected', 
         ['artifact identifier contract widened', SOURCE,
             "/^artifact-[a-f0-9]{32}$/.test(body?.artifact_id || '')",
             "/^[a-z0-9_-]{16,128}$/.test(body?.artifact_id || '')", helperContract],
-        ['client-abort smoke removed', SOURCE, '  await proveClientAbortNoArtifact();\n', '', helperContract],
+        ['client-abort smoke removed', SOURCE,
+            '  const abortTransport = await proveClientAbortNoArtifact();\n', '', helperContract],
         ['active queue observation bypassed', SOURCE, 'queue.activeJobs === 1', 'true', helperContract],
         ['post-abort API inventory ignored', SOURCE,
             'JSON.stringify(afterInventory) !== JSON.stringify(beforeInventory)', 'false', helperContract],

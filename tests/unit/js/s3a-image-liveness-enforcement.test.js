@@ -59,6 +59,7 @@ const SUCCESS_ENV = Object.freeze({
     ORCA_CLI_SMOKE_CLASSIFICATION: 'success',
     TOPOLOGY_OUTCOME: 'success',
     TOPOLOGY_CLASSIFICATION: 'success',
+    TOPOLOGY_CONTRACT_REASON: 'success',
     ARTIFACT_BOUNDARY_OUTCOME: 'success',
     EVIDENCE_UPLOAD_OUTCOME: 'success',
     CLEANUP_OUTCOME: 'success',
@@ -108,6 +109,9 @@ test('final enforcement preserves independent fail-closed classifications', asyn
         ['Orca CLI smoke fails independently', { ORCA_CLI_SMOKE_OUTCOME: 'failure',
             ORCA_CLI_SMOKE_CLASSIFICATION: 'orca_cli_smoke_failure' }, 1,
         ['orca_cli_smoke_failure'], ['runtime_liveness_failure']],
+        ['topology success requires success reason',
+            { TOPOLOGY_CONTRACT_REASON: 'private_image_mismatch' }, 1,
+            ['topology_gate_failure'], ['runtime_liveness_failure']],
         ['cleanup outcome fails independently', { CLEANUP_OUTCOME: 'failure' }, 1,
             ['cleanup_failure'], ['evidence_boundary_failure']]
     ];
@@ -316,6 +320,7 @@ function createEvidence() {
     fs.writeFileSync(path.join(evidenceDir, 'runtime-diagnostics.json'), JSON.stringify(validDiagnostic()));
     fs.writeFileSync(path.join(evidenceDir, 'topology-evidence.json'), JSON.stringify({
         classification: 'success',
+        contractReason: 'success',
         sentinelOperational: true,
         internalNetwork: true,
         loopbackIngress: true,

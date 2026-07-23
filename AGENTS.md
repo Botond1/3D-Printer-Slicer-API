@@ -181,13 +181,15 @@ non-slice audience, a maximum 90-day expiry, and no slice/broad/default use.
 Baseline hosted Source run `30022045664` and Image run `30022045578` passed for
 exact baseline source and image
 `sha256:5f159e1051233811ad663175311059829aecdbff16706e39aceba4aac77f9aa3`.
-Local Docker Desktop 29.6.1 A/B on that image proved ordinary loopback-published
-bridge ingress plus API/native DNS/TCP/UDP egress. An internal bridge denied
-egress but exposed no loopback listener. Compose intentionally remains
-unchanged and loopback-published on its ordinary bridge; S4 is therefore
-`BLOCKED_S4_EGRESS_CAPABILITY`, not production-ready. S5 owns the isolated
-worker/firewall architecture decision. Exact candidate SHA, hosted candidate
-validation, VPS/proxy/firewall/secret delivery/deployed state,
+Exact candidate `510e6110ef5c49cd03962627210d6db114554618` passed hosted
+Source run `30037842766`; Image run `30037842526` failed closed on independent
+active-abort transport and private-inspect contracts. The corrective repository
+candidate uses bounded semantic abort outcomes, canonical
+`HostConfig.PortBindings`, a separate external-default-route projection, and
+one allowlisted topology reason while retaining real ingress/readiness and
+API/native egress probes. Compose remains unchanged and no sidecar is invented.
+S4 is `IN_PROGRESS` pending both final hosted workflows on one exact SHA.
+VPS/proxy/firewall/secret delivery/deployed state,
 branch policy, and S3b promotion/readiness/rollback remain pending or
 `UNVERIFIED`. No production, push, or deployment authorization is inferred.
 See
