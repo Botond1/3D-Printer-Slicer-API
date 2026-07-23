@@ -1,5 +1,22 @@
 # Hardening plan
 
+## I4/S2 fast-track checkpoint
+
+Status: `PENDING_LOCAL_VALIDATION`.
+
+Implemented repository controls cover measured application limits, archive and
+output validity, job/artifact correlation, leased bounded retention, atomic
+serialized pricing persistence, and a fail-closed non-root/read-only container
+resource envelope. Final local aggregate and Docker evidence, atomic commits,
+and Source/Image hosted runs on one exact SHA remain stage-exit gates.
+
+Directory fsync is attempted and required when the platform exposes it; an
+unsupported directory fsync limits crash-durability guarantees, while a hard
+post-rename sync error cannot be rolled back transactionally without a larger
+journal protocol. Active-job container-stop orchestration is not claimed.
+S4 topology/egress/credential lifecycle, S3b promotion, VPS capacity, deployed
+identity, and production readiness remain later work.
+
 ## Status vocabulary
 
 - `NOT_STARTED`: authorized shape is known; implementation has not begun.

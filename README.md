@@ -25,6 +25,8 @@ Built for zero-downtime rollout, this API now supports two slicer engines throug
 - 🚦 **Queue + rate protection:** bounded queue and endpoint rate limiting for CPU-heavy requests.
 - 🧨 **ZIP safety checks:** entry/size/path validation and encrypted ZIP rejection.
 - 🧵 **Dual slicer routing:** Prusa and Orca engines behind dedicated endpoints.
+- **Resource/state envelope:** actual-byte limits, validated final artifacts,
+  stable job/artifact correlation, leased retention, and atomic pricing state.
 
 ---
 
@@ -411,6 +413,10 @@ Generated artifacts are stored with the following convention for clarity and tra
 - `InputName-output-<timestamp>.gcode`
 - `InputName-output-<timestamp>.sl1`
 
+Successful slice responses also include collision-resistant `job_id` and
+`artifact_id` fields. They expose correlation identifiers only, never absolute
+or workspace paths.
+
 ### `GET /admin/download/:fileName` (admin)
 
 Downloads a generated `.gcode` / `.sl1` artifact by file name.
@@ -492,7 +498,8 @@ The app reads `.env` automatically on local startup via `dotenv`, and Docker rea
 
 - `input/` → temporary working input directory used during conversion/slicing pipeline.
 - `output/` → generated output artifacts (`.gcode`, `.sl1`, etc.).
-- `configs/` → slicer profile `.ini` files + persistent `pricing.json`.
+- `configs/` → read-only slicer profiles plus writable
+  `pricing-state/pricing.json`; legacy `pricing.json` is migration input.
 
 Runtime paths are root-scoped in both local and Docker execution.
 No app-local runtime folders are used (`app/input`, `app/output`, `app/configs` are intentionally not used).
@@ -521,7 +528,9 @@ Different printer/process profiles produce different G-code behavior in practice
 
 You can customize pricing, security, and slicing behavior without changing endpoint contracts.
 
-- **Pricing Matrix:** Persisted in `configs/pricing.json` (managed via `/pricing` endpoints).
+- **Pricing Matrix:** Persisted atomically in
+  `configs/pricing-state/pricing.json`; a safe legacy `configs/pricing.json`
+  can be migrated on startup.
 - **Admin Security:** `ADMIN_API_KEY` environment variable controls access to pricing updates/deletes.
 - **Slice Service Security:** `SLICE_SERVICE_API_KEY` is a distinct mandatory credential for both slicing endpoints and is supplied in `x-slicer-api-key`.
 - **Admin Browser CORS Control:** `/admin/*` browser-origin requests are constrained by `ADMIN_CORS_ALLOWED_ORIGINS`.
@@ -542,6 +551,12 @@ You can customize pricing, security, and slicing behavior without changing endpo
 - **ZIP Safety Limits:** ZIP upload inspection and admin `ALL` bulk export are guarded by max entries (`MAX_ZIP_ENTRIES`, default `500`) and max cumulative size (`MAX_ZIP_UNCOMPRESSED_BYTES`, default `500MB`).
 - **ZIP Content Rule:** ZIP uploads must contain exactly one supported source file; unsupported or suspicious ZIP contents are rejected and cleaned up.
 - **Body Parser Limits:** JSON/form payload size is capped (`JSON_BODY_LIMIT`, `FORM_BODY_LIMIT`, default `1mb`).
+- **Artifact Retention:** Owned managed outputs are bounded by TTL, count, and
+  aggregate bytes; active downloads and unknown/unsafe entries are preserved.
+- **Container Envelope:** Production Compose uses a read-only root, non-root
+  service identity, bounded `/tmp`, explicit writable binds, and bounded
+  PID/memory/CPU/log/stop settings. Defaults are repository safety defaults,
+  not VPS capacity claims.
 - **Slicer Profiles:** Stored in `configs/prusa/*.ini` and `configs/orca/*.json`.
 - **Timeouts:** Internal 10-minute kill-switches prevent infinite loops during complex conversion/slicing operations and return `FILE_PROCESSING_TIMEOUT` when exceeded.
 - **Model Fidelity Policy:** Uploaded model data is never auto-healed or shape-corrected; invalid/non-printable source data is rejected with a clear error.

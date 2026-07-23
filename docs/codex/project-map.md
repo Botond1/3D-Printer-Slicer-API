@@ -1,5 +1,26 @@
 # Verified project map
 
+## Current I4/S2 resource-state candidate
+
+- Exact baseline: `780d64dd786440cb80ddd4df38cb489c16070a07`;
+  branch: `codex/i4-s2-resource-state-envelope`.
+- A central strict-integer resource policy now bounds upload lifetime and actual
+  bytes, ZIP/3MF/SL1 expansion, model/profile/output/pricing reads, successful
+  statistics, and managed-artifact retention. Successful slice responses add
+  backward-compatible `job_id` and `artifact_id` correlation.
+- Managed outputs use ownership metadata, active-download leases, deterministic
+  TTL/count/byte eviction, and bounded partial/startup cleanup. Pricing commits
+  use serialized candidate snapshots and same-directory exclusive temporary
+  files with full writes, file flush, atomic rename, and directory-sync where
+  supported. Primary state is `configs/pricing-state/pricing.json`; the legacy
+  `configs/pricing.json` is migration input only.
+- Production Compose uses a read-only root, root-owned code/profiles, only
+  input/output/pricing-state persistent writable binds, restrictive 64 MiB
+  `/tmp`, non-root identity, and bounded PID/memory/CPU/log/stop settings.
+- This is `PENDING_LOCAL_VALIDATION` until final aggregate, Docker, commit, and
+  exact-SHA hosted gates finish. VPS capacity, proxy/private topology, egress,
+  S4/S3b, deployment, and production readiness remain `UNVERIFIED`.
+
 ## Snapshot and authority
 
 - Historical S0 audit date: **2026-07-18**.
@@ -224,6 +245,45 @@ timeouts, private ingress/egress, the remaining S2/S4 exits, and production
 state are `UNVERIFIED`. Detailed evidence is in
 [`evidence/i3-service-auth-and-http-envelope.md`](evidence/i3-service-auth-and-http-envelope.md).
 
+## Current I4 S2 resource/state checkpoint
+
+I4 starts from exact I3 baseline
+`780d64dd786440cb80ddd4df38cb489c16070a07` on
+`codex/i4-s2-resource-state-envelope`; the candidate is an uncommitted worktree
+delta.
+
+- [`resource-policy.js`](../../app/config/resource-policy.js) centrally bounds
+  body/upload lifetime, multipart, ZIP/3MF/SL1, model/output/profile/pricing,
+  successful stats/pricing, retention, and cleanup work. Omitted values use
+  defaults; an invalid explicit value refuses startup. Multipart expiry maps to
+  HTTP 408 `UPLOAD_TOTAL_TIMEOUT`.
+- Generated archives validate declared and actual bytes, entry count,
+  per-entry bytes, compression ratio, path depth/type/encryption, canonical 3MF
+  parts, and archive identity. Success requires bounded contained regular
+  outputs and finite positive required stats.
+- Workspaces and artifacts use collision-resistant `job-<32 hex>` and
+  `artifact-<32 hex>` identifiers. Responses expose `job_id`/`artifact_id`;
+  private metadata, download leases, and TTL/count/byte/partial cleanup
+  coordinate managed output without exposing metadata in admin downloads.
+- Primary pricing state is `configs/pricing-state/pricing.json`. Safe legacy
+  `configs/pricing.json` is migration/fallback input. Persistence uses an
+  exclusive `0600` temp file, complete write, file fsync, atomic rename, and
+  directory fsync where supported, then publishes in-memory state.
+- The non-root container keeps code/profiles root-owned and read-only. Compose
+  uses a read-only root filesystem, separate `0700` UID/GID-owned writable
+  input/output/pricing-state binds, restrictive tmpfs, dropped capabilities,
+  no-new-privileges, and bounded PID/memory/CPU/log/stop settings.
+
+Supplied local evidence is green for multipart 24/24, generated archives 5/5,
+focused S2/state/container 107/107, container/workflow 382/382, quality focused
+73/73, archive 6/6, OpenAPI 5/5, syntax 15/15, exact npm 10.9.8 install, zero
+audit vulnerabilities, and diff whitespace. Python integration is
+`NOT_RUN_ENVIRONMENT`; active-job container stop orchestration is
+`NOT_PROVEN_S2_ACTIVE_JOB_STOP_ORCHESTRATION`. Hosted exact-candidate
+validation, VPS/proxy/topology, egress, S4, S3b, and deployment remain pending
+or unverified. See
+[`evidence/i4-s2-resource-state-envelope.md`](evidence/i4-s2-resource-state-envelope.md).
+
 ## System context
 
 The service is a synchronous HTTP API that accepts model/CAD input, invokes
@@ -285,7 +345,7 @@ code order is authoritative.
 | Pricing | [`pricing.service.js`](../../app/services/pricing.service.js) facade plus [`pricing/repository.js`](../../app/services/pricing/repository.js) and [`pricing/catalog.js`](../../app/services/pricing/catalog.js). |
 | Admin artifacts | [`admin-output.service.js`](../../app/services/admin-output.service.js) validates extension, containment, lstat, and realpath. Its existing filesystem-checking `resolveValidatedOutputFile` helper is exported for tests; it is not a pure helper. |
 | Python/native preprocessing | [`app/cad2stl.py`](../../app/cad2stl.py), [`mesh2stl.py`](../../app/mesh2stl.py), [`orient.py`](../../app/orient.py), [`scale_model.py`](../../app/scale_model.py). |
-| Profiles/state | [`configs/prusa`](../../configs/prusa), [`configs/orca`](../../configs/orca), and runtime `configs/pricing.json` resolved by `paths.js`. |
+| Profiles/state | Immutable [`configs/prusa`](../../configs/prusa) and [`configs/orca`](../../configs/orca) profiles plus writable primary pricing state `configs/pricing-state/pricing.json`; legacy `configs/pricing.json` is migration/fallback input only. |
 | Integration runners | [`tests/testing-scripts`](../../tests/testing-scripts) with shared helpers in `common/`; reports are generated in ignored `results/`. |
 | Runtime/container | [`Dockerfile`](../../Dockerfile), [`docker-compose.yml`](../../docker-compose.yml), and [`docker-compose.dev.yml`](../../docker-compose.dev.yml). |
 | Automation | [`ci.yml`](../../.github/workflows/ci.yml) and [`image-validation.yml`](../../.github/workflows/image-validation.yml) validate an exact candidate without deployment; [`deploy.yml`](../../.github/workflows/deploy.yml) is a manual no-deploy preflight that calls both gates. |
@@ -317,20 +377,23 @@ code order is authoritative.
   staging paths resolve inside the marked workspace. Cleanup validates marker,
   containment, and symlink state before recursive removal; it never recursively
   removes the input or output root.
-- Output names contain a sanitized source base plus `Date.now()`, but responses
-  expose no job/artifact identifier. There is no TTL, count/byte quota, or stale
-  final-output recovery job. S1a does not redesign this S2-owned public artifact
-  contract ([`common.js`](../../app/services/slice/common.js),
-  `buildOutputFilename`; [`response.js`](../../app/services/slice/response.js)).
+- Output names contain a sanitized source base plus collision-resistant
+  `artifact-<32 hex>` identity. Responses expose `job_id` and `artifact_id`.
+  Private metadata and leases support TTL/count/byte/partial cleanup without
+  deleting active downloads ([`common.js`](../../app/services/slice/common.js),
+  [`artifact-store.js`](../../app/services/artifact-store.js),
+  [`response.js`](../../app/services/slice/response.js)).
 - Startup classifies only immediate, correctly named and marked stale workspace
   children. It reports but does not delete them. The programmatic deletion mode
   additionally requires a verified exclusive lease and a stale threshold beyond
   a proven bounded lifetime plus safety margin; `server.js` never enables it in
   S1a.
-- Pricing is in-memory plus synchronous JSON persistence. A missing/invalid
-  pricing file can cause defaults to be written at startup
-  ([`pricing.service.js`](../../app/services/pricing.service.js),
-  `loadPricingFromDisk`). Atomic replacement/rollback is absent.
+- Pricing is in-memory plus bounded atomic persistence at
+  `configs/pricing-state/pricing.json`. Safe legacy state is migrated;
+  exclusive temp ownership, file fsync, atomic rename, supported directory
+  fsync, and publish-after-persist sequencing prevent failed mutations from
+  changing memory ([`pricing.service.js`](../../app/services/pricing.service.js),
+  [`pricing/repository.js`](../../app/services/pricing/repository.js)).
 
 ## API and compatibility boundaries
 
@@ -376,10 +439,12 @@ Runtime route registration, not README lists, is canonical:
   [`image-validation.yml`](../../.github/workflows/image-validation.yml)).
 
 The remaining delivery cycle is formally separated: S3a repository-only
-build-once/no-deploy controls are integrated. I3 implements only S4
-slice-service authentication/browser-Origin and S2 application HTTP-envelope
-subsets. Credential lifecycle, protected pricing policy, proxy/private ingress
-and egress, observability, and the remaining S2 exits are incomplete. S3b owns
+build-once/no-deploy controls are integrated. I3 implements the S4
+slice-service authentication/browser-Origin subset. I4 implements the local S2
+resource/state and container-envelope candidate; exact active-job container
+stop orchestration and live host/proxy evidence remain unproven. Credential
+lifecycle, protected pricing policy, proxy/private ingress/egress, and
+observability remain incomplete. S3b owns
 staging, promotion, readiness, and rollback only after complete S4 evidence and
 separate explicit user/owner authorization. No repository result verifies
 production topology or authorizes promotion.

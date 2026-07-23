@@ -148,6 +148,26 @@ capacity, reverse-proxy timeouts, private ingress/egress topology, deployment,
 and production readiness remain pending or `UNVERIFIED`. See
 [`docs/codex/evidence/i3-service-auth-and-http-envelope.md`](docs/codex/evidence/i3-service-auth-and-http-envelope.md).
 
+The current I4/S2 worktree is based on exact I3 baseline
+`780d64dd786440cb80ddd4df38cb489c16070a07` on branch
+`codex/i4-s2-resource-state-envelope`; it is an uncommitted candidate. Central
+resource-policy parsing accepts only bounded canonical positive decimal
+integers, with omission using defaults and invalid explicit values refusing
+startup. It bounds body/upload lifetime, multipart, ZIP/3MF/SL1, model/output/
+profile/pricing reads, successful stats/pricing, artifact retention, and
+cleanup work. Multipart lifetime expiry is HTTP 408 `UPLOAD_TOTAL_TIMEOUT`.
+Successful slices return collision-resistant `job_id` and `artifact_id`;
+private metadata, leases, and TTL/count/byte/partial cleanup coordinate managed
+artifacts. Primary pricing state is `configs/pricing-state/pricing.json`, with
+safe legacy `configs/pricing.json` read/migration fallback and exclusive-temp,
+file-fsync, atomic-rename, directory-fsync persistence. The non-root container
+uses a read-only root filesystem, root-owned code/profiles, separate writable
+input/output/pricing-state binds, restrictive tmpfs, and bounded PID/memory/
+CPU/log/stop settings. Exact active-job container stop orchestration remains
+`NOT_PROVEN_S2_ACTIVE_JOB_STOP_ORCHESTRATION`; VPS/proxy/topology/egress,
+hosted exact-candidate validation, and deployment remain unverified. See
+[`docs/codex/evidence/i4-s2-resource-state-envelope.md`](docs/codex/evidence/i4-s2-resource-state-envelope.md).
+
 ## Read before changing
 
 - Any change: this file, the three Codex knowledge files, root `CLAUDE.md`, and
@@ -192,6 +212,8 @@ and production readiness remain pending or `UNVERIFIED`. See
   geometry controls to make a test pass.
 - Do not mutate pricing, slicer profiles, runtime artifacts, private fixtures, or
   generated reports during unit validation.
+- Treat `configs/pricing-state/` as private mutable runtime state; keep
+  `configs/prusa/` and `configs/orca/` immutable in the container.
 - Resolve destructive targets first. Never clean, reset, overwrite, or absorb an
   unrelated dirty worktree.
 - A suspected vulnerability is not a desirable contract. Characterize safe

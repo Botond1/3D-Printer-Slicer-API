@@ -1,5 +1,24 @@
 # Security model
 
+## I4/S2 resource and mutable-state controls
+
+The current I4 candidate fails closed on malformed explicit resource settings,
+actual upload/archive/output byte overruns, unsafe archive paths/types/links,
+non-finite or out-of-range successful statistics, and invalid final artifacts.
+Artifacts require contained regular-file identity plus owned metadata; active
+downloads are leased and unknown, malformed, symlinked, replaced, or active
+entries are never eviction authority. Pricing mutation is serialized and
+memory changes only after a bounded, flushed, atomic primary-file replacement.
+
+The container contract narrows persistent writes to root-scoped input, output,
+and `configs/pricing-state`; root filesystem, application, dependencies,
+binaries, profiles, and the remaining configuration are read-only to the
+non-root service. `/tmp` is a restrictive bounded tmpfs. These are repository
+controls, not evidence of VPS sizing, private ingress/egress, credential
+delivery/rotation, or deployed identity. Active client-abort settlement is
+covered; stopping the container during an active native job remains
+`NOT_PROVEN_S2_ACTIVE_JOB_STOP_ORCHESTRATION`.
+
 ## Scope and deployment assumptions
 
 The original matrices in this model cover the repository at historical code baseline
