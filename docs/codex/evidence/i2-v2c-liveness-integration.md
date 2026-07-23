@@ -99,11 +99,13 @@ reuses a predictable name.
 
 Inside that offline, non-root, read-only-rootfs container, Orca help must identify
 `OrcaSlicer-2.3.1`. The synthetic fixture is a closed 10 mm manifold cube with
-explicit, consistently wound unit normals and contains no customer data. Orca
-uses the repository's production machine/process profile pair. Success requires
-exactly one bounded regular G-code file, an OrcaSlicer 2.3.1 generator signature
-within a bounded prefix, and a real `G1` extrusion command; mere nonempty output
-cannot pass.
+explicit, consistently wound unit normals and contains no customer data. The
+smoke loads the repository's production machine profile and calls the same
+`createRuntimeSlicerProfile` seam as a real Orca request. It asserts the
+generated process profile's `G92 E0` layer reset and absolute-extrusion guard
+before slicing. Success requires exactly one bounded regular G-code file, an
+OrcaSlicer 2.3.1 generator signature within a bounded prefix, and a real `G1`
+extrusion command; mere nonempty output cannot pass.
 
 Hosted Source run `30003526788` passed on gate-extension commit
 `4422d4018c98e594e666116fa3fd1bd2d7fcdaab`. Image run `30003526846`
@@ -120,14 +122,37 @@ keeping the outer Docker output at 64 KiB, and emits only an exact-schema,
 stdout and stderr separately, accepts only empty/`[]` stdout plus an exact
 not-found stderr, and retains the same ownership proof before deletion.
 
+Correction commit `17a57d78bd52a9eb996bf9c3ce43b1ff057ebaf1` passed Source
+run `30004494172`. Image run `30004494230` proved the corrected cleanup
+classification (`CLEANUP_OUTCOME: success`) and passed every other image gate,
+but failed only the Orca smoke. Its exact bounded diagnostic reported Orca
+status 205 (`-51` modulo 256) and:
+`Relative extruder addressing requires resetting the extruder position at each
+layer ... Add "G92 E0" to layer_gcode.` The smoke had loaded the raw static
+process profile directly, while production requests already generate a
+contained runtime profile with `layer_gcode = G92 E0` and
+`use_relative_e_distances = 0`.
+
+Commit `05ad6241c566cab593394a094ed36288e0c99165` aligned the smoke with that
+production runtime-profile seam without changing the static machine/process
+profiles or weakening Orca validation. Source run `30005259408` passed. Image
+run `30005259304` passed build, immutable image identity, dynamic service and
+kernel identity, exact-image Orca 2.3.1 help and synthetic slice, running plus
+healthy liveness, bounded diagnostics, SPDX SBOM, Grype scan and triage,
+evidence boundary/upload, ownership-bound cleanup, and the fail-closed final
+aggregator. No image was pushed and no deployment occurred.
+
 ## Validation evidence
 
 - Exact npm 10.9.8 clean install added 175 packages, audited 176, and reported
   zero vulnerabilities; `package.json` and `package-lock.json` did not change.
-- Aggregate local tests: JavaScript 537/537; Python 43 discovered/run, 42 pass,
+- Aggregate local tests: JavaScript 542/542; Python 43 discovered/run, 42 pass,
   one Windows-only POSIX permission mutation skipped. The skip is not called a
   pass; hosted Linux Source Validation covers the POSIX gate.
-- Focused final workflow/liveness/mutation suite: 297/297. Required mutations
+- Focused Orca runtime smoke suite: 23/23. The aggregate workflow/liveness
+  mutation coverage includes the prior 297 checks plus five runtime-profile
+  generation, extrusion-invariant, containment, and async-failure mutations.
+  Required mutations
   cover hard-coded/root identity, numeric/empty/multiline/error lookup, wrong or
   floating image, missing isolation, missing/unsafe tmpfs options, one-mount
   repair, health/final weakening, cleanup omission, shell injection, invalid
@@ -137,7 +162,8 @@ not-found stderr, and retains the same ownership proof before deletion.
   213 tracked files; fix and correction stages separately passed staged safety.
 - The local Docker client had no reachable daemon, so local image, liveness,
   Orca CLI/synthetic slice, SBOM, and Grype runtime gates are
-  `NOT_RUN_ENVIRONMENT`; hosted Image Validation owns those results.
+  `NOT_RUN_ENVIRONMENT`; successful hosted Image Validation run `30005259304`
+  owns those results.
 
 Hosted predecessor checkpoint `b2113516bb129007d27e5153e1d42089a437bb50`:
 

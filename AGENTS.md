@@ -112,9 +112,11 @@ running process against host-kernel credentials, and mounts both 64 MiB runtime
 tmpfs paths with `rw,nosuid,nodev,noexec`, dynamic UID/GID, and mode `0700`.
 Image validation also runs a bounded, network-isolated, exact-image Orca 2.3.1
 help and customer-free manifold-cube slice smoke. It validates an Orca 2.3.1
-G-code signature plus real extrusion and binds cleanup to the captured
-container ID, immutable image ID, and run-owned labels; reusable names alone
-are never deletion authority.
+G-code signature plus real extrusion, uses the same contained runtime-profile
+generator as production requests, and binds cleanup to the captured container
+ID, immutable image ID, and run-owned labels; reusable names alone are never
+deletion authority. Exact-candidate hosted Source and Image Validation passed
+for commit `05ad6241c566cab593394a094ed36288e0c99165`.
 See [`docs/codex/evidence/i2-v2c-liveness-integration.md`](docs/codex/evidence/i2-v2c-liveness-integration.md).
 Branch protection/required checks, signature/attestation, registry promotion,
 S4, S3b, VPS/deployed state, and production readiness remain `UNVERIFIED`; I2
