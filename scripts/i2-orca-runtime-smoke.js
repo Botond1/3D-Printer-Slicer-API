@@ -58,6 +58,7 @@ const ORCA_CONTAINER_SCRIPT = String.raw`
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { createRuntimeSlicerProfile } = require('/app/services/slice/profiles');
 
 const MAX_ORCA_OUTPUT_BYTES = 1024 * 10000;
 const MAX_GCODE_PREFIX_BYTES = 256 * 1024;
@@ -65,7 +66,8 @@ const root = '/tmp/orca-smoke';
 const input = path.join(root, 'input');
 const output = path.join(root, 'output');
 const model = path.join(input, 'synthetic-cube.stl');
-const settings = '/app/configs/orca/Bambu_P1S_0.4_nozzle.json;/app/configs/orca/FDM_0.2mm.json';
+const machineProfile = '/app/configs/orca/Bambu_P1S_0.4_nozzle.json';
+const baseProcessProfile = '/app/configs/orca/FDM_0.2mm.json';
 const syntheticStl = ${JSON.stringify(SYNTHETIC_STL)};
 const childEnvironment = Object.freeze({
     HOME: '/tmp/home',
@@ -128,7 +130,15 @@ function readPrefix(filePath, size) {
     }
 }
 
-try {
+function assertRuntimeProfile(profilePath) {
+    const profile = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
+    if (profile.layer_height !== '0.2' || profile.sparse_infill_density !== '20%' ||
+        profile.layer_gcode !== 'G92 E0' || profile.use_relative_e_distances !== '0') {
+        throw new Error('runtime_profile_contract');
+    }
+}
+
+async function executeSmoke() {
     for (const directory of [root, input, output, childEnvironment.HOME,
         childEnvironment.XDG_CACHE_HOME, childEnvironment.XDG_CONFIG_HOME,
         childEnvironment.XDG_RUNTIME_DIR]) {
@@ -145,6 +155,20 @@ try {
         !/(?:Usage:|OPTIONS:|--help)/.test(helpOutput)) exit(21);
 
     fs.writeFileSync(model, syntheticStl, { encoding: 'ascii', flag: 'wx', mode: 0o600 });
+    const workspace = {
+        resolvePath: (...segments) => path.resolve(root, ...segments),
+        assertContainedPath: (candidatePath) => {
+            const resolved = path.resolve(candidatePath);
+            if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+                throw new Error('runtime_profile_escape');
+            }
+            return resolved;
+        }
+    };
+    const runtimeProcessProfile = await createRuntimeSlicerProfile(
+        'orca', baseProcessProfile, 'FDM', 0.2, '20%', workspace);
+    assertRuntimeProfile(runtimeProcessProfile);
+    const settings = machineProfile + ';' + runtimeProcessProfile;
 
     const sliced = runOrca([
         '--load-settings', settings,
@@ -171,9 +195,9 @@ try {
         !/^G1\b[^\r\n]*\bE-?(?:\d+(?:\.\d*)?|\.\d+)/m.test(prefix)) exit(33);
 
     process.stdout.write('{"orca_cli_help":"pass","synthetic_slice":"pass"}\n');
-} catch {
-    exit(39);
 }
+
+void executeSmoke().catch(() => exit(39));
 `;
 
 function parsePositiveEnvironmentId(value, label) {
