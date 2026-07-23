@@ -103,7 +103,7 @@ S1a ownership seam, and its container envelope waits for S3a image-control
 decisions.
 
 The current I2 executable checkpoint is
-`17c8a04c440c2ca75f8a5cadbfbe97682ea611a3`. It preserves the I1
+`f4a5c7ab0aa0aab7a1f2eef9a56e5dded1201202`. It preserves the I1
 queue/native/graceful-shutdown contracts, integrates the deterministic Swiper
 12.1.2 remediation into both Orca resource trees, and leaves the exact Orca
 v2.3.1 URL/SHA unchanged. Hosted A/B/C evidence verified that root-owned tmpfs

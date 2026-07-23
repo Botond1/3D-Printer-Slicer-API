@@ -150,7 +150,7 @@ authentication, or authorize a `main` promotion.
 
 - Exact baseline `c6110e197ebe7e95d15ba597954108297251fb7b`; V2C equivalents
   `cf45524` then `9f8ae6b`; executable correction checkpoint
-  `17c8a04c440c2ca75f8a5cadbfbe97682ea611a3`.
+  `f4a5c7ab0aa0aab7a1f2eef9a56e5dded1201202`.
 - I1 queue deadline, shutdown, capacity ownership, native process-tree, minimal
   environment, and no-post-abort-success contracts remain green.
 - Swiper 12.1.2 is transactionally installed into both Orca trees and verified
@@ -159,9 +159,11 @@ authentication, or authorize a `main` promotion.
   The final fix dynamically resolves nonzero service UID/GID, cross-checks the
   running kernel credentials, mounts both runtime paths at 64 MiB with
   `rw,nosuid,nodev,noexec,uid,gid,mode=0700`, and keeps `USER slicer`.
-- Exact cleanup and one terminal cleanup classification precede the fail-closed
-  final aggregator. The one-time A/B/C matrix is absent from the final workflow;
-  bounded identity/state/log, SPDX, and Grype evidence remains.
+- Exact cleanup captures expected absent-container/image probes in conditional
+  contexts that cannot trip the runner's implicit Bash `errexit`; unexpected
+  inspect/removal failures still fail closed before the final aggregator. The
+  one-time A/B/C matrix is absent from the final workflow; bounded
+  identity/state/log, SPDX, and Grype evidence remains.
 - I2 closes repository image validation only. Branch protection/required checks,
   signature/attestation, registry promotion, S4, S3b, VPS/deployed state, and
   production readiness remain `UNVERIFIED`; deployment is not authorized.

@@ -8,7 +8,7 @@ I2 starts from exact I1 checkpoint
 `44024749ed99d0cf2a8caf1db85d89d16dbca665` and
 `73f33e856860cec3b1975af1abb98fa65839dac8` as `cf45524` and
 `9f8ae6b`, in that order. The executable I2 correction checkpoint is
-`17c8a04c440c2ca75f8a5cadbfbe97682ea611a3`.
+`f4a5c7ab0aa0aab7a1f2eef9a56e5dded1201202`.
 
 This is repository validation evidence only. I2 did not push an image, deploy,
 promote, merge, tag, release, contact a VPS, or change `main`.
@@ -84,16 +84,19 @@ retains exact image/service/kernel identity, bounded state and logs, SPDX JSON,
 and Grype JSON. Evidence upload is allowlisted to four exact regular contained
 files. Cleanup removes only this run's exact identity probes, main container,
 image tag, evidence files, and scanner configs, emits one terminal
-classification, and runs before the fail-closed final aggregator.
+classification, and runs before the fail-closed final aggregator. Expected
+absent-container and absent-image statuses are captured inside Bash conditional
+contexts so the GitHub runner's implicit `errexit` cannot abort before
+classification; unknown inspection or removal states still fail closed.
 
 ## Validation evidence
 
 - Exact npm 10.9.8 clean install added 175 packages, audited 176, and reported
   zero vulnerabilities; `package.json` and `package-lock.json` did not change.
-- Aggregate local tests: JavaScript 508/508; Python 43 discovered/run, 42 pass,
+- Aggregate local tests: JavaScript 509/509; Python 43 discovered/run, 42 pass,
   one Windows-only POSIX permission mutation skipped. The skip is not called a
   pass; hosted Linux Source Validation covers the POSIX gate.
-- Focused final workflow/liveness/mutation suite: 268/268. Required mutations
+- Focused final workflow/liveness/mutation suite: 269/269. Required mutations
   cover hard-coded/root identity, numeric/empty/multiline/error lookup, wrong or
   floating image, missing isolation, missing/unsafe tmpfs options, one-mount
   repair, health/final weakening, cleanup omission, and shell injection.
@@ -108,15 +111,28 @@ Hosted predecessor checkpoint `b2113516bb129007d27e5153e1d42089a437bb50`:
 - Source Validation run `29971659761`: success.
 - Image Validation run `29971659755`: exact image identity, kernel-identity
   cross-check, start, running+healthy liveness, bounded diagnostics, SPDX,
-  Grype, triage, evidence boundary/upload, and exact cleanup all succeeded. The
-  final aggregator alone failed because it consumed a shell-output
-  classification instead of the native cleanup outcome.
+  Grype, triage, and evidence boundary/upload succeeded. The cleanup step's
+  public conclusion was success because it used `continue-on-error`, but its
+  native outcome was failure and the final aggregator reported
+  `cleanup_failure`.
 
-Commit `17c8a04c440c2ca75f8a5cadbfbe97682ea611a3` removes that unreliable
-aggregator input and fail-closes directly on `steps.exact_cleanup.outcome`;
-focused outcome mutations pass. The later documentation commit intentionally
-does not name itself. Its exact hosted Source/Image run IDs and terminal results
-are recorded in the I2 handoff.
+Commit `17c8a04c440c2ca75f8a5cadbfbe97682ea611a3` removed the unreliable
+shell-output input and fail-closed directly on `steps.exact_cleanup.outcome`.
+At documentation checkpoint `8be89e65a3b665f592dcc328c0cd6b3bc2ab3eb7`,
+Source run `29972140254` passed. Image run `29972140281` again passed build,
+identity, kernel cross-check, running+healthy liveness, diagnostics, SPDX,
+Grype, triage, evidence boundary, and upload; its cleanup public conclusion was
+success while its native outcome was failure, and final enforcement alone
+reported `cleanup_failure`.
+
+The exact cause was the GitHub runner's implicit Bash `-e`: an expected
+not-present probe returned 1 as designed, but a bare function call triggered
+`errexit` before `$?` could be captured or a cleanup classification emitted.
+Commit `f4a5c7ab0aa0aab7a1f2eef9a56e5dded1201202` captures all four expected
+absence probes in `if` contexts and adds a mutation that rejects the exposed
+form. The later documentation commit intentionally does not name itself. Its
+exact hosted Source/Image run IDs and terminal results are recorded in the I2
+handoff.
 
 The diagnostic Grype artifact reported HIGH=0, CRITICAL=0, and
 `GHSA-hmx5-qpq5-p643` findings=0. Signature, attestation, immutable registry
