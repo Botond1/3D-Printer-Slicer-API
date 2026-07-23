@@ -384,7 +384,11 @@ function proveMalformedIdentityRejected(imageId, uid, gid) {
 function parseTopOutput(output) {
     const text = String(output || '').trim();
     if (!text || Buffer.byteLength(text, 'utf8') > 4096) fail('post_abort_process_output');
-    const processes = text.split('\n').map((line) => {
+    const lines = text.split('\n');
+    if (!/^\s*PID\s+PPID\s+(?:COMMAND|CMD)\s*$/.test(lines.shift() || '')) {
+        fail('post_abort_process_header');
+    }
+    const processes = lines.map((line) => {
         const match = line.match(/^\s*([1-9][0-9]*)\s+([0-9]+)\s+([A-Za-z0-9_.+-]{1,64})\s*$/);
         if (!match) fail('post_abort_process_shape');
         return { pid: Number(match[1]), ppid: Number(match[2]), command: match[3] };
@@ -399,7 +403,7 @@ function proveNoPostAbortDescendants(record) {
     const delayCell = new Int32Array(new SharedArrayBuffer(4));
     for (let attempt = 0; attempt < 8; attempt += 1) {
         const result = run('docker', [
-            'container', 'top', record.id, '-eo', 'pid=,ppid=,comm='
+            'container', 'top', record.id, '-eo', 'pid,ppid,comm'
         ], {
             timeout: 5000,
             capability: 'docker_top_unavailable',
@@ -419,7 +423,7 @@ function proveNoPostAbortDescendants(record) {
 }
 
 function stopAndProveSettlement(record) {
-    const stopped = run('docker', ['container', 'stop', '--time', '30', record.id], {
+    const stopped = run('docker', ['container', 'stop', '--timeout', '30', record.id], {
         timeout: 45_000,
         capability: 'docker_stop_unavailable',
         failure: 'graceful_stop_failure'

@@ -89,13 +89,13 @@ function helperContract(source) {
         'JSON.stringify(afterEntries) !== JSON.stringify(beforeEntries)',
         'postAbortArtifactDelta: 0',
         'NOT_PROVEN_S2_ACTIVE_JOB_STOP_ORCHESTRATION',
-        "'container', 'top', record.id, '-eo', 'pid=,ppid=,comm='",
+        "'container', 'top', record.id, '-eo', 'pid,ppid,comm'",
         'nonzeroCapability: true', "capability: 'docker_top_unavailable'",
         "Buffer.byteLength(text, 'utf8') > 4096", 'processes.length > 16',
         'processes.length === 1 && processes[0].pid === record.pid',
         'Atomics.wait(delayCell, 0, 0, 250)',
         'proveNoPostAbortDescendants(record);',
-        'if (total > 65536)', "text.includes('/app/')", "'container', 'stop', '--time', '30'",
+        'if (total > 65536)', "text.includes('/app/')", "'container', 'stop', '--timeout', '30'",
         "spawnSync('/usr/bin/ps'", 'processState.status !== 1',
         'classification=success'
     ]) assert.ok(source.includes(anchor), `missing helper anchor: ${anchor}`);
@@ -182,10 +182,14 @@ test('identity, probe output, helper source, and workflow orchestration remain f
         authenticatedSliceCount: 2, authenticatedClientAbortCount: 1,
         postAbortArtifactDelta: 0
     });
-    assert.deepEqual(envelope.parseTopOutput('4321 1 node\n'), [
+    assert.deepEqual(envelope.parseTopOutput('PID PPID COMMAND\n4321 1 node\n'), [
         { pid: 4321, ppid: 1, command: 'node' }
     ]);
-    for (const output of ['', 'PID PPID COMMAND\n', '0 1 node\n', '1 x node\n', '1 0 bad command\n']) {
+    for (const output of [
+        '', 'PID PPID COMMAND\n', '4321 1 node\n',
+        'PID PPID COMMAND\n0 1 node\n', 'PID PPID COMMAND\n1 x node\n',
+        'PID PPID COMMAND\n1 0 bad command\n'
+    ]) {
         assert.throws(() => envelope.parseTopOutput(output));
     }
     helperContract(SOURCE);
@@ -235,7 +239,7 @@ test('runtime-envelope and final-aggregation weakening mutations are rejected', 
         ['runtime cache path routed outside tmpfs', SOURCE,
             "XDG_CACHE_HOME: '/tmp/xdg-cache'", "XDG_CACHE_HOME: '/home/slicer/.cache'", helperContract],
         ['response bound removed', SOURCE, 'if (total > 65536)', 'if (false)', helperContract],
-        ['graceful timeout unbounded', SOURCE, "'container', 'stop', '--time', '30'",
+        ['graceful timeout unbounded', SOURCE, "'container', 'stop', '--timeout', '30'",
             "'container', 'stop'", helperContract],
         ['orphan check removed', SOURCE, 'processState.status !== 1', 'false', helperContract]
     ];
