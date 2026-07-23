@@ -146,6 +146,26 @@ authentication, or authorize a `main` promotion.
   promotion, S4, S3b, production readiness, VPS/deployed state remain
   `UNVERIFIED`. No production authorization or side effect is inferred.
 
+## Current I2 V2C and liveness closure
+
+- Exact baseline `c6110e197ebe7e95d15ba597954108297251fb7b`; V2C equivalents
+  `cf45524` then `9f8ae6b`; executable correction checkpoint
+  `17c8a04c440c2ca75f8a5cadbfbe97682ea611a3`.
+- I1 queue deadline, shutdown, capacity ownership, native process-tree, minimal
+  environment, and no-post-abort-success contracts remain green.
+- Swiper 12.1.2 is transactionally installed into both Orca trees and verified
+  offline; Orca v2.3.1 URL/SHA and Node 24-compatible Action pins remain.
+- Hosted A/B/C evidence verifies tmpfs ownership as the liveness root cause.
+  The final fix dynamically resolves nonzero service UID/GID, cross-checks the
+  running kernel credentials, mounts both runtime paths at 64 MiB with
+  `rw,nosuid,nodev,noexec,uid,gid,mode=0700`, and keeps `USER slicer`.
+- Exact cleanup and one terminal cleanup classification precede the fail-closed
+  final aggregator. The one-time A/B/C matrix is absent from the final workflow;
+  bounded identity/state/log, SPDX, and Grype evidence remains.
+- I2 closes repository image validation only. Branch protection/required checks,
+  signature/attestation, registry promotion, S4, S3b, VPS/deployed state, and
+  production readiness remain `UNVERIFIED`; deployment is not authorized.
+
 ## S0 work package and gates
 
 S0 is behavior-preserving. Production edits are limited to exporting an
@@ -369,3 +389,4 @@ grant itself the exception.
 | D-017 | Parallel lanes return evidence; the integrator owns canonical reconciliation. | I1 reconciliation supersedes historical stage status without rewriting historical evidence files. | Integrator maintains `AGENTS.md` and `docs/codex/**` after integration |
 | D-018 | Graceful shutdown must drain both HTTP and queue work without early capacity release. | `SIGTERM`/`SIGINT` are single-flight; queue shutdown aborts queued/active work, closes HTTP, and awaits both drains while active slots remain owned until task settlement. | I1 runtime lifecycle locally verified |
 | D-019 | A known image advisory does not explain away an independent liveness failure. | Hosted Image run `29957927370` shows both persistent liveness exit 1 and the HIGH scanner path. Swiper 7.2.0 is known, but S3a-V2C is not integrated. | S3a remains blocked; diagnose/fix both paths without weakening gates |
+| D-020 | I2 separates the verified tmpfs liveness root cause from the Swiper advisory. | Exact A/B/C and main-container evidence proves root-owned tmpfs mount roots caused startup `EACCES`; V2C independently produces zero `GHSA-hmx5-qpq5-p643` findings. Dynamic nonzero UID/GID plus kernel cross-check and mode `0700` fix liveness without root or world-writable state. | I2 repository image validation closed; external policy, provenance/promotion, S4/S3b, and production evidence remain required |

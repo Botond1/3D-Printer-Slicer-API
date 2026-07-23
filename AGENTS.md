@@ -102,6 +102,20 @@ and separate explicit user/owner authorization. S2 artifact work waits for the
 S1a ownership seam, and its container envelope waits for S3a image-control
 decisions.
 
+The current I2 executable checkpoint is
+`17c8a04c440c2ca75f8a5cadbfbe97682ea611a3`. It preserves the I1
+queue/native/graceful-shutdown contracts, integrates the deterministic Swiper
+12.1.2 remediation into both Orca resource trees, and leaves the exact Orca
+v2.3.1 URL/SHA unchanged. Hosted A/B/C evidence verified that root-owned tmpfs
+mount roots caused `/app/input/.slice-jobs` startup `EACCES`; the workflow now
+resolves nonzero service UID/GID from the immutable image, cross-checks the
+running process against host-kernel credentials, and mounts both 64 MiB runtime
+tmpfs paths with `rw,nosuid,nodev,noexec`, dynamic UID/GID, and mode `0700`.
+See [`docs/codex/evidence/i2-v2c-liveness-integration.md`](docs/codex/evidence/i2-v2c-liveness-integration.md).
+Branch protection/required checks, signature/attestation, registry promotion,
+S4, S3b, VPS/deployed state, and production readiness remain `UNVERIFIED`; I2
+does not authorize deployment or promotion.
+
 ## Read before changing
 
 - Any change: this file, the three Codex knowledge files, root `CLAUDE.md`, and

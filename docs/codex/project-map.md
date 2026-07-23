@@ -160,6 +160,29 @@ promotion, S4, S3b, production readiness, VPS topology, and deployed state
 remain `UNVERIFIED`. I1 made no `main`, PR/merge, tag/release, registry, VPS,
 SSH, or deployment change and authorizes none.
 
+## Current I2 V2C and image-liveness checkpoint
+
+I2 is anchored at executable correction commit
+`17c8a04c440c2ca75f8a5cadbfbe97682ea611a3`, from exact I1 baseline
+`c6110e197ebe7e95d15ba597954108297251fb7b`. It integrates V2C equivalents
+`cf45524` and `9f8ae6b` in source order, preserves the I1 queue, native-process,
+and graceful-shutdown behavior, installs Swiper 12.1.2 into both Orca resource
+trees, and leaves Orca v2.3.1 plus its pinned SHA-256 unchanged.
+
+Hosted A/B/C evidence proved the old tmpfs roots were `0:0`/`0755` and failed
+service-user writes while image directories and dynamic `uid/gid/mode=0700`
+tmpfs mounts passed. The main container failed at the same
+`/app/input/.slice-jobs` path with `EACCES`. The final workflow resolves nonzero
+UID/GID from the immutable image, verifies the running process credentials from
+host-kernel state, retains both restrictive 64 MiB tmpfs mounts, and requires
+both running and healthy. Exact evidence, tests, hosted runs, and remaining
+boundaries are recorded in
+[`evidence/i2-v2c-liveness-integration.md`](evidence/i2-v2c-liveness-integration.md).
+
+Branch protection and required-check settings, signature/attestation,
+immutable registry promotion, S4, S3b, VPS/deployed state, and production
+readiness remain `UNVERIFIED`. I2 did not deploy or promote.
+
 ## System context
 
 The service is a synchronous HTTP API that accepts model/CAD input, invokes

@@ -119,6 +119,21 @@ Online audit is `BLOCKED_POLICY`; `actionlint` and Docker are unavailable. This
 does not make the hosted image, branch policy, registry provenance, topology,
 promotion, or production state green.
 
+## Current I2 image-runtime security delta
+
+| Control | Classification | Evidence and boundary |
+| --- | --- | --- |
+| Deterministic Swiper 12.1.2 in both Orca trees | `IMPLEMENTED_AND_HOSTED_TESTED` | Transactional archive/hash/source checks and a digest-pinned offline Chromium contract gate; Orca v2.3.1 URL/SHA unchanged; `GHSA-hmx5-qpq5-p643` findings=0 in the diagnostic Grype result. |
+| Runtime tmpfs ownership | `ROOT_CAUSE_VERIFIED_AND_FIXED` | A/image and C/dynamic tmpfs write probes passed; B/former root-owned tmpfs failed `EACCES`; main startup failed on the same `/app/input/.slice-jobs` path. Both final mounts retain 64 MiB and `rw,nosuid,nodev,noexec` with dynamic UID/GID and `0700`. |
+| Non-root runtime identity | `IMPLEMENTED_AND_HOSTED_TESTED` | Exact-image `slicer` UID/GID lookup rejects zero/malformed output; host-kernel PID credentials must match before liveness can pass. Dockerfile remains `USER slicer`; no root/chmod-777/image workaround exists. |
+| Runtime liveness and evidence | `IMPLEMENTED_AND_HOSTED_TESTED` | Running and healthy are both required. Identity, bounded state/logs, SPDX, Grype, exact four-file upload, cleanup, and the final aggregator fail closed. |
+
+The exact diagnostic matrix and hosted identifiers are in
+[`evidence/i2-v2c-liveness-integration.md`](evidence/i2-v2c-liveness-integration.md).
+Branch protection/required checks, signature/attestation, registry promotion,
+S4, S3b, VPS topology, deployment, and production readiness remain
+`UNVERIFIED`.
+
 ## Assets and data classification
 
 | Asset | Classification | Security need | Evidence |
