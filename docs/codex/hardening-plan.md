@@ -31,13 +31,17 @@ invented. Therefore the repository cannot prove both required ingress and
 egress denial in this environment, and S4 is blocked on capability rather than
 verified.
 
-The final candidate SHA and hosted candidate runs remain `PENDING`. External
+The final committed candidate SHA is recorded by the closing execution report.
+Hosted candidate runs are `NOT_DISPATCHED` because the mandatory local
+topology gate is blocked. External
 reverse-proxy CIDRs/hops and
 timeouts, intended/denied deployed callers, host firewall/egress, production
 secret source/ownership/mode, deployed digest/VPS state, branch protection/
 required checks, S3b promotion/readiness/rollback, and production readiness are
-`UNVERIFIED`. No push, deploy, or production authorization exists. S5 owns the
-isolated-worker/firewall architecture decision.
+`UNVERIFIED`. A normal non-force target-branch push and hosted validation were
+authorized but withheld by the fail-closed local gate; deploy and production
+actions were not authorized. S5 owns the isolated-worker/firewall architecture
+decision.
 
 ## I4/S2 fast-track checkpoint
 

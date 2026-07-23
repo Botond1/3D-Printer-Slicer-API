@@ -6,8 +6,12 @@
 - Exact source baseline:
   `5be7b19d13616f06504c18217e25bf95c97c6e96`.
 - Branch: `codex/i5-s4-trust-topology-observability`.
-- Final candidate source SHA: `PENDING` (uncommitted candidate).
-- Production/push/deploy authorization: none.
+- Final candidate source SHA: the committed branch tip recorded by the closing
+  execution report (`git rev-parse HEAD` after this evidence commit).
+- Authorization boundary: one normal non-force target-branch push and hosted
+  validation were authorized. They were not executed because the mandatory
+  local topology gate reached `BLOCKED_S4_EGRESS_CAPABILITY`. Deployment and
+  production actions were not authorized.
 
 Repository source and deterministic test contracts are implemented for scoped
 credentials, Origin/proxy/request identity, readiness, structured events, and
@@ -23,7 +27,7 @@ environment. This is a blocker, not a skipped or passing gate.
 | Image Validation | Run `30022045578`: `PASS` |
 | Baseline image used for local A/B | `sha256:5f159e1051233811ad663175311059829aecdbff16706e39aceba4aac77f9aa3` |
 
-These are baseline results only. They do not describe the final uncommitted
+These are baseline results only. They do not describe the final committed
 candidate or any deployed/registry identity.
 
 ## Repository security contracts
@@ -214,8 +218,10 @@ removed exactly.
 
 ## Pending and unverified
 
-- Final candidate source SHA: `PENDING` (uncommitted candidate).
-- Hosted exact-candidate Source/Image/topology results: `PENDING`.
+- Final candidate source SHA: the committed branch tip recorded by the closing
+  execution report.
+- Hosted exact-candidate Source/Image/topology results: `NOT_DISPATCHED`
+  because the mandatory local topology gate is blocked.
 - Intended and denied deployed caller evidence: `UNVERIFIED`.
 - Deployed immutable digest and VPS state: `UNVERIFIED`.
 - External reverse-proxy CIDRs, hop count, and timeouts: `UNVERIFIED`.
@@ -226,5 +232,6 @@ removed exactly.
 - S3b promotion, staging readiness, rollback, and production readiness:
   `UNVERIFIED`.
 
-S5 owns the isolated-worker/firewall architecture decision. No repository
-result here authorizes production, push, promotion, deployment, or VPS probes.
+S5 owns the isolated-worker/firewall architecture decision. The authorized
+push remains withheld by the fail-closed local gate; no repository result here
+authorizes production, promotion, deployment, or VPS probes.

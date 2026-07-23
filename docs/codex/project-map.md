@@ -30,8 +30,10 @@
   exposed no loopback listener. Exact resources were removed.
 - Compose intentionally remains unchanged, loopback-published, and ordinary
   bridge. Status is `BLOCKED_S4_EGRESS_CAPABILITY`; no sidecar was invented.
-  Final candidate SHA and hosted topology evidence are pending. Deployed
-  caller/proxy/firewall/secret/digest/VPS state and S3b remain `UNVERIFIED`.
+  The final committed candidate SHA is recorded by the closing execution
+  report. Hosted topology evidence is `NOT_DISPATCHED` because the mandatory
+  local gate is blocked. Deployed caller/proxy/firewall/secret/digest/VPS state
+  and S3b remain `UNVERIFIED`.
 
 ## Current I4/S2 resource-state candidate
 
