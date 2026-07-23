@@ -13,7 +13,7 @@ from itertools import cycle
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from common.env_utils import resolve_admin_keys, resolve_base_url
+from common.env_utils import resolve_base_url, resolve_slice_service_api_key
 from common.http_utils import curl_json, curl_multipart_slice
 
 PRUSA_SLICE_ENDPOINT = "/prusa/slice"
@@ -90,12 +90,10 @@ def resolve_engine_name(endpoint: str) -> str:
     return "Orca" if endpoint == ORCA_SLICE_ENDPOINT else "Prusa"
 
 
-def _resolve_runtime_env(project_root: Path) -> tuple[str, bool]:
-    """Resolve base URL and whether an admin key is configured."""
+def _resolve_runtime_env(project_root: Path) -> tuple[str, str | None]:
+    """Resolve base URL and the scoped slice service credential."""
     base_url = resolve_base_url(project_root)
-    env_key, dotenv_key = resolve_admin_keys(project_root)
-    has_admin_key = bool(env_key or dotenv_key)
-    return base_url, has_admin_key
+    return base_url, resolve_slice_service_api_key(project_root)
 
 
 def format_layer_height_token(layer_height: float) -> str:
@@ -188,6 +186,7 @@ def run_slice_request(
     file_path: Path,
     layer_height: float,
     material: str,
+    slice_service_api_key: str,
     extra_fields: dict[str, str] | None = None,
 ) -> tuple[int, dict | str | None, float]:
     """Execute one multipart slicing request."""
@@ -197,6 +196,7 @@ def run_slice_request(
         file_path=file_path,
         layer_height=layer_height,
         material=material,
+        slice_service_api_key=slice_service_api_key,
         extra_fields=extra_fields,
     )
 
@@ -207,6 +207,7 @@ def run_slice_request_with_retry(
     file_path: Path,
     layer_height: float,
     material: str,
+    slice_service_api_key: str,
     extra_fields: dict[str, str] | None = None,
     retry_on_429: int = 3,
     retry_wait_seconds: int = 20,
@@ -224,6 +225,7 @@ def run_slice_request_with_retry(
             file_path,
             layer_height,
             material,
+            slice_service_api_key,
             extra_fields,
         )
         total_duration += duration
@@ -434,11 +436,14 @@ def run_scenario(
         if legacy_path.exists():
             legacy_path.unlink()
 
-    base_url, has_admin_key = _resolve_runtime_env(project_root)
+    base_url, slice_service_api_key = _resolve_runtime_env(project_root)
     print(
         f"[RUNNER:{scenario.key}] endpoint={scenario.endpoint} tech={scenario.technology} "
-        f"material={scenario.material} admin_api_key_found={has_admin_key}"
+        f"material={scenario.material} "
+        f"slice_service_api_key_found={bool(slice_service_api_key)}"
     )
+    if not slice_service_api_key:
+        raise RuntimeError("SLICE_SERVICE_API_KEY not found in .env or process environment.")
 
     files = discover_test_files(tests_root)
     if not files:
@@ -471,6 +476,7 @@ def run_scenario(
             file_path,
             layer_height,
             scenario.material,
+            slice_service_api_key,
             extra_fields,
             retry_on_429=retry_on_429,
             retry_wait_seconds=retry_wait_seconds,

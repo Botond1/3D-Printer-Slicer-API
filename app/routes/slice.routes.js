@@ -6,6 +6,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { DEFAULTS, EXTENSIONS } = require('../config/constants');
 const { sliceRateLimiter } = require('../middleware/rateLimit');
+const requireSliceService = require('../middleware/requireSliceService');
 const { handleSlicePrusa, handleSliceOrca } = require('../services/slice.service');
 const {
     createJobWorkspace,
@@ -157,6 +158,7 @@ async function finalizeLifecycle(context) {
 function createSliceRouter(options = {}) {
     const router = express.Router();
     const rateLimiter = options.rateLimiter || sliceRateLimiter;
+    const authenticate = options.authenticate || requireSliceService;
     const allocate = options.createWorkspace || createJobWorkspace;
     const attach = options.attachWorkspace || attachWorkspaceToRequest;
     const detach = options.detachWorkspace || detachWorkspaceFromRequest;
@@ -209,9 +211,9 @@ function createSliceRouter(options = {}) {
         };
     }
 
-    // The limiter must reject before any request-owned directory is allocated.
-    router.post('/prusa/slice', rateLimiter, lifecycle('prusa'));
-    router.post('/orca/slice', rateLimiter, lifecycle('orca'));
+    // Rate limiting and authentication must reject before request-owned allocation.
+    router.post('/prusa/slice', rateLimiter, authenticate, lifecycle('prusa'));
+    router.post('/orca/slice', rateLimiter, authenticate, lifecycle('orca'));
     return router;
 }
 

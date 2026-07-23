@@ -26,8 +26,8 @@ const EXPECTED_RESPONSE_KEYS = {
     'DELETE /pricing/FDM/{material}': ['200', '400', '401', '404', '500'],
     'PATCH /pricing/SLA/{material}': ['200', '400', '401', '500'],
     'DELETE /pricing/SLA/{material}': ['200', '400', '401', '404', '500'],
-    'POST /prusa/slice': ['200', '400', '422', '500'],
-    'POST /orca/slice': ['200', '400', '422', '500'],
+    'POST /prusa/slice': ['200', '400', '401', '422', '500'],
+    'POST /orca/slice': ['200', '400', '401', '422', '500'],
     'GET /admin/output-files': ['200', '401', '500', '503'],
     'GET /admin/download/{fileName}': ['200', '400', '401', '404', '413', '500', '503']
 };
@@ -67,6 +67,59 @@ test('OpenAPI protected operations declare a required x-api-key header', () => {
         assert.ok(header, operationKey);
         assert.equal(header.required, true, operationKey);
         assert.equal(header.schema.type, 'string', operationKey);
+    }
+});
+
+test('OpenAPI slice operations expose the exact scoped authentication contract', () => {
+    assert.deepEqual(document.components.securitySchemes.SliceServiceApiKey, {
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-slicer-api-key',
+        description: 'Scoped service credential required only for slicing operations.'
+    });
+
+    const expectedUnauthorizedResponse = {
+        description: 'Slice service authentication is required.',
+        content: {
+            'application/json': {
+                schema: {
+                    type: 'object',
+                    required: ['success', 'error', 'errorCode'],
+                    properties: {
+                        success: { type: 'boolean', enum: [false] },
+                        error: {
+                            type: 'string',
+                            enum: ['Slice service authentication is required.']
+                        },
+                        errorCode: {
+                            type: 'string',
+                            enum: ['SLICE_SERVICE_AUTH_REQUIRED']
+                        }
+                    }
+                },
+                example: {
+                    success: false,
+                    error: 'Slice service authentication is required.',
+                    errorCode: 'SLICE_SERVICE_AUTH_REQUIRED'
+                }
+            }
+        }
+    };
+
+    for (const operationKey of ['POST /prusa/slice', 'POST /orca/slice']) {
+        const operation = getOperation(operationKey);
+        assert.deepEqual(operation.security, [{ SliceServiceApiKey: [] }], operationKey);
+        const authHeaders = operation.parameters.filter((parameter) => (
+            parameter.name === 'x-slicer-api-key' && parameter.in === 'header'
+        ));
+        assert.deepEqual(authHeaders, [{
+            name: 'x-slicer-api-key',
+            in: 'header',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Scoped slice-service API credential.'
+        }], operationKey);
+        assert.deepEqual(operation.responses['401'], expectedUnauthorizedResponse, operationKey);
     }
 });
 

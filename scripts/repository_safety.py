@@ -33,7 +33,14 @@ ALLOWED_POLICY_SENTINELS = frozenset(
 
 # Exact and path-scoped: broad prefixes such as "example*" are not exempt.
 INERT_ASSIGNMENT_SENTINELS = frozenset(
-    {(".env.example", "ADMIN_API_KEY", "exampleKEY-6.7.")}
+    {
+        (".env.example", "ADMIN_API_KEY", "exampleKEY-6.7."),
+        (
+            ".env.example",
+            "SLICE_SERVICE_API_KEY",
+            "example-inert-slice-service-key-000000000001",
+        ),
+    }
 )
 
 _PEM_BEGIN = b"-----" + b"BEGIN "

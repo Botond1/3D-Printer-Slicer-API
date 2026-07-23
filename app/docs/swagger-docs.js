@@ -252,7 +252,17 @@ function createSwaggerDocument(pricing) {
             post: {
                 tags: ['Slicing'],
                 summary: 'PrusaSlicer endpoint (FDM/SLA auto mode by layer height).',
-                description: 'Uses PrusaSlicer. Automatically chooses technology by layer height: SLA for 0.025/0.05, FDM for 0.1/0.2/0.3. Supports optional size/scale/rotation preprocessing and printer profile based build-volume validation.',
+                description: 'Requires x-slicer-api-key service authentication. Uses PrusaSlicer. Automatically chooses technology by layer height: SLA for 0.025/0.05, FDM for 0.1/0.2/0.3. Supports optional size/scale/rotation preprocessing and printer profile based build-volume validation.',
+                security: [{ SliceServiceApiKey: [] }],
+                parameters: [
+                    {
+                        name: 'x-slicer-api-key',
+                        in: 'header',
+                        required: true,
+                        schema: { type: 'string' },
+                        description: 'Scoped slice-service API credential.'
+                    }
+                ],
                 consumes: ['multipart/form-data'],
                 requestBody: {
                     required: true,
@@ -339,6 +349,27 @@ function createSwaggerDocument(pricing) {
                 responses: {
                     200: { description: 'Slicing successful' },
                     400: { description: 'Bad Request' },
+                    401: {
+                        description: 'Slice service authentication is required.',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    required: ['success', 'error', 'errorCode'],
+                                    properties: {
+                                        success: { type: 'boolean', enum: [false] },
+                                        error: { type: 'string', enum: ['Slice service authentication is required.'] },
+                                        errorCode: { type: 'string', enum: ['SLICE_SERVICE_AUTH_REQUIRED'] }
+                                    }
+                                },
+                                example: {
+                                    success: false,
+                                    error: 'Slice service authentication is required.',
+                                    errorCode: 'SLICE_SERVICE_AUTH_REQUIRED'
+                                }
+                            }
+                        }
+                    },
                     422: { description: 'Model or profile validation failed (for example out-of-printer-bounds model).' },
                     500: { description: 'Server Error' }
                 }
@@ -348,7 +379,17 @@ function createSwaggerDocument(pricing) {
             post: {
                 tags: ['Slicing'],
                 summary: 'OrcaSlicer endpoint (FDM-only).',
-                description: 'Uses OrcaSlicer and always processes as FDM, including pricing. Supports optional size/scale/rotation preprocessing, machine/process profile overrides, and profile-based build-volume validation.',
+                description: 'Requires x-slicer-api-key service authentication. Uses OrcaSlicer and always processes as FDM, including pricing. Supports optional size/scale/rotation preprocessing, machine/process profile overrides, and profile-based build-volume validation.',
+                security: [{ SliceServiceApiKey: [] }],
+                parameters: [
+                    {
+                        name: 'x-slicer-api-key',
+                        in: 'header',
+                        required: true,
+                        schema: { type: 'string' },
+                        description: 'Scoped slice-service API credential.'
+                    }
+                ],
                 consumes: ['multipart/form-data'],
                 requestBody: {
                     required: true,
@@ -439,6 +480,27 @@ function createSwaggerDocument(pricing) {
                 responses: {
                     200: { description: 'Slicing successful' },
                     400: { description: 'Bad Request' },
+                    401: {
+                        description: 'Slice service authentication is required.',
+                        content: {
+                            'application/json': {
+                                schema: {
+                                    type: 'object',
+                                    required: ['success', 'error', 'errorCode'],
+                                    properties: {
+                                        success: { type: 'boolean', enum: [false] },
+                                        error: { type: 'string', enum: ['Slice service authentication is required.'] },
+                                        errorCode: { type: 'string', enum: ['SLICE_SERVICE_AUTH_REQUIRED'] }
+                                    }
+                                },
+                                example: {
+                                    success: false,
+                                    error: 'Slice service authentication is required.',
+                                    errorCode: 'SLICE_SERVICE_AUTH_REQUIRED'
+                                }
+                            }
+                        }
+                    },
                     422: { description: 'Model or profile validation failed (for example out-of-printer-bounds model).' },
                     500: { description: 'Server Error' }
                 }
@@ -538,6 +600,16 @@ function createSwaggerDocument(pricing) {
                     503: { description: 'Admin API key is not configured on server' },
                     500: { description: 'Failed to download output file' }
                 }
+            }
+        }
+    },
+    components: {
+        securitySchemes: {
+            SliceServiceApiKey: {
+                type: 'apiKey',
+                in: 'header',
+                name: 'x-slicer-api-key',
+                description: 'Scoped service credential required only for slicing operations.'
             }
         }
     }

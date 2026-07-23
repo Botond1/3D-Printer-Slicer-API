@@ -10,12 +10,16 @@ const swaggerUi = require('swagger-ui-express');
 require('dotenv').config();
 const createSwaggerDocument = require('./docs/swagger-docs');
 const pricingRoutes = require('./routes/pricing.routes');
-const sliceRoutes = require('./routes/slice.routes');
+const { createSliceRouter } = require('./routes/slice.routes');
 const systemRoutes = require('./routes/system.routes');
 const errorHandler = require('./middleware/errorHandler');
+const { createCorsOptionsResolver, parseAllowedOrigins } = require('./middleware/corsPolicy');
+const { createRequireSliceService } = require('./middleware/requireSliceService');
 const { PORT, DEFAULTS } = require('./config/constants');
 const { ensureRequiredDirectories } = require('./config/paths');
+const { resolveSliceServiceApiKey } = require('./config/service-auth');
 const { loadPricingFromDisk, getPricing } = require('./services/pricing.service');
+const { createBoundedHttpServer } = require('./services/http-server');
 const { auditWorkspacesThenListen } = require('./services/slice/workspace');
 const { beginSliceQueueShutdown } = require('./services/slice/queue');
 const { createRuntimeLifecycle } = require('./services/runtime-lifecycle');
@@ -26,6 +30,14 @@ if (!process.env.ADMIN_API_KEY) {
     process.exit(1);
 }
 
+let sliceServiceApiKey;
+try {
+    sliceServiceApiKey = resolveSliceServiceApiKey(process.env);
+} catch {
+    console.error('[SECURITY] Service authentication configuration is invalid. Refusing to start server.');
+    process.exit(1);
+}
+
 // Initialize required directories and load pricing data
 ensureRequiredDirectories();
 loadPricingFromDisk();
@@ -33,6 +45,9 @@ loadPricingFromDisk();
 /** @type {import('express').Express} */
 const app = express();
 const runtimeLifecycle = createRuntimeLifecycle({ beginQueueShutdown: beginSliceQueueShutdown });
+const sliceRoutes = createSliceRouter({
+    authenticate: createRequireSliceService({ apiKey: sliceServiceApiKey })
+});
 
 const standardHelmet = helmet();
 const docsHelmet = helmet({
@@ -61,7 +76,10 @@ function parseCsvValues(value) {
         .filter(Boolean);
 }
 
-const adminAllowedOrigins = parseCsvValues(process.env.ADMIN_CORS_ALLOWED_ORIGINS);
+const resolveCorsOptions = createCorsOptionsResolver({
+    adminAllowedOrigins: parseAllowedOrigins(process.env.ADMIN_CORS_ALLOWED_ORIGINS),
+    sliceAllowedOrigins: parseAllowedOrigins(process.env.SLICE_CORS_ALLOWED_ORIGINS)
+});
 
 /**
  * Resolve Express trust proxy setting from environment.
@@ -84,38 +102,6 @@ function resolveTrustProxySetting() {
 
 const trustProxySetting = resolveTrustProxySetting();
 app.set('trust proxy', trustProxySetting);
-
-/**
- * Resolve dynamic CORS options for public and admin endpoints.
- * Public routes allow all origins. Admin routes require explicit allowlist for browser-origin requests.
- * @param {import('express').Request} req Express request instance.
- * @param {(err: Error | null, options?: import('cors').CorsOptions) => void} callback CORS callback.
- * @returns {void}
- */
-function resolveCorsOptions(req, callback) {
-    const requestOrigin = req.header('Origin');
-    const isAdminRoute = req.path === '/admin' || req.path.startsWith('/admin/');
-
-    if (!isAdminRoute) {
-        callback(null, { origin: true });
-        return;
-    }
-
-    if (!requestOrigin) {
-        callback(null, { origin: true });
-        return;
-    }
-
-    if (adminAllowedOrigins.includes(requestOrigin)) {
-        callback(null, { origin: true });
-        return;
-    }
-
-    const corsError = new Error('Admin CORS origin is not allowed.');
-    corsError.code = 'ADMIN_CORS_ORIGIN_NOT_ALLOWED';
-    corsError.status = 403;
-    callback(corsError);
-}
 
 app.use((req, res, next) => {
     const isDocsRoute = req.path === '/openapi.json' || req.path.startsWith('/docs');
@@ -195,6 +181,8 @@ app.all('*', (req, res) => {
 // Global error handler
 app.use(errorHandler);
 
+const httpServer = createBoundedHttpServer(app);
+
 /**
  * Audit positively identified stale workspaces before accepting traffic.
  * S1a intentionally keeps production startup audit-only because total request lifetime is not bounded yet.
@@ -210,10 +198,11 @@ async function startServer() {
         },
         listen() {
             if (runtimeLifecycle.isShuttingDown()) return null;
-            return app.listen(PORT, () => {
+            httpServer.listen(PORT, () => {
                 console.log(`FDM and SLA Slicer Engine running on port ${PORT}`);
                 console.log(`Swagger Docs available at http://localhost:${PORT}/docs`);
             });
+            return httpServer;
         }
     });
 }

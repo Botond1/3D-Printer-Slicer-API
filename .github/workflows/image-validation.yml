@@ -194,6 +194,7 @@ jobs:
             exit 2
           fi
           inert_admin_key="s3a-inert-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          inert_slice_service_key="i3-image-validation-inert-slice-key-0000000000000000"
           docker run --detach \
             --name "$CONTAINER_NAME" \
             --pull never \
@@ -205,6 +206,7 @@ jobs:
             --tmpfs "/app/input:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
             --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
             --env "ADMIN_API_KEY=$inert_admin_key" \
+            --env "SLICE_SERVICE_API_KEY=$inert_slice_service_key" \
             --label io.s3a.validation-only=true \
             --label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID" \
             "$IMAGE_REF"

@@ -53,7 +53,9 @@ async function createHarness(t, options = {}) {
         ? () => options.createWorkspace({ jobsRoot, outputRoot })
         : () => createJobWorkspace({ jobsRoot, outputRoot });
     app.use(createSliceRouter({
-        rateLimiter(req, res, next) { next(); }, createWorkspace: allocate,
+        rateLimiter(req, res, next) { next(); },
+        authenticate(req, res, next) { next(); },
+        createWorkspace: allocate,
         multipartLimits: options.multipartLimits,
         cleanupWorkspace: options.cleanupWorkspace,
         handlePrusa: options.handler || ((req, res) => res.status(200).json({ success: true, fields: Object.keys(req.body), file: Boolean(req.file) })),

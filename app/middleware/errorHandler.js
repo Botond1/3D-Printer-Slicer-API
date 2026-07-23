@@ -25,6 +25,12 @@ const KNOWN_ERROR_RULES = Object.freeze([
         errorCode: 'ADMIN_CORS_ORIGIN_NOT_ALLOWED'
     },
     {
+        match: (err) => err?.code === 'SLICE_CORS_ORIGIN_NOT_ALLOWED',
+        status: 403,
+        message: 'Origin is not allowed for slicing endpoints.',
+        errorCode: 'SLICE_CORS_ORIGIN_NOT_ALLOWED'
+    },
+    {
         match: (err) => err?.type === 'entity.parse.failed',
         status: 400,
         message: 'Invalid JSON request payload.',

@@ -25,6 +25,15 @@ def resolve_base_url(project_root: Path) -> str:
     return os.getenv("SLICER_BASE_URL") or dotenv.get("SLICER_BASE_URL") or "http://127.0.0.1:3000"
 
 
+def resolve_slice_service_api_key(project_root: Path) -> str | None:
+    dotenv = read_dotenv(project_root)
+    env_key = os.getenv("SLICE_SERVICE_API_KEY")
+    if env_key:
+        return env_key
+    dotenv_key = dotenv.get("SLICE_SERVICE_API_KEY")
+    return dotenv_key or None
+
+
 def resolve_admin_keys(project_root: Path) -> tuple[str | None, str | None]:
     dotenv = read_dotenv(project_root)
     env_key = os.getenv("ADMIN_API_KEY", "").strip() or None

@@ -20,7 +20,7 @@ PROJECT_ROOT = SCRIPT_ROOT.parent.parent.parent
 RESULTS_DIR = SCRIPT_ROOT.parent / "results"
 REPORT_PATH = RESULTS_DIR / "unsupported_upload_test_result.md"
 
-from common.env_utils import resolve_base_url
+from common.env_utils import resolve_base_url, resolve_slice_service_api_key
 from common.http_utils import curl_multipart_slice
 
 SLICE_ENDPOINT = "/prusa/slice"
@@ -62,7 +62,11 @@ def _retry_wait_seconds(body: dict | str | None) -> int:
     return DEFAULT_RETRY_WAIT_SECONDS
 
 
-def run_case(base_url: str, test_case: UnsupportedUploadCase) -> UnsupportedUploadResult:
+def run_case(
+    base_url: str,
+    slice_service_api_key: str,
+    test_case: UnsupportedUploadCase,
+) -> UnsupportedUploadResult:
     """Run an unsupported upload case with bounded 429 retry."""
     total_duration = 0.0
     status = 0
@@ -75,6 +79,7 @@ def run_case(base_url: str, test_case: UnsupportedUploadCase) -> UnsupportedUplo
             file_path=test_case.file_path,
             layer_height=LAYER_HEIGHT,
             material=MATERIAL,
+            slice_service_api_key=slice_service_api_key,
         )
         total_duration += duration
 
@@ -156,9 +161,24 @@ def write_report(base_url: str, results: list[UnsupportedUploadResult]) -> None:
 
 def main() -> int:
     base_url = resolve_base_url(PROJECT_ROOT)
+    slice_service_api_key = resolve_slice_service_api_key(PROJECT_ROOT)
+    print(
+        "[UNSUPPORTED UPLOAD TEST] "
+        f"slice_service_api_key_found={bool(slice_service_api_key)}"
+    )
+    if not slice_service_api_key:
+        print(
+            "[UNSUPPORTED UPLOAD TEST] ERROR: "
+            "SLICE_SERVICE_API_KEY not found in .env or process environment."
+        )
+        return 1
+
     with tempfile.TemporaryDirectory(prefix="unsupported-upload-") as temp_dir_name:
         test_cases = create_unsupported_cases(Path(temp_dir_name))
-        results = [run_case(base_url, test_case) for test_case in test_cases]
+        results = [
+            run_case(base_url, slice_service_api_key, test_case)
+            for test_case in test_cases
+        ]
 
     write_report(base_url, results)
     for result in results:

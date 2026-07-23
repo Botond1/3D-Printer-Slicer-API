@@ -60,9 +60,10 @@ test('minimal environment passes runtime essentials and excludes secret/applicat
     const source = {
         PATH: 'runtime-path', SystemRoot: 'C:\\Windows', WINDIR: 'C:\\Windows',
         PATHEXT: '.EXE', TEMP: 'C:\\Temp', TMP: 'C:\\Tmp', LANG: 'C.UTF-8',
-        ADMIN_API_KEY: String(41), SECRET_MARKER: String(42), DATABASE_URL: String(43),
-        CLOUD_API_KEY: String(44), TELEGRAM_BOT_TOKEN: String(45), EMAIL_API_KEY: String(46),
-        SLICE_RATE_LIMIT_MAX_REQUESTS: String(47), NODE_OPTIONS: '--inspect', PYTHONPATH: 'unsafe'
+        ADMIN_API_KEY: String(41), SLICE_SERVICE_API_KEY: String(42),
+        SECRET_MARKER: String(43), DATABASE_URL: String(44),
+        CLOUD_API_KEY: String(45), TELEGRAM_BOT_TOKEN: String(46), EMAIL_API_KEY: String(47),
+        SLICE_RATE_LIMIT_MAX_REQUESTS: String(48), NODE_OPTIONS: '--inspect', PYTHONPATH: 'unsafe'
     };
     const env = createChildEnvironment(source, 'win32');
     assert.deepEqual(env, {
@@ -71,13 +72,14 @@ test('minimal environment passes runtime essentials and excludes secret/applicat
         PYTHONDONTWRITEBYTECODE: '1', PYTHONNOUSERSITE: '1',
         PYTHONUNBUFFERED: '1', PYTHONUTF8: '1'
     });
-    for (const key of ['ADMIN_API_KEY', 'SECRET_MARKER', 'DATABASE_URL', 'CLOUD_API_KEY',
+    for (const key of ['ADMIN_API_KEY', 'SLICE_SERVICE_API_KEY', 'SECRET_MARKER',
+        'DATABASE_URL', 'CLOUD_API_KEY',
         'TELEGRAM_BOT_TOKEN', 'EMAIL_API_KEY', 'SLICE_RATE_LIMIT_MAX_REQUESTS',
         'NODE_OPTIONS', 'PYTHONPATH']) assert.equal(env[key], undefined, key);
 });
 
 test('real child sees required allowlist values but no inert secret markers', async () => {
-    const keys = ['ADMIN_API_KEY', 'SECRET_MARKER', 'DATABASE_URL'];
+    const keys = ['ADMIN_API_KEY', 'SLICE_SERVICE_API_KEY', 'SECRET_MARKER', 'DATABASE_URL'];
     const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
     try {
         keys.forEach((key, index) => { process.env[key] = String(51 + index); });
@@ -85,7 +87,7 @@ test('real child sees required allowlist values but no inert secret markers', as
             "const e=process.env;process.stdout.write(JSON.stringify({",
             "path:Boolean(e.PATH),root:Boolean(e.SystemRoot||e.WINDIR),",
             "python:[e.PYTHONDONTWRITEBYTECODE,e.PYTHONNOUSERSITE,e.PYTHONUNBUFFERED,e.PYTHONUTF8],",
-            "leaked:['ADMIN_API_KEY','SECRET_MARKER','DATABASE_URL'].filter(k=>k in e)}))"
+            "leaked:['ADMIN_API_KEY','SLICE_SERVICE_API_KEY','SECRET_MARKER','DATABASE_URL'].filter(k=>k in e)}))"
         ].join('')]);
         const observed = JSON.parse(stdout);
         assert.equal(observed.path, true);

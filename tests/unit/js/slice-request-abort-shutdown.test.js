@@ -204,12 +204,13 @@ test('an aborted active request cannot write success and route cleanup waits for
     const workspace = { directory: process.cwd(), cleanup: async () => { cleanupCalls += 1; } };
     const router = createSliceRouter({
         rateLimiter(req, res, next) { next(); },
+        authenticate(req, res, next) { next(); },
         createWorkspace: async () => workspace,
         cleanupWorkspace: (owned) => owned.cleanup(),
         upload: { single: () => (req, res, next) => next() },
         handlePrusa: handlers.handleSlicePrusa
     });
-    const lifecycle = router.stack.find((layer) => layer.route).route.stack[1].handle;
+    const lifecycle = router.stack.find((layer) => layer.route).route.stack[2].handle;
     const req = new SyntheticRequest();
     const res = new SyntheticResponse();
     let forwarded;

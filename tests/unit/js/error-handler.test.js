@@ -33,6 +33,7 @@ function createResponseRecorder() {
 test('global error middleware preserves known status and error-code mappings', async (t) => {
     const cases = [
         ['admin CORS', { code: 'ADMIN_CORS_ORIGIN_NOT_ALLOWED' }, 403, 'ADMIN_CORS_ORIGIN_NOT_ALLOWED'],
+        ['slice CORS', { code: 'SLICE_CORS_ORIGIN_NOT_ALLOWED' }, 403, 'SLICE_CORS_ORIGIN_NOT_ALLOWED'],
         ['invalid JSON', { type: 'entity.parse.failed' }, 400, 'INVALID_JSON_BODY'],
         ['large body', { type: 'entity.too.large' }, 413, 'PAYLOAD_TOO_LARGE'],
         ['large upload', { code: 'LIMIT_FILE_SIZE' }, 413, 'UPLOADED_FILE_TOO_LARGE'],
@@ -51,6 +52,25 @@ test('global error middleware preserves known status and error-code mappings', a
             assert.equal(state.body.errorCode, expectedCode);
         });
     }
+});
+
+test('global error middleware preserves the exact slice CORS rejection payload', () => {
+    const { state, response } = createResponseRecorder();
+    const error = Object.assign(new Error('untrusted implementation message'), {
+        code: 'SLICE_CORS_ORIGIN_NOT_ALLOWED'
+    });
+
+    errorHandler(error, {
+        method: 'POST',
+        originalUrl: '/prusa/slice'
+    }, response, assert.fail);
+
+    assert.equal(state.statusCode, 403);
+    assert.deepEqual(state.body, {
+        success: false,
+        error: 'Origin is not allowed for slicing endpoints.',
+        errorCode: 'SLICE_CORS_ORIGIN_NOT_ALLOWED'
+    });
 });
 
 test('global error middleware hides server details and preserves safe client failures', () => {

@@ -101,6 +101,10 @@ class RepositorySafetyContentTests(unittest.TestCase):
             ".env.example",
             b"ADMIN_API_KEY=exampleKEY-6.7.\n",
         )
+        self.assert_no_secret_assignment(
+            ".env.example",
+            b"SLICE_SERVICE_API_KEY=example-inert-slice-service-key-000000000001\n",
+        )
         self.assert_secret_assignment(
             ".env.example",
             b"ADMIN_API_KEY=example-not-an-approved-sentinel\n",
@@ -108,6 +112,14 @@ class RepositorySafetyContentTests(unittest.TestCase):
         self.assert_secret_assignment(
             "candidate.env",
             b"ADMIN_API_KEY=exampleKEY-6.7.\n",
+        )
+        self.assert_secret_assignment(
+            ".env.example",
+            b"SLICE_SERVICE_API_KEY=example-inert-slice-service-key-000000000002\n",
+        )
+        self.assert_secret_assignment(
+            "candidate.env",
+            b"SLICE_SERVICE_API_KEY=example-inert-slice-service-key-000000000001\n",
         )
 
     def test_structured_and_unquoted_literals_are_detected(self) -> None:
