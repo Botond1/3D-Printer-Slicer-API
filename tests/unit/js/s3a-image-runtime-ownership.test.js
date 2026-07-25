@@ -81,8 +81,8 @@ function workflowContract(source) {
     assert.match(boundary, /identity\.kernel_uid !== identity\.service_uid/);
     assert.match(cleanup, /if: \$\{\{ always\(\) \}\}[\s\S]*continue-on-error: true/);
     for (const name of ['I2_UID_PROBE_NAME', 'I2_GID_PROBE_NAME',
-        'I2_ORCA_PROBE_NAME', 'I5_TOPOLOGY_PROBE_NAME',
-        'CONTAINER_NAME']) assert.ok(cleanup.includes(name));
+        'I2_ORCA_PROBE_NAME', 'I6_TOPOLOGY_API_NAME', 'I6_PRIVATE_PEER_NAME',
+        'CONTAINER_NAME', 'I6_EGRESS_SENTINEL_NAME']) assert.ok(cleanup.includes(name));
     assert.match(cleanup, /::error title=I2 exact cleanup::\$1/);
     assert.match(cleanup, /container_ownership_failure/);
     assert.match(cleanup, /"\$exact_reference" 2>\/dev\/null\)/);
@@ -182,8 +182,10 @@ test('required workflow mutations are rejected', async (t) => {
         ['cleanup outcome ignored', "if (process.env.CLEANUP_OUTCOME !== 'success')", 'if (false)'],
         ['cleanup skipped', '        id: exact_cleanup\n        if: ${{ always() }}', '        id: exact_cleanup\n        if: ${{ success() }}'],
         ['cleanup probe omitted',
-            '              "$I2_ORCA_PROBE_NAME" "$I5_TOPOLOGY_PROBE_NAME" "$CONTAINER_NAME"',
-            '              "$I2_ORCA_PROBE_NAME" "$CONTAINER_NAME"'],
+            '              "$I2_ORCA_PROBE_NAME" "$I6_TOPOLOGY_API_NAME" "$I6_PRIVATE_PEER_NAME" \\\n'
+                + '              "$CONTAINER_NAME" "$I6_EGRESS_SENTINEL_NAME"',
+            '              "$I2_ORCA_PROBE_NAME" "$I6_TOPOLOGY_API_NAME" \\\n'
+                + '              "$CONTAINER_NAME" "$I6_EGRESS_SENTINEL_NAME"'],
         ['cleanup ownership removed', '[ "$validation_label" != "true" ]', 'false'],
         ['cleanup absence streams merged', '"$exact_reference" 2>/dev/null)', '"$exact_reference" 2>&1)'],
         ['cleanup switches to name', 'docker container rm --force "$container_id"', 'docker container rm --force "$exact_container"']

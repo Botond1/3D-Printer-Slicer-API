@@ -319,14 +319,18 @@ function createEvidence() {
     fs.writeFileSync(path.join(evidenceDir, 'grype.json'), JSON.stringify({ matches: [] }));
     fs.writeFileSync(path.join(evidenceDir, 'runtime-diagnostics.json'), JSON.stringify(validDiagnostic()));
     fs.writeFileSync(path.join(evidenceDir, 'topology-evidence.json'), JSON.stringify({
+        version: 'i6-s5-private-peer-v1',
         classification: 'success',
         contractReason: 'success',
-        sentinelOperational: true,
-        internalNetwork: true,
-        loopbackIngress: true,
+        privatePeerIngress: true,
         authenticatedReadiness: true,
+        authRejectionProof: true,
         apiEgressDenied: true,
-        nativeEgressDenied: true
+        nativeEgressDenied: true,
+        hostPortAbsent: true,
+        apiNoDefaultRoute: true,
+        internalNetwork: true,
+        sentinelOperational: true
     }));
     return { runnerTemp, subdir, evidenceDir };
 }
