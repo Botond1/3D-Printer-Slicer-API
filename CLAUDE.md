@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Operating Guide
 
-Last synchronized: 2026-07-23
+Last synchronized: 2026-07-25
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -108,17 +108,20 @@ Operations-protected endpoints (x-api-key with operations audience):
 ## Readiness, Events, Metrics, and Topology
 - GET /health is public process liveness.
 - GET /ready is public minimal readiness and exposes only READY/NOT_READY.
+- GET /health/detailed uses fresh readiness probes; GET /ready and
+  GET /operations/readiness use the bounded readiness cache.
 - Operations-scoped readiness reason codes are SHUTDOWN, ADMISSION_CLOSED,
   QUEUE_UNAVAILABLE, NATIVE_RUNTIME_QUARANTINED, STORAGE_UNSAFE,
   RETENTION_UNSAFE, PRICING_UNAVAILABLE, and CONFIG_UNSAFE.
 - Structured JSON events use version 1, a fixed event vocabulary, bounded
   request/job/artifact correlation, allowlisted fields, and secret/path/customer
   redaction. Metrics use fixed audience/outcome/reason/bucket labels only.
-- Compose intentionally remains loopback-published on its ordinary bridge. A
-  local Docker Desktop 29.6.1 A/B proved the ordinary bridge allows API/native
-  DNS/TCP/UDP egress; an internal bridge denied egress but exposed no host
-  listener. S4 is BLOCKED_S4_EGRESS_CAPABILITY. Do not invent a sidecar or claim
-  VPS/firewall/proxy/deployment proof; S5 owns the isolation architecture decision.
+- I6 selects an internal-only API with no host port/default route and one
+  authenticated reverse-proxy peer; repository validation requires calibrated
+  API/native DNS/TCP/UDP denial. The proxy must not provide generic forwarding,
+  NAT, or DNS tunnelling for the API. Decision:
+  PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED. Intended/denied
+  callers and all deployed Hostinger/proxy/firewall facts remain UNVERIFIED.
 
 ## Queue and Rate Protection
 Defaults:

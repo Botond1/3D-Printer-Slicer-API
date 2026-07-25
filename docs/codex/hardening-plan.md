@@ -1,6 +1,26 @@
 # Hardening plan
 
-## I5/S4 scoped trust, topology, and observability checkpoint
+## I6/S5 private-peer topology decision
+
+Status: `IN_PROGRESS`; repository topology selected, deployment proof pending.
+
+Atomic delta: `549fa4258c60b2971855e7a202e488d74427ccd4` followed
+by `7dd6d73632856967824570c6e38c54b905d032b1`.
+Decision: `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`.
+
+The API is internal-only with no host-published port. An authenticated
+reverse-proxy peer provides intended ingress and may also attach to an approved
+ingress network, but must not provide generic forwarding, NAT, or DNS
+tunnelling for the API. Repository validation calibrates an owned sentinel and
+then requires API and spawned-native DNS/TCP/UDP denial. Protected
+`/health/detailed` is fresh; `/ready` and `/operations/readiness` stay cached.
+
+Intended/denied callers, proxy hop/CIDR, secret mode, immutable deployed digest,
+and Hostinger/proxy/firewall/egress behavior remain `UNVERIFIED`. See the
+[I6 evidence](evidence/i6-s5-private-peer-topology.md) and
+[operator contract](i6-s5-private-peer-operator-validation.md).
+
+## Historical I5/S4 scoped trust, topology, and observability checkpoint
 
 Status: `IN_PROGRESS` pending final exact-SHA hosted validation.
 
@@ -88,9 +108,9 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `IN_PROGRESS` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | I3 implements a bounded Node HTTP-server subset; resource/archive, artifact/pricing, and container-permission exits remain open | I3 locally implements and focuses tests on header/request/keep-alive timeouts, header/connection counts, and requests/socket with bounded fallback. Final aggregate and exact-SHA evidence are pending; measured VPS/proxy/CPU/RAM/PID/disk/archive/model/output caps, streaming limits, artifact retention/correlation, atomic pricing, and read-only state separation remain incomplete. |
 | S3a - repository build/provenance and automatic-deploy separation | `BLOCKED` | S0.1; integrated through I1 | exact-candidate, build-once, no-push/no-deploy validation and Node 24 action maintenance are integrated; remaining image/runtime and supply-chain evidence stays fail closed | Exact S3a-B2 source validation is green, but hosted image validation has both an unresolved persistent liveness failure and a HIGH scanner path. Swiper 7.2.0 is known, but is not claimed as the sole failure. Immutable registry digest, signature/attestation, branch policy, promotion, topology, readiness, and rollback are unverified. |
-| S4 - service trust and topology | `BLOCKED` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | I5 implements/test-covers scoped active/previous credentials, finite legacy migration, exact audience CORS, fail-closed proxy/request identity, readiness, structured events, and metrics; topology capability remains open | Baseline hosted gates passed. Local Docker Desktop A/B proved ordinary bridge ingress plus unrestricted API/native egress, while internal bridge denied egress but provided no host listener. Exit is `BLOCKED_S4_EGRESS_CAPABILITY`; external proxy/private ingress, host egress/firewall, secret delivery, deployed candidate, and final exact-SHA gates remain unverified. No promotion is authorized. |
+| S4 - service trust and topology | `IN_PROGRESS` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | I5 supplies scoped trust; I6 selects the internal private-peer/no-host-port topology | Repository validation requires authenticated peer ingress, auth rejection, no API external route, and calibrated API/native DNS/TCP/UDP denial. Deployed callers, proxy/firewall, secrets, digest, and egress remain `UNVERIFIED`. |
 | S3b - staging and promotion drill | `NOT_STARTED` | S3a evidence; S4 evidence; separate explicit user/owner authorization | staging/promotion/readiness/rollback drill only | Promote a verified immutable artifact through a human-authorized staging gate; readiness is bounded and meaningful; failure restores the prior artifact; the drill is recorded. No authorization or verification is inferred from S1a/S3a/S4 repository work. |
-| S5 - optional isolated worker and async API | `NOT_STARTED` | explicit architecture decision after S1a-S4 and S3b evidence | API-version lane; worker-isolation lane; migration lane | Decision record approves cost/complexity; isolated worker enforces resource/network boundaries; versioned async job states, idempotency, cancellation, retention, and compatibility migration are tested without silently changing current endpoints. |
+| S5 - topology/optional async worker decision | `IN_PROGRESS` | I5 trust controls and S4 topology evidence | private-peer topology selected; async API/worker deferred | `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`. Complete exact deployed caller, proxy, secret, digest, firewall, and egress evidence without changing current endpoints. |
 
 ## Current S0.1 verification checkpoint
 
@@ -447,11 +467,10 @@ S1c follows that AbortSignal contract and owns native process execution:
 
 ## S5 decision gate
 
-S5 proceeds only if threat/performance evidence shows that S1-S4 in-process
-controls are insufficient or asynchronous work is a product requirement. The
-decision must compare isolation, operational complexity, migration risk, queue
-durability, API compatibility, and cost. No `/v1` or async job contract is added
-before that decision.
+Decision: `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`. No `/v1`,
+async job, or isolated-worker contract is authorized by I6. Revisit async work
+only under a separate decision covering durability, compatibility, migration,
+operational complexity, and cost.
 
 ## Parallel sequencing and integration
 
@@ -472,8 +491,9 @@ graceful runtime shutdown, process-tree cancellation, exact command integrity,
 and subprocess-environment minimization are locally verified.
 S2 artifact lifecycle waits for S1a, while its container envelope waits for S3a
 image-control decisions. I5 supplies repository-tested scoped credentials,
-Origin/proxy/request identity, readiness, events, and metrics, but the required
-private ingress plus denied API/native egress topology is capability-blocked.
+Origin/proxy/request identity, readiness, events, and metrics. I6 selects the
+private-peer/no-host-port topology and its fail-closed repository validation
+contract; deployed proof remains `UNVERIFIED`.
 S3b may run staging, promotion, readiness, and rollback drills only
 after complete S4 evidence and separate explicit user/owner authorization. No
 production promotion occurs without those verified gates or explicit human
@@ -496,7 +516,7 @@ the exception.
 | D-010 | Promotion to `main` was not part of S0 completion. | At S0 the workflow could deploy every `main` push. S3a has since removed that repository path without creating a replacement promotion mechanism. | S4 then separately authorized S3b promotion design |
 | D-011 | S0.1 remediated the registry/audit findings, but that result alone did not complete the application mitigation for deeply nested multipart fields. | Commit `f9ed1ee6791e531670d5d7703f994bfb51986ebb` locks Multer 2.2.0 and the other verified non-major fixes, and its production audit is zero. S1a commit `e7a409566bb8795a22f38bbf9f514b42c51bda74` separately configures and live-tests fixed `limits.fieldNestingDepth: 0`. | S0.1 registry/audit remediation and S1a application mitigation locally verified |
 | D-012 | Native children require both secret minimization and egress control. | I1 supplies a tested minimal environment excluding API secrets, but parser/slicer processes still share unrestricted container egress. | S1c environment verified; S4 topology/container egress gate before promotion |
-| D-013 | I3 established a separate slice credential; I5 supersedes the wider service-trust contract. | I5 now tests four active/previous audiences, two-restart revocation, finite legacy migration, exact Origin/proxy/request identity, readiness, events, and metrics. Private deployed topology and production secret delivery remain `UNVERIFIED`; local simultaneous ingress/egress denial is capability-blocked. | Complete the S4/S5 topology and deployed secret evidence before S3b; no production authorization is inferred. |
+| D-013 | I3 established a separate slice credential; I5 supersedes the wider service-trust contract. | I5 tests four active/previous audiences, two-restart revocation, finite legacy migration, exact Origin/proxy/request identity, readiness, events, and metrics. I6 selects the private-peer repository topology; deployed topology and secret delivery remain `UNVERIFIED`. | Complete deployed S4/S5 caller, proxy, secret, digest, firewall, and egress evidence before S3b. |
 | D-014 | `fileSize` alone was not a complete multipart/HTTP resource envelope. | S1a verifies finite multipart limits. I3 adds bounded Node header/request/keep-alive timeouts, header count, connection count, and requests/socket with fallback, but actual VPS/proxy behavior, total streamed upload duration, and measured CPU/RAM/disk envelopes remain open. | Complete S2 measured server, proxy, and resource envelope. |
 | D-015 | A `main` push could historically deploy independently of validation CI. | S3a removed that path. Exact S3a-B2 source is green, but image liveness and HIGH scanning remain red; required checks and branch protection are external `UNVERIFIED`. | S3a image/runtime diagnosis plus repository policy verification; S3b only after S4 and separate authorization |
 | D-016 | The manifest/lock freeze was limited to the S1a/S3a parallel wave. | The dependency patch is now integrated once by patch ID; duplicate `306b799` was not picked. | Future advisory work requires a new serialized owner and audit evidence |
@@ -505,4 +525,4 @@ the exception.
 | D-019 | A known image advisory does not explain away an independent liveness failure. | Hosted Image run `29957927370` shows both persistent liveness exit 1 and the HIGH scanner path. Swiper 7.2.0 is known, but S3a-V2C is not integrated. | S3a remains blocked; diagnose/fix both paths without weakening gates |
 | D-020 | I2 separates the verified tmpfs liveness root cause from the Swiper advisory. | Exact A/B/C and main-container evidence proves root-owned tmpfs mount roots caused startup `EACCES`; V2C independently produces zero `GHSA-hmx5-qpq5-p643` findings. Dynamic nonzero UID/GID plus kernel cross-check and mode `0700` fix liveness without root or world-writable state. | I2 repository image validation closed; external policy, provenance/promotion, S4/S3b, and production evidence remain required |
 | D-021 | Application defaults do not prove host or proxy capacity. | I3 tests the Node HTTP envelope in-process, but no exact-SHA hosted result, VPS measurement, or reverse-proxy timeout inspection exists. | Keep VPS capacity and proxy timeouts `UNVERIFIED`; complete measured S2/S4 topology evidence before promotion. |
-| D-022 | Docker Desktop internal networking cannot currently prove the required private loopback-published topology. | Baseline A/B on Docker Desktop 29.6.1 proved ordinary bridge ingress plus API/native DNS/TCP/UDP egress; internal bridge denied egress but exposed no host listener. Compose remains unchanged and no sidecar is invented. | `BLOCKED_S4_EGRESS_CAPABILITY`; S5 owns the isolated-worker/firewall architecture decision. Verify final deployed caller/proxy/firewall/egress separately before S3b. |
+| D-022 | I5's loopback-published topology could not combine ingress with egress denial; I6 replaces it. | Historical Docker Desktop A/B remains valid. I6 selects an internal-only API with an authenticated private peer, no API host port/default route, and calibrated API/native egress-denial validation. | Verify callers, proxy hop, secret mode, deployed digest, firewall, and egress externally before S3b. Async worker is deferred. |

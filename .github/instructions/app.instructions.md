@@ -4,7 +4,7 @@ applyTo: "app/**"
 
 # App Folder Instructions
 
-Last synchronized: 2026-07-23
+Last synchronized: 2026-07-25
 
 ## Responsibilities
 - app/server.js handles bootstrap, middleware, routes, docs, and static output serving.
@@ -23,9 +23,10 @@ Last synchronized: 2026-07-23
   requestObservability emits lifecycle events.
 - app/middleware/rateLimit.js includes periodic expired-bucket cleanup and separate admin throttling middleware.
 - app/services/http-server.js applies bounded HTTP timeouts, header/connection counts, and requests per socket before listen.
-- app/services/readiness.service.js provides cached admission-aware probes and
-  stable reason codes; app/services/observability provides redacted events and
-  fixed-cardinality metrics.
+- app/services/readiness.service.js provides cached admission-aware probes for
+  /ready and /operations/readiness plus fresh probes for /health/detailed;
+  app/services/observability provides redacted events and fixed-cardinality
+  metrics.
 
 ## Endpoint Rules
 - Keep upload field name as choosenFile.
@@ -57,7 +58,9 @@ Last synchronized: 2026-07-23
 - Preserve error code names used by clients.
 - Do not auto-heal invalid geometry.
 - Preserve public minimal readiness and operations-only detailed reasons/metrics.
+  Keep /health/detailed fresh and /ready plus /operations/readiness cached.
 - Never add request/job/artifact/customer values as metric labels.
 - Preserve fail-closed proxy CIDR/loopback compilation and safe request-ID validation.
-- Compose remains loopback-only; ordinary bridge egress is an unresolved
-  BLOCKED_S4_EGRESS_CAPABILITY, not authority to invent a sidecar.
+- I6 validation requires an internal-only API with no host port/default route,
+  an authenticated private peer, and calibrated API/native egress denial.
+  Async worker work remains deferred and deployed topology remains UNVERIFIED.

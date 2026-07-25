@@ -1,6 +1,6 @@
 # App Folder - Local Claude Guide
 
-Last synchronized: 2026-07-23
+Last synchronized: 2026-07-25
 
 ## Scope
 
@@ -119,7 +119,9 @@ This document describes the application runtime inside app/.
   - Applies validated Node HTTP header/request/keep-alive timeouts, header count, connection count, and requests-per-socket before listen.
   - Falls back to defaults for empty, non-decimal, unsafe, or out-of-range values and caps headers timeout at request timeout.
 - app/services/readiness.service.js
-  - Caches admission-aware queue/native/storage/retention/pricing/config probes.
+  - Caches admission-aware queue/native/storage/retention/pricing/config probes
+    for /ready and /operations/readiness; exposes fresh probes to
+    /health/detailed.
   - Emits stable reason codes and closes admission before shutdown drain.
 - app/services/observability/
   - Carries bounded request/job/artifact correlation, emits versioned allowlisted
@@ -198,6 +200,8 @@ This document describes the application runtime inside app/.
 - /health is liveness. /ready is public minimal readiness only.
 - /health/detailed, /operations/readiness, and /operations/metrics require the
   operations key. Readiness reason codes are stable and metrics labels are fixed.
+- /health/detailed uses fresh readiness probes; /ready and
+  /operations/readiness retain bounded caching.
 - /admin/download/:fileName requires the artifact key and applies path safety guards.
 - /admin/download/:fileName supports ALL token for ZIP bulk download while preserving extension allowlist, path/symlink containment checks, and MAX_ZIP_ENTRIES/MAX_ZIP_UNCOMPRESSED_BYTES limits.
 - Unsupported routes return JSON 404 with ROUTE_NOT_FOUND.
@@ -254,10 +258,9 @@ HTTP server defaults and inclusive bounds:
 - HTTP_MAX_CONNECTIONS: 128, bounded 1..1024
 - HTTP_MAX_REQUESTS_PER_SOCKET: 100, bounded 1..1000
 - Actual VPS capacity and reverse-proxy timeouts remain UNVERIFIED.
-- Compose stays loopback-published on an ordinary bridge. Local Docker Desktop
-  29.6.1 showed that bridge permits API/native DNS/TCP/UDP egress; an internal
-  bridge denied egress but exposed no loopback listener. S4 remains
-  BLOCKED_S4_EGRESS_CAPABILITY; do not invent an in-process/sidecar bypass.
+- I6 validation selects an internal-only API with no host port/default route,
+  an authenticated private peer, and calibrated API/native DNS/TCP/UDP denial.
+  Async worker work is deferred; deployed topology remains UNVERIFIED.
 
 ## Local Rules
 

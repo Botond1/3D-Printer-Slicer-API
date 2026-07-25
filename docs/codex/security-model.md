@@ -1,6 +1,25 @@
 # Security model
 
-## I5/S4 scoped-trust and observability control delta
+## I6/S5 private-peer topology control delta
+
+Atomic delta: `549fa4258c60b2971855e7a202e488d74427ccd4` followed
+by `7dd6d73632856967824570c6e38c54b905d032b1`.
+Decision: `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`.
+
+| Current control | Classification | Evidence and remaining boundary |
+| --- | --- | --- |
+| Readiness freshness | `IMPLEMENTED_AND_TESTED` | Protected `/health/detailed` runs fresh readiness probes and then checks Python; `/ready` and `/operations/readiness` retain the bounded cache. |
+| Internal-only API | `REPOSITORY_CONTRACT_SELECTED` | I6 requires one internal private bridge, no API host port/default route, and one authenticated reverse-proxy peer. |
+| Peer ingress and egress denial | `REPOSITORY_CONTRACT_SELECTED` | The peer proves liveness, readiness, operations authentication and rejection. A calibrated sentinel then proves API and spawned-native DNS/TCP/UDP denial. The proxy must not provide generic forwarding, NAT, or DNS tunnelling for the API. |
+| External deployment proof | `UNVERIFIED` | Intended/denied caller, proxy hop/CIDR, secret owner/mode, immutable deployed digest, and Hostinger/proxy/firewall/egress behavior require operator evidence. |
+
+See
+[`evidence/i6-s5-private-peer-topology.md`](evidence/i6-s5-private-peer-topology.md)
+and
+[`i6-s5-private-peer-operator-validation.md`](i6-s5-private-peer-operator-validation.md).
+No repository result authorizes deployment or promotion.
+
+## Historical I5/S4 scoped-trust and observability control delta
 
 Exact repository baseline:
 `5be7b19d13616f06504c18217e25bf95c97c6e96`.
@@ -15,7 +34,7 @@ Exact repository baseline:
 | Structured events and metrics | `IMPLEMENTED_AND_TESTED` | Version-1 fixed event names, bounded request/job/artifact correlation, field allowlists, injection neutralization, secret/path/filename/customer-data exclusion, fixed metric enums, and output bounds have deterministic tests. Production collection, retention, access, alert routing, and thresholds remain `UNVERIFIED`. |
 | Private ingress plus denied API/native egress | `IN_PROGRESS` | Exact candidate `510e6110ef5c49cd03962627210d6db114554618` passed hosted Source run `30037842766`; Image run `30037842526` failed closed on independent abort-transport and private-inspect contracts. The corrective validator reads requested loopback publication only from canonical `HostConfig.PortBindings`, proves external-default-route absence separately, retains real ingress/readiness and API/native DNS/TCP/UDP denial probes, and emits one allowlisted reason. Final exact-SHA hosted proof is pending. |
 
-Compose remains unchanged, loopback-published, and ordinary bridge. No sidecar,
+At I5, Compose remained unchanged, loopback-published, and ordinary bridge. No sidecar,
 production firewall, deployed proxy, or worker isolation is invented. Docker
 API 1.48 and Desktop 29 fixture differences are local portability evidence, not
 production topology proof. The final candidate SHA and hosted topology result
@@ -23,7 +42,8 @@ are pending. Intended/denied
 deployed caller, reverse-proxy CIDRs/hops/timeouts, host egress/firewall,
 production secret source/ownership/mode/current/previous/revoked state, deployed
 digest/VPS state, branch policy, S3b, and production readiness remain
-`UNVERIFIED`. S5 owns the isolated-worker/firewall architecture decision.
+`UNVERIFIED`. I6 later selected the private-peer topology and deferred the
+async-worker option; these I5 results remain historical.
 
 ## I4/S2 resource and mutable-state controls
 
@@ -237,8 +257,10 @@ Material trust boundaries:
 7. Source/lockfiles/build network to the run-local validation image. The former
    GitHub-workflow-to-mutable-VPS path is historical and has been removed from
    the repository; any external deployment path is `UNVERIFIED`.
-8. API/native processing to the ordinary Compose network and outbound network.
-   Local evidence proves unrestricted egress on the ingress-capable topology.
+8. API/native processing to the container network. Historical I5 evidence
+   proves unrestricted egress on its ingress-capable topology; I6 selects an
+   internal private-peer repository contract, while deployed egress remains
+   `UNVERIFIED`.
 
 ## Attack surface
 
@@ -278,7 +300,7 @@ delta above when reading test classifications.
 
 | Risk | Severity | Current evidence | Required exit / owner |
 | --- | --- | --- | --- |
-| Native Python/slicer compromise can use unrestricted egress. | Critical | I5 local A/B proves API/native DNS/TCP/UDP egress succeeds on the ordinary bridge required for loopback ingress. Internal networking denies egress but removes the Docker Desktop host listener. | **S4/S5 topology gate:** `BLOCKED_S4_EGRESS_CAPABILITY`; choose and verify the isolated-worker/firewall architecture before promotion. |
+| Native Python/slicer compromise can use unintended egress if deployment drifts. | Critical | Historical I5 A/B proved ordinary-bridge egress. I6 selects an internal-only API/no-host-port topology and repository validation requires calibrated API/native DNS/TCP/UDP denial. | **S4/S5 deployment gate:** verify callers, proxy behavior, firewall, and API/native egress on the exact deployed digest. |
 | Scoped service trust is repository-tested but deployed topology is incomplete. | Critical | I5 tests active/previous audiences, two-restart revocation, finite legacy migration, Origin policy, proxy identity, readiness, and observability. Final candidate/hosted evidence, deployed callers/proxy/firewall, and production secret lifecycle are pending or `UNVERIFIED`. | **S4 service trust/topology + S3b promotion gate:** prove final deployed private ingress, denied unintended caller, denied API/native egress, secret ownership/mode/state, and exact digest before production. An agent cannot grant an exception. |
 | Multipart/HTTP ingress can exhaust resources beyond the application subset. | High | S1a covers bounded multipart fields and cleanup. I3 applies bounded Node header/request/keep-alive timeouts, headers, connections, and requests/socket with fallback. Actual VPS capacity/proxy timeouts, total streamed upload duration, and measured memory/disk/CPU envelopes remain unverified. | **S2:** measure and enforce host/proxy upload duration, connection/concurrency, memory, CPU, and disk envelopes under synthetic load. |
 | Validation is not yet a production promotion chain. | Critical | S3a removed automatic deployment and exact source S3a-B2 passed, but its hosted image failed both persistent runtime liveness and the HIGH scanner path. Branch protection and required checks remain external `UNVERIFIED`. | **S3a image/runtime + repository administrator:** resolve liveness and vulnerability evidence without weakening gates, then verify policy. **S4/S3b:** only after S4 evidence and separate explicit user/owner authorization, prove immutable promotion, staging readiness, and rollback. |

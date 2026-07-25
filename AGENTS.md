@@ -195,6 +195,21 @@ branch policy, and S3b promotion/readiness/rollback remain pending or
 See
 [`docs/codex/evidence/i5-s4-trust-topology-observability.md`](docs/codex/evidence/i5-s4-trust-topology-observability.md).
 
+The current I6/S5 atomic delta is
+`549fa4258c60b2971855e7a202e488d74427ccd4` followed by
+`7dd6d73632856967824570c6e38c54b905d032b1`. Decision:
+`PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`. Protected
+`/health/detailed` now runs fresh readiness probes; `/ready` and
+`/operations/readiness` retain the bounded cache. Repository validation selects
+an internal-only API with no host port/default route and one authenticated
+reverse-proxy peer, then requires calibrated API/native DNS/TCP/UDP denial.
+The proxy must not provide generic forwarding, NAT, or DNS tunnelling for the
+API. Intended/denied callers, proxy hop/CIDR, secret mode, deployed digest, and
+Hostinger/proxy/firewall/egress facts remain `UNVERIFIED`. See
+[`docs/codex/evidence/i6-s5-private-peer-topology.md`](docs/codex/evidence/i6-s5-private-peer-topology.md)
+and
+[`docs/codex/i6-s5-private-peer-operator-validation.md`](docs/codex/i6-s5-private-peer-operator-validation.md).
+
 ## Read before changing
 
 - Any change: this file, the three Codex knowledge files, root `CLAUDE.md`, and
@@ -231,6 +246,8 @@ See
 - Keep proxy trust disabled by default and compile only explicit validated
   IP/CIDR peers or loopback. Preserve nearest-untrusted-hop spoof resistance.
 - Keep public `/ready` minimal and operations diagnostics/metrics protected.
+  `/health/detailed` must use fresh readiness probes; `/ready` and
+  `/operations/readiness` retain bounded caching.
   Events must remain allowlisted/redacted and metrics fixed-cardinality.
 - Execute commands with `execFile` and argument arrays; never add shell
   interpolation for request-controlled data.

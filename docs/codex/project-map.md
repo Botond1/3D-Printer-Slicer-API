@@ -1,6 +1,26 @@
 # Verified project map
 
-## Current I5/S4 scoped-trust candidate
+## Current I6/S5 private-peer topology decision
+
+- Atomic delta: `549fa4258c60b2971855e7a202e488d74427ccd4`
+  followed by `7dd6d73632856967824570c6e38c54b905d032b1`.
+- Decision: `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`.
+- Protected `/health/detailed` evaluates fresh readiness probes. Public
+  `/ready` and protected `/operations/readiness` retain the bounded cache.
+- Repository validation places the API and authenticated reverse-proxy peer on
+  one internal-only bridge. The API has no host-published port or external
+  default route. The peer proves liveness, minimal readiness,
+  operations-authenticated readiness, and missing/wrong-key rejection.
+- An owned sentinel is calibrated while reachable, detached, and then used to
+  require API and spawned-native DNS/TCP/UDP denial. The proxy must not provide
+  generic forward-proxy, NAT, or DNS tunnelling for the API.
+- Deployed intended/denied callers, proxy hop/CIDR, secret mode, immutable
+  digest, and Hostinger/proxy/firewall/egress facts remain `UNVERIFIED`. See
+  [`evidence/i6-s5-private-peer-topology.md`](evidence/i6-s5-private-peer-topology.md)
+  and
+  [`i6-s5-private-peer-operator-validation.md`](i6-s5-private-peer-operator-validation.md).
+
+## Historical I5/S4 scoped-trust candidate
 
 - Exact baseline: `5be7b19d13616f06504c18217e25bf95c97c6e96`;
   branch: `codex/i5-s4-trust-topology-observability`.
@@ -40,7 +60,7 @@
   requested fixed loopback publish; a bounded runtime projection separately
   proves no external default route. Docker API 1.48 and Desktop 29 fixtures
   cover the inspect-shape portability seam.
-- Compose remains unchanged and no sidecar was invented. Status is
+- At I5, Compose remained unchanged and no sidecar was invented. Status was
   `IN_PROGRESS` pending final exact-SHA hosted Source and Image success.
   Deployed caller/proxy/firewall/secret/digest/VPS state and S3b remain
   `UNVERIFIED`.
@@ -454,6 +474,8 @@ Runtime route registration, not README lists, is canonical:
 - protected pricing mutations apply `adminRateLimiter` then pricing audience
   authentication; `/admin/**` uses artifact audience; `/health/detailed` and
   `/operations/**` use operations audience;
+- `/health/detailed` runs fresh readiness probes; `/ready` and
+  `/operations/readiness` use the bounded cache;
 - `/prusa/slice` and `/orca/slice` apply rate limiting then mandatory
   `x-slicer-api-key` authentication before workspace/Multer/queue/native work;
   active/previous rotation and revocation are repository-tested; deployed
@@ -479,8 +501,9 @@ Runtime route registration, not README lists, is canonical:
   [`process-tree.js`](../../app/services/slice/process-tree.js)). POSIX uses a
   detached process group; Windows uses trusted absolute `taskkill.exe` exact-PID
   tree requests. Failed termination proof retains the active slot fail closed.
-- Native children no longer inherit arbitrary API environment values. Network
-  egress remains unrestricted and belongs to the S4 topology gate.
+- Native children no longer inherit arbitrary API environment values. I6
+  repository validation denies API/native egress on its selected internal
+  private-peer topology; deployed enforcement remains `UNVERIFIED`.
 - Docker verifies versioned Prusa/Orca AppImage SHA-256 values, while Ubuntu
   tags, NodeSource/Apt inputs, unversioned Python requirements, action tags, and
   Compose image tags remain floating
@@ -530,9 +553,10 @@ delta above for present test and audit status.
 
 ## Verified documentation/code discrepancies
 
-1. `/health` is liveness only. `/ready` is intentionally minimal; operations
-   readiness checks queue/native/storage/retention/pricing/config, while detailed
-   health additionally checks Python. This is not a real synthetic native slice.
+1. `/health` is liveness only. `/ready` is intentionally minimal.
+   `/health/detailed` runs fresh queue/native/storage/retention/pricing/config
+   probes and additionally checks Python; `/operations/readiness` uses the
+   bounded cache. This is not a real synthetic native slice.
 2. OpenAPI omits docs/root routes and several 413/429/503 responses. It
    also claims default pricing entries cannot be deleted, but route/catalog code
    contains no such guard.

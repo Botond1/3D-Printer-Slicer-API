@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Copilot Instructions
 
-Last synchronized: 2026-07-23
+Last synchronized: 2026-07-25
 
 ## Architecture Notice
 This project uses both GitHub Copilot and Claude as primary agentic tools.
@@ -138,17 +138,20 @@ Orca:
 
 ## Readiness, Observability, and Topology
 - Public /health is liveness; public /ready exposes only READY/NOT_READY.
+- /health/detailed uses fresh readiness probes; /ready and
+  /operations/readiness use the bounded readiness cache.
 - Operations readiness reasons are SHUTDOWN, ADMISSION_CLOSED,
   QUEUE_UNAVAILABLE, NATIVE_RUNTIME_QUARANTINED, STORAGE_UNSAFE,
   RETENTION_UNSAFE, PRICING_UNAVAILABLE, and CONFIG_UNSAFE.
 - Versioned structured events use fixed names, bounded request/job/artifact
   correlation, and allowlisted/redacted fields. Runtime metrics use only fixed
   audience/outcome/reason/duration labels.
-- Compose intentionally remains loopback-published on an ordinary bridge. Local
-  Docker Desktop 29.6.1 proved ordinary-bridge API/native DNS/TCP/UDP egress;
-  an internal bridge denied egress but exposed no host listener. S4 is
-  BLOCKED_S4_EGRESS_CAPABILITY. VPS/proxy/firewall/deployment are UNVERIFIED;
-  S5 owns any isolation architecture change.
+- I6 selects an internal-only API with no host port/default route and one
+  authenticated reverse-proxy peer; repository validation requires calibrated
+  API/native DNS/TCP/UDP denial. The proxy must not provide generic forwarding,
+  NAT, or DNS tunnelling for the API. Decision:
+  PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED. Deployed
+  caller/proxy/firewall facts remain UNVERIFIED.
 
 ## Python Runtime Resolution
 - PYTHON_EXECUTABLE is optional but must be an existing absolute path when set.
