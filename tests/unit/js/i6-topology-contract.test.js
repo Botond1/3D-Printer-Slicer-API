@@ -197,6 +197,12 @@ test('accepts the exact private API, hardened peer, and external sentinel topolo
     assert.deepEqual(validateSentinelTopology(sentinelFixture()), {ok: true, reason: 'success'});
 });
 
+test('accepts both Docker projections of an unset peer DNS server list', () => {
+    const fixture = peerFixture();
+    fixture.container.HostConfig.Dns = [];
+    assert.deepEqual(validatePeerTopology(fixture), {ok: true, reason: 'success'});
+});
+
 test('every API allowlisted predicate reason has an executable mutation', () => {
     const mutations = new Map([
         ['private_network_shape_invalid', (f) => { f.network.IPAM = null; }],

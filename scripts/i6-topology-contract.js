@@ -396,7 +396,9 @@ function validatePeerTopology(input) {
     if (JSON.stringify(host.SecurityOpt) !== JSON.stringify(['no-new-privileges'])) {
         return { ok: false, reason: 'peer_no_new_privileges_required' };
     }
-    if (host.Dns !== null
+    const dnsUnset = host.Dns === null
+        || (Array.isArray(host.Dns) && host.Dns.length === 0);
+    if (!dnsUnset
         || !Array.isArray(host.DnsOptions) || host.DnsOptions.length !== 0
         || !Array.isArray(host.DnsSearch) || host.DnsSearch.length !== 0) {
         return { ok: false, reason: 'peer_dns_override_forbidden' };
