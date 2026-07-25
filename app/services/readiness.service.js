@@ -152,8 +152,13 @@ function createReadinessService(options = {}) {
         return cache.value;
     }
 
+    function getFreshStatus() {
+        return runProbes();
+    }
+
     return Object.freeze({
         closeAdmission,
+        getFreshStatus,
         getStatus,
         isAdmissionOpen: () => admissionOpen && !shuttingDown(),
         recordRetentionResult

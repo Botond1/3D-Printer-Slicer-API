@@ -11,6 +11,9 @@ const WORKFLOW_PATH = path.join(ROOT, '.github/workflows/image-validation.yml');
 const SOURCE = fs.readFileSync(HELPER_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const WORKFLOW = fs.readFileSync(WORKFLOW_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const envelope = require(HELPER_PATH);
+const {
+    CONTAINER_PROBE_FAILURES
+} = require(path.join(ROOT, 'scripts/i4-runtime-probe-contract'));
 
 const IMAGE_ID = `sha256:${'b'.repeat(64)}`;
 const CONTAINER_ID = 'c'.repeat(64);
@@ -82,12 +85,21 @@ function helperContract(source) {
         "/^artifact-[a-f0-9]{32}$/.test(body?.artifact_id || '')",
         'await proveClientAbortNoArtifact();', "process.env.ARTIFACT_API_KEY",
         "process.env.OPERATIONS_API_KEY",
+        "scopedJson('/operations/readiness', process.env.OPERATIONS_API_KEY)",
         "scopedJson('/health/detailed', process.env.OPERATIONS_API_KEY)",
+        'async function cachedQueueStatus()', 'async function freshQueueStatus()',
         "scopedJson('/admin/output-files', process.env.ARTIFACT_API_KEY)",
         'controller.abort();', 'if (!controller.signal.aborted)',
         'evaluateAbortTransport(controller.signal.aborted, outcome)',
         'stderrReasons: CONTAINER_PROBE_FAILURES',
+        'const cachedBefore = await cachedQueueStatus();',
+        'cachedBefore.activeJobs !== 0 || cachedBefore.queueLength !== 0',
+        'attempt < 18',
+        'const queue = await freshQueueStatus();\n    if (queue.activeJobs === 1)',
         'queue.activeJobs === 1', 'queue.activeJobs === 0 && queue.queueLength === 0',
+        'cachedDuring.activeJobs !== 0 || cachedDuring.queueLength !== 0',
+        'cachedReadinessActiveJobs: abortProof.cachedReadinessActiveJobs',
+        'freshReadinessActiveJobs: abortProof.freshReadinessActiveJobs',
         'sleep(5000).then(() => ({ timedOut: true }))',
         'JSON.stringify(afterInventory) !== JSON.stringify(beforeInventory)',
         'JSON.stringify(afterEntries) !== JSON.stringify(beforeEntries)',
@@ -179,13 +191,27 @@ test('identity, probe output, helper source, and workflow orchestration remain f
         assert.throws(() => envelope.parsePositiveId(value, 'uid'));
     }
     assert.deepEqual(envelope.parseProbeOutput({
-        stdout: '{"classification":"success","immutableCount":8,"writableCount":9,"authenticatedSliceCount":2,"authenticatedClientAbortCount":1,"postAbortArtifactDelta":0,"abortTransport":"terminal_response"}\n',
+        stdout: '{"classification":"success","immutableCount":8,"writableCount":9,"authenticatedSliceCount":2,"authenticatedClientAbortCount":1,"postAbortArtifactDelta":0,"cachedReadinessActiveJobs":0,"freshReadinessActiveJobs":1,"abortTransport":"terminal_response"}\n',
         stderr: ''
     }), {
         classification: 'success', immutableCount: 8, writableCount: 9,
         authenticatedSliceCount: 2, authenticatedClientAbortCount: 1,
-        postAbortArtifactDelta: 0, abortTransport: 'terminal_response'
+        postAbortArtifactDelta: 0, cachedReadinessActiveJobs: 0,
+        freshReadinessActiveJobs: 1, abortTransport: 'terminal_response'
     });
+    for (const [cachedReadinessActiveJobs, freshReadinessActiveJobs] of [[1, 1], [0, 0]]) {
+        assert.throws(() => envelope.parseProbeOutput({
+            stdout: JSON.stringify({
+                classification: 'success', immutableCount: 8, writableCount: 9,
+                authenticatedSliceCount: 2, authenticatedClientAbortCount: 1,
+                postAbortArtifactDelta: 0, cachedReadinessActiveJobs,
+                freshReadinessActiveJobs, abortTransport: 'terminal_response'
+            }),
+            stderr: ''
+        }));
+    }
+    assert.ok(CONTAINER_PROBE_FAILURES.includes('abort_initial_queue_not_idle'));
+    assert.ok(CONTAINER_PROBE_FAILURES.includes('abort_readiness_cache_replaced'));
     assert.deepEqual(envelope.parseTopOutput('PID PPID COMMAND\n4321 1 node\n'), [
         { pid: 4321, ppid: 1, command: 'node' }
     ]);
@@ -229,8 +255,19 @@ test('runtime-envelope and final-aggregation weakening mutations are rejected', 
             "/^artifact-[a-f0-9]{32}$/.test(body?.artifact_id || '')",
             "/^[a-z0-9_-]{16,128}$/.test(body?.artifact_id || '')", helperContract],
         ['client-abort smoke removed', SOURCE,
-            '  const abortTransport = await proveClientAbortNoArtifact();\n', '', helperContract],
+            '  const abortProof = await proveClientAbortNoArtifact();\n', '', helperContract],
+        ['cached readiness is not primed at zero', SOURCE,
+            '  const cachedBefore = await cachedQueueStatus();\n', '', helperContract],
+        ['active abort observation uses cached readiness', SOURCE,
+            '    const queue = await freshQueueStatus();',
+            '    const queue = await cachedQueueStatus();', helperContract],
+        ['detailed health probe replaced by cached operations readiness', SOURCE,
+            "scopedJson('/health/detailed', process.env.OPERATIONS_API_KEY)",
+            "scopedJson('/operations/readiness', process.env.OPERATIONS_API_KEY)", helperContract],
         ['active queue observation bypassed', SOURCE, 'queue.activeJobs === 1', 'true', helperContract],
+        ['fresh observation replaces normal readiness cache unchecked', SOURCE,
+            'cachedDuring.activeJobs !== 0 || cachedDuring.queueLength !== 0',
+            'false', helperContract],
         ['post-abort API inventory ignored', SOURCE,
             'JSON.stringify(afterInventory) !== JSON.stringify(beforeInventory)', 'false', helperContract],
         ['post-abort filesystem inventory ignored', SOURCE,

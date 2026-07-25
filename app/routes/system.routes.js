@@ -66,7 +66,7 @@ function createSystemRouter(options = {}) {
     });
 
     router.get('/health/detailed', adminRateLimiter, authenticateOperations, async (req, res) => {
-        const readinessStatus = readiness.getStatus();
+        const readinessStatus = readiness.getFreshStatus();
         const python = await checkPythonAvailability();
         const healthy = readinessStatus.ready && python.available;
         return res.status(healthy ? 200 : 503).json({

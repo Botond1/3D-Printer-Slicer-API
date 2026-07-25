@@ -37,6 +37,17 @@ function validateMetricsAuthorization(source) {
     assert.match(source, /router\.get\('\/ready', \(req, res\) =>/);
 }
 
+function validateLiveDetailedReadiness(source) {
+    assert.match(source,
+        /router\.get\('\/health\/detailed', adminRateLimiter, authenticateOperations, async \(req, res\) => \{\s*const readinessStatus = readiness\.getFreshStatus\(\);/);
+    assert.match(source,
+        /router\.get\('\/ready', \(req, res\) => \{\s*const status = readiness\.getStatus\(\);/);
+    assert.match(source,
+        /router\.get\('\/operations\/readiness', adminRateLimiter, authenticateOperations, \(req, res\) => \{\s*const status = readiness\.getStatus\(\);/);
+    assert.match(source,
+        /router\.get\('\/operations\/metrics', adminRateLimiter, authenticateOperations, \(req, res\) => \{\s*readiness\.getStatus\(\);/);
+}
+
 function validateMetrics(module) {
     module.resetMetricsForTests();
     module.incrementRequest('slice",request_id="attacker', 'invented');
@@ -78,6 +89,36 @@ function validateReadiness(module) {
     assert.deepEqual(quarantine.reasonCodes, ['NATIVE_RUNTIME_QUARANTINED']);
 }
 
+function validateFreshReadiness(module) {
+    let queue = {
+        queueLength: 0, activeJobs: 0, maxQueueLength: 1, acceptingJobs: true
+    };
+    let queueCalls = 0;
+    const service = module.createReadinessService({
+        clock: () => 0,
+        cacheMs: 5000,
+        getQueueStatus: () => {
+            queueCalls += 1;
+            return queue;
+        },
+        getNativeRuntimeStatus: () => ({ available: true, quarantined: false }),
+        probes: {
+            queue: () => true,
+            storage: () => true,
+            retention: () => true,
+            pricing: () => true,
+            config: () => true
+        }
+    });
+    const cached = service.getStatus();
+    queue = { ...queue, activeJobs: 1 };
+    const fresh = service.getFreshStatus();
+    assert.equal(fresh.queue.activeJobs, 1);
+    assert.equal(service.getStatus(), cached);
+    assert.equal(service.getStatus().queue.activeJobs, 0);
+    assert.equal(queueCalls, 2);
+}
+
 function mutate(name, from, to) {
     const original = read(name);
     assert.ok(original.includes(from), `missing I5 runtime mutation anchor: ${from}`);
@@ -113,6 +154,7 @@ test('job and artifact correlation mutations fail the cross-surface contract', a
 test('metrics authentication and cardinality mutations fail', async (t) => {
     const system = read('system');
     validateMetricsAuthorization(system);
+    validateLiveDetailedReadiness(system);
     await t.test('metrics route loses operations authentication', () => {
         assert.throws(() => validateMetricsAuthorization(mutate('system',
             "router.get('/operations/metrics', adminRateLimiter, authenticateOperations,",
@@ -126,6 +168,51 @@ test('metrics authentication and cardinality mutations fail', async (t) => {
         assert.throws(() => validateMetrics(
             loadCommonJsFromSource(PATHS.metrics, mutated)
         ), assert.AssertionError);
+    });
+});
+
+test('fresh detailed readiness and cached operational surfaces resist mutations', async (t) => {
+    const live = require(PATHS.readiness);
+    const system = read('system');
+    validateFreshReadiness(live);
+    validateLiveDetailedReadiness(system);
+    const routeCases = [
+        ['detailed health falls back to cached readiness',
+            'const readinessStatus = readiness.getFreshStatus();',
+            'const readinessStatus = readiness.getStatus();'],
+        ['detailed health rate limiter removed',
+            "router.get('/health/detailed', adminRateLimiter, authenticateOperations,",
+            "router.get('/health/detailed', authenticateOperations,"],
+        ['detailed health operations authentication removed',
+            "router.get('/health/detailed', adminRateLimiter, authenticateOperations,",
+            "router.get('/health/detailed', adminRateLimiter,"],
+        ['public readiness bypasses the normal cache',
+            'const status = readiness.getStatus();',
+            'const status = readiness.getFreshStatus();']
+    ];
+    for (const [name, from, to] of routeCases) await t.test(name, () => {
+        assert.throws(() => validateLiveDetailedReadiness(
+            mutate('system', from, to)
+        ), assert.AssertionError);
+    });
+
+    await t.test('fresh readiness reads the normal cache', () => {
+        const module = loadCommonJsFromSource(PATHS.readiness,
+            mutate('readiness',
+                'function getFreshStatus() {\n        return runProbes();\n    }',
+                'function getFreshStatus() {\n        return getStatus();\n    }'));
+        assert.throws(() => validateFreshReadiness(module), assert.AssertionError);
+    });
+    await t.test('fresh readiness replaces the normal cache', () => {
+        const module = loadCommonJsFromSource(PATHS.readiness,
+            mutate('readiness',
+                'function getFreshStatus() {\n        return runProbes();\n    }',
+                'function getFreshStatus() {\n'
+                    + '        const now = clock();\n'
+                    + '        cache = { cachedAt: now, value: runProbes() };\n'
+                    + '        return cache.value;\n'
+                    + '    }'));
+        assert.throws(() => validateFreshReadiness(module), assert.AssertionError);
     });
 });
 

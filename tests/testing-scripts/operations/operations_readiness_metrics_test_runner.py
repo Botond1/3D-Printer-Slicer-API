@@ -23,6 +23,14 @@ OPERATIONS_PATHS = (
     "/operations/metrics",
 )
 AUTH_ERROR_CODE = "OPERATIONS_AUTH_REQUIRED"
+QUEUE_KEYS = {
+    "queueLength",
+    "activeJobs",
+    "maxConcurrent",
+    "maxQueueLength",
+    "maxQueuePerClient",
+    "acceptingJobs",
+}
 
 
 @dataclass(frozen=True)
@@ -61,6 +69,20 @@ def safe_payload(body: dict | str | None, credentials: list[str]) -> bool:
         "fileName",
     ]
     return all(value not in serialized for value in forbidden)
+
+
+def valid_queue(queue: object) -> bool:
+    return (
+        isinstance(queue, dict)
+        and set(queue) == QUEUE_KEYS
+        and isinstance(queue.get("acceptingJobs"), bool)
+        and all(
+            isinstance(queue.get(key), int)
+            and not isinstance(queue.get(key), bool)
+            and queue[key] >= 0
+            for key in QUEUE_KEYS - {"acceptingJobs"}
+        )
+    )
 
 
 def run_checks(base_url: str, credentials: list[str]) -> list[Check]:
@@ -104,17 +126,20 @@ def run_checks(base_url: str, credentials: list[str]) -> list[Check]:
                 and len(body.encode("utf-8")) < 16 * 1024
             )
         elif endpoint == "/health/detailed":
+            subsystems = body.get("subsystems") if isinstance(body, dict) else None
             shape_ok = (
                 status in {200, 503}
                 and isinstance(body, dict)
                 and body.get("status") in {"OK", "DEGRADED"}
-                and isinstance(body.get("subsystems"), dict)
+                and isinstance(subsystems, dict)
+                and valid_queue(subsystems.get("queue"))
             )
         else:
             shape_ok = (
                 status in {200, 503}
                 and isinstance(body, dict)
                 and isinstance(body.get("ready"), bool)
+                and valid_queue(body.get("queue"))
             )
         checks.append(Check(
             "operations credential accepted",

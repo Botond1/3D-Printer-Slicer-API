@@ -17,7 +17,15 @@ const {
 function abortSourceContract(source) {
     for (const anchor of [
         'const controller = new AbortController();',
+        "scopedJson('/operations/readiness', process.env.OPERATIONS_API_KEY)",
+        "scopedJson('/health/detailed', process.env.OPERATIONS_API_KEY)",
+        'const cachedBefore = await cachedQueueStatus();',
+        'cachedBefore.activeJobs !== 0 || cachedBefore.queueLength !== 0',
+        'const queue = await freshQueueStatus();\n    if (queue.activeJobs === 1)',
         'queue.activeJobs === 1',
+        'cachedDuring.activeJobs !== 0 || cachedDuring.queueLength !== 0',
+        'cachedReadinessActiveJobs: abortProof.cachedReadinessActiveJobs',
+        'freshReadinessActiveJobs: abortProof.freshReadinessActiveJobs',
         'controller.abort();',
         'if (!controller.signal.aborted)',
         'evaluateAbortTransport(controller.signal.aborted, outcome)',
@@ -32,8 +40,8 @@ function abortSourceContract(source) {
     ]) {
         assert.ok(source.includes(anchor), `missing abort contract anchor: ${anchor}`);
     }
-    assert.ok(source.split('controller.abort();').length - 1 >= 2,
-        'active-path and fail-closed abort calls are both required');
+    assert.ok(source.split('controller.abort();').length - 1 >= 3,
+        'active-path and both fail-closed abort calls are required');
     assert.doesNotMatch(source, /outcome\.error\.name\s*!==\s*['"]AbortError['"]/);
 }
 
@@ -81,7 +89,17 @@ test('active observation, abort, settlement, and both artifact inventories resis
     const cases = [
         ['abort call removed', '  controller.abort();\n  if (!controller.signal.aborted)',
             '  if (!controller.signal.aborted)'],
+        ['cached-zero readiness priming removed',
+            '  const cachedBefore = await cachedQueueStatus();\n', ''],
+        ['active observation stops using detailed health',
+            '    const queue = await freshQueueStatus();',
+            '    const queue = await cachedQueueStatus();'],
+        ['detailed health endpoint removed',
+            "scopedJson('/health/detailed', process.env.OPERATIONS_API_KEY)",
+            "scopedJson('/operations/readiness', process.env.OPERATIONS_API_KEY)"],
         ['active observation removed', 'queue.activeJobs === 1', 'false'],
+        ['fresh result may replace the cached-zero observation',
+            'cachedDuring.activeJobs !== 0 || cachedDuring.queueLength !== 0', 'false'],
         ['final queue not empty accepted',
             'queue.activeJobs === 0 && queue.queueLength === 0', 'queue.activeJobs === 0'],
         ['native settlement removed', '    proveNoPostAbortDescendants(record);\n', ''],

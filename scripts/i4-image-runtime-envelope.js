@@ -227,7 +227,14 @@ async function outputInventory() {
     return file.fileName + ':' + file.artifact_id;
   }).sort();
 }
-async function queueStatus() {
+async function cachedQueueStatus() {
+  const body = await scopedJson('/operations/readiness', process.env.OPERATIONS_API_KEY);
+  const queue = body?.queue;
+  if (!Number.isSafeInteger(queue?.activeJobs) || queue.activeJobs < 0
+      || !Number.isSafeInteger(queue?.queueLength) || queue.queueLength < 0) fail('queue_status_shape');
+  return queue;
+}
+async function freshQueueStatus() {
   const body = await scopedJson('/health/detailed', process.env.OPERATIONS_API_KEY);
   const queue = body?.subsystems?.queue;
   if (!Number.isSafeInteger(queue?.activeJobs) || queue.activeJobs < 0
@@ -243,6 +250,10 @@ async function awaitBoundedRequest(request) {
 async function proveClientAbortNoArtifact() {
   const beforeInventory = await outputInventory();
   const beforeEntries = outputEntries();
+  const cachedBefore = await cachedQueueStatus();
+  if (cachedBefore.activeJobs !== 0 || cachedBefore.queueLength !== 0) {
+    fail('abort_initial_queue_not_idle');
+  }
   const controller = new AbortController();
   const form = new FormData();
   form.append('choosenFile', new Blob([stl], { type: 'model/stl' }), 'i4-aborted-cube.stl');
@@ -260,9 +271,11 @@ async function proveClientAbortNoArtifact() {
   })).catch((error) => ({ error })).finally(() => { requestSettled = true; });
 
   let activeObserved = false;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const queue = await queueStatus();
+  let freshReadinessActiveJobs = 0;
+  for (let attempt = 0; attempt < 18; attempt += 1) {
+    const queue = await freshQueueStatus();
     if (queue.activeJobs === 1) {
+      freshReadinessActiveJobs = queue.activeJobs;
       activeObserved = true;
       break;
     }
@@ -274,6 +287,12 @@ async function proveClientAbortNoArtifact() {
     await awaitBoundedRequest(request);
     fail('abort_active_not_observed');
   }
+  const cachedDuring = await cachedQueueStatus();
+  if (cachedDuring.activeJobs !== 0 || cachedDuring.queueLength !== 0) {
+    controller.abort();
+    await awaitBoundedRequest(request);
+    fail('abort_readiness_cache_replaced');
+  }
   controller.abort();
   if (!controller.signal.aborted) fail('abort_signal_not_set');
   const outcome = await awaitBoundedRequest(request);
@@ -283,7 +302,7 @@ async function proveClientAbortNoArtifact() {
   let settled = false;
   for (const delay of [100, 200, 400, 800, 1600, 3200, 6400]) {
     await sleep(delay);
-    const queue = await queueStatus();
+    const queue = await freshQueueStatus();
     if (queue.activeJobs === 0 && queue.queueLength === 0) {
       settled = true;
       break;
@@ -296,17 +315,23 @@ async function proveClientAbortNoArtifact() {
       || JSON.stringify(afterEntries) !== JSON.stringify(beforeEntries)) {
     fail('post_abort_artifact_detected');
   }
-  return abortTransport.representation;
+  return {
+    abortTransport: abortTransport.representation,
+    cachedReadinessActiveJobs: cachedDuring.activeJobs,
+    freshReadinessActiveJobs
+  };
 }
 void (async () => {
   await slice('prusa');
   await slice('orca');
-  const abortTransport = await proveClientAbortNoArtifact();
+  const abortProof = await proveClientAbortNoArtifact();
   process.stdout.write(JSON.stringify({
     classification: 'success', immutableCount: immutable.length,
     writableCount: writable.length, authenticatedSliceCount: 2,
     authenticatedClientAbortCount: 1, postAbortArtifactDelta: 0,
-    abortTransport
+    cachedReadinessActiveJobs: abortProof.cachedReadinessActiveJobs,
+    freshReadinessActiveJobs: abortProof.freshReadinessActiveJobs,
+    abortTransport: abortProof.abortTransport
   }) + '\n');
 })().catch(() => fail('slice_execution'));
 `;
@@ -341,6 +366,8 @@ function appendSummary(payload) {
         + `writable allowlist checked: \`${payload.writableCount}\`; `
         + `authenticated synthetic slices: \`${payload.authenticatedSliceCount}\`; `
         + `active client-abort checks: \`${payload.authenticatedClientAbortCount}\`; `
+        + `cached/fresh active-job observations: `
+        + `\`${payload.cachedReadinessActiveJobs}/${payload.freshReadinessActiveJobs}\`; `
         + `abort transport: \`${payload.abortTransport}\`; `
         + `post-abort artifact delta: \`${payload.postAbortArtifactDelta}\`.\n`
         + 'Limits: `pids=512`, `memory=4g`, `swap=4g`, `cpus=2`, '

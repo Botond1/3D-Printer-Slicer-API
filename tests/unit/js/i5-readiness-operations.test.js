@@ -78,6 +78,33 @@ test('readiness is cached, admission-aware, and reports fixed queue reason codes
     assert.equal(fixture.queueCalls(), 2);
 });
 
+test('fresh readiness observes live state without priming or replacing the normal cache', () => {
+    const fixture = createService();
+    const cachedZero = fixture.service.getStatus();
+    assert.equal(cachedZero.queue.activeJobs, 0);
+
+    fixture.setQueue(healthyQueue({ activeJobs: 1 }));
+    const freshActive = fixture.service.getFreshStatus();
+    assert.equal(freshActive.queue.activeJobs, 1);
+    assert.deepEqual(Object.keys(freshActive), Object.keys(cachedZero));
+    assert.deepEqual(Object.keys(freshActive.probes), Object.keys(cachedZero.probes));
+    assert.equal(fixture.queueCalls(), 2);
+
+    assert.equal(fixture.service.getStatus(), cachedZero);
+    assert.equal(fixture.service.getStatus().queue.activeJobs, 0);
+    assert.equal(fixture.queueCalls(), 2);
+
+    const unprimed = createService();
+    unprimed.setQueue(healthyQueue({ activeJobs: 1 }));
+    assert.equal(unprimed.service.getFreshStatus().queue.activeJobs, 1);
+    unprimed.setQueue(healthyQueue());
+    const firstCached = unprimed.service.getStatus();
+    assert.equal(firstCached.queue.activeJobs, 0);
+    assert.equal(unprimed.queueCalls(), 2);
+    assert.equal(unprimed.service.getStatus(), firstCached);
+    assert.equal(unprimed.queueCalls(), 2);
+});
+
 test('shutdown, native quarantine, retention, pricing, and malformed queue fail closed', () => {
     const shutdown = createService();
     shutdown.service.closeAdmission('shutdown');
@@ -160,4 +187,56 @@ test('public readiness is minimal while reasons and metrics require operations s
         assert.match(text, /slicer_readiness 0/);
         assert.ok(Buffer.byteLength(text, 'utf8') < 16 * 1024);
     });
+});
+
+test('detailed health evaluates fresh readiness only after operations authentication', async () => {
+    let cachedCalls = 0;
+    let freshCalls = 0;
+    const cachedStatus = Object.freeze({
+        ready: true,
+        queue: Object.freeze(healthyQueue()),
+        probes: Object.freeze({ queue: true })
+    });
+    const freshStatus = Object.freeze({
+        ready: true,
+        queue: Object.freeze(healthyQueue({ activeJobs: 1 })),
+        probes: Object.freeze({ queue: true })
+    });
+    const readinessService = {
+        getStatus() {
+            cachedCalls += 1;
+            return cachedStatus;
+        },
+        getFreshStatus() {
+            freshCalls += 1;
+            return freshStatus;
+        }
+    };
+
+    const pythonExecutable = process.env.PYTHON_EXECUTABLE;
+    process.env.PYTHON_EXECUTABLE = process.execPath;
+    try {
+        await withSystemServer(readinessService, async (baseUrl) => {
+            const rejected = await fetch(`${baseUrl}/health/detailed`);
+            assert.equal(rejected.status, 401);
+            assert.equal(freshCalls, 0);
+            assert.equal(cachedCalls, 0);
+
+            const headers = { 'x-api-key': 'i5-operations-client' };
+            const detailed = await fetch(`${baseUrl}/health/detailed`, { headers });
+            assert.equal(detailed.status, 200);
+            assert.equal((await detailed.json()).subsystems.queue.activeJobs, 1);
+            assert.equal(freshCalls, 1);
+            assert.equal(cachedCalls, 0);
+
+            assert.equal((await fetch(`${baseUrl}/ready`)).status, 200);
+            assert.equal((await fetch(`${baseUrl}/operations/readiness`, { headers })).status, 200);
+            assert.equal((await fetch(`${baseUrl}/operations/metrics`, { headers })).status, 200);
+            assert.equal(cachedCalls, 3);
+            assert.equal(freshCalls, 1);
+        });
+    } finally {
+        if (pythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;
+        else process.env.PYTHON_EXECUTABLE = pythonExecutable;
+    }
 });

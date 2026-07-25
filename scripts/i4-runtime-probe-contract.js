@@ -18,7 +18,9 @@ const CONTAINER_PROBE_FAILURES = Object.freeze([
     'output_inventory_shape',
     'output_inventory_entry',
     'queue_status_shape',
+    'abort_initial_queue_not_idle',
     'abort_active_not_observed',
+    'abort_readiness_cache_replaced',
     'abort_signal_not_set',
     'abort_request_timeout',
     'abort_success_response',
@@ -57,7 +59,9 @@ function evaluateProbeOutput(result) {
         writableCount: 9,
         authenticatedSliceCount: 2,
         authenticatedClientAbortCount: 1,
-        postAbortArtifactDelta: 0
+        postAbortArtifactDelta: 0,
+        cachedReadinessActiveJobs: 0,
+        freshReadinessActiveJobs: 1
     };
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)
         || JSON.stringify(Object.keys(payload).sort())
