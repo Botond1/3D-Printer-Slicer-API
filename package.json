@@ -16,7 +16,7 @@
     "check:repository-safety:staged": "node scripts/run-python.js scripts/validate-repository-safety.py --scope staged --require-nonempty"
   },
   "dependencies": {
-    "archiver": "^7.0.1",
+    "archiver": "^8.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.3.1",
     "express": "^4.22.2",

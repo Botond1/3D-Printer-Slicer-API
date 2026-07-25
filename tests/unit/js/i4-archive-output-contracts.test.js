@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const archiver = require('archiver');
+const { ZipArchive } = require('archiver');
 const { resolveResourcePolicy } = require('../../../app/config/resource-policy');
 const { inspectZipFile, extractZipEntry } = require('../../../app/services/slice/zip');
 const { inspectThreeMfArchive } = require('../../../app/services/slice/three-mf');
@@ -16,7 +16,7 @@ const { writeFully } = require('../../../app/services/slice/zip-stream');
 async function makeArchive(target, entries) {
     await new Promise((resolve, reject) => {
         const output = fs.createWriteStream(target, { flags: 'wx' });
-        const archive = archiver('zip', { zlib: { level: 9 } });
+        const archive = new ZipArchive({ zlib: { level: 9 } });
         output.once('close', resolve);
         output.once('error', reject);
         archive.once('error', reject);

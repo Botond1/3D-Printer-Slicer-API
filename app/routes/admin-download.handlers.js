@@ -1,6 +1,6 @@
 'use strict';
 
-const archiver = require('archiver');
+const { ZipArchive } = require('archiver');
 const { emitEvent } = require('../services/observability/events');
 const {
     BULK_DOWNLOAD_ALL_TOKEN,
@@ -130,7 +130,7 @@ function bulkDownloadHandler(req, res, requestContext) {
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${archiveFileName}"`);
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 9 } });
     archive.on('warning', () => {});
     let downloadSettled = false;
     const settleDownload = (outcome, errorCode) => {
