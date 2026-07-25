@@ -165,8 +165,8 @@ jobs:
             echo "local_image_ref=$IMAGE_REF"
             echo "local_image_id=$actual_image_id"
             echo "build_action_image_id=$BUILD_IMAGE_ID"
-            echo "identity_scope=local-loaded-image-only"
-            echo "registry_digest=not_applicable_no_push"
+            echo "identity_scope=run_local_not_registry_digest"
+            echo "registry_digest=not_created"
             echo "signature=not_created"
             echo "attestation=not_created"
           } > "$EVIDENCE_DIR/image-identity.txt"
@@ -688,8 +688,8 @@ jobs:
           if (identity.candidate_sha !== process.env.CANDIDATE_SHA || identity.local_image_ref !== process.env.IMAGE_REF ||
               !/^sha256:[0-9a-f]{64}$/.test(identity.local_image_id) ||
               (identity.build_action_image_id && identity.build_action_image_id !== identity.local_image_id) ||
-              identity.identity_scope !== 'local-loaded-image-only' ||
-              identity.registry_digest !== 'not_applicable_no_push' || identity.signature !== 'not_created' ||
+              identity.identity_scope !== 'run_local_not_registry_digest' ||
+              identity.registry_digest !== 'not_created' || identity.signature !== 'not_created' ||
               identity.attestation !== 'not_created' || identity.configured_user !== 'slicer' ||
               !/^[1-9][0-9]*$/.test(identity.service_uid) || !/^[1-9][0-9]*$/.test(identity.service_gid) ||
               identity.kernel_uid !== identity.service_uid || identity.kernel_gid !== identity.service_gid ||
@@ -700,24 +700,7 @@ jobs:
           NODE
           echo "classification=success" >> "$GITHUB_OUTPUT"
 
-      - name: Upload bounded image-validation evidence only
-        id: evidence_upload
-        if: ${{ always() && steps.artifact_boundary.outcome == 'success' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        with:
-          name: s3a-image-evidence-${{ steps.candidate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt
-            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/runtime-diagnostics.json
-            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/topology-evidence.json
-            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json
-            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json
-          if-no-files-found: error
-          retention-days: 7
-          overwrite: false
-          include-hidden-files: false
-
-      - name: Remove only this run's exact containers, image, and evidence
+      - name: Remove only this run's exact containers, networks, and image
         id: exact_cleanup
         if: ${{ always() }}
         continue-on-error: true
@@ -876,31 +859,148 @@ jobs:
               cleanup_error image_cleanup_verification_failure
             fi
           fi
-          expected_evidence_dir="$RUNNER_TEMP/$EVIDENCE_SUBDIR"
-          if { [ -n "${EVIDENCE_DIR:-}" ] && [ "$EVIDENCE_DIR" != "$expected_evidence_dir" ]; } || \
-             [ -L "$expected_evidence_dir" ]; then
-            cleanup_error evidence_directory_boundary_failure
-          elif [ -d "$expected_evidence_dir" ]; then
-              for evidence_name in image-identity.txt runtime-diagnostics.json \
-                  topology-evidence.json sbom.spdx.json grype.json syft.yaml grype.yaml; do
-                evidence_path="$expected_evidence_dir/$evidence_name"
-                if [ -f "$evidence_path" ] && [ ! -L "$evidence_path" ]; then
-                  rm -- "$evidence_path" || cleanup_error evidence_file_remove_failure
-                elif [ -e "$evidence_path" ] || [ -L "$evidence_path" ]; then
-                  cleanup_error evidence_file_type_failure
-                fi
-              done
-              rmdir -- "$expected_evidence_dir" || cleanup_error evidence_directory_remove_failure
-          elif [ -e "$expected_evidence_dir" ]; then
-            cleanup_error evidence_directory_type_failure
-          fi
           if [ "$cleanup_status" -ne 0 ]; then
             echo "classification=cleanup_failure" >> "$GITHUB_OUTPUT"
             echo "Exact-resource cleanup failed." >&2
             exit "$cleanup_status"
           fi
           echo "classification=success" >> "$GITHUB_OUTPUT"
-          echo "Removed only this run's exact identity/Orca/main/API/peer/sentinel containers, private and calibration networks, image tag, five evidence files, and scanner configs when present; no prune was run." >> "$GITHUB_STEP_SUMMARY"
+          echo "Removed only this run's exact identity/Orca/main/API/peer/sentinel containers, private and calibration networks, and image tag; evidence remains bounded for aggregation and upload; no prune was run." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate bounded exact-candidate provenance after resource cleanup
+        id: candidate_provenance
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          EXPECTED_IMAGE_ID: ${{ steps.image_identity.outputs.image_id }}
+          CONFIGURED_USER: ${{ steps.runtime_identity.outputs.configured_user }}
+          SERVICE_UID: ${{ steps.runtime_identity.outputs.uid }}
+          SERVICE_GID: ${{ steps.runtime_identity.outputs.gid }}
+          RUNTIME_IDENTITY_OUTCOME: ${{ steps.runtime_identity.outcome }}
+          RUNTIME_IDENTITY_CLASSIFICATION: ${{ steps.runtime_identity.outputs.classification }}
+          ORCA_CLI_SMOKE_OUTCOME: ${{ steps.orca_cli_smoke.outcome }}
+          ORCA_CLI_SMOKE_CLASSIFICATION: ${{ steps.orca_cli_smoke.outputs.classification }}
+          SMOKE_OUTCOME: ${{ steps.smoke_gate.outcome }}
+          SMOKE_CLASSIFICATION: ${{ steps.smoke_gate.outputs.classification }}
+          TOPOLOGY_OUTCOME: ${{ steps.topology_gate.outcome }}
+          TOPOLOGY_CLASSIFICATION: ${{ steps.topology_gate.outputs.classification }}
+          TOPOLOGY_CONTRACT_REASON: ${{ steps.topology_gate.outputs.contract_reason }}
+          TOPOLOGY_SENTINEL_OPERATIONAL: ${{ steps.topology_gate.outputs.sentinel_operational }}
+          DIAGNOSTIC_OUTCOME: ${{ steps.runtime_diagnostics.outcome }}
+          SBOM_OUTCOME: ${{ steps.sbom.outcome }}
+          SBOM_GATE_OUTCOME: ${{ steps.sbom_gate.outcome }}
+          SBOM_CLASSIFICATION: ${{ steps.sbom_gate.outputs.classification }}
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          SCAN_GATE_OUTCOME: ${{ steps.scan_gate.outcome }}
+          SCAN_CLASSIFICATION: ${{ steps.scan_gate.outputs.classification }}
+          TRIAGE_OUTCOME: ${{ steps.vulnerability_triage.outcome }}
+          TRIAGE_CLASSIFICATION: ${{ steps.vulnerability_triage.outputs.classification }}
+          ARTIFACT_BOUNDARY_OUTCOME: ${{ steps.artifact_boundary.outcome }}
+          ARTIFACT_BOUNDARY_CLASSIFICATION: ${{ steps.artifact_boundary.outputs.classification }}
+          CLEANUP_OUTCOME: ${{ steps.exact_cleanup.outcome }}
+          CLEANUP_CLASSIFICATION: ${{ steps.exact_cleanup.outputs.classification }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "classification=provenance_generation_failure" >> "$GITHUB_OUTPUT"
+          node scripts/i7-write-provenance.js
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Require exact provenance correlation and bounded artifact set
+        id: provenance_boundary
+        if: ${{ always() && steps.candidate_provenance.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "classification=provenance_boundary_failure" >> "$GITHUB_OUTPUT"
+          node <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const {
+            MAX_EVIDENCE_BYTES,
+            validateCandidateEvidence
+          } = require('./scripts/i7-provenance-evidence');
+
+          const root = path.resolve(process.env.RUNNER_TEMP, process.env.EVIDENCE_SUBDIR);
+          const target = path.join(root, 'candidate-provenance.json');
+          if (process.env.EVIDENCE_DIR !== root || fs.realpathSync(root) !== root) process.exit(2);
+          const details = fs.lstatSync(target);
+          if (!details.isFile() || details.isSymbolicLink() || details.size <= 0
+              || details.size > MAX_EVIDENCE_BYTES
+              || path.dirname(fs.realpathSync(target)) !== root) process.exit(2);
+          const evidence = JSON.parse(fs.readFileSync(target, 'utf8'));
+          const sbomPath = path.join(root, 'sbom.spdx.json');
+          const sbomSha256 = crypto.createHash('sha256').update(fs.readFileSync(sbomPath)).digest('hex');
+          const error = validateCandidateEvidence(evidence, {
+            repository: `https://github.com/${process.env.GITHUB_REPOSITORY}`,
+            source_sha: process.env.CANDIDATE_SHA,
+            run_id: process.env.GITHUB_RUN_ID,
+            run_attempt: process.env.GITHUB_RUN_ATTEMPT,
+            job: process.env.GITHUB_JOB,
+            image_id: process.env.EXPECTED_IMAGE_ID,
+            sbom_sha256: sbomSha256
+          });
+          if (error) {
+            console.error(error);
+            process.exit(2);
+          }
+          NODE
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+        env:
+          EXPECTED_IMAGE_ID: ${{ steps.image_identity.outputs.image_id }}
+
+      - name: Upload bounded image-validation evidence only
+        id: evidence_upload
+        if: ${{ always() && steps.provenance_boundary.outcome == 'success' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: s3a-image-evidence-${{ steps.candidate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/candidate-provenance.json
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/runtime-diagnostics.json
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/topology-evidence.json
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+          include-hidden-files: false
+
+      - name: Remove only the exact bounded evidence set
+        id: evidence_cleanup
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -u
+          evidence_cleanup_status=0
+          expected_evidence_dir="$RUNNER_TEMP/$EVIDENCE_SUBDIR"
+          if { [ -n "${EVIDENCE_DIR:-}" ] && [ "$EVIDENCE_DIR" != "$expected_evidence_dir" ]; } || \
+             [ -L "$expected_evidence_dir" ]; then
+            evidence_cleanup_status=1
+          elif [ -d "$expected_evidence_dir" ]; then
+            for evidence_name in candidate-provenance.json image-identity.txt \
+                runtime-diagnostics.json topology-evidence.json sbom.spdx.json \
+                grype.json syft.yaml grype.yaml; do
+              evidence_path="$expected_evidence_dir/$evidence_name"
+              if [ -f "$evidence_path" ] && [ ! -L "$evidence_path" ]; then
+                rm -- "$evidence_path" || evidence_cleanup_status=1
+              elif [ -e "$evidence_path" ] || [ -L "$evidence_path" ]; then
+                evidence_cleanup_status=1
+              fi
+            done
+            rmdir -- "$expected_evidence_dir" || evidence_cleanup_status=1
+          elif [ -e "$expected_evidence_dir" ]; then
+            evidence_cleanup_status=1
+          fi
+          if [ "$evidence_cleanup_status" -ne 0 ]; then
+            echo "classification=evidence_cleanup_failure" >> "$GITHUB_OUTPUT"
+            exit "$evidence_cleanup_status"
+          fi
+          echo "classification=success" >> "$GITHUB_OUTPUT"
 
       - name: Enforce all independent image validation gates fail-closed
         id: final_enforcement
@@ -926,8 +1026,11 @@ jobs:
           TOPOLOGY_CONTRACT_REASON: ${{ steps.topology_gate.outputs.contract_reason }}
           TOPOLOGY_SENTINEL_OPERATIONAL: ${{ steps.topology_gate.outputs.sentinel_operational }}
           ARTIFACT_BOUNDARY_OUTCOME: ${{ steps.artifact_boundary.outcome }}
+          PROVENANCE_OUTCOME: ${{ steps.candidate_provenance.outcome }}
+          PROVENANCE_BOUNDARY_OUTCOME: ${{ steps.provenance_boundary.outcome }}
           EVIDENCE_UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
           CLEANUP_OUTCOME: ${{ steps.exact_cleanup.outcome }}
+          EVIDENCE_CLEANUP_OUTCOME: ${{ steps.evidence_cleanup.outcome }}
         shell: bash
         run: |
           set -euo pipefail
@@ -976,16 +1079,19 @@ jobs:
           }
           if (process.env.DIAGNOSTIC_OUTCOME !== 'success'
               || process.env.ARTIFACT_BOUNDARY_OUTCOME !== 'success'
+              || process.env.PROVENANCE_OUTCOME !== 'success'
+              || process.env.PROVENANCE_BOUNDARY_OUTCOME !== 'success'
               || process.env.EVIDENCE_UPLOAD_OUTCOME !== 'success') {
             failures.push('evidence_boundary_failure');
           }
-          if (process.env.CLEANUP_OUTCOME !== 'success') {
+          if (process.env.CLEANUP_OUTCOME !== 'success'
+              || process.env.EVIDENCE_CLEANUP_OUTCOME !== 'success') {
             failures.push('cleanup_failure');
           }
 
           const classifications = [...new Set(failures)];
           const summary = classifications.length === 0
-            ? '\n### Final image validation enforcement\n\nAll independent runtime identity, Orca CLI/synthetic slice, liveness, private-peer ingress/authenticated readiness, no-host-port, calibrated API/native egress denial, SBOM, scanner, vulnerability, evidence, and cleanup gates passed.\n'
+            ? '\n### Final image validation enforcement\n\nAll independent runtime identity, Orca CLI/synthetic slice, liveness/live-abort settlement, private-peer ingress/authenticated readiness, no-host-port, calibrated API/native egress denial, SBOM, scanner, bounded exact-candidate provenance, upload, and cleanup gates passed.\n'
             : `\n### Final image validation enforcement\n\nFail-closed classifications: ${classifications.map((value) => `\`${value}\``).join(', ')}.\n`;
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
           if (classifications.length > 0) {
