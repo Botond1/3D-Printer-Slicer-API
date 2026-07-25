@@ -29,6 +29,8 @@ const SENTINEL_NETWORK = 'i6-sentinel-net-123-1';
 const UID = '999';
 const GID = '999';
 const OPERATIONS_KEY = 'i6-validation-operations-active-260725-d1';
+const API_CONTAINER_ID = 'd'.repeat(64);
+const PEER_CONTAINER_ID = 'e'.repeat(64);
 const LABELS = Object.freeze({
     [VALIDATION_LABEL]: 'true',
     [IMAGE_LABEL]: IMAGE_ID
@@ -47,6 +49,7 @@ function apiFixture() {
     return {
         network: networkFixture(),
         container: {
+            Id: API_CONTAINER_ID,
             Image: IMAGE_ID,
             Config: {
                 Labels: {...LABELS, 'org.opencontainers.image.title': 'slicer-api'},
@@ -77,7 +80,8 @@ function apiFixture() {
                 Networks: {
                     [NETWORK]: {
                         IPAddress: API_IP,
-                        Aliases: [API_NAME, API_ALIAS]
+                        Aliases: [API_ALIAS],
+                        DNSNames: [API_NAME, API_ALIAS, API_CONTAINER_ID.slice(0, 12)]
                     }
                 },
                 Ports: {'3000/tcp': null}
@@ -95,6 +99,7 @@ function apiFixture() {
 function peerFixture() {
     return {
         container: {
+            Id: PEER_CONTAINER_ID,
             Image: IMAGE_ID,
             Config: {
                 Labels: {...LABELS},
@@ -110,7 +115,9 @@ function peerFixture() {
                 CapDrop: ['ALL'],
                 CapAdd: null,
                 SecurityOpt: ['no-new-privileges'],
-                Dns: [],
+                Dns: null,
+                DnsOptions: [],
+                DnsSearch: [],
                 Privileged: false,
                 PidMode: '',
                 IpcMode: 'private',
@@ -136,7 +143,8 @@ function peerFixture() {
                 Networks: {
                     [NETWORK]: {
                         IPAddress: PEER_IP,
-                        Aliases: [PEER_ALIAS, PEER_NAME]
+                        Aliases: [PEER_ALIAS],
+                        DNSNames: [PEER_NAME, PEER_ALIAS, PEER_CONTAINER_ID.slice(0, 12)]
                     }
                 },
                 Ports: {'3000/tcp': null}
@@ -205,6 +213,9 @@ test('every API allowlisted predicate reason has an executable mutation', () => 
         ['api_network_alias_mismatch', (f) => {
             f.container.NetworkSettings.Networks[NETWORK].Aliases = [API_NAME];
         }],
+        ['api_dns_names_mismatch', (f) => {
+            f.container.NetworkSettings.Networks[NETWORK].DNSNames.pop();
+        }],
         ['api_image_mismatch', (f) => { f.container.Image = `sha256:${'b'.repeat(64)}`; }],
         ['api_container_labels_mismatch', (f) => { delete f.container.Config.Labels[IMAGE_LABEL]; }],
         ['api_user_mismatch', (f) => { f.container.Config.User = 'slicer'; }],
@@ -251,6 +262,9 @@ test('every peer allowlisted predicate reason has an executable mutation', () =>
         ['peer_network_alias_mismatch', (f) => {
             f.container.NetworkSettings.Networks[NETWORK].Aliases = [PEER_NAME];
         }],
+        ['peer_dns_names_mismatch', (f) => {
+            f.container.NetworkSettings.Networks[NETWORK].DNSNames.push('extra');
+        }],
         ['peer_image_mismatch', (f) => { f.container.Image = `sha256:${'b'.repeat(64)}`; }],
         ['peer_container_labels_mismatch', (f) => { delete f.container.Config.Labels[IMAGE_LABEL]; }],
         ['peer_user_mismatch', (f) => { f.container.Config.User = 'root'; }],
@@ -276,6 +290,21 @@ test('every peer allowlisted predicate reason has an executable mutation', () =>
         const fixture = peerFixture();
         mutate(fixture);
         assert.deepEqual(validatePeerTopology(fixture), {ok: false, reason});
+    }
+});
+
+test('peer DNS override predicate rejects every Docker DNS override field', () => {
+    for (const [field, value] of [
+        ['Dns', ['8.8.8.8']],
+        ['DnsOptions', ['ndots:1']],
+        ['DnsSearch', ['example.invalid']]
+    ]) {
+        const fixture = peerFixture();
+        fixture.container.HostConfig[field] = value;
+        assert.deepEqual(validatePeerTopology(fixture), {
+            ok: false,
+            reason: 'peer_dns_override_forbidden'
+        });
     }
 });
 

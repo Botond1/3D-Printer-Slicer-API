@@ -32,6 +32,7 @@ const API_REASON_CODES = Object.freeze([
     'api_network_attachment_mismatch',
     'api_static_ip_mismatch',
     'api_network_alias_mismatch',
+    'api_dns_names_mismatch',
     'api_image_mismatch',
     'api_container_labels_mismatch',
     'api_user_mismatch',
@@ -56,6 +57,7 @@ const PEER_REASON_CODES = Object.freeze([
     'peer_network_attachment_mismatch',
     'peer_static_ip_mismatch',
     'peer_network_alias_mismatch',
+    'peer_dns_names_mismatch',
     'peer_image_mismatch',
     'peer_container_labels_mismatch',
     'peer_user_mismatch',
@@ -223,10 +225,18 @@ function validateOnlyPrivateEndpoint(container, expected, prefix) {
     if (endpoint.IPAddress !== expected.ip) {
         return { ok: false, reason: `${prefix}_static_ip_mismatch` };
     }
-    const aliases = Array.isArray(endpoint.Aliases) ? [...endpoint.Aliases].sort() : [];
-    if (JSON.stringify(aliases)
-        !== JSON.stringify([expected.alias, expected.containerName].sort())) {
+    if (JSON.stringify(endpoint.Aliases) !== JSON.stringify([expected.alias])) {
         return { ok: false, reason: `${prefix}_network_alias_mismatch` };
+    }
+    const containerId = typeof container.Id === 'string' ? container.Id : '';
+    const dnsNames = Array.isArray(endpoint.DNSNames) ? [...endpoint.DNSNames].sort() : [];
+    if (!/^[0-9a-f]{64}$/.test(containerId)
+        || JSON.stringify(dnsNames) !== JSON.stringify([
+            expected.containerName,
+            expected.alias,
+            containerId.slice(0, 12)
+        ].sort())) {
+        return { ok: false, reason: `${prefix}_dns_names_mismatch` };
     }
     return null;
 }
@@ -386,7 +396,9 @@ function validatePeerTopology(input) {
     if (JSON.stringify(host.SecurityOpt) !== JSON.stringify(['no-new-privileges'])) {
         return { ok: false, reason: 'peer_no_new_privileges_required' };
     }
-    if (!Array.isArray(host.Dns) || host.Dns.length !== 0) {
+    if (host.Dns !== null
+        || !Array.isArray(host.DnsOptions) || host.DnsOptions.length !== 0
+        || !Array.isArray(host.DnsSearch) || host.DnsSearch.length !== 0) {
         return { ok: false, reason: 'peer_dns_override_forbidden' };
     }
     const portError = validateNoHostPorts(container, 'peer_host_port_present');
