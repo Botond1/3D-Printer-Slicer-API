@@ -1,6 +1,49 @@
 # Verified project map
 
-## Current I7/S3a immutable-candidate foundation
+## Current I8/S3a signed-candidate publication implementation
+
+- Exact baseline:
+  `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6`; target branch:
+  `codex/i8-s3a-ghcr-signed-candidate`.
+- `.github/actions/exact-image-gate/action.yml` is the common build-once gate
+  used by normal Image Validation and the proposed Candidate Publication.
+  Normal validation passes `retain-image: false`, `publish-mode: false` and
+  remains read-only/no-push. Publication passes `retain-image: true`,
+  `publish-mode: true` so the same local image survives the complete gate for
+  same-job retag and push.
+- `.github/workflows/candidate-publication.yml` is manual-only, requires a full
+  lowercase SHA plus exact `PUBLISH_I8_SIGNED_GHCR_CANDIDATE` confirmation,
+  rejects any repository other than
+  `ghcr.io/botond1/3d-printer-slicer-api`, proves target-branch HEAD and
+  baseline ancestry, and checks out the exact SHA without credentials.
+- The publication sequence is:
+  exact source -> one local `linux/amd64` build -> full runtime/Orca/browser/
+  abort/private-topology/SBOM/Grype gate -> GHCR login -> absent discovery tag
+  -> push the same image -> resolve registry manifest digest -> digest-pinned
+  pull and runtime/Orca/Compose round trip -> SLSA and SPDX attestations ->
+  GitHub API/OCI/local-bundle verification -> bounded v2 evidence -> exact
+  cleanup and fail-closed aggregation.
+- Only the publication job requests `packages: write`, `attestations: write`,
+  and `id-token: write`; its other permission is `contents: read`. The
+  preflight and normal Image Validation have only `contents: read`.
+- `scripts/i8-publication-evidence.js` and
+  `scripts/i8-write-publication-evidence.js` define the exact-key bounded
+  `i8-s3a-signed-candidate-provenance-v2` correlation contract. The exact npm
+  10.9.8 focused/adapted I8 and shared Image Validation lane is green:
+  587/587 tests.
+- Current state is `BLOCKED_PREFLIGHT`. A new `workflow_dispatch` workflow must
+  exist on GitHub's default branch before dispatch; the current authorization
+  forbids changing `main`. Therefore final branch SHA, hosted Source/Image/
+  Publication runs, candidate tag/digest, signed attestations, and hosted
+  evidence are `PENDING` or `NOT_CREATED`, not inferred from local tests.
+- The exact-SHA candidate workflow is the reviewed trust assumption because
+  build, gate, and push must share one job without a multi-GiB image-tar
+  transfer. No deploy, promotion, mutable tag, VPS, proxy, firewall, secret,
+  environment, ruleset, or package-setting mutation is part of I8.
+- See
+  [`evidence/i8-s3a-ghcr-signed-candidate.md`](evidence/i8-s3a-ghcr-signed-candidate.md).
+
+## Historical I7/S3a immutable-candidate foundation
 
 - `docker-compose.production.yml` is the only production manifest. It has one
   `slicer-api` service and one internal `slicer-api-private` bridge, no build,
@@ -14,8 +57,9 @@
   Grype, artifact-boundary, and exact-cleanup gates against that identity. It
   then generates and revalidates one bounded allowlisted provenance object and
   uploads six explicit files. It does not push, sign, attest, or deploy.
-- Local status is `IMPLEMENTED_AND_LOCALLY_TESTED`; the I7 exact-SHA hosted
-  target is `PENDING_HOSTED_VALIDATION`. See
+- I7 hosted Source run `30160486802` and Image run `30160486750` succeeded for
+  the exact baseline; evidence artifact `8620145030` preserves the no-push
+  checkpoint. See
   [`evidence/i7-s3a-immutable-candidate-foundation.md`](evidence/i7-s3a-immutable-candidate-foundation.md).
 - The external reverse-proxy peer is intentionally outside this manifest. It
   may join the named private bridge from its own stack, but must not provide

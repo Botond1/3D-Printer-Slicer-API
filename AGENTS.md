@@ -17,7 +17,47 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
-## Current I7/S3a immutable-candidate foundation
+## Current I8/S3a signed-candidate publication status
+
+The I8 worktree starts exactly from
+`c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
+`codex/i8-s3a-ghcr-signed-candidate`. It contains an uncommitted, locally
+focused-tested Candidate Publication implementation, but its current status is
+`BLOCKED_PREFLIGHT`, not published. GitHub requires a `workflow_dispatch`
+workflow to exist on the default branch before it can be dispatched; adding the
+new `candidate-publication.yml` only on this candidate branch does not register
+it. A `main` change is outside the current authorization.
+
+The proposed workflow is manual-only and exact-SHA/branch/repository/
+confirmation gated. Its preflight has only `contents: read`; only the
+publication job has `contents: read`, `packages: write`,
+`attestations: write`, and `id-token: write`. The normal Image Validation
+remains read-only. Both workflows use the same local exact-image composite
+gate. Candidate publication keeps that once-built `linux/amd64` image in the
+same job, completes the full runtime/Orca/browser/topology/SBOM/Grype gate
+before registry login, and would then push only
+`candidate-<full-source-sha>` to the fixed
+`ghcr.io/botond1/3d-printer-slicer-api` repository.
+
+The downstream contract is digest-only:
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`. A discovery
+tag is not an immutable consumption reference. The proposed workflow refuses
+an existing tag, verifies manifest/config/platform/labels, performs a
+digest-pinned pull and runtime/Orca/production-Compose round trip, and creates
+distinct GitHub/Sigstore SLSA provenance and SPDX 2.3 attestations for the
+untagged repository name plus exact registry digest. I8 provenance v2 is
+bounded and fail closed, and its final aggregator distinguishes
+`BLOCKED_I8_PREPUBLICATION_GATE`, `I8_CANDIDATE_PUBLISHED_UNATTESTED`, and
+`I8_CANDIDATE_ATTESTATION_UNVERIFIED`.
+
+No I8 branch commit, remote branch, GHCR tag/digest, attestation, hosted run,
+deployment, or production change has been created. The exact-SHA candidate
+workflow is a reviewed trust assumption: the build, full gate, push, and
+attestation remain in one job to preserve build identity without a multi-GiB
+image-tar handoff. See
+[`docs/codex/evidence/i8-s3a-ghcr-signed-candidate.md`](docs/codex/evidence/i8-s3a-ghcr-signed-candidate.md).
+
+## Historical I7/S3a immutable-candidate foundation
 
 The repository now has a separate `docker-compose.production.yml` contract.
 It accepts only an operator-supplied
@@ -28,14 +68,16 @@ mandatory preflight. The production manifest has no build, published port, or
 proxy service; it preserves the non-root/read-only/resource/logging/runtime
 envelope and attaches the API only to the internal `slicer-api-private` bridge.
 
-Image Validation still builds once and never pushes or deploys. After all
+At I7, Image Validation built once and never pushed or deployed. After all
 exact-image gates and exact cleanup pass, it creates one bounded, allowlisted
 `candidate-provenance.json`, correlates it to the exact source/run/job/local
 image ID/SBOM/scanner database/gate outcomes, uploads the explicit evidence
 set, and then removes only that run's evidence. Registry digest, signature,
 and attestation are `NOT_CREATED`; deployed digest is
-`NOT_APPLICABLE_NO_PUBLISH`. I7 is locally tested and awaits exact-SHA hosted
-validation. S3b is `NOT_STARTED`; production readiness is `UNVERIFIED`.
+`NOT_APPLICABLE_NO_PUBLISH`. Exact baseline I7 hosted Source run `30160486802`
+and Image run `30160486750` are `SUCCESS`; evidence artifact `8620145030`
+records the green no-push checkpoint. S3b is `NOT_STARTED`; production
+readiness remains `UNVERIFIED`.
 
 ## Authority and evidence
 

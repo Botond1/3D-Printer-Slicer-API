@@ -4,7 +4,7 @@ applyTo: "**"
 
 # Repository Wide Instructions
 
-Last synchronized: 2026-07-23
+Last synchronized: 2026-07-25
 
 ## Architecture
 - Backend stack is Node.js + Express + Python helper scripts.
@@ -48,10 +48,18 @@ Last synchronized: 2026-07-23
   health/readiness/metrics require operations scope. Keep readiness reason codes
   stable and all event/metric fields bounded, allowlisted, redacted, and
   fixed-cardinality.
-- Compose remains loopback-published on an ordinary bridge. Local Docker Desktop
-  29.6.1 shows this permits API/native DNS/TCP/UDP egress; internal networking
-  removes the host listener. S4 is BLOCKED_S4_EGRESS_CAPABILITY. S5 owns any
-  isolation architecture decision.
+- Development Compose remains loopback-published on an ordinary bridge; local
+  Docker Desktop 29.6.1 showed that topology permits API/native DNS/TCP/UDP
+  egress. The separate production manifest uses an internal private bridge,
+  no host port, and a digest-only image, but deployed proxy/firewall/egress
+  topology remains `UNVERIFIED`.
+- Normal Image Validation is read-only/no-push. Candidate publication is
+  manual-only, fixed to `ghcr.io/botond1/3d-printer-slicer-api`, build-once,
+  full-gate-before-push, digest-only, signed/attested, and no-deploy. Never
+  overwrite a discovery tag or create mutable promotion tags.
+- Current I8 status is `BLOCKED_PREFLIGHT`: GitHub requires a newly introduced
+  `workflow_dispatch` file on the default branch and the current authorization
+  forbids a `main` change. No candidate digest/signature/attestation exists.
 
 ## Testing
 - Use Python test runners under tests/testing-scripts/.

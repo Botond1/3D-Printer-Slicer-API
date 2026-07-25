@@ -15,6 +15,24 @@ If rules are changed here, synchronize with:
 ## Goal
 Keep slicing behavior safe, deterministic, and production-friendly while preserving strict domain constraints.
 
+## Candidate image publication boundary
+
+- Normal Image Validation remains read-only/no-push/no-deploy.
+- Manual Candidate Publication is fixed to
+  `ghcr.io/botond1/3d-printer-slicer-api`, exact target branch/full SHA/
+  ancestry, and confirmation `PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
+- Registry, attestation, and OIDC write permissions belong only to the
+  publication job, after the shared complete gate passes on the same once-built
+  `linux/amd64` image.
+- Refuse an existing discovery tag. Never create mutable/release/staging/
+  production tags. Consumers use only
+  `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`.
+- Publication never authorizes deploy. Preserve and classify partial remote
+  candidates; never overwrite or delete them.
+- Current I8 status is `BLOCKED_PREFLIGHT` because the new manual workflow is
+  not registered on the default branch and changing `main` is unauthorized.
+  Digest, signature, and attestations are `NOT_CREATED`.
+
 ## Technology Baseline
 - Node.js + Express API
 - Python 3.12 preprocessing/orientation scripts

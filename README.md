@@ -59,6 +59,25 @@ not claim deployed proxy, firewall, secret, digest, VPS, or readiness proof.
 - **Resource/state envelope:** actual-byte limits, validated final artifacts,
   stable job/artifact correlation, leased retention, and atomic pricing state.
 
+### Immutable candidate image contract
+
+The repository defines a manual, fail-closed GHCR candidate-publication path,
+but it is not registered or published yet. Its fixed target is
+`ghcr.io/botond1/3d-printer-slicer-api`, and its discovery tag is derived from
+the full source SHA. Discovery tags are not immutable consumption references.
+After a successful publication and attestation run, consumers must use only:
+
+```text
+ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>
+```
+
+The proposed path builds once, completes the full image gate before push,
+resolves and round-trips the registry digest, and verifies digest-bound
+GitHub/Sigstore SLSA provenance plus SPDX SBOM attestations. It never creates
+`latest`, semver, staging, or production tags and never deploys. Current I8
+publication, digest, signature, and attestations are `NOT_CREATED` because the
+manual workflow is blocked pending authorized default-branch registration.
+
 ---
 
 ## 📂 Supported File Formats

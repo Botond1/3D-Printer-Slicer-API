@@ -1,8 +1,55 @@
 # Hardening plan
 
-## I7/S3a immutable-candidate foundation
+## I8/S3a signed-candidate publication checkpoint
 
-Status: `IMPLEMENTED_AND_LOCALLY_TESTED`; exact-SHA hosted validation pending.
+Status: `BLOCKED_PREFLIGHT`.
+
+Implemented locally on exact baseline
+`c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6`:
+
+- one shared exact-image gate for normal no-push Image Validation and Candidate
+  Publication;
+- a separate manual workflow with exact branch/SHA/repository/confirmation and
+  baseline-ancestry checks;
+- job-local least privilege, with registry/attestation/OIDC writes only in the
+  publication job;
+- build-once `linux/amd64` validation before GHCR authentication or push;
+- absent-tag/no-overwrite enforcement and digest-only downstream identity;
+- exact registry manifest/config/platform/source/User correlation;
+- digest-pinned pull, kernel identity, liveness, Orca, and production-Compose
+  round trip;
+- exact-digest SLSA provenance and SPDX 2.3 GitHub/Sigstore attestations,
+  three-path positive verification, and two negative verification probes;
+- bounded I8 provenance v2, explicit partial-publication classifications,
+  allowlisted upload, exact cleanup, and final fail-closed aggregation.
+
+The exact npm 10.9.8 focused/adapted I8 and shared Image Validation contract
+lane is green at 587/587. This does not prove hosted publication.
+
+Open exit gates:
+
+1. Obtain explicit authorization for the minimum default-branch registration
+   change or an explicitly approved alternative. GitHub cannot dispatch a new
+   `workflow_dispatch` workflow that exists only on the candidate branch.
+2. Commit and non-force push the exact target branch, then prove final remote
+   SHA and baseline ancestry.
+3. Run hosted Source Validation and normal read-only Image Validation on that
+   exact SHA.
+4. Only after both pass, dispatch Candidate Publication with the exact
+   confirmation and verify one previously absent discovery tag.
+5. Record exact registry digest, digest round trip, provenance/SBOM attestation
+   IDs and bundle hashes, positive and negative cryptographic verification,
+   bounded artifact identity, exact cleanup, and final aggregator success.
+
+Until all exits are green: candidate tag/digest `NOT_CREATED`; signature
+`NOT_CREATED`; attestations `NOT_CREATED`; hosted I8 evidence `PENDING`;
+deployment `NOT_RUN`; external topology and production readiness `UNVERIFIED`.
+The exact-SHA candidate workflow remains the reviewed trust assumption needed
+for the same-job no-tar build/gate/push identity constraint.
+
+## Historical I7/S3a immutable-candidate foundation
+
+Status: `HOSTED_VERIFIED_NO_PUSH`.
 
 The repository now separates production operation from development Compose.
 Production accepts only an externally supplied immutable digest after the
@@ -12,9 +59,10 @@ Image Validation remains build-once/no-push/no-deploy and emits bounded
 allowlisted provenance only after the exact-image gates and exact cleanup
 succeed.
 
-Remaining exits are explicit:
+Exact I7 hosted Source run `30160486802` and Image run `30160486750`
+succeeded; evidence artifact `8620145030` is the retained no-push checkpoint.
+Remaining exits beyond I7 are explicit:
 
-- obtain one green exact-SHA hosted Source and Image Validation result for I7;
 - verify or establish required branch policy without overstating the observed
   404/no-ruleset result;
 - separately authorize and create a registry digest, signature, and
@@ -134,7 +182,7 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1b - queue deadlines and abort contract | `VERIFIED` | S1a workspace ownership | integrated queue scheduling/deadline/counter/runtime lifecycle | Independent deadlines, request/shutdown AbortSignal propagation, typed `SLICE_QUEUE_SHUTDOWN`, single settlement, active-slot retention, and timer/listener/counter/workspace cleanup have deterministic local evidence. |
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `IN_PROGRESS` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | I3 implements a bounded Node HTTP-server subset; resource/archive, artifact/pricing, and container-permission exits remain open | I3 locally implements and focuses tests on header/request/keep-alive timeouts, header/connection counts, and requests/socket with bounded fallback. Final aggregate and exact-SHA evidence are pending; measured VPS/proxy/CPU/RAM/PID/disk/archive/model/output caps, streaming limits, artifact retention/correlation, atomic pricing, and read-only state separation remain incomplete. |
-| S3a - repository build/provenance and automatic-deploy separation | `IN_PROGRESS` | S0.1; integrated through I7 | exact-candidate build-once/no-push/no-deploy validation, bounded provenance, and digest-only production Compose are implemented locally | I6 hosted Source and Image Validation are green. I7 local gates are green and exact-SHA hosted validation is pending. Registry publication, signature/attestation, branch policy, promotion, deployed topology, readiness, and rollback remain unverified or not created. |
+| S3a - repository build/provenance and automatic-deploy separation | `BLOCKED_PREFLIGHT` | S0.1; exact hosted I7 baseline green | I8 locally factors one shared build-once gate and adds manual least-privilege digest-bound GHCR publication, attestations, verification, bounded v2 evidence, and no-deploy aggregation | I7 Source `30160486802` and Image `30160486750` are green. I8's exact npm 10.9.8 focused/adapted lane is 587/587, but GitHub cannot dispatch the new workflow until default-branch registration, which is not authorized. I8 GHCR digest/signature/attestations are `NOT_CREATED`; S3b/deployed topology/readiness/rollback remain unverified or not started. |
 | S4 - service trust and topology | `IN_PROGRESS` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | I5 supplies scoped trust; I6 selects the internal private-peer/no-host-port topology | Repository validation requires authenticated peer ingress, auth rejection, no API external route, and calibrated API/native DNS/TCP/UDP denial. Deployed callers, proxy/firewall, secrets, digest, and egress remain `UNVERIFIED`. |
 | S3b - staging and promotion drill | `NOT_STARTED` | S3a evidence; S4 evidence; separate explicit user/owner authorization | staging/promotion/readiness/rollback drill only | Promote a verified immutable artifact through a human-authorized staging gate; readiness is bounded and meaningful; failure restores the prior artifact; the drill is recorded. No authorization or verification is inferred from S1a/S3a/S4 repository work. |
 | S5 - topology/optional async worker decision | `IN_PROGRESS` | I5 trust controls and S4 topology evidence | private-peer topology selected; async API/worker deferred | `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`. Complete exact deployed caller, proxy, secret, digest, firewall, and egress evidence without changing current endpoints. |

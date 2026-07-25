@@ -1,11 +1,58 @@
 # Security model
 
-## I7/S3a immutable-candidate control delta
+## I8/S3a signed-candidate publication control delta
+
+- The proposed publication boundary is a separate, manual-only
+  `.github/workflows/candidate-publication.yml`. It accepts only the exact
+  target branch, full lowercase source SHA, fixed repository, and literal
+  confirmation. Its concurrency key is candidate-SHA scoped with cancellation
+  disabled.
+- Workflow permissions default to `contents: none`. Preflight gets only
+  `contents: read`; only the publication job gets `contents: read`,
+  `packages: write`, `attestations: write`, and `id-token: write`. Normal
+  Source/Image validation remains without registry or attestation writes.
+- The shared exact-image gate preserves
+  `ONE_BUILD -> FULL_GATE_ON_THAT_IMAGE -> PUSH_THAT_EXACT_IMAGE`. Registry
+  authentication and tag probing occur only after the full gate. An existing
+  discovery tag is a hard stop, and no mutable/release/staging/production tag
+  exists in the contract.
+- Local image IDs are config identities, never registry manifest identities.
+  Publication resolves a distinct lowercase registry digest, compares raw
+  tag/digest manifests, verifies a single `linux/amd64` image and exact OCI
+  source revision, pulls by digest after removing the local build identity,
+  and re-proves kernel identity, liveness, Orca, and production Compose.
+- `actions/attest` is exact-commit pinned and would create two distinct
+  digest-bound GitHub/Sigstore attestations: SLSA provenance and SPDX 2.3 SBOM.
+  Verification requires GitHub API, OCI bundle, and local bounded-bundle paths,
+  exact signer repository/workflow/ref/source, expected predicates, and
+  negative wrong-digest/wrong-repository rejection.
+- The bounded v2 evidence schema rejects tag subjects, local-ID substitution,
+  malformed or mismatched digests, wrong source/build/repository/workflow/ref,
+  SBOM drift, unsigned/wrong-predicate attestations, missing verification,
+  incomplete pre-gates, second builds, mutable tags, cleanup loss, and final
+  aggregator removal.
+- Partial publication fails closed. Before a matching push the classification
+  is `BLOCKED_I8_PREPUBLICATION_GATE`; after a matching push but incomplete
+  attestations it is `I8_CANDIDATE_PUBLISHED_UNATTESTED`; after attestations but
+  failed verification it is `I8_CANDIDATE_ATTESTATION_UNVERIFIED`. Published
+  content is preserved for audit and is never overwritten, deleted, promoted,
+  or deployed by this workflow.
+- Current state is `BLOCKED_PREFLIGHT`, not a signed-candidate security claim.
+  GitHub will not dispatch a newly introduced `workflow_dispatch` file until
+  the workflow exists on the default branch, and changing `main` is not
+  authorized. GHCR digest is `NOT_CREATED`; signature is `NOT_CREATED`;
+  provenance/SBOM attestations are `NOT_CREATED`; production readiness and
+  external topology remain `UNVERIFIED`.
+- The exact-SHA candidate workflow is the reviewed trust assumption needed to
+  keep build, complete gate, push, and attestation in one job without an
+  image-tar transfer.
+
+## Historical I7/S3a immutable-candidate control delta
 
 | Current control | Classification | Evidence and remaining boundary |
 | --- | --- | --- |
 | Digest-only production Compose | `IMPLEMENTED_AND_TESTED` | The separate production manifest has one internal-only API service, no build/host port/proxy, and preserves non-root, read-only, resource, logging, mount, health, and shutdown controls. The mandatory Node preflight rejects missing or noncanonical image references before Compose. |
-| Exact-candidate provenance metadata | `IMPLEMENTED_AND_LOCALLY_TESTED`; hosted target pending | Image Validation binds a bounded allowlisted JSON artifact to source SHA, workflow run/attempt/job, build inputs, local image ID and UID/GID, slicer/Swiper pins, SPDX hash, Grype 0.110.0 database build timestamp and counts, topology proofs, and successful aggregation/cleanup. |
+| Exact-candidate provenance metadata | `HOSTED_VERIFIED_NO_PUSH` | Image Validation binds a bounded allowlisted JSON artifact to source SHA, workflow run/attempt/job, build inputs, local image ID and UID/GID, slicer/Swiper pins, SPDX hash, Grype 0.110.0 database build timestamp and counts, topology proofs, and successful aggregation/cleanup. Exact I7 Source run `30160486802` and Image run `30160486750` succeeded; artifact `8620145030` is retained. |
 | Publication and promotion | `NOT_CREATED` / `NOT_STARTED` | The workflow does not push, sign, attest, or deploy. Registry/signature/attestation remain `NOT_CREATED`; deployed digest is `NOT_APPLICABLE_NO_PUBLISH`; S3b is `NOT_STARTED`. |
 | Repository policy | `BRANCH_PROTECTION_UNVERIFIED_OR_ABSENT` | Read-only inspection found public default branch `main`, no rulesets, and the branch-protection endpoint returned 404. Actions are enabled with `allowed_actions=all`; default workflow permission is read and workflows cannot approve pull requests. Package target remains `UNVERIFIED` because the token lacked `read:packages`. |
 | Deployed private-peer boundary | `UNVERIFIED` | No repository result proves the intended/denied callers, proxy hop/CIDR, secret owner/mode, exact deployed digest, firewall, egress, VPS state, or production readiness. |
