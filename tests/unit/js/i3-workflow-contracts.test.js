@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '../../..');
-const WORKFLOW_PATH = path.join(ROOT, '.github/workflows/image-validation.yml');
+const WORKFLOW_PATH = path.join(ROOT, '.github/actions/exact-image-gate/action.yml');
 const WORKFLOW = fs.readFileSync(WORKFLOW_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const SCOPED_KEYS = Object.freeze([
     ['SLICE_SERVICE_API_KEY', 'slice'],

@@ -19,6 +19,7 @@ function readWorkflow(relativePath) {
 const WORKFLOWS = Object.freeze(Object.fromEntries(
     Object.entries(WORKFLOW_PATHS).map(([name, relativePath]) => [name, readWorkflow(relativePath)])
 ));
+const IMAGE_GATE = readWorkflow('.github/actions/exact-image-gate/action.yml');
 
 const AUDITED_USES = Object.freeze({
     ci: Object.freeze([
@@ -32,13 +33,16 @@ const AUDITED_USES = Object.freeze({
     ]),
     image: Object.freeze([
         'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8',
-        'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f',
-        'anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610',
-        'anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2',
-        'docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294',
-        'docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd'
+        './.github/actions/exact-image-gate'
     ])
 });
+const AUDITED_IMAGE_GATE_USES = Object.freeze([
+    'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f',
+    'anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610',
+    'anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2',
+    'docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294',
+    'docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd'
+]);
 
 const AUDITED_ACTION_VERSION_COMMENTS = Object.freeze({
     'actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8': 'v5.0.0',
@@ -344,8 +348,8 @@ function validateActionPins(document, errors) {
     for (const line of usesLines(document)) {
         const reference = actionReference(line);
         if (reference.startsWith('./')) {
-            addError(errors, /^\.\/\.github\/workflows\/[A-Za-z0-9._/-]+\.ya?ml$/.test(reference),
-                `${document.name}: only local reusable workflows may omit an Action SHA (${reference})`);
+            addError(errors, /^\.\/\.github\/(?:workflows\/[A-Za-z0-9._/-]+\.ya?ml|actions\/[A-Za-z0-9._/-]+)$/.test(reference),
+                `${document.name}: only local reusable workflows/actions may omit an Action SHA (${reference})`);
             continue;
         }
         addError(errors,
@@ -403,8 +407,8 @@ function validateGlobalWorkflowSet(workflows) {
     return errors;
 }
 
-function validateExactCandidate(document, errors) {
-    const source = document.source;
+function validateExactCandidate(document, errors, companionSource = '') {
+    const source = `${document.source}\n${companionSource}`;
     addError(errors, !source.includes('inputs.candidate_sha || github.sha'),
         `${document.name}: fail-open candidate fallback with || is forbidden`);
     addError(errors, source.includes(`contains(toJSON(inputs), '"candidate_sha"')`),
@@ -431,9 +435,9 @@ function validateExactCandidate(document, errors) {
     }
 
     addError(errors, source.includes('git rev-parse HEAD'), `${document.name}: missing HEAD resolution proof`);
-    addError(errors, /\[\s*"\$actual_sha"\s*!=\s*"\$CANDIDATE_SHA"\s*\]/.test(source),
+    addError(errors, /\[\s*"\$actual_sha"\s*!=\s*"\$(?:CANDIDATE_SHA|candidate_sha)"\s*\]/.test(source),
         `${document.name}: resolved HEAD must be compared with the requested candidate`);
-    addError(errors, source.includes('git cat-file -e "$CANDIDATE_SHA^{commit}"'),
+    addError(errors, /git cat-file -e "\$(?:CANDIDATE_SHA|candidate_sha)\^\{commit\}"/.test(source),
         `${document.name}: candidate commit object must be proven`);
 }
 
@@ -644,19 +648,32 @@ function validateExactImageAction(step, label, errors) {
     }
 }
 
-function validateImage(source) {
-    const document = parseWorkflow(source, 'image');
+function validateImage(gateSource, wrapperSource = WORKFLOWS.image) {
+    const document = parseWorkflow(gateSource, 'image');
+    const wrapperDocument = parseWorkflow(wrapperSource, 'image');
+    const source = `${wrapperSource}\n${gateSource}`;
     const errors = [];
     const alwaysAfterBuild = "${{ always() && steps.build.outcome == 'success' }}";
-    validateTriggerSet(document, ['pull_request', 'push', 'workflow_dispatch', 'workflow_call'], errors);
-    validateNonMainPush(document, errors);
-    validateInputContract(document, 'workflow_dispatch', errors);
-    validateInputContract(document, 'workflow_call', errors);
-    validateExactCandidate(document, errors);
-    addError(errors, /^name:\s*.*Build Once.*NO PUSH.*NO DEPLOY.*$/mi.test(source),
+    const normalOnlyAlways = "${{ always() && inputs.publish-mode == 'false' }}";
+    const normalOnlyAlwaysAfterBuild =
+        "${{ always() && inputs.publish-mode == 'false' && steps.build.outcome == 'success' }}";
+    const normalOnlyAfterProvenance =
+        "${{ always() && inputs.publish-mode == 'false' && steps.candidate_provenance.outcome == 'success' }}";
+    validateSupportedYamlSubset(document, errors);
+    validateActionPins(document, errors);
+    validateAuditedActionVersionComments(document, errors);
+    addError(errors, JSON.stringify(usesLines(document).map(actionReference).sort())
+        === JSON.stringify([...AUDITED_IMAGE_GATE_USES].sort()),
+    'image: shared gate uses multiset differs from the audited action allowlist');
+    validateTriggerSet(wrapperDocument, ['pull_request', 'push', 'workflow_dispatch', 'workflow_call'], errors);
+    validateNonMainPush(wrapperDocument, errors);
+    validateInputContract(wrapperDocument, 'workflow_dispatch', errors);
+    validateInputContract(wrapperDocument, 'workflow_call', errors);
+    validateExactCandidate(wrapperDocument, errors, gateSource);
+    addError(errors, /^name:\s*.*Build Once.*NO PUSH.*NO DEPLOY.*$/mi.test(wrapperSource),
         'image: workflow name must state build once, NO PUSH, and NO DEPLOY');
 
-    const jobs = topLevelBlock(document, 'jobs');
+    const jobs = topLevelBlock(wrapperDocument, 'jobs');
     addError(errors, jobs && directKeys(jobs).length === 1, 'image: exactly one image-validation job is required');
 
     const setupSteps = actionSteps(document, 'docker/setup-buildx-action@');
@@ -689,9 +706,10 @@ function validateImage(source) {
         && ['username', 'password', 'registry-username', 'registry-password'].includes(mappingKey(line))),
     'image: registry credential inputs are forbidden');
 
-    addError(errors, source.includes('image_ref="local/slicer-api-validation:$candidate_sha"')
-        && source.includes('echo "image_ref=$image_ref" >> "$GITHUB_OUTPUT"')
-        && source.includes('echo "IMAGE_REF=$image_ref" >> "$GITHUB_ENV"'),
+    addError(errors, (source.includes('image_ref="local/slicer-api-validation:$candidate_sha"')
+        || source.includes('echo "image_ref=local/slicer-api-validation:$candidate_sha" >> "$GITHUB_OUTPUT"'))
+        && source.includes('echo "image_ref=$INPUT_IMAGE_REF" >> "$GITHUB_OUTPUT"')
+        && source.includes('echo "IMAGE_REF=$INPUT_IMAGE_REF" >> "$GITHUB_ENV"'),
     'image: exact candidate-scoped local image ref must be recorded as output and environment value');
     addError(errors, !document.lines.some((line) => line.structural && mappingKey(line) === 'EVIDENCE_DIR'),
         'image: evidence directory must not be a workspace-relative workflow env value');
@@ -855,6 +873,8 @@ function validateImage(source) {
         addError(errors, /steps\.sbom\.outcome/.test(gateText)
             && gateText.includes('sbom_infrastructure_failure') && /process\.exit\(2\)/.test(gateText),
         'image: sbom_gate must fail closed with stable infrastructure classification');
+        addError(errors, gateText.includes('stat.size > 16 * 1024 * 1024'),
+            'image: sbom_gate must cap the attested SPDX document at 16 MiB');
     }
 
     const scanSteps = actionSteps(document, 'anchore/scan-action@');
@@ -975,6 +995,8 @@ function validateImage(source) {
             'image: artifact boundary must prove realpath containment');
         addError(errors, /stat\.size\s*<=\s*0\s*\|\|\s*stat\.size\s*>\s*limit/.test(boundaryText),
             'image: artifact boundary must enforce file-size bounds');
+        addError(errors, boundaryText.includes("'sbom.spdx.json': 16 * 1024 * 1024"),
+            'image: artifact boundary must cap the attested SPDX document at 16 MiB');
         addError(errors, (boundaryText.match(/JSON\.parse/g) || []).length >= 4,
             'image: artifact boundary must parse machine-readable JSON before upload');
         addError(errors, boundaryText.includes("'configured_user', 'service_uid', 'service_gid', 'kernel_uid', 'kernel_gid'")
@@ -992,8 +1014,7 @@ function validateImage(source) {
     addError(errors, Boolean(candidateProvenance), 'image: missing bounded candidate provenance generator');
     if (candidateProvenance) {
         const provenanceText = blockText(candidateProvenance);
-        addError(errors, stepScalar(candidateProvenance, 'if')
-            === "${{ always() && steps.build.outcome == 'success' }}"
+        addError(errors, stepScalar(candidateProvenance, 'if') === normalOnlyAlwaysAfterBuild
             && stepScalar(candidateProvenance, 'continue-on-error') === 'true'
             && provenanceText.includes('node scripts/i7-write-provenance.js'),
         'image: provenance generator must be observable and invoke the reviewed writer');
@@ -1014,8 +1035,7 @@ function validateImage(source) {
     addError(errors, Boolean(provenanceBoundary), 'image: missing exact provenance correlation boundary');
     if (provenanceBoundary) {
         const provenanceBoundaryText = blockText(provenanceBoundary);
-        addError(errors, stepScalar(provenanceBoundary, 'if')
-            === "${{ always() && steps.candidate_provenance.outcome == 'success' }}"
+        addError(errors, stepScalar(provenanceBoundary, 'if') === normalOnlyAfterProvenance
             && stepScalar(provenanceBoundary, 'continue-on-error') === 'true',
         'image: provenance boundary must be observable and depend on generation');
         for (const anchor of [
@@ -1045,8 +1065,8 @@ function validateImage(source) {
     addError(errors, Boolean(finalEnforcement), 'image: missing final fail-closed enforcement gate');
     if (finalEnforcement) {
         const gateText = blockText(finalEnforcement);
-        addError(errors, stepScalar(finalEnforcement, 'if') === '${{ always() }}',
-            'image: final enforcement must use if: always()');
+        addError(errors, stepScalar(finalEnforcement, 'if') === normalOnlyAlways,
+            'image: final enforcement must use the exact normal-validation always condition');
         addError(errors, stepKeyBlock(finalEnforcement, 'continue-on-error') === null,
             'image: final enforcement must not continue on error');
         for (const outcome of ['SMOKE_OUTCOME', 'SBOM_OUTCOME', 'SBOM_GATE_OUTCOME', 'SCAN_OUTCOME',
@@ -1105,10 +1125,10 @@ function validateImage(source) {
         'image: cleanup must target the exact identity, Orca, main, topology API, peer, and sentinel containers');
         addError(errors, /docker image rm --force "\$IMAGE_REF"/.test(cleanupText),
             'image: cleanup must target exact IMAGE_REF');
-        addError(errors, /if \[ -n "\$\{IMAGE_REF:-\}" \]; then/.test(cleanupText),
+        addError(errors, /elif \[ "\$RETAIN_IMAGE" = "false" \] && \[ -n "\$\{IMAGE_REF:-\}" \]; then/.test(cleanupText),
             'image: cleanup must guard an unset IMAGE_REF before image inspection');
         addError(errors, /exact_image_present\(\)[\s\S]*docker image inspect "\$exact_ref"/.test(cleanupText)
-            && /if \[ -n "\$\{IMAGE_REF:-\}" \]; then[\s\S]*if exact_image_present "\$IMAGE_REF"; then[\s\S]*image_state=\$\?[\s\S]*docker image rm --force "\$IMAGE_REF"[\s\S]*if exact_image_present "\$IMAGE_REF"; then/.test(cleanupText),
+            && /RETAIN_IMAGE" = "false"[\s\S]*if exact_image_present "\$IMAGE_REF"; then[\s\S]*image_state=\$\?[\s\S]*docker image rm --force "\$IMAGE_REF"[\s\S]*if exact_image_present "\$IMAGE_REF"; then/.test(cleanupText),
         'image: cleanup must fail closed around exact image inspection, removal, and absence verification');
         addError(errors, /if container_record="\$\(exact_container_record "\$exact_container"\)"; then[\s\S]*container_state=\$\?/.test(cleanupText)
             && /if exact_image_present "\$IMAGE_REF"; then[\s\S]*image_state=\$\?/.test(cleanupText)
@@ -1131,9 +1151,9 @@ function validateImage(source) {
     addError(errors, Boolean(evidenceCleanup), 'image: exact bounded evidence cleanup is required');
     if (evidenceCleanup) {
         const cleanupText = blockText(evidenceCleanup);
-        addError(errors, /^\$\{\{\s*always\(\)\s*\}\}$/.test(directScalar(evidenceCleanup, 'if') || '')
+        addError(errors, directScalar(evidenceCleanup, 'if') === normalOnlyAlways
             && stepScalar(evidenceCleanup, 'continue-on-error') === 'true',
-        'image: evidence cleanup must be observable and use if: always()');
+        'image: evidence cleanup must be observable and use the exact normal-validation always condition');
         addError(errors, /\[ -n "\$\{EVIDENCE_DIR:-\}" \]/.test(cleanupText)
             && cleanupText.includes('candidate-provenance.json')
             && cleanupText.includes('topology-evidence.json')
@@ -1182,6 +1202,14 @@ function mutateStringOccurrence(source, search, occurrence, replacement, expecte
     return mutated;
 }
 
+function mutateStepSource(source, stepId, search, replacement, expectedMarker) {
+    const step = stepById(parseWorkflow(source, 'mutation'), stepId);
+    assert.ok(step, `Mutation step was not found: ${stepId}`);
+    const originalBlock = blockText(step);
+    const mutatedBlock = mutateOnce(originalBlock, search, replacement, expectedMarker);
+    return source.replace(originalBlock, mutatedBlock);
+}
+
 function injectStepControlForCommand(source, command, controlLine) {
     const document = parseWorkflow(source, 'mutation');
     const matches = stepsWithExactCommand(document, command);
@@ -1219,7 +1247,7 @@ test('production candidate preflight has an explicit non-deploy boundary', () =>
 });
 
 test('image validation builds once and reuses one local image for smoke, SBOM, scan, evidence, and cleanup', () => {
-    assertValid(validateImage(WORKFLOWS.image));
+    assertValid(validateImage(IMAGE_GATE));
 });
 
 test('global workflow safety mutations are rejected in memory', async (t) => {
@@ -1599,7 +1627,7 @@ test('deploy trigger, transport, credential, command, and boundary mutations are
 });
 
 test('image build, credential, isolation, scan, artifact, and cleanup mutations are rejected in memory', async (t) => {
-    const buildAction = WORKFLOWS.image.match(/docker\/build-push-action@[0-9a-f]{40}/)[0];
+    const buildAction = IMAGE_GATE.match(/docker\/build-push-action@[0-9a-f]{40}/)[0];
     const loginAction = `docker/login-action@${'b'.repeat(40)}`;
     const cases = [
         ['push enabled', (source) => mutateOnce(source, '          push: false', '          push: true', 'push: true'),
@@ -1752,8 +1780,8 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             '          set -u\n          docker system prune --force\n', 'docker system prune --force'),
         /broad Docker prune/],
         ['unnamed broad prune step', (source) => mutateOnce(source,
-            '      - name: Remove only this run\'s exact containers, networks, and image',
-            '      - run: docker image prune --force\n\n      - name: Remove only this run\'s exact containers, networks, and image',
+            '      - name: Remove exact test resources and optionally retain the gated image',
+            '      - run: docker image prune --force\n\n      - name: Remove exact test resources and optionally retain the gated image',
             '- run: docker image prune --force'), /broad Docker prune/],
         ['unnamed docker login step', (source) => mutateOnce(source,
             '      - name: Record and verify local image identity',
@@ -1840,6 +1868,9 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ['SBOM scans a different image', (source) => mutateStringOccurrence(source,
             '${{ steps.candidate.outputs.image_ref }}', 2, 'local/synthetic:sbom', 'local/synthetic:sbom'),
         /SBOM must inspect/],
+        ['SBOM gate permits an oversized attestation document', (source) => mutateOnce(source,
+            'stat.size > 16 * 1024 * 1024', 'stat.size > 100 * 1024 * 1024',
+            'stat.size > 100 * 1024 * 1024'), /attested SPDX document at 16 MiB/],
         ['scan action targets a different image', (source) => mutateStringOccurrence(source,
             '${{ steps.candidate.outputs.image_ref }}', 3, 'local/synthetic:scan', 'local/synthetic:scan'),
         /scan must inspect/],
@@ -1898,6 +1929,10 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ['artifact boundary drops upper size limit', (source) => mutateOnce(source,
             'stat.size <= 0 || stat.size > limit', 'stat.size <= 0',
             'stat.size <= 0) {'), /enforce file-size bounds/],
+        ['artifact boundary permits an oversized attestation document', (source) => mutateOnce(source,
+            "'sbom.spdx.json': 16 * 1024 * 1024",
+            "'sbom.spdx.json': 100 * 1024 * 1024",
+            "'sbom.spdx.json': 100 * 1024 * 1024"), /attested SPDX document at 16 MiB/],
         ['artifact boundary parses only one JSON document', (source) => mutateOnce(source,
             "scan = JSON.parse(fs.readFileSync(path.join(actualRoot, 'grype.json'), 'utf8'));",
             "scan = fs.readFileSync(path.join(actualRoot, 'grype.json'), 'utf8');",
@@ -1905,7 +1940,8 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ['candidate provenance writer is bypassed', (source) => mutateOnce(source,
             'node scripts/i7-write-provenance.js', 'node --version', 'node --version'),
         /invoke the reviewed writer/],
-        ['candidate provenance ignores cleanup outcome', (source) => mutateOnce(source,
+        ['candidate provenance ignores cleanup outcome', (source) => mutateStepSource(source,
+            'candidate_provenance',
             '          CLEANUP_OUTCOME: ${{ steps.exact_cleanup.outcome }}',
             '          CLEANUP_RESULT: ignored', 'CLEANUP_RESULT: ignored'),
         /candidate provenance must bind CLEANUP_OUTCOME/],
@@ -1923,13 +1959,14 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             '        id: final_enforcement', '        id: final_enforcement_disabled',
             'id: final_enforcement_disabled'), /missing final fail-closed enforcement/],
         ['final enforcement loses always condition', (source) => mutateOnce(source,
-            '        id: final_enforcement\n        if: ${{ always() }}',
+            "        id: final_enforcement\n        if: ${{ always() && inputs.publish-mode == 'false' }}",
             '        id: final_enforcement\n        if: ${{ success() }}',
-            'id: final_enforcement\n        if: ${{ success() }}'), /final enforcement must use if: always/],
+            'id: final_enforcement\n        if: ${{ success() }}'),
+        /final enforcement must use the exact normal-validation always condition/],
         ['final enforcement continues on error', (source) => mutateOnce(source,
-            '        id: final_enforcement\n        if: ${{ always() }}',
-            '        id: final_enforcement\n        if: ${{ always() }}\n        continue-on-error: true',
-            'id: final_enforcement\n        if: ${{ always() }}\n        continue-on-error: true'),
+            "        id: final_enforcement\n        if: ${{ always() && inputs.publish-mode == 'false' }}",
+            "        id: final_enforcement\n        if: ${{ always() && inputs.publish-mode == 'false' }}\n        continue-on-error: true",
+            "id: final_enforcement\n        if: ${{ always() && inputs.publish-mode == 'false' }}\n        continue-on-error: true"),
         /final enforcement must not continue/],
         ['final enforcement ignores smoke outcome', (source) => mutateOnce(source,
             "process.env.SMOKE_OUTCOME !== 'success'", 'false', 'if (false ||'),
@@ -1952,15 +1989,16 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ['final enforcement loses scanner infrastructure class', (source) => mutateOnce(source,
             "failures.push('scanner_infrastructure_failure');", "failures.push('scanner_failure');",
             "failures.push('scanner_failure')"), /must report scanner_infrastructure_failure/],
-        ['final enforcement loses vulnerability class', (source) => mutateOnce(source,
+        ['final enforcement loses vulnerability class', (source) => mutateStepSource(source,
+            'final_enforcement',
             "failures.push('vulnerability_gate_failure');", "failures.push('vulnerability_failure');",
             "failures.push('vulnerability_failure')"), /must report vulnerability_gate_failure/],
-        ['final enforcement neutralizes nonzero exit', (source) => mutateStringOccurrence(source,
-            'process.exit(1);', 2, 'process.exit(0);', 'process.exit(0);'),
+        ['final enforcement neutralizes nonzero exit', (source) => mutateStepSource(source,
+            'final_enforcement', 'process.exit(1);', 'process.exit(0);', 'process.exit(0);'),
         /final enforcement must fail non-success outcomes/],
         ['cleanup loses always condition', (source) => mutateOnce(source,
-            '      - name: Remove only this run\'s exact containers, networks, and image\n        id: exact_cleanup\n        if: ${{ always() }}',
-            '      - name: Remove only this run\'s exact containers, networks, and image\n        id: exact_cleanup\n        if: ${{ success() }}',
+            '      - name: Remove exact test resources and optionally retain the gated image\n        id: exact_cleanup\n        if: ${{ always() }}',
+            '      - name: Remove exact test resources and optionally retain the gated image\n        id: exact_cleanup\n        if: ${{ success() }}',
             'if: ${{ success() }}'), /cleanup must use if: always/],
         ['cleanup targets another image', (source) => mutateOnce(source,
             'docker image rm --force "$IMAGE_REF"', 'docker image rm --force "$OTHER_IMAGE_REF"',
@@ -1983,10 +2021,10 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             '${EVIDENCE_DIR:-}', '$EVIDENCE_DIR', '[ -n "$EVIDENCE_DIR" ]'),
         /guard and remove only the exact evidence set/],
         ['evidence cleanup loses always condition', (source) => mutateOnce(source,
-            '        id: evidence_cleanup\n        if: ${{ always() }}',
+            "        id: evidence_cleanup\n        if: ${{ always() && inputs.publish-mode == 'false' }}",
             '        id: evidence_cleanup\n        if: ${{ success() }}',
             'id: evidence_cleanup\n        if: ${{ success() }}'),
-        /evidence cleanup must be observable and use if: always/],
+        /evidence cleanup must be observable and use the exact normal-validation always condition/],
         ['cleanup leaves an expected-absence probe exposed to shell errexit', (source) => mutateOnce(source,
             '            if container_record="$(exact_container_record "$exact_container")"; then\n              container_state=0\n            else\n              container_state=$?\n            fi',
             '            exact_container_record "$exact_container"\n            container_state=$?',
@@ -1996,7 +2034,7 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
 
     for (const [name, mutate, expected] of cases) {
         await t.test(name, () => {
-            assertRejected(validateImage(mutate(WORKFLOWS.image)), expected);
+            assertRejected(validateImage(mutate(IMAGE_GATE)), expected);
         });
     }
 });

@@ -8,7 +8,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '../../..');
 const HELPER_PATH = path.join(ROOT, 'scripts/i2-orca-runtime-smoke.js');
-const WORKFLOW_PATH = path.join(ROOT, '.github/workflows/image-validation.yml');
+const WORKFLOW_PATH = path.join(ROOT, '.github/actions/exact-image-gate/action.yml');
 const SOURCE = fs.readFileSync(HELPER_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const WORKFLOW = fs.readFileSync(WORKFLOW_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const smoke = require(HELPER_PATH);

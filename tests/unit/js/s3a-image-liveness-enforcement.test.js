@@ -8,7 +8,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '../../..');
-const WORKFLOW = fs.readFileSync(path.join(ROOT, '.github/workflows/image-validation.yml'), 'utf8')
+const WORKFLOW = fs.readFileSync(path.join(ROOT, '.github/actions/exact-image-gate/action.yml'), 'utf8')
     .replace(/\r\n?/g, '\n');
 const TRIAGE_HELPER_PATH = path.join(ROOT, 'scripts/render-image-vulnerability-summary.js');
 const TRIAGE_HELPER = fs.readFileSync(TRIAGE_HELPER_PATH, 'utf8').replace(/\r\n?/g, '\n');
@@ -231,7 +231,7 @@ test('triage workflow remains observational and preserves scan, artifact, and cl
     const triageStep = stepText('vulnerability_triage');
     const scanStep = stepText('scan');
     const boundaryStep = stepText('artifact_boundary');
-    const cleanupStep = WORKFLOW.slice(WORKFLOW.indexOf('- name: Remove only this run'));
+    const cleanupStep = WORKFLOW.slice(WORKFLOW.indexOf('- name: Remove exact test resources'));
 
     assert.match(triageStep, /GRYPE_RESULT_PATH:/);
     assert.match(triageStep, /classification=triage_parser_failure/);
@@ -239,7 +239,7 @@ test('triage workflow remains observational and preserves scan, artifact, and cl
     assert.match(scanStep, /grype-version: v0\.110\.0/);
     assert.match(boundaryStep, /'image-identity\.txt': 16 \* 1024/);
     assert.match(boundaryStep, /'runtime-diagnostics\.json': 96 \* 1024/);
-    assert.match(boundaryStep, /'sbom\.spdx\.json': 100 \* 1024 \* 1024/);
+    assert.match(boundaryStep, /'sbom\.spdx\.json': 16 \* 1024 \* 1024/);
     assert.match(boundaryStep, /'grype\.json': 100 \* 1024 \* 1024/);
     assert.doesNotMatch(boundaryStep, /vulnerability-summary|triage-summary/);
     assert.match(cleanupStep, /no prune was run/);
@@ -272,7 +272,7 @@ test('triage mutation anchors reject weakened bounded-output and enforcement con
     assert.match(WORKFLOW, /severity-cutoff: high/);
     assert.match(WORKFLOW, /failures\.push\('vulnerability_gate_failure'\)/);
     const weakenedCutoff = WORKFLOW.replace('severity-cutoff: high', 'severity-cutoff: critical');
-    const bypassedGate = WORKFLOW.replace("failures.push('vulnerability_gate_failure');", '');
+    const bypassedGate = WORKFLOW.replaceAll("failures.push('vulnerability_gate_failure');", '');
     assert.doesNotMatch(weakenedCutoff, /severity-cutoff: high/);
     assert.doesNotMatch(bypassedGate, /failures\.push\('vulnerability_gate_failure'\)/);
 });

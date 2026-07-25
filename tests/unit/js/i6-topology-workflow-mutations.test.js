@@ -9,11 +9,15 @@ const ROOT = path.resolve(__dirname, '../../..');
 const SCRIPT_PATH = path.join(ROOT, 'scripts/i6-topology-runtime-gate.js');
 const PROBES_PATH = path.join(ROOT, 'scripts/i6-topology-probes.js');
 const CONTRACT_PATH = path.join(ROOT, 'scripts/i6-topology-contract.js');
-const WORKFLOW_PATH = path.join(ROOT, '.github/workflows/image-validation.yml');
+const WORKFLOW_PATH = path.join(ROOT, '.github/actions/exact-image-gate/action.yml');
+const IMAGE_WORKFLOW_PATH = path.join(ROOT, '.github/workflows/image-validation.yml');
 const SCRIPT = fs.readFileSync(SCRIPT_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const PROBES = fs.readFileSync(PROBES_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const CONTRACT = fs.readFileSync(CONTRACT_PATH, 'utf8').replace(/\r\n?/g, '\n');
-const WORKFLOW = fs.readFileSync(WORKFLOW_PATH, 'utf8').replace(/\r\n?/g, '\n');
+const WORKFLOW = [
+    fs.readFileSync(IMAGE_WORKFLOW_PATH, 'utf8'),
+    fs.readFileSync(WORKFLOW_PATH, 'utf8')
+].join('\n').replace(/\r\n?/g, '\n');
 
 function requireAnchors(source, anchors) {
     for (const anchor of anchors) {
@@ -196,7 +200,7 @@ function validateWorkflow(source) {
 
 function mutate(source, from, to) {
     assert.ok(source.includes(from), `missing mutation seam: ${from}`);
-    return source.replace(from, to);
+    return source.replaceAll(from, to);
 }
 
 test('topology runtime and probe sources reject private-peer and calibration mutations', async (t) => {

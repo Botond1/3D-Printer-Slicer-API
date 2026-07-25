@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '../../..');
 const HELPER_PATH = path.join(ROOT, 'scripts/i4-image-runtime-envelope.js');
-const WORKFLOW_PATH = path.join(ROOT, '.github/workflows/image-validation.yml');
+const WORKFLOW_PATH = path.join(ROOT, '.github/actions/exact-image-gate/action.yml');
 const SOURCE = fs.readFileSync(HELPER_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const WORKFLOW = fs.readFileSync(WORKFLOW_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const envelope = require(HELPER_PATH);
