@@ -1047,14 +1047,14 @@ function validateImage(source) {
         addError(errors, /^\$\{\{\s*always\(\)\s*\}\}$/.test(directScalar(cleanup, 'if') || ''),
             'image: exact-resource cleanup must use if: always()');
         const cleanupText = blockText(cleanup);
-        addError(errors, /for exact_container in "\$I2_UID_PROBE_NAME" "\$I2_GID_PROBE_NAME" \\\n\s+"\$I2_ORCA_PROBE_NAME" "\$I5_TOPOLOGY_PROBE_NAME" "\$CONTAINER_NAME"/.test(cleanupText)
+        addError(errors, /for exact_container in "\$I2_UID_PROBE_NAME" "\$I2_GID_PROBE_NAME" \\\n\s+"\$I2_ORCA_PROBE_NAME" "\$I6_TOPOLOGY_API_NAME" "\$I6_PRIVATE_PEER_NAME" \\\n\s+"\$CONTAINER_NAME" "\$I6_EGRESS_SENTINEL_NAME"/.test(cleanupText)
             && /docker container rm --force "\$container_id"/.test(cleanupText)
             && /container_ownership_failure/.test(cleanupText)
             && /\[ "\$container_image" != "\$EXPECTED_IMAGE_ID" \]/.test(cleanupText)
             && (cleanupText.match(/\[ "\$validation_label" != "true" \]/g) || []).length === 2
             && /\[ "\$expected_label" != "\$EXPECTED_IMAGE_ID" \]/.test(cleanupText)
             && !/docker container rm --force "\$exact_container"/.test(cleanupText),
-        'image: cleanup must target the exact identity, Orca, topology, and main containers');
+        'image: cleanup must target the exact identity, Orca, main, topology API, peer, and sentinel containers');
         addError(errors, /docker image rm --force "\$IMAGE_REF"/.test(cleanupText),
             'image: cleanup must target exact IMAGE_REF');
         addError(errors, /if \[ -n "\$\{IMAGE_REF:-\}" \]; then/.test(cleanupText),
@@ -1890,11 +1890,11 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ['cleanup removes a reusable name', (source) => mutateOnce(source,
             'docker container rm --force "$container_id"', 'docker container rm --force "$exact_container"',
             'docker container rm --force "$exact_container"'),
-        /cleanup must target the exact identity, Orca, topology, and main containers/],
+            /cleanup must target the exact identity, Orca, main, topology API, peer, and sentinel containers/],
         ['cleanup drops ownership label proof', (source) => mutateOnce(source,
             '[ "$validation_label" != "true" ]', 'false',
             '[ "$container_image" != "$EXPECTED_IMAGE_ID" ] || \\\n                 false'),
-        /cleanup must target the exact identity, Orca, topology, and main containers/],
+            /cleanup must target the exact identity, Orca, main, topology API, peer, and sentinel containers/],
         ['cleanup merges absent inspect streams', (source) => mutateOnce(source,
             '"$exact_reference" 2>/dev/null)', '"$exact_reference" 2>&1)',
             '"$exact_reference" 2>&1)'),

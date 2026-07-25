@@ -37,10 +37,11 @@ jobs:
       I2_UID_PROBE_NAME: i2-uid-${{ github.run_id }}-${{ github.run_attempt }}
       I2_GID_PROBE_NAME: i2-gid-${{ github.run_id }}-${{ github.run_attempt }}
       I2_ORCA_PROBE_NAME: i2-orca-${{ github.run_id }}-${{ github.run_attempt }}
-      I5_TOPOLOGY_PROBE_NAME: i5-topology-${{ github.run_id }}-${{ github.run_attempt }}
-      I5_PRIVATE_NETWORK_NAME: i5-private-${{ github.run_id }}-${{ github.run_attempt }}
-      I5_EGRESS_SENTINEL_NAME: i5-sentinel-${{ github.run_id }}-${{ github.run_attempt }}
-      I5_SENTINEL_NETWORK_NAME: i5-sentinel-net-${{ github.run_id }}-${{ github.run_attempt }}
+      I6_TOPOLOGY_API_NAME: i6-api-${{ github.run_id }}-${{ github.run_attempt }}
+      I6_PRIVATE_PEER_NAME: i6-peer-${{ github.run_id }}-${{ github.run_attempt }}
+      I6_PRIVATE_NETWORK_NAME: i6-private-${{ github.run_id }}-${{ github.run_attempt }}
+      I6_EGRESS_SENTINEL_NAME: i6-sentinel-${{ github.run_id }}-${{ github.run_attempt }}
+      I6_SENTINEL_NETWORK_NAME: i6-sentinel-net-${{ github.run_id }}-${{ github.run_attempt }}
       EVIDENCE_SUBDIR: s3a-image-evidence-${{ github.run_id }}-${{ github.run_attempt }}
       DOCKER_BUILD_RECORD_UPLOAD: 'false'
       DOCKER_BUILD_SUMMARY: 'false'
@@ -320,7 +321,7 @@ jobs:
           echo "Container did not become healthy within the 240-second bound." >&2
           exit 1
 
-      - name: Prove intended private ingress and API/native egress denial fail closed
+      - name: Prove private-peer ingress and API/native egress denial fail closed
         id: topology_gate
         if: ${{ steps.runtime_identity.outcome == 'success' }}
         continue-on-error: true
@@ -331,7 +332,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/i5-topology-runtime-gate.js
+          node scripts/i6-topology-runtime-gate.js
 
       - name: Capture bounded allowlisted runtime diagnostics
         id: runtime_diagnostics
@@ -575,7 +576,7 @@ jobs:
           const path = require('node:path');
           const {
             validateTopologyEvidence
-          } = require('./scripts/i5-topology-evidence-contract');
+          } = require('./scripts/i6-topology-evidence-contract');
           const failBoundary = (code) => {
             if (!/^[a-z0-9_]{1,80}$/.test(code)) code = 'unclassified_boundary_failure';
             console.error(`::error title=I2 evidence boundary::${code}`);
@@ -774,8 +775,8 @@ jobs:
             docker network inspect "$1" >/dev/null 2>&1
           }
           for exact_container in "$I2_UID_PROBE_NAME" "$I2_GID_PROBE_NAME" \
-              "$I2_ORCA_PROBE_NAME" "$I5_TOPOLOGY_PROBE_NAME" "$CONTAINER_NAME" \
-              "$I5_EGRESS_SENTINEL_NAME"; do
+              "$I2_ORCA_PROBE_NAME" "$I6_TOPOLOGY_API_NAME" "$I6_PRIVATE_PEER_NAME" \
+              "$CONTAINER_NAME" "$I6_EGRESS_SENTINEL_NAME"; do
             if container_record="$(exact_container_record "$exact_container")"; then
               container_state=0
             else
@@ -814,10 +815,10 @@ jobs:
             local validation_label="$1" expected_label="$2"
             [ "$validation_label" != "true" ] || [ "$expected_label" != "$EXPECTED_IMAGE_ID" ]
           }
-          if docker network inspect "$I5_PRIVATE_NETWORK_NAME" >/dev/null 2>&1; then
+          if docker network inspect "$I6_PRIVATE_NETWORK_NAME" >/dev/null 2>&1; then
             network_record="$(docker network inspect --format \
               '{{.Id}}|{{index .Labels "io.s3a.validation-only"}}|{{index .Labels "io.s3a.expected-image-id"}}|{{.Internal}}' \
-              "$I5_PRIVATE_NETWORK_NAME")" || cleanup_error network_inspect_failure
+              "$I6_PRIVATE_NETWORK_NAME")" || cleanup_error network_inspect_failure
             IFS='|' read -r network_id validation_label expected_label internal_flag <<< "$network_record"
             if [[ ! "$network_id" =~ ^[0-9a-f]{64}$ ]] || \
                invalid_network_labels "$validation_label" "$expected_label" || \
@@ -831,14 +832,14 @@ jobs:
           if [ -n "$private_network_id" ] && docker network inspect "$private_network_id" >/dev/null 2>&1; then
             cleanup_error network_cleanup_verification_failure
           fi
-          if docker network inspect "$I5_PRIVATE_NETWORK_NAME" >/dev/null 2>&1; then
+          if docker network inspect "$I6_PRIVATE_NETWORK_NAME" >/dev/null 2>&1; then
             cleanup_error network_cleanup_verification_failure
           fi
           network_id=
-          if docker network inspect "$I5_SENTINEL_NETWORK_NAME" >/dev/null 2>&1; then
+          if docker network inspect "$I6_SENTINEL_NETWORK_NAME" >/dev/null 2>&1; then
             network_record="$(docker network inspect --format \
               '{{.Id}}|{{index .Labels "io.s3a.validation-only"}}|{{index .Labels "io.s3a.expected-image-id"}}|{{.Internal}}' \
-              "$I5_SENTINEL_NETWORK_NAME")" || cleanup_error network_inspect_failure
+              "$I6_SENTINEL_NETWORK_NAME")" || cleanup_error network_inspect_failure
             IFS='|' read -r network_id validation_label expected_label internal_flag <<< "$network_record"
             if [[ ! "$network_id" =~ ^[0-9a-f]{64}$ ]] || \
                invalid_network_labels "$validation_label" "$expected_label" || \
@@ -852,7 +853,7 @@ jobs:
           if [ -n "$sentinel_network_id" ] && docker network inspect "$sentinel_network_id" >/dev/null 2>&1; then
             cleanup_error network_cleanup_verification_failure
           fi
-          if network_reference_present "$I5_SENTINEL_NETWORK_NAME"; then
+          if network_reference_present "$I6_SENTINEL_NETWORK_NAME"; then
             cleanup_error network_cleanup_verification_failure
           fi
           if [ -n "${IMAGE_REF:-}" ]; then
@@ -899,7 +900,7 @@ jobs:
             exit "$cleanup_status"
           fi
           echo "classification=success" >> "$GITHUB_OUTPUT"
-          echo "Removed only this run's exact containers, private and sentinel networks, image tag, five evidence files, and scanner configs when present; no prune was run." >> "$GITHUB_STEP_SUMMARY"
+          echo "Removed only this run's exact identity/Orca/main/API/peer/sentinel containers, private and calibration networks, image tag, five evidence files, and scanner configs when present; no prune was run." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce all independent image validation gates fail-closed
         id: final_enforcement
@@ -960,18 +961,11 @@ jobs:
           }
           if (process.env.TOPOLOGY_OUTCOME !== 'success'
               || process.env.TOPOLOGY_CLASSIFICATION !== 'success') {
-            const allowedBlockedReason = (
-              process.env.TOPOLOGY_CLASSIFICATION === 'BLOCKED_S4_EGRESS_CAPABILITY'
-              && [
-                'loopback_ingress_unavailable', 'authenticated_readiness_unavailable'
-              ].includes(process.env.TOPOLOGY_CONTRACT_REASON)
-            ) || (
-              process.env.TOPOLOGY_CLASSIFICATION === 'BLOCKED_S4_HOSTED_RUNTIME_CAPABILITY'
-              && [
-                'docker_command_unavailable', 'private_runtime_probe_unavailable'
-              ].includes(process.env.TOPOLOGY_CONTRACT_REASON)
-            );
-            failures.push(allowedBlockedReason
+            failures.push([
+              'BLOCKED_I6_PRIVATE_PEER_CAPABILITY',
+              'BLOCKED_I6_EGRESS_ENFORCEMENT',
+              'BLOCKED_I6_RUNTIME_CAPABILITY'
+            ].includes(process.env.TOPOLOGY_CLASSIFICATION)
               ? process.env.TOPOLOGY_CLASSIFICATION : 'topology_gate_failure');
           } else if (process.env.TOPOLOGY_CONTRACT_REASON !== 'success') {
             failures.push('topology_gate_failure');
@@ -991,7 +985,7 @@ jobs:
 
           const classifications = [...new Set(failures)];
           const summary = classifications.length === 0
-            ? '\n### Final image validation enforcement\n\nAll independent runtime identity, Orca CLI/synthetic slice, liveness, live-sentinel/private-ingress/API-native-egress, SBOM, scanner, vulnerability, evidence, and cleanup gates passed.\n'
+            ? '\n### Final image validation enforcement\n\nAll independent runtime identity, Orca CLI/synthetic slice, liveness, private-peer ingress/authenticated readiness, no-host-port, calibrated API/native egress denial, SBOM, scanner, vulnerability, evidence, and cleanup gates passed.\n'
             : `\n### Final image validation enforcement\n\nFail-closed classifications: ${classifications.map((value) => `\`${value}\``).join(', ')}.\n`;
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
           if (classifications.length > 0) {
