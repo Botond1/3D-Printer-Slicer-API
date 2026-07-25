@@ -1,5 +1,21 @@
 # Security model
 
+## I7/S3a immutable-candidate control delta
+
+| Current control | Classification | Evidence and remaining boundary |
+| --- | --- | --- |
+| Digest-only production Compose | `IMPLEMENTED_AND_TESTED` | The separate production manifest has one internal-only API service, no build/host port/proxy, and preserves non-root, read-only, resource, logging, mount, health, and shutdown controls. The mandatory Node preflight rejects missing or noncanonical image references before Compose. |
+| Exact-candidate provenance metadata | `IMPLEMENTED_AND_LOCALLY_TESTED`; hosted target pending | Image Validation binds a bounded allowlisted JSON artifact to source SHA, workflow run/attempt/job, build inputs, local image ID and UID/GID, slicer/Swiper pins, SPDX hash, Grype 0.110.0 database build timestamp and counts, topology proofs, and successful aggregation/cleanup. |
+| Publication and promotion | `NOT_CREATED` / `NOT_STARTED` | The workflow does not push, sign, attest, or deploy. Registry/signature/attestation remain `NOT_CREATED`; deployed digest is `NOT_APPLICABLE_NO_PUBLISH`; S3b is `NOT_STARTED`. |
+| Repository policy | `BRANCH_PROTECTION_UNVERIFIED_OR_ABSENT` | Read-only inspection found public default branch `main`, no rulesets, and the branch-protection endpoint returned 404. Actions are enabled with `allowed_actions=all`; default workflow permission is read and workflows cannot approve pull requests. Package target remains `UNVERIFIED` because the token lacked `read:packages`. |
+| Deployed private-peer boundary | `UNVERIFIED` | No repository result proves the intended/denied callers, proxy hop/CIDR, secret owner/mode, exact deployed digest, firewall, egress, VPS state, or production readiness. |
+
+The production API stays on `slicer-api-private`. A separately operated reverse
+proxy can join that bridge and an approved ingress network, but it must not
+offer generic forwarding, NAT, or DNS tunnelling to the API. Exact local and
+historical hosted evidence is recorded in
+[`evidence/i7-s3a-immutable-candidate-foundation.md`](evidence/i7-s3a-immutable-candidate-foundation.md).
+
 ## I6/S5 private-peer topology control delta
 
 Atomic delta: `549fa4258c60b2971855e7a202e488d74427ccd4` followed

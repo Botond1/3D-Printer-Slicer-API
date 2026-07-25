@@ -17,6 +17,26 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
+## Current I7/S3a immutable-candidate foundation
+
+The repository now has a separate `docker-compose.production.yml` contract.
+It accepts only an operator-supplied
+`registry/repository@sha256:<64 lowercase hex>` after
+`node scripts/i7-production-compose-contract.js` passes. Raw Compose
+interpolation checks presence, not digest syntax, so that validator is a
+mandatory preflight. The production manifest has no build, published port, or
+proxy service; it preserves the non-root/read-only/resource/logging/runtime
+envelope and attaches the API only to the internal `slicer-api-private` bridge.
+
+Image Validation still builds once and never pushes or deploys. After all
+exact-image gates and exact cleanup pass, it creates one bounded, allowlisted
+`candidate-provenance.json`, correlates it to the exact source/run/job/local
+image ID/SBOM/scanner database/gate outcomes, uploads the explicit evidence
+set, and then removes only that run's evidence. Registry digest, signature,
+and attestation are `NOT_CREATED`; deployed digest is
+`NOT_APPLICABLE_NO_PUBLISH`. I7 is locally tested and awaits exact-SHA hosted
+validation. S3b is `NOT_STARTED`; production readiness is `UNVERIFIED`.
+
 ## Authority and evidence
 
 Use sources in this order:

@@ -1,5 +1,27 @@
 # Verified project map
 
+## Current I7/S3a immutable-candidate foundation
+
+- `docker-compose.production.yml` is the only production manifest. It has one
+  `slicer-api` service and one internal `slicer-api-private` bridge, no build,
+  no host port, and no in-stack proxy. It requires an external environment
+  file, numeric runtime UID/GID, and a digest-only image reference.
+- `scripts/i7-production-compose-contract.js` is the mandatory preflight that
+  enforces the lowercase `registry/repository@sha256:<64 hex>` reference and
+  exact Compose envelope. Compose interpolation alone only enforces presence.
+- `.github/workflows/image-validation.yml` still builds one local
+  `linux/amd64` image and performs runtime, Orca, browser, topology, SBOM,
+  Grype, artifact-boundary, and exact-cleanup gates against that identity. It
+  then generates and revalidates one bounded allowlisted provenance object and
+  uploads six explicit files. It does not push, sign, attest, or deploy.
+- Local status is `IMPLEMENTED_AND_LOCALLY_TESTED`; the I7 exact-SHA hosted
+  target is `PENDING_HOSTED_VALIDATION`. See
+  [`evidence/i7-s3a-immutable-candidate-foundation.md`](evidence/i7-s3a-immutable-candidate-foundation.md).
+- The external reverse-proxy peer is intentionally outside this manifest. It
+  may join the named private bridge from its own stack, but must not provide
+  generic forwarding, NAT, or DNS tunnelling. Deployed proxy/firewall/secret/
+  digest/VPS state is `UNVERIFIED`; S3b is `NOT_STARTED`.
+
 ## Current I6/S5 private-peer topology decision
 
 - Atomic delta: `549fa4258c60b2971855e7a202e488d74427ccd4`

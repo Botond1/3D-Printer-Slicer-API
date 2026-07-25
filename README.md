@@ -13,9 +13,38 @@
 
 An automated 3D slicing and pricing API built with `Node.js` and `Python` that converts supported 3D model and CAD inputs into printable outputs with validated pricing.
 
-The repository target is a private sidecar API. Compose binds the API to host
-loopback; production ingress, egress, proxy hops, and deployment remain
+The repository target is a private sidecar API. Development Compose binds the
+API to host loopback; the dedicated production manifest has no published API
+port. Production ingress, egress, proxy hops, and deployment remain
 operator-verified gates rather than repository claims.
+
+The dedicated production contract is `docker-compose.production.yml`. It never
+builds locally and has no published API port. Before any production Compose
+command, export an immutable image reference plus the operator-managed
+environment and runtime identity, then run:
+
+```sh
+export SLICER_API_IMAGE='registry.example.invalid/owner/3d-printer-slicer-api@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+export SLICER_ENV_FILE='./operator/service.env'
+export SLICER_UID='10001'
+export SLICER_GID='10001'
+node scripts/i7-production-compose-contract.js &&
+  docker compose -f docker-compose.production.yml config --quiet
+```
+
+The all-zero digest and host paths above are inert documentation values, not a
+published artifact or secret. An authorized operator can replace them with
+verified values and use the same fail-closed preflight before startup:
+
+```sh
+node scripts/i7-production-compose-contract.js &&
+  docker compose -f docker-compose.production.yml up -d --pull always
+```
+
+The external reverse proxy may join the named private bridge from its own
+stack and retain a separate approved ingress network. It must not provide
+generic forwarding, NAT, or DNS tunnelling for the API. This repository does
+not claim deployed proxy, firewall, secret, digest, VPS, or readiness proof.
 
 ---
 
@@ -685,12 +714,12 @@ This repository currently includes the following synchronized changes across imp
 - **Docker supply-chain validation:** build-time SHA256 verification for slicer AppImages.
 - **Documentation synchronization:** global guides, folder-local guides, and instruction overlays under `.github/instructions/*`.
 
-Compose intentionally remains loopback-published on an ordinary bridge. A local
-Docker Desktop 29.6.1 A/B proved that this topology retains API/native
-DNS/TCP/UDP egress; an internal bridge denied egress but exposed no loopback
-listener. The S4 topology exit is therefore
-`BLOCKED_S4_EGRESS_CAPABILITY`, not production-ready. No sidecar, deploy, or
-production firewall state is implied.
+The development Compose topology remains loopback-published on an ordinary
+bridge. Historical Docker Desktop 29.6.1 A/B proved that topology retains
+API/native DNS/TCP/UDP egress. I6 then selected the internal private-peer model,
+and I7's production manifest implements the API half without inventing a proxy.
+Deployed caller, proxy, firewall, egress, secret, digest, and VPS evidence is
+still required; no production-ready state is implied.
 
 ---
 

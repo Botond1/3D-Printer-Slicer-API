@@ -1,5 +1,32 @@
 # Hardening plan
 
+## I7/S3a immutable-candidate foundation
+
+Status: `IMPLEMENTED_AND_LOCALLY_TESTED`; exact-SHA hosted validation pending.
+
+The repository now separates production operation from development Compose.
+Production accepts only an externally supplied immutable digest after the
+mandatory contract validator passes, preserves the runtime security envelope,
+publishes no API port, and places the API only on an internal private bridge.
+Image Validation remains build-once/no-push/no-deploy and emits bounded
+allowlisted provenance only after the exact-image gates and exact cleanup
+succeed.
+
+Remaining exits are explicit:
+
+- obtain one green exact-SHA hosted Source and Image Validation result for I7;
+- verify or establish required branch policy without overstating the observed
+  404/no-ruleset result;
+- separately authorize and create a registry digest, signature, and
+  attestation if promotion is later approved;
+- prove deployed caller, proxy, secret, firewall, egress, digest, VPS,
+  readiness, and rollback behavior before S3b.
+
+Registry publication, signing, attestation, deployment, and VPS mutation are
+outside this delta. S3b is `NOT_STARTED`; production readiness is
+`UNVERIFIED`. See
+[`evidence/i7-s3a-immutable-candidate-foundation.md`](evidence/i7-s3a-immutable-candidate-foundation.md).
+
 ## I6/S5 private-peer topology decision
 
 Status: `IN_PROGRESS`; repository topology selected, deployment proof pending.
@@ -107,7 +134,7 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1b - queue deadlines and abort contract | `VERIFIED` | S1a workspace ownership | integrated queue scheduling/deadline/counter/runtime lifecycle | Independent deadlines, request/shutdown AbortSignal propagation, typed `SLICE_QUEUE_SHUTDOWN`, single settlement, active-slot retention, and timer/listener/counter/workspace cleanup have deterministic local evidence. |
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `IN_PROGRESS` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | I3 implements a bounded Node HTTP-server subset; resource/archive, artifact/pricing, and container-permission exits remain open | I3 locally implements and focuses tests on header/request/keep-alive timeouts, header/connection counts, and requests/socket with bounded fallback. Final aggregate and exact-SHA evidence are pending; measured VPS/proxy/CPU/RAM/PID/disk/archive/model/output caps, streaming limits, artifact retention/correlation, atomic pricing, and read-only state separation remain incomplete. |
-| S3a - repository build/provenance and automatic-deploy separation | `BLOCKED` | S0.1; integrated through I1 | exact-candidate, build-once, no-push/no-deploy validation and Node 24 action maintenance are integrated; remaining image/runtime and supply-chain evidence stays fail closed | Exact S3a-B2 source validation is green, but hosted image validation has both an unresolved persistent liveness failure and a HIGH scanner path. Swiper 7.2.0 is known, but is not claimed as the sole failure. Immutable registry digest, signature/attestation, branch policy, promotion, topology, readiness, and rollback are unverified. |
+| S3a - repository build/provenance and automatic-deploy separation | `IN_PROGRESS` | S0.1; integrated through I7 | exact-candidate build-once/no-push/no-deploy validation, bounded provenance, and digest-only production Compose are implemented locally | I6 hosted Source and Image Validation are green. I7 local gates are green and exact-SHA hosted validation is pending. Registry publication, signature/attestation, branch policy, promotion, deployed topology, readiness, and rollback remain unverified or not created. |
 | S4 - service trust and topology | `IN_PROGRESS` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | I5 supplies scoped trust; I6 selects the internal private-peer/no-host-port topology | Repository validation requires authenticated peer ingress, auth rejection, no API external route, and calibrated API/native DNS/TCP/UDP denial. Deployed callers, proxy/firewall, secrets, digest, and egress remain `UNVERIFIED`. |
 | S3b - staging and promotion drill | `NOT_STARTED` | S3a evidence; S4 evidence; separate explicit user/owner authorization | staging/promotion/readiness/rollback drill only | Promote a verified immutable artifact through a human-authorized staging gate; readiness is bounded and meaningful; failure restores the prior artifact; the drill is recorded. No authorization or verification is inferred from S1a/S3a/S4 repository work. |
 | S5 - topology/optional async worker decision | `IN_PROGRESS` | I5 trust controls and S4 topology evidence | private-peer topology selected; async API/worker deferred | `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`. Complete exact deployed caller, proxy, secret, digest, firewall, and egress evidence without changing current endpoints. |
