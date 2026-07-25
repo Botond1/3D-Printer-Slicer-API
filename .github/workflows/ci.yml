@@ -115,6 +115,9 @@ jobs:
       - name: Enforce S3a workflow contracts fail-closed
         run: node --test tests/unit/js/s3a-workflow-contracts.test.js
 
+      - name: Enforce immutable-candidate contracts fail-closed
+        run: node --test tests/unit/js/i7-production-compose-contract.test.js tests/unit/js/i7-provenance-evidence-contract.test.js tests/unit/js/i7-provenance-writer-contract.test.js
+
       - name: Run deterministic unit tests
         run: npm test
 

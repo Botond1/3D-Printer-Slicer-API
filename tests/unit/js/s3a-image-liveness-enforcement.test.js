@@ -61,9 +61,12 @@ const SUCCESS_ENV = Object.freeze({
     TOPOLOGY_CLASSIFICATION: 'success',
     TOPOLOGY_CONTRACT_REASON: 'success',
     ARTIFACT_BOUNDARY_OUTCOME: 'success',
+    PROVENANCE_OUTCOME: 'success',
+    PROVENANCE_BOUNDARY_OUTCOME: 'success',
     EVIDENCE_UPLOAD_OUTCOME: 'success',
     CLEANUP_OUTCOME: 'success',
-    CLEANUP_CLASSIFICATION: 'success'
+    CLEANUP_CLASSIFICATION: 'success',
+    EVIDENCE_CLEANUP_OUTCOME: 'success'
 });
 
 function runFinal(overrides = {}) {
@@ -302,8 +305,8 @@ function createEvidence() {
         `local_image_ref=${IMAGE_REF}`,
         `local_image_id=sha256:${'b'.repeat(64)}`,
         'build_action_image_id=',
-        'identity_scope=local-loaded-image-only',
-        'registry_digest=not_applicable_no_push',
+        'identity_scope=run_local_not_registry_digest',
+        'registry_digest=not_created',
         'signature=not_created',
         'attestation=not_created',
         'configured_user=slicer',

@@ -148,6 +148,7 @@ function validateWorkflow(source) {
     const topology = workflowStep(source, 'topology_gate');
     const boundary = workflowStep(source, 'artifact_boundary');
     const cleanup = workflowStep(source, 'exact_cleanup');
+    const evidenceCleanup = workflowStep(source, 'evidence_cleanup');
     const final = workflowStep(source, 'final_enforcement');
     requireAnchors(topology, [
         "if: ${{ steps.runtime_identity.outcome == 'success' }}",
@@ -168,10 +169,13 @@ function validateWorkflow(source) {
         '[ "$expected_label" != "$EXPECTED_IMAGE_ID" ]',
         'docker network rm "$network_id"',
         'network_cleanup_verification_failure',
-        'topology-evidence.json',
-        'evidence_directory_boundary_failure',
-        'rmdir -- "$expected_evidence_dir"',
         'classification=cleanup_failure'
+    ]);
+    requireAnchors(evidenceCleanup, [
+        'topology-evidence.json',
+        '${EVIDENCE_DIR:-}',
+        'rmdir -- "$expected_evidence_dir"',
+        'classification=evidence_cleanup_failure'
     ]);
     requireAnchors(final, [
         'TOPOLOGY_OUTCOME: ${{ steps.topology_gate.outcome }}',
@@ -281,7 +285,8 @@ test('image workflow rejects I6 invocation, evidence, cleanup, and enforcement m
             'docker network inspect "$I6_PRIVATE_NETWORK_NAME"'],
         ['exact network removal omitted', 'docker network rm "$network_id"', 'true'],
         ['topology evidence omitted from cleanup',
-            'topology-evidence.json sbom.spdx.json', 'sbom.spdx.json'],
+            'runtime-diagnostics.json topology-evidence.json sbom.spdx.json',
+            'runtime-diagnostics.json sbom.spdx.json'],
         ['private-peer classification dropped',
             "'BLOCKED_I6_PRIVATE_PEER_CAPABILITY'", "'topology_gate_failure'"],
         ['egress classification dropped',

@@ -15,7 +15,7 @@ const PATHS = Object.freeze({
     metrics: path.join(ROOT, 'app/services/observability/metrics.js'),
     readiness: path.join(ROOT, 'app/services/readiness.service.js')
 });
-const read = (name) => fs.readFileSync(PATHS[name], 'utf8');
+const read = (name) => fs.readFileSync(PATHS[name], 'utf8').replace(/\r\n?/g, '\n');
 
 function validateCorrelation(sources) {
     assert.match(sources.response, /job_id: context\.jobId,/);

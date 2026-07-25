@@ -99,7 +99,7 @@ function workflowContract(source) {
         "failures.push('runtime_identity_failure');", 'CLEANUP_OUTCOME', "failures.push('cleanup_failure');",
         'ORCA_CLI_SMOKE_OUTCOME', 'ORCA_CLI_SMOKE_CLASSIFICATION',
         "failures.push('orca_cli_smoke_failure');",
-        "if (process.env.CLEANUP_OUTCOME !== 'success')",
+        "if (process.env.CLEANUP_OUTCOME !== 'success'",
         "process.env.SMOKE_OUTCOME !== 'success'", "process.env.SMOKE_CLASSIFICATION !== 'success'",
         'process.exit(1);']) assert.ok(final.includes(anchor), `final missing ${anchor}`);
     assert.match(DOCKERFILE, /^USER slicer$/m);
@@ -179,7 +179,7 @@ test('required workflow mutations are rejected', async (t) => {
         ['health weakened', "process.env.SMOKE_OUTCOME !== 'success'", 'false'],
         ['final identity ignored', "failures.push('runtime_identity_failure');", ''],
         ['final Orca smoke ignored', "failures.push('orca_cli_smoke_failure');", ''],
-        ['cleanup outcome ignored', "if (process.env.CLEANUP_OUTCOME !== 'success')", 'if (false)'],
+        ['cleanup outcome ignored', "if (process.env.CLEANUP_OUTCOME !== 'success'", 'if (false'],
         ['cleanup skipped', '        id: exact_cleanup\n        if: ${{ always() }}', '        id: exact_cleanup\n        if: ${{ success() }}'],
         ['cleanup probe omitted',
             '              "$I2_ORCA_PROBE_NAME" "$I6_TOPOLOGY_API_NAME" "$I6_PRIVATE_PEER_NAME" \\\n'

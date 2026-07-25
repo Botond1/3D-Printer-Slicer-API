@@ -71,6 +71,8 @@ const CI_REQUIRED_COMMANDS = Object.freeze([
     ['npm ci --ignore-scripts --no-audit --no-fund', 'lockfile install gate'],
     ['npm run check:syntax', 'tracked JS/Python syntax gate'],
     ['node --test tests/unit/js/s3a-workflow-contracts.test.js', 'focused fail-closed S3a contract gate'],
+    ['node --test tests/unit/js/i7-production-compose-contract.test.js tests/unit/js/i7-provenance-evidence-contract.test.js tests/unit/js/i7-provenance-writer-contract.test.js',
+        'focused immutable-candidate contract gate'],
     ['npm test', 'aggregate JavaScript/Python test gate'],
     ['npm audit --omit=dev --audit-level=moderate', 'moderate production audit gate'],
     ['npm run check:repository-safety', 'tracked repository-safety gate'],
@@ -933,11 +935,12 @@ function validateImage(source) {
         addError(errors, directScalar(withBlock, 'name')
             === 's3a-image-evidence-${{ steps.candidate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}',
         'image: artifact name must be unique across candidate, run, and rerun attempt');
-        for (const fileName of ['image-identity.txt', 'runtime-diagnostics.json',
+        for (const fileName of ['candidate-provenance.json', 'image-identity.txt', 'runtime-diagnostics.json',
             'topology-evidence.json', 'sbom.spdx.json', 'grype.json']) {
             addError(errors, artifactPaths.includes(fileName), `image: bounded artifact must include ${fileName}`);
         }
         const expectedUploadPaths = [
+            '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/candidate-provenance.json',
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt',
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/runtime-diagnostics.json',
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/topology-evidence.json',
@@ -945,7 +948,7 @@ function validateImage(source) {
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json'
         ].sort();
         addError(errors, JSON.stringify(uploadedPathLines.sort()) === JSON.stringify(expectedUploadPaths),
-            'image: artifact upload must use the exact five runner.temp evidence paths');
+            'image: artifact upload must use the exact six runner.temp evidence paths');
         addError(errors, !/(?:\.tar\b|\.oci\b|\*\*|^\s*\.\s*$)/im.test(artifactPaths),
             'image: full image or broad directory artifact upload is forbidden');
     }
@@ -985,12 +988,57 @@ function validateImage(source) {
             && boundaryText.includes('containerLog'),
         'image: artifact boundary must validate the diagnostic field allowlist');
     }
+    const candidateProvenance = stepById(document, 'candidate_provenance');
+    addError(errors, Boolean(candidateProvenance), 'image: missing bounded candidate provenance generator');
+    if (candidateProvenance) {
+        const provenanceText = blockText(candidateProvenance);
+        addError(errors, stepScalar(candidateProvenance, 'if')
+            === "${{ always() && steps.build.outcome == 'success' }}"
+            && stepScalar(candidateProvenance, 'continue-on-error') === 'true'
+            && provenanceText.includes('node scripts/i7-write-provenance.js'),
+        'image: provenance generator must be observable and invoke the reviewed writer');
+        for (const binding of [
+            'RUNTIME_IDENTITY_OUTCOME', 'RUNTIME_IDENTITY_CLASSIFICATION',
+            'SMOKE_OUTCOME', 'SMOKE_CLASSIFICATION', 'TOPOLOGY_OUTCOME',
+            'TOPOLOGY_CLASSIFICATION', 'TOPOLOGY_CONTRACT_REASON',
+            'TOPOLOGY_SENTINEL_OPERATIONAL', 'SBOM_OUTCOME', 'SBOM_CLASSIFICATION',
+            'SCAN_OUTCOME', 'SCAN_CLASSIFICATION', 'TRIAGE_OUTCOME',
+            'TRIAGE_CLASSIFICATION', 'ARTIFACT_BOUNDARY_OUTCOME',
+            'ARTIFACT_BOUNDARY_CLASSIFICATION', 'CLEANUP_OUTCOME', 'CLEANUP_CLASSIFICATION'
+        ]) {
+            addError(errors, provenanceText.includes(`${binding}:`),
+                `image: candidate provenance must bind ${binding}`);
+        }
+    }
+    const provenanceBoundary = stepById(document, 'provenance_boundary');
+    addError(errors, Boolean(provenanceBoundary), 'image: missing exact provenance correlation boundary');
+    if (provenanceBoundary) {
+        const provenanceBoundaryText = blockText(provenanceBoundary);
+        addError(errors, stepScalar(provenanceBoundary, 'if')
+            === "${{ always() && steps.candidate_provenance.outcome == 'success' }}"
+            && stepScalar(provenanceBoundary, 'continue-on-error') === 'true',
+        'image: provenance boundary must be observable and depend on generation');
+        for (const anchor of [
+            'candidate-provenance.json', 'MAX_EVIDENCE_BYTES',
+            'const error = validateCandidateEvidence(evidence, {',
+            'source_sha: process.env.CANDIDATE_SHA', 'run_id: process.env.GITHUB_RUN_ID',
+            'image_id: process.env.EXPECTED_IMAGE_ID', 'sbom_sha256: sbomSha256'
+        ]) {
+            addError(errors, provenanceBoundaryText.includes(anchor),
+                `image: provenance boundary lacks exact correlation anchor ${anchor}`);
+        }
+    }
     if (uploads.length === 1) {
         const uploadCondition = directScalar(uploads[0], 'if') || '';
-        addError(errors, /steps\.artifact_boundary\.outcome\s*==\s*'success'/.test(uploadCondition),
-            'image: artifact upload must be gated by successful artifact boundary outcome');
+        addError(errors, /steps\.provenance_boundary\.outcome\s*==\s*'success'/.test(uploadCondition),
+            'image: artifact upload must be gated by successful provenance boundary outcome');
         addError(errors, artifactBoundary && artifactBoundary.start < uploads[0].start,
             'image: artifact boundary must run before artifact upload');
+        addError(errors, candidateProvenance && provenanceBoundary
+            && artifactBoundary && artifactBoundary.start < candidateProvenance.start
+            && candidateProvenance.start < provenanceBoundary.start
+            && provenanceBoundary.start < uploads[0].start,
+        'image: evidence aggregation and final correlation must precede upload');
     }
 
     const finalEnforcement = stepById(document, 'final_enforcement');
@@ -1004,8 +1052,8 @@ function validateImage(source) {
         for (const outcome of ['SMOKE_OUTCOME', 'SBOM_OUTCOME', 'SBOM_GATE_OUTCOME', 'SCAN_OUTCOME',
             'SCAN_GATE_OUTCOME', 'DIAGNOSTIC_OUTCOME', 'RUNTIME_IDENTITY_OUTCOME',
             'ORCA_CLI_SMOKE_OUTCOME',
-            'ARTIFACT_BOUNDARY_OUTCOME', 'EVIDENCE_UPLOAD_OUTCOME',
-            'CLEANUP_OUTCOME']) {
+            'ARTIFACT_BOUNDARY_OUTCOME', 'PROVENANCE_OUTCOME', 'PROVENANCE_BOUNDARY_OUTCOME',
+            'EVIDENCE_UPLOAD_OUTCOME', 'CLEANUP_OUTCOME', 'EVIDENCE_CLEANUP_OUTCOME']) {
             addError(errors, gateText.includes(`process.env.${outcome}`),
                 `image: final enforcement must check ${outcome}`);
         }
@@ -1031,8 +1079,8 @@ function validateImage(source) {
 
     addError(errors, source.includes('candidate_sha=$CANDIDATE_SHA')
         && source.includes('local_image_id=$actual_image_id')
-        && source.includes('identity_scope=local-loaded-image-only')
-        && source.includes('registry_digest=not_applicable_no_push')
+        && source.includes('identity_scope=run_local_not_registry_digest')
+        && source.includes('registry_digest=not_created')
         && source.includes('signature=not_created')
         && source.includes('attestation=not_created'),
     'image: local image identity evidence and non-provenance disclaimer are required');
@@ -1068,8 +1116,6 @@ function validateImage(source) {
             && /inspect_error="\$\(docker container inspect "\$exact_reference" 2>&1 >\/dev\/null\)"/.test(cleanupText)
             && !/^\s*exact_(?:container|image)_present [^\n]+\n\s*(?:container|image)_state=\$\?/m.test(cleanupText),
         'image: expected absent cleanup probes must be captured without triggering shell errexit');
-        addError(errors, /\[ -n "\$\{EVIDENCE_DIR:-\}" \]/.test(cleanupText),
-            'image: cleanup must guard an unset EVIDENCE_DIR before evidence inspection');
         addError(errors, stepScalar(cleanup, 'continue-on-error') === 'true'
             && (cleanupText.match(/classification=cleanup_failure/g) || []).length === 1
             && (cleanupText.match(/classification=success/g) || []).length === 1
@@ -1078,6 +1124,24 @@ function validateImage(source) {
         'image: cleanup must return a stable classification to final enforcement');
         addError(errors, finalEnforcement && cleanup.start < finalEnforcement.start,
             'image: exact cleanup must run before final enforcement');
+        addError(errors, candidateProvenance && cleanup.start < candidateProvenance.start,
+            'image: exact resource cleanup must precede provenance generation');
+    }
+    const evidenceCleanup = stepById(document, 'evidence_cleanup');
+    addError(errors, Boolean(evidenceCleanup), 'image: exact bounded evidence cleanup is required');
+    if (evidenceCleanup) {
+        const cleanupText = blockText(evidenceCleanup);
+        addError(errors, /^\$\{\{\s*always\(\)\s*\}\}$/.test(directScalar(evidenceCleanup, 'if') || '')
+            && stepScalar(evidenceCleanup, 'continue-on-error') === 'true',
+        'image: evidence cleanup must be observable and use if: always()');
+        addError(errors, /\[ -n "\$\{EVIDENCE_DIR:-\}" \]/.test(cleanupText)
+            && cleanupText.includes('candidate-provenance.json')
+            && cleanupText.includes('topology-evidence.json')
+            && cleanupText.includes('rmdir -- "$expected_evidence_dir"'),
+        'image: cleanup must guard and remove only the exact evidence set');
+        addError(errors, uploads.length === 1 && evidenceCleanup.start > uploads[0].start
+            && finalEnforcement && evidenceCleanup.start < finalEnforcement.start,
+        'image: bounded evidence cleanup must run after upload and before final enforcement');
     }
     return errors;
 }
@@ -1688,8 +1752,8 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             '          set -u\n          docker system prune --force\n', 'docker system prune --force'),
         /broad Docker prune/],
         ['unnamed broad prune step', (source) => mutateOnce(source,
-            '      - name: Remove only this run\'s exact containers, image, and evidence',
-            '      - run: docker image prune --force\n\n      - name: Remove only this run\'s exact containers, image, and evidence',
+            '      - name: Remove only this run\'s exact containers, networks, and image',
+            '      - run: docker image prune --force\n\n      - name: Remove only this run\'s exact containers, networks, and image',
             '- run: docker image prune --force'), /broad Docker prune/],
         ['unnamed docker login step', (source) => mutateOnce(source,
             '      - name: Record and verify local image identity',
@@ -1793,16 +1857,16 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         ['artifact retained too long', (source) => mutateOnce(source, 'retention-days: 7',
             'retention-days: 90', 'retention-days: 90'), /retention must be between/],
         ['artifact uploads broad directory', (source) => mutateOnce(source,
-            '          path: |\n            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt',
+            '          path: |\n            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/candidate-provenance.json',
             '          path: |\n            .', '\n            .\n'), /broad directory artifact/],
         ['artifact upload reads from workspace', (source) => mutateOnce(source,
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt',
             '${{ github.workspace }}/image-identity.txt', '${{ github.workspace }}/image-identity.txt'),
-        /exact five runner\.temp evidence paths/],
+        /exact six runner\.temp evidence paths/],
         ['artifact upload permits parent-path exfil', (source) => mutateStringOccurrence(source,
             '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/sbom.spdx.json',
             2, '${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/../synthetic-link',
-            '../synthetic-link'), /exact five runner\.temp evidence paths/],
+            '../synthetic-link'), /exact six runner\.temp evidence paths/],
         ['artifact name collides across reruns', (source) => mutateOnce(source,
             's3a-image-evidence-${{ steps.candidate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}',
             's3a-image-evidence-${{ steps.candidate.outputs.sha }}',
@@ -1838,9 +1902,23 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             "scan = JSON.parse(fs.readFileSync(path.join(actualRoot, 'grype.json'), 'utf8'));",
             "scan = fs.readFileSync(path.join(actualRoot, 'grype.json'), 'utf8');",
             "scan = fs.readFileSync(path.join(actualRoot, 'grype.json')"), /parse machine-readable JSON/],
+        ['candidate provenance writer is bypassed', (source) => mutateOnce(source,
+            'node scripts/i7-write-provenance.js', 'node --version', 'node --version'),
+        /invoke the reviewed writer/],
+        ['candidate provenance ignores cleanup outcome', (source) => mutateOnce(source,
+            '          CLEANUP_OUTCOME: ${{ steps.exact_cleanup.outcome }}',
+            '          CLEANUP_RESULT: ignored', 'CLEANUP_RESULT: ignored'),
+        /candidate provenance must bind CLEANUP_OUTCOME/],
+        ['provenance boundary skips exact validation', (source) => mutateOnce(source,
+            'const error = validateCandidateEvidence(evidence, {',
+            'const error = null; /* validateCandidateEvidence(evidence, { */',
+            'const error = null'), /lacks exact correlation anchor/],
+        ['provenance boundary drops exact image correlation', (source) => mutateOnce(source,
+            'image_id: process.env.EXPECTED_IMAGE_ID', 'image_id: evidence.image.id',
+            'image_id: evidence.image.id'), /lacks exact correlation anchor/],
         ['artifact upload bypasses boundary outcome', (source) => mutateOnce(source,
-            "steps.artifact_boundary.outcome == 'success'", "steps.build.outcome == 'success'",
-            "steps.build.outcome == 'success'"), /upload must be gated by successful artifact boundary/],
+            "steps.provenance_boundary.outcome == 'success'", "steps.build.outcome == 'success'",
+            "steps.build.outcome == 'success'"), /upload must be gated by successful provenance boundary/],
         ['final enforcement is removed', (source) => mutateOnce(source,
             '        id: final_enforcement', '        id: final_enforcement_disabled',
             'id: final_enforcement_disabled'), /missing final fail-closed enforcement/],
@@ -1881,8 +1959,8 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             'process.exit(1);', 2, 'process.exit(0);', 'process.exit(0);'),
         /final enforcement must fail non-success outcomes/],
         ['cleanup loses always condition', (source) => mutateOnce(source,
-            '      - name: Remove only this run\'s exact containers, image, and evidence\n        id: exact_cleanup\n        if: ${{ always() }}',
-            '      - name: Remove only this run\'s exact containers, image, and evidence\n        id: exact_cleanup\n        if: ${{ success() }}',
+            '      - name: Remove only this run\'s exact containers, networks, and image\n        id: exact_cleanup\n        if: ${{ always() }}',
+            '      - name: Remove only this run\'s exact containers, networks, and image\n        id: exact_cleanup\n        if: ${{ success() }}',
             'if: ${{ success() }}'), /cleanup must use if: always/],
         ['cleanup targets another image', (source) => mutateOnce(source,
             'docker image rm --force "$IMAGE_REF"', 'docker image rm --force "$OTHER_IMAGE_REF"',
@@ -1903,7 +1981,12 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
         /guard an unset IMAGE_REF/],
         ['cleanup dereferences unset evidence directory', (source) => mutateOnce(source,
             '${EVIDENCE_DIR:-}', '$EVIDENCE_DIR', '[ -n "$EVIDENCE_DIR" ]'),
-        /guard an unset EVIDENCE_DIR/],
+        /guard and remove only the exact evidence set/],
+        ['evidence cleanup loses always condition', (source) => mutateOnce(source,
+            '        id: evidence_cleanup\n        if: ${{ always() }}',
+            '        id: evidence_cleanup\n        if: ${{ success() }}',
+            'id: evidence_cleanup\n        if: ${{ success() }}'),
+        /evidence cleanup must be observable and use if: always/],
         ['cleanup leaves an expected-absence probe exposed to shell errexit', (source) => mutateOnce(source,
             '            if container_record="$(exact_container_record "$exact_container")"; then\n              container_state=0\n            else\n              container_state=$?\n            fi',
             '            exact_container_record "$exact_container"\n            container_state=$?',
