@@ -1,0 +1,72 @@
+# SLICER_API_IMAGE must be a full immutable registry reference:
+# <registry>/<repository>@sha256:<64 lowercase hexadecimal characters>
+services:
+  slicer-api:
+    image: "${SLICER_API_IMAGE:?Set SLICER_API_IMAGE to registry/repository@sha256:<64 lowercase hex>}"
+    container_name: 3d-psa-backend-server
+    env_file:
+      - "${SLICER_ENV_FILE:?Set SLICER_ENV_FILE to the operator-managed service environment file}"
+    environment:
+      EXPECTED_SERVICE_UID: "${SLICER_UID:?Set SLICER_UID to the image slicer user's positive numeric UID}"
+      EXPECTED_SERVICE_GID: "${SLICER_GID:?Set SLICER_GID to the image slicer user's positive numeric GID}"
+      EXPECTED_PIDS_LIMIT: "${SLICER_PIDS_LIMIT:-512}"
+      EXPECTED_MEMORY_BYTES: "${SLICER_MEMORY_BYTES:-4294967296}"
+      EXPECTED_CPU_LIMIT: "${SLICER_CPU_LIMIT:-2.0}"
+      EXPECTED_LOG_MAX_SIZE: "${SLICER_LOG_MAX_SIZE:-20m}"
+      EXPECTED_LOG_MAX_FILES: "${SLICER_LOG_MAX_FILES:-5}"
+      EXPECTED_STOP_GRACE_PERIOD: "${SLICER_STOP_GRACE_PERIOD:-30s}"
+    user: "${SLICER_UID:?Set SLICER_UID to the image slicer user's positive numeric UID}:${SLICER_GID:?Set SLICER_GID to the image slicer user's positive numeric GID}"
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http=require('http');const req=http.get('http://127.0.0.1:3000/health',res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));req.setTimeout(5000,()=>{req.destroy();process.exit(1);});"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    pids_limit: ${SLICER_PIDS_LIMIT:-512}
+    mem_limit: ${SLICER_MEMORY_BYTES:-4294967296}
+    memswap_limit: ${SLICER_MEMORY_BYTES:-4294967296}
+    cpus: ${SLICER_CPU_LIMIT:-2.0}
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m,uid=${SLICER_UID:?Set SLICER_UID to the image slicer user's positive numeric UID},gid=${SLICER_GID:?Set SLICER_GID to the image slicer user's positive numeric GID},mode=0700
+    logging:
+      driver: json-file
+      options:
+        max-size: "${SLICER_LOG_MAX_SIZE:-20m}"
+        max-file: "${SLICER_LOG_MAX_FILES:-5}"
+    volumes:
+      - type: bind
+        source: ${SLICER_INPUT_DIR:-./input}
+        target: /app/input
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SLICER_OUTPUT_DIR:-./output}
+        target: /app/output
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SLICER_CONFIGS_DIR:-./configs}
+        target: /app/configs
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${SLICER_PRICING_STATE_DIR:-./configs/pricing-state}
+        target: /app/configs/pricing-state
+        bind:
+          create_host_path: false
+    networks:
+      - slicer-api-private
+    restart: unless-stopped
+    stop_grace_period: ${SLICER_STOP_GRACE_PERIOD:-30s}
+
+networks:
+  slicer-api-private:
+    name: slicer-api-private
+    driver: bridge
+    internal: true
