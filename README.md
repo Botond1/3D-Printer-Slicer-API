@@ -61,22 +61,39 @@ not claim deployed proxy, firewall, secret, digest, VPS, or readiness proof.
 
 ### Immutable candidate image contract
 
-The repository defines a manual, fail-closed GHCR candidate-publication path,
-but it is not registered or published yet. Its fixed target is
-`ghcr.io/botond1/3d-printer-slicer-api`, and its discovery tag is derived from
-the full source SHA. Discovery tags are not immutable consumption references.
+The repository defines a fail-closed GHCR candidate-publication path. It
+retains exact-input `workflow_dispatch` for future default-branch integration
+and adds a push trigger only for
+`codex/i8-s3a-ghcr-signed-candidate`. On that push path the candidate is
+`github.sha`; repository `Botond1/3D-Printer-Slicer-API`, ref
+`refs/heads/codex/i8-s3a-ghcr-signed-candidate`, and actor `Botond1` must match
+exactly, the registry is hardcoded to
+`ghcr.io/botond1/3d-printer-slicer-api`, and the commit's last non-empty line
+must be:
+
+```text
+I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE
+```
+
+Both trigger paths emit the same canonical `candidate_sha`, `image_ref`,
+`discovery_tag`, and `registry_repository` outputs. The discovery tag is
+derived from the full source SHA and is not an immutable consumption reference.
 After a successful publication and attestation run, consumers must use only:
 
 ```text
 ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>
 ```
 
-The proposed path builds once, completes the full image gate before push,
+The path builds once, completes the full image gate before push,
 resolves and round-trips the registry digest, and verifies digest-bound
 GitHub/Sigstore SLSA provenance plus SPDX SBOM attestations. It never creates
-`latest`, semver, staging, or production tags and never deploys. Current I8
-publication, digest, signature, and attestations are `NOT_CREATED` because the
-manual workflow is blocked pending authorized default-branch registration.
+`latest`, semver, staging, or production tags and never deploys. Before the
+single authorized normal non-force corrective branch push, Source run
+`30163991878` and Image run `30163991870` are green; the corrective
+Source/Image/Publication runs are pending. No registry, signature, or
+attestation side effect exists.
+Nothing in this contract authorizes a `main` change, PR, merge, force-push,
+release, Git tag, mutable image tag, deployment, or repository-setting change.
 
 ---
 

@@ -16,12 +16,15 @@ on:
         required: false
         default: ghcr.io/botond1/3d-printer-slicer-api
         type: string
+  push:
+    branches:
+      - codex/i8-s3a-ghcr-signed-candidate
 
 permissions:
   contents: none
 
 concurrency:
-  group: i8-candidate-publication-${{ inputs.candidate_sha }}
+  group: i8-candidate-publication-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -35,37 +38,70 @@ jobs:
       candidate_sha: ${{ steps.candidate.outputs.sha }}
       image_ref: ${{ steps.candidate.outputs.image_ref }}
       discovery_tag: ${{ steps.candidate.outputs.discovery_tag }}
+      registry_repository: ${{ steps.candidate.outputs.registry_repository }}
     steps:
-      - name: Require the exact branch, SHA, repository, and confirmation
+      - name: Adapt only the exact manual or authorized push event
         id: candidate
         env:
-          REQUESTED_SHA: ${{ inputs.candidate_sha }}
-          CONFIRMATION: ${{ inputs.confirmation }}
-          REQUESTED_REGISTRY_REPOSITORY: ${{ inputs.registry_repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTOR: ${{ github.actor }}
           EVENT_SHA: ${{ github.sha }}
           EVENT_REF: ${{ github.ref }}
           EVENT_REPOSITORY: ${{ github.repository }}
+          REQUESTED_SHA: ${{ inputs.candidate_sha }}
+          REQUESTED_CONFIRMATION: ${{ inputs.confirmation }}
+          REQUESTED_REGISTRY_REPOSITORY: ${{ inputs.registry_repository }}
         shell: bash
         run: |
           set -euo pipefail
           baseline_sha="c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6"
           exact_ref="refs/heads/codex/i8-s3a-ghcr-signed-candidate"
-          if [ "$EVENT_REPOSITORY" != "Botond1/3D-Printer-Slicer-API" ] || \
-             [ "$EVENT_REF" != "$exact_ref" ] || \
-             [ "$CONFIRMATION" != "PUBLISH_I8_SIGNED_GHCR_CANDIDATE" ] || \
-             [ "$REQUESTED_REGISTRY_REPOSITORY" != "ghcr.io/botond1/3d-printer-slicer-api" ]; then
+          exact_repository="Botond1/3D-Printer-Slicer-API"
+          exact_registry_repository="ghcr.io/botond1/3d-printer-slicer-api"
+          exact_confirmation="PUBLISH_I8_SIGNED_GHCR_CANDIDATE"
+
+          if [ "$EVENT_REPOSITORY" != "$exact_repository" ] || [ "$EVENT_REF" != "$exact_ref" ]; then
             echo "Candidate publication authorization does not match the exact contract." >&2
             exit 2
           fi
-          if [[ ! "$REQUESTED_SHA" =~ ^[0-9a-f]{40}$ ]] || \
-             [ "$REQUESTED_SHA" != "$EVENT_SHA" ] || [ "$REQUESTED_SHA" = "$baseline_sha" ]; then
+
+          case "$EVENT_NAME" in
+            workflow_dispatch)
+              candidate_sha="$REQUESTED_SHA"
+              registry_repository="$REQUESTED_REGISTRY_REPOSITORY"
+              if [ "$REQUESTED_CONFIRMATION" != "$exact_confirmation" ]; then
+                echo "Manual confirmation does not match the exact contract." >&2
+                exit 2
+              fi
+              ;;
+            push)
+              if [ "$EVENT_ACTOR" != "Botond1" ]; then
+                echo "Candidate publication push actor is not authorized." >&2
+                exit 2
+              fi
+              candidate_sha="$EVENT_SHA"
+              registry_repository="$exact_registry_repository"
+              ;;
+            *)
+              echo "Unsupported Candidate Publication event: $EVENT_NAME" >&2
+              exit 2
+              ;;
+          esac
+
+          if [ "$registry_repository" != "$exact_registry_repository" ]; then
+            echo "Candidate publication registry does not match the exact contract." >&2
+            exit 2
+          fi
+          if [[ ! "$candidate_sha" =~ ^[0-9a-f]{40}$ ]] || \
+             [ "$candidate_sha" != "$EVENT_SHA" ] || [ "$candidate_sha" = "$baseline_sha" ]; then
             echo "candidate_sha must be the selected branch's exact full lowercase post-baseline SHA." >&2
             exit 2
           fi
           {
-            echo "sha=$REQUESTED_SHA"
-            echo "image_ref=local/slicer-api-publication:$REQUESTED_SHA"
-            echo "discovery_tag=candidate-$REQUESTED_SHA"
+            echo "sha=$candidate_sha"
+            echo "image_ref=local/slicer-api-publication:$candidate_sha"
+            echo "discovery_tag=candidate-$candidate_sha"
+            echo "registry_repository=$registry_repository"
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout the exact candidate without credentials
@@ -75,18 +111,39 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Prove branch head and baseline ancestry
+      - name: Prove branch head, baseline ancestry, and exact push trailer
+        id: authorization_proof
         env:
           CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
+          EVENT_NAME: ${{ github.event_name }}
         shell: bash
         run: |
           set -euo pipefail
           baseline_sha="c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6"
+          required_trailer="I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE"
           [ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]
           remote_sha="$(git ls-remote --exit-code origin \
             refs/heads/codex/i8-s3a-ghcr-signed-candidate | awk '{print $1}')"
           [ "$remote_sha" = "$CANDIDATE_SHA" ]
           git merge-base --is-ancestor "$baseline_sha" "$CANDIDATE_SHA"
+          case "$EVENT_NAME" in
+            workflow_dispatch)
+              ;;
+            push)
+              last_nonempty_line="$(
+                git show -s --format=%B "$CANDIDATE_SHA" |
+                  awk 'NF { last = $0 } END { if (last != "") print last }'
+              )"
+              if [ "$last_nonempty_line" != "$required_trailer" ]; then
+                echo "Candidate publication push lacks the exact final authorization trailer." >&2
+                exit 2
+              fi
+              ;;
+            *)
+              echo "Unsupported Candidate Publication event after checkout: $EVENT_NAME" >&2
+              exit 2
+              ;;
+          esac
 
   publication:
     name: Gate, publish, attest, verify, and retain immutable candidate
@@ -99,7 +156,7 @@ jobs:
       attestations: write
       id-token: write
     env:
-      REGISTRY_REPOSITORY: ghcr.io/botond1/3d-printer-slicer-api
+      REGISTRY_REPOSITORY: ${{ needs.preflight.outputs.registry_repository }}
       CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
       IMAGE_REF: ${{ needs.preflight.outputs.image_ref }}
       DISCOVERY_TAG: ${{ needs.preflight.outputs.discovery_tag }}

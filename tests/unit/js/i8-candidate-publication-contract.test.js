@@ -15,7 +15,9 @@ const BASELINE_SHA = 'c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6';
 const BRANCH = 'codex/i8-s3a-ghcr-signed-candidate';
 const GHCR_REPOSITORY = 'ghcr.io/botond1/3d-printer-slicer-api';
 const GITHUB_REPOSITORY = 'Botond1/3D-Printer-Slicer-API';
+const PUSH_ACTOR = 'Botond1';
 const CONFIRMATION = 'PUBLISH_I8_SIGNED_GHCR_CANDIDATE';
+const PUBLICATION_TRAILER = `I8-Publication: ${CONFIRMATION}`;
 const ATTEST_ACTION = 'actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6';
 const LOGIN_ACTION = 'docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7';
 const BUILD_ACTION = 'docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294';
@@ -144,8 +146,12 @@ function validateContract(sources) {
     assert.doesNotMatch(`${publication}\n${image}\n${gate}`, /\t|\r/, 'workflow sources use spaces/LF');
 
     const trigger = mappingBlock(publication, 'on', 0);
-    assert.deepEqual(directKeys(trigger), ['workflow_dispatch'], 'publication is manual-only');
+    assert.deepEqual(directKeys(trigger), ['workflow_dispatch', 'push'],
+        'publication accepts only exact manual and candidate-branch push events');
     const dispatch = mappingBlock(publication, 'workflow_dispatch', 2);
+    const push = mappingBlock(publication, 'push', 2);
+    assert.equal(push.text.trimEnd(), `  push:\n    branches:\n      - ${BRANCH}`,
+        'push publication is limited to one exact branch without tags or wildcards');
     const inputs = mappingBlock(dispatch.text, 'inputs', 4);
     const inputKeys = directKeys(inputs);
     assert.ok([
@@ -162,11 +168,72 @@ function validateContract(sources) {
     }
     requireIncludes(publication, [
         BASELINE_SHA, `refs/heads/${BRANCH}`, GHCR_REPOSITORY, GITHUB_REPOSITORY,
-        CONFIRMATION, '^[0-9a-f]{40}$', 'cancel-in-progress: false',
+        CONFIRMATION, PUBLICATION_TRAILER, '^[0-9a-f]{40}$', 'cancel-in-progress: false',
+        'group: i8-candidate-publication-${{ github.sha }}',
         'git merge-base --is-ancestor', 'persist-credentials: false', 'fetch-depth: 0'
     ], 'preflight');
+    const eventAdapter = stepText(publication, 'candidate');
+    requireIncludes(eventAdapter, [
+        'EVENT_NAME: ${{ github.event_name }}',
+        'EVENT_ACTOR: ${{ github.actor }}',
+        'EVENT_SHA: ${{ github.sha }}',
+        'EVENT_REF: ${{ github.ref }}',
+        'EVENT_REPOSITORY: ${{ github.repository }}',
+        'if [ "$EVENT_REPOSITORY" != "$exact_repository" ] || [ "$EVENT_REF" != "$exact_ref" ]; then',
+        'case "$EVENT_NAME" in',
+        'workflow_dispatch)',
+        'push)',
+        'candidate_sha="$REQUESTED_SHA"',
+        'candidate_sha="$EVENT_SHA"',
+        `if [ "$EVENT_ACTOR" != "${PUSH_ACTOR}" ]; then`,
+        'registry_repository="$exact_registry_repository"',
+        'if [ "$registry_repository" != "$exact_registry_repository" ]; then',
+        '[ "$candidate_sha" != "$EVENT_SHA" ]',
+        'echo "registry_repository=$registry_repository"',
+        'Unsupported Candidate Publication event'
+    ], 'event adapter');
+    assert.doesNotMatch(eventAdapter, /contains\s*\(|\$\{[^}\n]*:-/,
+        'event adapter must not use substring authorization or fallback defaults');
+    const authorizationProof = stepText(publication, 'authorization_proof');
+    requireIncludes(authorizationProof, [
+        `required_trailer="${PUBLICATION_TRAILER}"`,
+        'git show -s --format=%B "$CANDIDATE_SHA"',
+        "awk 'NF { last = $0 } END { if (last != \"\") print last }'",
+        'if [ "$last_nonempty_line" != "$required_trailer" ]; then',
+        'workflow_dispatch)',
+        'push)',
+        'Unsupported Candidate Publication event after checkout'
+    ], 'post-checkout authorization proof');
+    assert.doesNotMatch(authorizationProof, /contains\s*\(|=\s*~|\*"\$required_trailer"\*/,
+        'push trailer authorization must use exact equality');
+    const preflightJob = mappingBlock(publication, 'preflight', 2);
+    assert.ok(!directKeys(preflightJob).includes('if')
+        && !directKeys(preflightJob).includes('continue-on-error'),
+    'preflight job must fail closed without a job-level bypass');
+    assert.doesNotMatch(preflightJob.text, /^\s+continue-on-error:\s*true\s*$/m,
+        'no preflight authorization step may ignore failure');
+    const preflightOutputs = mappingBlock(preflightJob.text, 'outputs', 4);
+    assert.deepEqual(directKeys(preflightOutputs), [
+        'candidate_sha', 'image_ref', 'discovery_tag', 'registry_repository'
+    ], 'canonical preflight output key set');
+    requireIncludes(preflightOutputs.text, [
+        'candidate_sha: ${{ steps.candidate.outputs.sha }}',
+        'image_ref: ${{ steps.candidate.outputs.image_ref }}',
+        'discovery_tag: ${{ steps.candidate.outputs.discovery_tag }}',
+        'registry_repository: ${{ steps.candidate.outputs.registry_repository }}'
+    ], 'canonical preflight output mappings');
+    requireIncludes(mappingBlock(publication, 'env', 4).text, [
+        'REGISTRY_REPOSITORY: ${{ needs.preflight.outputs.registry_repository }}'
+    ], 'canonical publication environment');
 
     assert.deepEqual(directKeys(mappingBlock(publication, 'jobs', 0)), ['preflight', 'publication']);
+    const publicationJob = mappingBlock(publication, 'publication', 2);
+    assert.ok(directKeys(publicationJob).includes('needs')
+        && publicationJob.text.includes('    needs: preflight'),
+    'publication must depend on the successful preflight job');
+    assert.ok(!directKeys(publicationJob).includes('if')
+        && !directKeys(publicationJob).includes('continue-on-error'),
+    'publication job must not bypass a failed preflight');
     assert.deepEqual(permissions(publication, 0), [[['contents', 'none']]]);
     assert.deepEqual(permissions(mappingBlock(publication, 'preflight', 2).text, 4), [
         [['contents', 'read']]
@@ -381,6 +448,9 @@ function validateContract(sources) {
         '[ "$PUBLICATION_EVIDENCE_BOUNDARY_OUTCOME" != "success" ]',
         'classification=BLOCKED_I8_PREPUBLICATION_GATE'
     ], 'partial publication classification');
+    assert.match(final,
+        /if \[ "\$classification" != "I8_SIGNED_CANDIDATE_COMPLETE" \]; then\n\s+echo "::error title=I8 publication::\$classification"\n\s+exit 1\n\s+fi\s*$/,
+        'the final aggregator must terminate every non-complete classification with failure');
     assert.ok(stepRange(publication, 'publication_cleanup').start < stepRange(publication, 'final_enforcement').start);
 }
 
@@ -430,7 +500,7 @@ function mutation(name, surface, transform) {
     }];
 }
 
-test('Candidate Publication is manual, least-privilege, build-once, digest-bound, and fail-closed', () => {
+test('Candidate Publication accepts only exact manual/push authorization and remains least-privilege, build-once, digest-bound, and fail-closed', () => {
     validateContract(ORIGINAL);
 });
 
@@ -438,7 +508,65 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
     const loginId = stepIdContaining(ORIGINAL.publication, LOGIN_ACTION);
     const uploadId = stepIdContaining(ORIGINAL.publication, 'actions/upload-artifact@');
     const cases = [
-        mutation('non-manual trigger', 'publication', (s) => s.replace('on:\n', 'on:\n  push:\n')),
+        mutation('push branch wildcard', 'publication', (s) => replaceRequired(
+            s,
+            `  push:\n    branches:\n      - ${BRANCH}`,
+            "  push:\n    branches:\n      - '**'"
+        )),
+        mutation('different push branch', 'publication', (s) => replaceRequired(
+            s,
+            `  push:\n    branches:\n      - ${BRANCH}`,
+            '  push:\n    branches:\n      - main'
+        )),
+        mutation('different push actor', 'publication', (s) => replaceRequired(
+            s, `if [ "$EVENT_ACTOR" != "${PUSH_ACTOR}" ]; then`,
+            'if [ "$EVENT_ACTOR" != "OtherActor" ]; then')),
+        mutation('push actor check removed', 'publication', (s) => replaceRequired(
+            s, `if [ "$EVENT_ACTOR" != "${PUSH_ACTOR}" ]; then`, 'if false; then')),
+        mutation('push trailer omitted', 'publication', (s) => replaceRequired(
+            s, `required_trailer="${PUBLICATION_TRAILER}"`, 'required_trailer=""')),
+        mutation('push trailer uses substring authorization', 'publication', (s) => replaceRequired(
+            s,
+            'if [ "$last_nonempty_line" != "$required_trailer" ]; then',
+            'if [[ "$last_nonempty_line" != *"$required_trailer"* ]]; then'
+        )),
+        mutation('push SHA uses manual input', 'publication', (s) => replaceRequired(
+            s, 'candidate_sha="$EVENT_SHA"', 'candidate_sha="$REQUESTED_SHA"')),
+        mutation('event adapter adds a fallback', 'publication', (s) => replaceRequired(
+            s, 'candidate_sha="$EVENT_SHA"', 'candidate_sha="${REQUESTED_SHA:-$EVENT_SHA}"')),
+        mutation('manual dispatch contract removed', 'publication', (s) => replaceRequired(
+            s, '  workflow_dispatch:\n', '  schedule:\n')),
+        mutation('preflight gains write permission', 'publication', (s) => replaceRequired(
+            s,
+            '    permissions:\n      contents: read\n    outputs:',
+            '    permissions:\n      contents: write\n    outputs:'
+        )),
+        mutation('preflight ignores authorization failure', 'publication', (s) => replaceRequired(
+            s,
+            '    permissions:\n      contents: read\n    outputs:',
+            '    permissions:\n      contents: read\n    continue-on-error: true\n    outputs:'
+        )),
+        mutation('authorization proof ignores failure', 'publication', (s) => replaceRequired(
+            s,
+            '        id: authorization_proof\n',
+            '        id: authorization_proof\n        continue-on-error: true\n'
+        )),
+        mutation('repository and ref guard removed', 'publication', (s) => replaceRequired(
+            s,
+            'if [ "$EVENT_REPOSITORY" != "$exact_repository" ] || [ "$EVENT_REF" != "$exact_ref" ]; then',
+            'if false; then'
+        )),
+        mutation('fixed registry comparison removed', 'publication', (s) => replaceRequired(
+            s, 'if [ "$registry_repository" != "$exact_registry_repository" ]; then', 'if false; then')),
+        mutation('candidate and event SHA comparison removed', 'publication', (s) => replaceRequired(
+            s, '[ "$candidate_sha" != "$EVENT_SHA" ]', '[ "$candidate_sha" != "$candidate_sha" ]')),
+        mutation('publication bypasses failed preflight', 'publication', (s) => replaceRequired(
+            s, '    needs: preflight\n', '    needs: preflight\n    if: ${{ always() }}\n')),
+        mutation('canonical registry output is replaced', 'publication', (s) => replaceRequired(
+            s,
+            'registry_repository: ${{ steps.candidate.outputs.registry_repository }}',
+            'registry_repository: ghcr.io/other/repository'
+        )),
         mutation('wrong target branch', 'publication', (s) => replaceAllRequired(s, BRANCH, 'main')),
         mutation('wrong baseline', 'publication', (s) => replaceAllRequired(s, BASELINE_SHA, 'a'.repeat(40))),
         mutation('wrong registry repository', 'publication', (s) => replaceAllRequired(s, GHCR_REPOSITORY, 'ghcr.io/other/repository')),
@@ -562,6 +690,14 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
         mutation('prepublication partial state omitted', 'publication', (s) => replaceAllRequired(s, 'BLOCKED_I8_PREPUBLICATION_GATE', 'publication_failure')),
         mutation('published-unattested state omitted', 'publication', (s) => replaceAllRequired(s, 'I8_CANDIDATE_PUBLISHED_UNATTESTED', 'publication_failure')),
         mutation('attestation-unverified state omitted', 'publication', (s) => replaceAllRequired(s, 'I8_CANDIDATE_ATTESTATION_UNVERIFIED', 'publication_failure')),
+        mutation('final aggregator exits successfully on failure', 'publication', (s) => {
+            const block = stepText(s, 'final_enforcement');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                '            exit 1\n          fi',
+                '            exit 0\n          fi'
+            ));
+        }),
         mutation('final aggregator omitted', 'publication', (s) => removeStep(s, 'final_enforcement'))
     ];
     for (const [name, buildMutation] of cases) await t.test(name, () => {

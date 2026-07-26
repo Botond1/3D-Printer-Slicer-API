@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Instructions
 
-Last synchronized: 2026-07-25
+Last synchronized: 2026-07-26
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -18,9 +18,16 @@ Keep slicing behavior safe, deterministic, and production-friendly while preserv
 ## Candidate image publication boundary
 
 - Normal Image Validation remains read-only/no-push/no-deploy.
-- Manual Candidate Publication is fixed to
-  `ghcr.io/botond1/3d-printer-slicer-api`, exact target branch/full SHA/
-  ancestry, and confirmation `PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
+- Candidate Publication retains exact-input `workflow_dispatch` for later
+  default-branch integration and accepts `push` only on
+  `codex/i8-s3a-ghcr-signed-candidate`.
+- Push authorization derives `github.sha` and requires repository
+  `Botond1/3D-Printer-Slicer-API`, ref
+  `refs/heads/codex/i8-s3a-ghcr-signed-candidate`, actor `Botond1`, hardcoded
+  `ghcr.io/botond1/3d-printer-slicer-api`, and exact last non-empty commit line
+  `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
+- Both event adapters fail closed and emit canonical `candidate_sha`,
+  `image_ref`, `discovery_tag`, and `registry_repository` outputs.
 - Registry, attestation, and OIDC write permissions belong only to the
   publication job, after the shared complete gate passes on the same once-built
   `linux/amd64` image.
@@ -29,9 +36,14 @@ Keep slicing behavior safe, deterministic, and production-friendly while preserv
   `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`.
 - Publication never authorizes deploy. Preserve and classify partial remote
   candidates; never overwrite or delete them.
-- Current I8 status is `BLOCKED_PREFLIGHT` because the new manual workflow is
-  not registered on the default branch and changing `main` is unauthorized.
-  Digest, signature, and attestations are `NOT_CREATED`.
+- Before the one authorized corrective push, local and remote HEAD are
+  `c49bfc698d4d41041e6216c76a11144ffb386183`; Source run
+  `30163991878` and Image run `30163991870` are green. Corrective
+  Source/Image/Publication runs remain pending. No registry, signature, or
+  attestation side effect exists.
+- The authorization permits one normal non-force push to the existing I8
+  branch only. It does not permit `main`, PR, merge, force-push, release/Git
+  tag, mutable image tag, deployment, or repository-setting changes.
 
 ## Technology Baseline
 - Node.js + Express API

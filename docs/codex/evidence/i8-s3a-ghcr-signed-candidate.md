@@ -4,30 +4,37 @@
 
 I8 starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. The local branch contains the committed
-implementation and focused tests, but this pre-push checkpoint is classified
-`BLOCKED_PREFLIGHT`.
+`codex/i8-s3a-ghcr-signed-candidate`. Before I8-C1, local and remote HEAD are
+`c49bfc698d4d41041e6216c76a11144ffb386183`, comprising
+`fa45cf6 -> 79a07d4 -> 01055b8 -> c49bfc6`. Hosted Source run
+`30163991878` and Image run `30163991870` are `SUCCESS`. Candidate
+Publication is `NOT_RUN`. No registry, signature, or attestation side effect
+exists.
 
-GitHub requires a `workflow_dispatch` workflow to exist on the default branch
-before it can be dispatched. The new
-`.github/workflows/candidate-publication.yml` exists only in the candidate
-worktree. The current authorization explicitly forbids a `main` push, so the
-workflow cannot yet be registered or run. This committed checkpoint records no
-remote I8 source SHA, remote push, GHCR publication, signature, or attestation.
-Later hosted outcomes belong in the bounded workflow evidence and mandatory
-integrator report; they must not be inferred from this pre-push table.
+The root cause is limited to GitHub event registration:
+`workflow_dispatch` cannot start a workflow that is absent from the default
+branch. I8-C1 resolves only that blocker by retaining the manual trigger for
+future default-branch integration while adding a push trigger restricted to
+the existing candidate branch. This is a pre-corrective-push checkpoint, not a
+hosted-publication success claim.
+
+I8-C1 authorizes exactly one corrective commit and one normal non-force push to
+the existing branch. The corrective SHA, discovery tag, and three
+push-triggered hosted runs do not exist yet and must not be inferred from the
+pre-correction runs below.
 
 Current classifications:
 
 | Evidence | Classification |
 | --- | --- |
-| Local I8 implementation | `IMPLEMENTED_COMMITTED_LOCAL` |
-| Focused/adapted I8 and shared workflow tests | `VERIFIED_LOCAL`, 587/587 pass with exact npm 10.9.8 |
-| Final local branch SHA | `CREATED`, authoritative HEAD is the commit containing this record |
-| Remote branch | `PENDING_NOT_PUSHED` |
-| Hosted I8 Source Validation | `PENDING_NOT_RUN` |
-| Hosted I8 Image Validation | `PENDING_NOT_RUN` |
-| Candidate Publication | `BLOCKED_PREFLIGHT` |
+| Committed/pushed pre-I8-C1 implementation | `CREATED`, local and remote `c49bfc698d4d41041e6216c76a11144ffb386183` |
+| Focused/adapted I8-C1 and shared workflow tests | `VERIFIED_LOCAL`, 621/621 pass across 11 files with exact npm 10.9.8 |
+| Pre-I8-C1 hosted Source Validation | `SUCCESS`, run `30163991878` |
+| Pre-I8-C1 hosted Image Validation | `SUCCESS`, run `30163991870` |
+| Candidate Publication at pre-correction SHA | `NOT_RUN` |
+| I8-C1 trigger correction | `IMPLEMENTED_LOCAL`; accelerated focused/adapted lane and non-staged local gates green |
+| Corrective commit and remaining push | `PENDING`; exactly one normal non-force branch push authorized |
+| Corrective hosted Source/Image/Publication | `PENDING_NOT_RUN` |
 | GHCR candidate digest | `NOT_CREATED` |
 | GitHub/Sigstore signature | `NOT_CREATED` |
 | Build-provenance attestation | `NOT_CREATED` |
@@ -58,7 +65,9 @@ used as an I8 registry manifest digest.
 ## Direct source and identity map
 
 ```text
-exact candidate source SHA
+authorized target-branch push
+  -> exact repository/ref/actor/github.sha/final-trailer adapter
+  -> canonical candidate SHA, image ref, discovery tag, and registry repository
   -> one loaded linux/amd64 local image
   -> complete shared identity/runtime/Orca/browser/abort/topology/SBOM/Grype gate
   -> GHCR login only after that gate
@@ -79,19 +88,43 @@ trust assumption.
 
 ## Trigger, confirmation, and permission contract
 
-`candidate-publication.yml` has only `workflow_dispatch`. It requires:
+`candidate-publication.yml` retains `workflow_dispatch` with its existing
+exact input contract:
 
 - `candidate_sha`: exactly 40 lowercase hexadecimal characters;
 - `confirmation`: exactly `PUBLISH_I8_SIGNED_GHCR_CANDIDATE`;
 - `registry_repository`: fixed to
   `ghcr.io/botond1/3d-printer-slicer-api`.
 
-Preflight also requires repository
-`Botond1/3D-Printer-Slicer-API`, ref
-`refs/heads/codex/i8-s3a-ghcr-signed-candidate`, event SHA equal to the input,
-remote branch HEAD equal to that SHA, and baseline ancestry. Checkout is
-detached to the exact SHA and does not persist credentials. Concurrency is
-candidate-SHA scoped and does not cancel an in-progress publication.
+I8-C1 also adds `push` with one literal branch:
+`codex/i8-s3a-ghcr-signed-candidate`. It adds no wildcard branch, tag, PR,
+schedule, release, `repository_dispatch`, or fallback event.
+
+On `push`, preflight derives:
+
+- `candidate_sha` from `github.sha`;
+- exact ref `refs/heads/codex/i8-s3a-ghcr-signed-candidate`;
+- exact repository `Botond1/3D-Printer-Slicer-API`;
+- exact actor `Botond1`;
+- hardcoded registry repository
+  `ghcr.io/botond1/3d-printer-slicer-api`;
+- authorization from the exact HEAD commit's last non-empty line:
+
+```text
+I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE
+```
+
+The workflow does not use `contains()`, substring/prefix matching, author name
+or email, input-selected push registry, a branch wildcard, or a default
+confirmation. `workflow_dispatch` and `push` are separate cases; every other
+event fails closed. Both cases produce the canonical `candidate_sha`,
+`image_ref`, `discovery_tag`, and `registry_repository` outputs.
+
+Shared preflight requires exact repository/ref, event SHA identity, remote
+branch HEAD equality, and baseline ancestry. Push additionally requires exact
+actor and trailer. Checkout is detached to the exact SHA and does not persist
+credentials. Concurrency is candidate-SHA scoped and does not cancel an
+in-progress publication.
 
 | Boundary | Permissions |
 | --- | --- |
@@ -100,8 +133,8 @@ candidate-SHA scoped and does not cancel an in-progress publication.
 | Normal Image Validation | `contents: read` |
 | Publication job only | `contents: read`, `packages: write`, `attestations: write`, `id-token: write` |
 
-There is no PR, push, release, schedule, deployment, or reusable publication
-trigger.
+There is no PR, tag, release, schedule, deployment, wildcard, reusable, or
+repository-dispatch publication trigger.
 
 ## Build-once and prepublication gate
 
@@ -178,8 +211,8 @@ All paths constrain the exact repository, signer workflow, ref, source digest,
 subject digest, and predicate. Separate wrong-digest and wrong-repository
 probes must fail. An attestation ID or HTTP success alone is insufficient.
 
-No attestation was created or cryptographically verified while this preflight
-block remains.
+No attestation has been created or cryptographically verified before the
+authorized corrective push.
 
 ## I8 provenance v2 and evidence boundary
 
@@ -224,17 +257,20 @@ After any observed matching push, the exact remote digest is preserved. The
 workflow never overwrites or deletes it, creates a mutable promotion tag, or
 deploys it.
 
-## Local focused validation
+## I8-C1 accelerated local validation
 
 Command:
 
 ```text
-npx.cmd --yes npm@10.9.8 exec -- node --test tests/unit/js/i8-candidate-publication-contract.test.js tests/unit/js/i8-provenance-evidence-contract.test.js tests/unit/js/i8-provenance-writer-contract.test.js tests/unit/js/i3-workflow-contracts.test.js tests/unit/js/i4-image-runtime-envelope-contracts.test.js tests/unit/js/i6-topology-workflow-mutations.test.js tests/unit/js/s3a-image-liveness-enforcement.test.js tests/unit/js/s3a-image-runtime-ownership.test.js tests/unit/js/s3a-orca-runtime-smoke.test.js tests/unit/js/s3a-workflow-contracts.test.js
+npx.cmd --yes npm@10.9.8 exec -- node --test tests/unit/js/i8-candidate-publication-contract.test.js tests/unit/js/i8-provenance-evidence-contract.test.js tests/unit/js/i8-provenance-writer-contract.test.js tests/unit/js/i3-workflow-contracts.test.js tests/unit/js/i4-image-runtime-envelope-contracts.test.js tests/unit/js/i6-topology-workflow-mutations.test.js tests/unit/js/s3a-i8-publication-trigger-contract.test.js tests/unit/js/s3a-image-liveness-enforcement.test.js tests/unit/js/s3a-image-runtime-ownership.test.js tests/unit/js/s3a-orca-runtime-smoke.test.js tests/unit/js/s3a-workflow-contracts.test.js
 ```
 
-Result: exact npm 10.9.8; 587 tests, 587 pass, 0 fail, 0 skipped.
+Result: exact npm 10.9.8; 621 tests, 621 pass, 0 fail, 0 skipped across
+11 files, including
+`tests/unit/js/s3a-i8-publication-trigger-contract.test.js`.
 
-Mutation coverage includes trigger/branch/baseline/repository/confirmation,
+The 621-test I8-C1 mutation coverage includes
+trigger/branch/baseline/repository/confirmation,
 permission broadening, persistent checkout credentials, floating attest
 action, pre-gate login/push, second build, mutable/short/uppercase tags,
 malformed/short/uppercase/local-ID/tag digests, overwrite, different-build
@@ -242,6 +278,13 @@ config, SBOM mismatch, wrong/unsigned predicates, tag subjects, wrong
 workflow/ref/source, missing GitHub/OCI/offline/negative verification,
 unbounded bundle upload, evidence-boundary bypass, incomplete cleanup, missing
 partial classifications, and missing final aggregator.
+
+I8-C1 includes focused contract and mutation expectations for an exact literal push
+branch, alternate branch, actor mismatch/removal, missing/non-exact/substr/
+`contains()` trailer confirmation, alternate registry, SHA-input substitution
+for `github.sha`, event fallback, lost `workflow_dispatch`, write-permission
+broadening, publication-before-gate, second build, mutable tag, and weakened
+final aggregation.
 
 Broader local validation:
 
@@ -270,8 +313,10 @@ The exact image resolved configured `USER=slicer`, kernel UID/GID inputs
 validation container, tag, image ID, or temporary output. This was local
 refactor validation, not a final candidate digest or hosted publication proof.
 
-Final diff/whitespace and worktree-isolation results are recorded in the
-integrator report. Hosted I8 Source/Image/Publication results remain not run.
+Final I8-C1 staged safety, post-commit exact-range whitespace, and
+worktree-isolation results belong in the integrator report. Working-tree
+diff/whitespace and actionlint are green. The pre-correction Source and Image
+runs are green; corrective Source/Image/Publication results remain not run.
 
 ## Read-only external observations and no-deploy boundary
 
@@ -285,5 +330,13 @@ package-setting, registry-delete, or mutable-promotion operation. External
 caller/proxy/firewall/egress/secret topology and deployed digest remain
 `UNVERIFIED`; production readiness remains `UNVERIFIED`.
 
-The preflight blocker must be resolved by explicit user authorization. Until
-then, no hosted publication or signing claim is valid.
+The I8-C1 authorization permits one corrective commit and one normal non-force
+push to the existing candidate branch. It does not permit a `main` push, PR,
+merge, force-push, second corrective push, release, Git tag, mutable image tag,
+deployment, SSH/VPS operation, registry overwrite/delete, or repository/
+environment/secret/branch-policy setting change.
+
+The corrective push must automatically trigger Source Validation, Image
+Validation, and Candidate Publication. Until all three exact-SHA runs and every
+publication/attestation/evidence/cleanup gate are green, no hosted publication
+or signing success claim is valid.

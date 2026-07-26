@@ -2,11 +2,21 @@
 
 ## I8/S3a signed-candidate publication control delta
 
-- The proposed publication boundary is a separate, manual-only
-  `.github/workflows/candidate-publication.yml`. It accepts only the exact
-  target branch, full lowercase source SHA, fixed repository, and literal
-  confirmation. Its concurrency key is candidate-SHA scoped with cancellation
-  disabled.
+- `.github/workflows/candidate-publication.yml` retains exact-input
+  `workflow_dispatch` for future default-branch integration and adds `push`
+  only for `codex/i8-s3a-ghcr-signed-candidate`. Its concurrency key is
+  candidate-SHA scoped with cancellation disabled.
+- On push, the event adapter derives the candidate from `github.sha` and
+  requires exact repository `Botond1/3D-Printer-Slicer-API`, ref
+  `refs/heads/codex/i8-s3a-ghcr-signed-candidate`, actor `Botond1`, hardcoded
+  registry `ghcr.io/botond1/3d-printer-slicer-api`, and exact last non-empty
+  HEAD commit line
+  `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`. It does not use author
+  identity, substring matching, registry input, wildcard branches, or fallback
+  confirmation.
+- Manual and push paths emit identical canonical `candidate_sha`, `image_ref`,
+  `discovery_tag`, and `registry_repository` outputs. Every other event,
+  branch, repository, actor, trailer, SHA, or registry fails closed.
 - Workflow permissions default to `contents: none`. Preflight gets only
   `contents: read`; only the publication job gets `contents: read`,
   `packages: write`, `attestations: write`, and `id-token: write`. Normal
@@ -37,12 +47,17 @@
   failed verification it is `I8_CANDIDATE_ATTESTATION_UNVERIFIED`. Published
   content is preserved for audit and is never overwritten, deleted, promoted,
   or deployed by this workflow.
-- Current state is `BLOCKED_PREFLIGHT`, not a signed-candidate security claim.
-  GitHub will not dispatch a newly introduced `workflow_dispatch` file until
-  the workflow exists on the default branch, and changing `main` is not
-  authorized. GHCR digest is `NOT_CREATED`; signature is `NOT_CREATED`;
-  provenance/SBOM attestations are `NOT_CREATED`; production readiness and
-  external topology remain `UNVERIFIED`.
+- Before the I8-C1 corrective push, local and remote HEAD are
+  `c49bfc698d4d41041e6216c76a11144ffb386183`; hosted Source run
+  `30163991878` and Image run `30163991870` are `SUCCESS`. Candidate
+  Publication has not run. The corrective SHA and its three exact hosted runs
+  remain pending. No registry side effect exists; GHCR digest, signature, and
+  provenance/SBOM attestations are `NOT_CREATED`.
+- I8-C1 authorizes one corrective commit and one normal non-force push to the
+  existing candidate branch only. `main`, PR, merge, force-push, a second
+  correction, release/Git tag, mutable registry tag, deploy, and repository
+  settings remain outside authority. Production readiness and external
+  topology remain `UNVERIFIED`.
 - The exact-SHA candidate workflow is the reviewed trust assumption needed to
   keep build, complete gate, push, and attestation in one job without an
   image-tar transfer.

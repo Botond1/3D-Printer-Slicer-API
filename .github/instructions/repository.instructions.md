@@ -4,7 +4,7 @@ applyTo: "**"
 
 # Repository Wide Instructions
 
-Last synchronized: 2026-07-25
+Last synchronized: 2026-07-26
 
 ## Architecture
 - Backend stack is Node.js + Express + Python helper scripts.
@@ -53,13 +53,24 @@ Last synchronized: 2026-07-25
   egress. The separate production manifest uses an internal private bridge,
   no host port, and a digest-only image, but deployed proxy/firewall/egress
   topology remains `UNVERIFIED`.
-- Normal Image Validation is read-only/no-push. Candidate publication is
-  manual-only, fixed to `ghcr.io/botond1/3d-printer-slicer-api`, build-once,
-  full-gate-before-push, digest-only, signed/attested, and no-deploy. Never
-  overwrite a discovery tag or create mutable promotion tags.
-- Current I8 status is `BLOCKED_PREFLIGHT`: GitHub requires a newly introduced
-  `workflow_dispatch` file on the default branch and the current authorization
-  forbids a `main` change. No candidate digest/signature/attestation exists.
+- Normal Source/Image Validation is read-only/no-push. Candidate Publication
+  retains exact-input `workflow_dispatch` and adds `push` only for
+  `codex/i8-s3a-ghcr-signed-candidate`. The push path derives `github.sha` and
+  requires repository `Botond1/3D-Printer-Slicer-API`, ref
+  `refs/heads/codex/i8-s3a-ghcr-signed-candidate`, actor `Botond1`, hardcoded
+  `ghcr.io/botond1/3d-printer-slicer-api`, and exact last non-empty commit line
+  `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
+- Both event paths fail closed and produce canonical `candidate_sha`,
+  `image_ref`, `discovery_tag`, and `registry_repository` outputs. Publication remains
+  build-once, full-gate-before-login/push, digest-only, signed/attested, and
+  no-deploy. Never overwrite a discovery tag or create mutable promotion tags.
+- Pre-correction HEAD is
+  `c49bfc698d4d41041e6216c76a11144ffb386183`; Source run
+  `30163991878` and Image run `30163991870` are green. One normal
+  non-force corrective push to the existing I8 branch is authorized; its three
+  hosted runs remain pending. No registry side effect exists and no candidate
+  digest/signature/attestation exists. `main`, PR/merge/force-push, release/Git
+  tag, deploy, and repository settings remain outside authorization.
 
 ## Testing
 - Use Python test runners under tests/testing-scripts/.

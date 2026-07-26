@@ -19,25 +19,36 @@ Canonical Codex knowledge:
 
 ## Current I8/S3a signed-candidate publication status
 
-The I8 worktree starts exactly from
+The I8 branch starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. It contains an uncommitted, locally
-focused-tested Candidate Publication implementation, but its current status is
-`BLOCKED_PREFLIGHT`, not published. GitHub requires a `workflow_dispatch`
-workflow to exist on the default branch before it can be dispatched; adding the
-new `candidate-publication.yml` only on this candidate branch does not register
-it. A `main` change is outside the current authorization.
+`codex/i8-s3a-ghcr-signed-candidate`. Before the I8-C1 correction, local and
+remote HEAD are
+`c49bfc698d4d41041e6216c76a11144ffb386183`; hosted Source run
+`30163991878` and Image run `30163991870` are `SUCCESS`. Candidate Publication
+has not run. No registry, signature, or attestation side effect exists.
 
-The proposed workflow is manual-only and exact-SHA/branch/repository/
-confirmation gated. Its preflight has only `contents: read`; only the
-publication job has `contents: read`, `packages: write`,
-`attestations: write`, and `id-token: write`. The normal Image Validation
-remains read-only. Both workflows use the same local exact-image composite
-gate. Candidate publication keeps that once-built `linux/amd64` image in the
-same job, completes the full runtime/Orca/browser/topology/SBOM/Grype gate
-before registry login, and would then push only
-`candidate-<full-source-sha>` to the fixed
-`ghcr.io/botond1/3d-printer-slicer-api` repository.
+I8-C1 narrowly resolves the default-branch `workflow_dispatch` registration
+blocker. Candidate Publication retains its exact manual input contract for
+future default-branch integration and also accepts `push` only for
+`codex/i8-s3a-ghcr-signed-candidate`. The push adapter derives the candidate
+from `github.sha` and requires repository
+`Botond1/3D-Printer-Slicer-API`, ref
+`refs/heads/codex/i8-s3a-ghcr-signed-candidate`, actor `Botond1`, fixed registry
+`ghcr.io/botond1/3d-printer-slicer-api`, and exact last non-empty HEAD commit
+line:
+
+```text
+I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE
+```
+
+Both event paths fail closed and emit the same canonical `candidate_sha`,
+`image_ref`, `discovery_tag`, and `registry_repository` outputs. Preflight has
+only `contents: read`; only the publication job has `contents: read`,
+`packages: write`, `attestations: write`, and `id-token: write`. Normal Source
+and Image Validation remain read-only. Candidate Publication keeps the same
+once-built `linux/amd64` image through the complete
+runtime/Orca/browser/topology/SBOM/Grype gate before registry login and may
+then push only `candidate-<full-source-sha>` to the fixed GHCR repository.
 
 The downstream contract is digest-only:
 `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`. A discovery
@@ -50,11 +61,17 @@ bounded and fail closed, and its final aggregator distinguishes
 `BLOCKED_I8_PREPUBLICATION_GATE`, `I8_CANDIDATE_PUBLISHED_UNATTESTED`, and
 `I8_CANDIDATE_ATTESTATION_UNVERIFIED`.
 
-No I8 branch commit, remote branch, GHCR tag/digest, attestation, hosted run,
-deployment, or production change has been created. The exact-SHA candidate
-workflow is a reviewed trust assumption: the build, full gate, push, and
-attestation remain in one job to preserve build identity without a multi-GiB
-image-tar handoff. See
+Exactly one corrective commit and one normal non-force push to the existing I8
+branch are authorized. The corrective commit's last non-empty line must be the
+exact trailer above; that push, not a manual dispatch attempt, must trigger
+Source Validation, Image Validation, and Candidate Publication for the new
+corrective SHA. Those three corrective hosted results remain pending. No
+second corrective push, `main` change, PR, merge, force-push, release, Git tag,
+mutable registry tag, deploy, or repository-setting change is authorized.
+
+The exact-SHA candidate workflow is a reviewed trust assumption: build, full
+gate, push, and attestation remain in one job to preserve build identity
+without a multi-GiB image-tar handoff. See
 [`docs/codex/evidence/i8-s3a-ghcr-signed-candidate.md`](docs/codex/evidence/i8-s3a-ghcr-signed-candidate.md).
 
 ## Historical I7/S3a immutable-candidate foundation

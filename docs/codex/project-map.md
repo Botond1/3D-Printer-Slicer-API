@@ -6,16 +6,24 @@
   `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6`; target branch:
   `codex/i8-s3a-ghcr-signed-candidate`.
 - `.github/actions/exact-image-gate/action.yml` is the common build-once gate
-  used by normal Image Validation and the proposed Candidate Publication.
+  used by normal Image Validation and Candidate Publication.
   Normal validation passes `retain-image: false`, `publish-mode: false` and
   remains read-only/no-push. Publication passes `retain-image: true`,
   `publish-mode: true` so the same local image survives the complete gate for
   same-job retag and push.
-- `.github/workflows/candidate-publication.yml` is manual-only, requires a full
-  lowercase SHA plus exact `PUBLISH_I8_SIGNED_GHCR_CANDIDATE` confirmation,
-  rejects any repository other than
-  `ghcr.io/botond1/3d-printer-slicer-api`, proves target-branch HEAD and
-  baseline ancestry, and checks out the exact SHA without credentials.
+- `.github/workflows/candidate-publication.yml` retains exact-input
+  `workflow_dispatch` for future default-branch integration and adds `push`
+  only for `codex/i8-s3a-ghcr-signed-candidate`. On push, its fail-closed event
+  adapter derives `candidate_sha` from `github.sha` and requires repository
+  `Botond1/3D-Printer-Slicer-API`, ref
+  `refs/heads/codex/i8-s3a-ghcr-signed-candidate`, actor `Botond1`, hardcoded
+  registry `ghcr.io/botond1/3d-printer-slicer-api`, and exact last non-empty
+  commit line
+  `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
+- Manual and push paths produce the same canonical `candidate_sha`,
+  `image_ref`, `discovery_tag`, and `registry_repository` outputs. Both prove
+  target-branch HEAD and baseline ancestry and check out the exact SHA without
+  credentials; every other event or identity fails closed.
 - The publication sequence is:
   exact source -> one local `linux/amd64` build -> full runtime/Orca/browser/
   abort/private-topology/SBOM/Grype gate -> GHCR login -> absent discovery tag
@@ -29,13 +37,20 @@
 - `scripts/i8-publication-evidence.js` and
   `scripts/i8-write-publication-evidence.js` define the exact-key bounded
   `i8-s3a-signed-candidate-provenance-v2` correlation contract. The exact npm
-  10.9.8 focused/adapted I8 and shared Image Validation lane is green:
-  587/587 tests.
-- Current state is `BLOCKED_PREFLIGHT`. A new `workflow_dispatch` workflow must
-  exist on GitHub's default branch before dispatch; the current authorization
-  forbids changing `main`. Therefore final branch SHA, hosted Source/Image/
-  Publication runs, candidate tag/digest, signed attestations, and hosted
-  evidence are `PENDING` or `NOT_CREATED`, not inferred from local tests.
+  10.9.8 focused/adapted I8-C1 and shared Image Validation lane is green:
+  621/621 tests across 11 files.
+- Pre-correction local and remote HEAD are
+  `c49bfc698d4d41041e6216c76a11144ffb386183`. Source Validation run
+  `30163991878` and Image Validation run `30163991870` succeeded for that
+  SHA; Candidate Publication did not run and no registry side effect exists.
+- I8-C1 authorizes exactly one corrective commit and one normal non-force push
+  to the existing I8 branch. The commit's last non-empty line must be the exact
+  authorization trailer above. That push must trigger Source Validation, Image
+  Validation, and Candidate Publication for the new corrective SHA; all three
+  results remain pending and are not inferred from pre-correction evidence.
+- `main`, PR, merge, force-push, release/Git tag, mutable registry tag, deploy,
+  and repository-setting changes remain forbidden; no second corrective push
+  is authorized.
 - The exact-SHA candidate workflow is the reviewed trust assumption because
   build, gate, and push must share one job without a multi-GiB image-tar
   transfer. No deploy, promotion, mutable tag, VPS, proxy, firewall, secret,

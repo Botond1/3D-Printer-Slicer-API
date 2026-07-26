@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Operating Guide
 
-Last synchronized: 2026-07-25
+Last synchronized: 2026-07-26
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -19,10 +19,18 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
 
 - Normal Image Validation remains read-only, builds once, and never pushes,
   attests, or deploys.
-- Candidate Publication is manual-only and fixed to
-  `ghcr.io/botond1/3d-printer-slicer-api`; it requires the exact target branch,
-  full lowercase SHA, baseline ancestry, and literal
-  `PUBLISH_I8_SIGNED_GHCR_CANDIDATE` confirmation.
+- Candidate Publication retains `workflow_dispatch` for later default-branch
+  integration and also accepts `push` only on
+  `codex/i8-s3a-ghcr-signed-candidate`. Manual dispatch keeps the exact input
+  contract.
+- The push path derives the candidate from `github.sha` and requires exact
+  repository `Botond1/3D-Printer-Slicer-API`, exact ref
+  `refs/heads/codex/i8-s3a-ghcr-signed-candidate`, actor `Botond1`, hardcoded
+  registry `ghcr.io/botond1/3d-printer-slicer-api`, and exact last non-empty
+  commit line
+  `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
+- Both event paths fail closed and produce the canonical `candidate_sha`,
+  `image_ref`, `discovery_tag`, and `registry_repository` outputs.
 - Only its publication job may use `packages: write`, `attestations: write`,
   and `id-token: write`. Login and push occur only after the complete shared
   exact-image gate passes on the same once-built `linux/amd64` image.
@@ -31,10 +39,14 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`.
 - Publication is not deployment. Preserve partial candidates and report the
   fail-closed I8 status; do not delete, promote, or deploy them.
-- Current I8 status is `BLOCKED_PREFLIGHT`: GitHub requires the new
-  `workflow_dispatch` file on the default branch, but a `main` change is not
-  currently authorized. GHCR digest, signature, and attestations are
-  `NOT_CREATED`.
+- Before the one authorized corrective commit/push, local and remote HEAD are
+  `c49bfc698d4d41041e6216c76a11144ffb386183`; hosted Source
+  `30163991878` and Image `30163991870` are green. The corrective SHA and its
+  Source/Image/Publication runs are pending. No registry, signature, or
+  attestation side effect exists.
+- Only one normal non-force corrective push to the existing I8 branch is
+  authorized. It must not modify `main`, open a PR, merge, force-push, create a
+  release/Git tag/mutable image tag, deploy, or change repository settings.
 
 ## Technology Baseline
 - Backend: Node.js + Express
