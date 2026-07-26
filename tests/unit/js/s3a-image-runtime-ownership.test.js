@@ -14,7 +14,8 @@ const WORKFLOW = fs.readFileSync(WORKFLOW_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const DOCKERFILE = fs.readFileSync(DOCKERFILE_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const identity = require(HELPER_PATH);
 
-const REF = `local/slicer-api-validation:${'a'.repeat(40)}`;
+const VALIDATION_REF = `local/slicer-api-validation:${'a'.repeat(40)}`;
+const PUBLICATION_REF = `local/slicer-api-publication:${'a'.repeat(40)}`;
 const ID = `sha256:${'b'.repeat(64)}`;
 
 function step(id, source = WORKFLOW) {
@@ -32,7 +33,8 @@ function helperContract(source) {
         "--entrypoint', '/usr/bin/id'", "'--pull', 'never'", "'--network', 'none'",
         "'--cap-drop', 'ALL'", "'--security-opt', 'no-new-privileges'",
         'io.s3a.validation-only=true', 'io.s3a.expected-image-id=${exactImageId}',
-        'configured_user=${identity.configuredUser}', 'classification=success'
+        'configured_user=${identity.configuredUser}', 'classification=success',
+        '/^local\\/slicer-api-(?:validation|publication):[0-9a-f]{40}$/'
     ]) assert.ok(source.includes(anchor), `missing ${anchor}`);
     assert.doesNotMatch(source, /(?:^|[^\w.])exec(?:Sync)?\s*\(|\bshell\s*:\s*true|\beval\s*\(|\/bin\/(?:ba)?sh|\$\(/);
     assert.doesNotMatch(source, /\b999\b|\/etc\/passwd/);
@@ -103,7 +105,48 @@ function workflowContract(source) {
         "process.env.SMOKE_OUTCOME !== 'success'", "process.env.SMOKE_CLASSIFICATION !== 'success'",
         'process.exit(1);']) assert.ok(final.includes(anchor), `final missing ${anchor}`);
     assert.match(DOCKERFILE, /^USER slicer$/m);
+    assert.ok(source.includes(
+        '[[ ! "$INPUT_IMAGE_REF" =~ ^local/slicer-api-(validation|publication):[0-9a-f]{40}$ ]]'
+    ), 'shared action must allow exactly the validation and publication namespaces');
+    assert.ok(source.includes(
+        '[ "${INPUT_IMAGE_REF##*:}" != "$candidate_sha" ]'
+    ), 'shared action must bind the image-ref suffix to candidate_sha');
 }
+
+test('identity lookup accepts both exact run-local namespaces and preserves inspect arguments', () => {
+    const prefix = ['image', 'inspect', '--format', '{{json .Id}}|{{json .Config.User}}'];
+    assert.equal(identity.validateImageRef(VALIDATION_REF), VALIDATION_REF);
+    assert.equal(identity.validateImageRef(PUBLICATION_REF), PUBLICATION_REF);
+    assert.deepEqual(identity.buildInspectArgs(VALIDATION_REF), [...prefix, VALIDATION_REF]);
+    assert.deepEqual(identity.buildInspectArgs(PUBLICATION_REF), [...prefix, PUBLICATION_REF]);
+});
+
+test('identity lookup rejects every non-exact local namespace, digest, registry, and injection ref', () => {
+    const sha = 'a'.repeat(40);
+    for (const nonString of [undefined, null, 0, {}, []]) {
+        assert.throws(() => identity.validateImageRef(nonString), { message: 'image_ref_invalid' });
+    }
+    for (const bad of [
+        `local/slicer-api-production:${sha}`,
+        `local/slicer-api-publish:${sha}`,
+        `local/slicer-api-anything:${sha}`,
+        'local/slicer-api-validation:latest',
+        'local/slicer-api-publication:latest',
+        `local/slicer-api-validation:${'a'.repeat(39)}`,
+        `local/slicer-api-publication:${'a'.repeat(41)}`,
+        `local/slicer-api-validation:${'A'.repeat(40)}`,
+        `local/slicer-api-publication:sha256:${'b'.repeat(64)}`,
+        `ghcr.io/botond1/3d-printer-slicer-api:candidate-${sha}`,
+        `ghcr.io/botond1/3d-printer-slicer-api@sha256:${'b'.repeat(64)}`,
+        `${VALIDATION_REF}/extra`,
+        `${PUBLICATION_REF}:extra`,
+        ` ${VALIDATION_REF}`,
+        `${PUBLICATION_REF} `,
+        `${VALIDATION_REF}\n`,
+        `${PUBLICATION_REF};docker image rm victim`,
+        `${VALIDATION_REF}$(docker image rm victim)`
+    ]) assert.throws(() => identity.validateImageRef(bad), { message: 'image_ref_invalid' });
+});
 
 test('identity lookup accepts only the exact immutable slicer image and positive single-line IDs', () => {
     assert.deepEqual(identity.parseInspectOutput(`${JSON.stringify(ID)}|"slicer"\n`, ID),
@@ -113,7 +156,8 @@ test('identity lookup accepts only the exact immutable slicer image and positive
     }
     assert.throws(() => identity.parseInspectOutput(`${JSON.stringify(ID)}|"root"\n`, ID));
     assert.throws(() => identity.parseInspectOutput(`${JSON.stringify(`sha256:${'c'.repeat(64)}`)}|"slicer"\n`, ID));
-    for (const floating of ['ubuntu:latest', 'local/slicer-api-validation:latest', `${REF}\n--privileged`]) {
+    for (const floating of ['ubuntu:latest', 'local/slicer-api-validation:latest',
+        `${VALIDATION_REF}\n--privileged`]) {
         assert.throws(() => identity.validateImageRef(floating));
     }
 });
@@ -130,14 +174,25 @@ test('resolver command is non-shell, exact-image-bound, isolated, bounded, and d
         }
         assert.equal(args.filter((item) => item === '--entrypoint').length, 1);
     }
-    assert.throws(() => identity.buildResolverArgs('uid-probe', REF, '-u'));
+    assert.throws(() => identity.buildResolverArgs('uid-probe', VALIDATION_REF, '-u'));
     assert.throws(() => identity.buildResolverArgs('uid-probe', ID, '--help'));
     helperContract(SOURCE);
     const mutations = [
         ['shell: false', 'shell: true'], ['maxBuffer: MAX_COMMAND_BYTES', 'maxBuffer: Infinity'],
         ["new Set(['image inspect', 'run --rm', 'container inspect'])", "new Set(['*'])"],
         ['!Number.isSafeInteger(value) || value <= 0', 'value <= 0'],
-        ["spawnSync('docker', args,", "eval(args.join(' ')); spawnSync('docker', args,"]
+        ["spawnSync('docker', args,", "eval(args.join(' ')); spawnSync('docker', args,"],
+        ['(?:validation|publication)', 'validation'],
+        ['(?:validation|publication)', '(?:validation|publication|production)'],
+        ['(?:validation|publication)', '[a-z]+'],
+        ['(?:validation|publication)', '[^:]+'],
+        ['(?:validation|publication)', '.*'],
+        ['(?:validation|publication)', '(?:validation|publication)?'],
+        [
+            '/^local\\/slicer-api-(?:validation|publication):[0-9a-f]{40}$/',
+            '/^(?:local\\/slicer-api-(?:validation|publication):[0-9a-f]{40}'
+                + '|ghcr\\.io\\/botond1\\/3d-printer-slicer-api@sha256:[0-9a-f]{64})$/'
+        ]
     ];
     for (const [from, to] of mutations) await t.test(from, () => {
         assert.ok(SOURCE.includes(from));
@@ -188,7 +243,13 @@ test('required workflow mutations are rejected', async (t) => {
                 + '              "$CONTAINER_NAME" "$I6_EGRESS_SENTINEL_NAME"'],
         ['cleanup ownership removed', '[ "$validation_label" != "true" ]', 'false'],
         ['cleanup absence streams merged', '"$exact_reference" 2>/dev/null)', '"$exact_reference" 2>&1)'],
-        ['cleanup switches to name', 'docker container rm --force "$container_id"', 'docker container rm --force "$exact_container"']
+        ['cleanup switches to name', 'docker container rm --force "$container_id"', 'docker container rm --force "$exact_container"'],
+        ['shared action loses publication namespace',
+            '(validation|publication):[0-9a-f]{40}', 'validation:[0-9a-f]{40}'],
+        ['shared action admits a third namespace',
+            '(validation|publication):[0-9a-f]{40}', '(validation|publication|production):[0-9a-f]{40}'],
+        ['shared action loses candidate SHA binding',
+            '[ "${INPUT_IMAGE_REF##*:}" != "$candidate_sha" ]', 'false']
     ];
     for (const [name, from, to, occurrence = 1] of mutations) await t.test(name, () => {
         let mutated = WORKFLOW;

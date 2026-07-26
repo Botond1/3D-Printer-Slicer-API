@@ -12,7 +12,9 @@ function requireString(value, pattern, label) {
 }
 
 function validateImageRef(value) {
-    return requireString(value, /^local\/slicer-api-validation:[0-9a-f]{40}$/, 'image_ref');
+    return requireString(value,
+        /^local\/slicer-api-(?:validation|publication):[0-9a-f]{40}$/,
+        'image_ref');
 }
 
 function validateImageId(value) {

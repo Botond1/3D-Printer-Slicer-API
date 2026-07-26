@@ -265,6 +265,12 @@ function validateContract(sources) {
     }
     assert.doesNotMatch(image, /packages:\s*write|attestations:\s*write|id-token:\s*write|docker\/login-action|actions\/attest|docker push/);
     assert.doesNotMatch(publication, /\$\{\{\s*secrets\.(?!GITHUB_TOKEN\b)|\benvironment:|docker\s+(?:system|image|container)\s+prune\b|docker\s+(?:manifest|image)\s+(?:rm|delete)\b.*ghcr\.io|(?:latest|staging|production|release):/i);
+    assert.doesNotMatch(publication, /\bgh\s+api\b/i,
+        'the bounded publication workflow has no GitHub API mutation path');
+    const joinedPublicationShell = publication.replace(/\\\r?\n\s*/g, ' ');
+    assert.doesNotMatch(joinedPublicationShell,
+        /\bcurl\b[^\n]*-X\s+DELETE\b|\boras\s+manifest\s+delete\b/i,
+        'the publication workflow must never delete a registry artifact');
 
     assert.equal(count(publication, new RegExp(`uses: ${SHARED_GATE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g')), 1);
     assert.equal(count(image, new RegExp(`uses: ${SHARED_GATE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'g')), 1);
@@ -305,9 +311,102 @@ function validateContract(sources) {
         'Refusing to overwrite existing discovery tag', 'docker buildx imagetools inspect',
         "['org.opencontainers.image.title']", "['org.opencontainers.image.description']",
         'configDigest !== process.env.EXPECTED_LOCAL_IMAGE_ID',
-        'id: digest_roundtrip', 'docker pull "$DIGEST_REF"',
+        'id: digest_runtime_identity', 'id: digest_roundtrip', 'docker pull "$DIGEST_REF"',
         'node scripts/i7-production-compose-contract.js'
     ], 'registry identity');
+    const digestPull = stepText(publication, 'digest_pull');
+    requireIncludes(digestPull, [
+        'RUNTIME_IMAGE_REF: ${{ needs.preflight.outputs.image_ref }}',
+        '[ "$RUNTIME_IMAGE_REF" = "local/slicer-api-publication:$CANDIDATE_SHA" ]',
+        'docker image rm "$TAG_REF"',
+        'docker image rm "$RUNTIME_IMAGE_REF"',
+        'docker image rm "$EXPECTED_LOCAL_IMAGE_ID"',
+        'docker image inspect "$EXPECTED_LOCAL_IMAGE_ID" >/dev/null 2>&1 ||',
+        'docker image inspect "$RUNTIME_IMAGE_REF" >/dev/null 2>&1 ||',
+        'docker image inspect "$TAG_REF" >/dev/null 2>&1; then',
+        'docker pull "$DIGEST_REF"',
+        'pulled_image_id="$(docker image inspect --format \'{{.Id}}\' "$DIGEST_REF")"',
+        'if [ "$pulled_image_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]; then',
+        'docker image tag "$DIGEST_REF" "$RUNTIME_IMAGE_REF"',
+        'runtime_alias_image_id="$(docker image inspect --format \'{{.Id}}\' "$RUNTIME_IMAGE_REF")"',
+        'if [ "$runtime_alias_image_id" != "$pulled_image_id" ]',
+        '[ "$runtime_alias_image_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]',
+        'pulled_image_id=$pulled_image_id',
+        'runtime_alias_image_id=$runtime_alias_image_id',
+        'runtime_image_ref=$RUNTIME_IMAGE_REF'
+    ], 'digest pull and local publication alias');
+    assert.ok(
+        digestPull.indexOf('docker image rm "$TAG_REF"')
+            < digestPull.indexOf('docker pull "$DIGEST_REF"')
+            && digestPull.indexOf('docker image rm "$RUNTIME_IMAGE_REF"')
+            < digestPull.indexOf('docker pull "$DIGEST_REF"')
+            && digestPull.indexOf('docker image rm "$EXPECTED_LOCAL_IMAGE_ID"')
+            < digestPull.indexOf('docker pull "$DIGEST_REF"')
+            && digestPull.indexOf('docker image inspect "$TAG_REF" >/dev/null 2>&1; then')
+            < digestPull.indexOf('docker pull "$DIGEST_REF"'),
+        'every original local identity and the complete absence proof must precede the digest pull'
+    );
+    assert.ok(
+        digestPull.indexOf('docker pull "$DIGEST_REF"')
+            < digestPull.indexOf('pulled_image_id="$(docker image inspect'),
+        'the exact registry digest must be pulled before its local image ID is inspected'
+    );
+    assert.ok(
+        digestPull.indexOf('pulled_image_id="$(docker image inspect')
+            < digestPull.indexOf('docker image tag "$DIGEST_REF" "$RUNTIME_IMAGE_REF"'),
+        'the digest-pulled image ID must be captured before the local alias is created'
+    );
+    assert.ok(
+        digestPull.includes(
+            '            exit 2\n'
+            + '          fi\n'
+            + '          docker image tag "$DIGEST_REF" "$RUNTIME_IMAGE_REF"'
+        ),
+        'the digest-pulled image ID mismatch branch must close before the local alias is created'
+    );
+    assert.ok(
+        digestPull.indexOf('docker image tag "$DIGEST_REF" "$RUNTIME_IMAGE_REF"')
+            < digestPull.indexOf('runtime_alias_image_id="$(docker image inspect'),
+        'the local alias must be created before its image ID is independently resolved'
+    );
+    assert.ok(
+        digestPull.indexOf('[ "$runtime_alias_image_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]; then')
+            < digestPull.indexOf('echo "pulled_image_id=$pulled_image_id" >> "$GITHUB_OUTPUT"')
+            && digestPull.includes(
+                '            exit 2\n'
+                + '          fi\n'
+                + '          echo "pulled_image_id=$pulled_image_id" >> "$GITHUB_OUTPUT"'
+            ),
+        'digest-pull outputs must be emitted only after alias, pulled, and gated image IDs agree'
+    );
+    const digestIdentity = stepText(publication, 'digest_runtime_identity');
+    requireIncludes(digestIdentity, [
+        "if: ${{ steps.digest_pull.outcome == 'success' }}",
+        'EXPECTED_IMAGE_ID: ${{ steps.exact_image_gate.outputs.image-id }}',
+        'IMAGE_REF: ${{ steps.digest_pull.outputs.runtime_image_ref }}',
+        'node scripts/i2-image-runtime-diagnostics.js'
+    ], 'digest-pulled runtime identity');
+    assert.doesNotMatch(digestIdentity, /registry_identity\.outputs\.digest_ref|DIGEST_REF|ghcr\.io/,
+        'the local-only identity helper must not receive a registry or digest reference');
+    const digestRoundtrip = stepText(publication, 'digest_roundtrip');
+    requireIncludes(digestRoundtrip, [
+        'name: Re-prove runtime and Compose from the digest-pulled exact image',
+        "if: ${{ steps.digest_runtime_identity.outcome == 'success' }}",
+        'CONFIGURED_USER: ${{ steps.digest_runtime_identity.outputs.configured_user }}',
+        'DIGEST_REF: ${{ steps.registry_identity.outputs.digest_ref }}',
+        'RUNTIME_IMAGE_REF: ${{ steps.digest_pull.outputs.runtime_image_ref }}',
+        'SERVICE_UID: ${{ steps.digest_runtime_identity.outputs.uid }}',
+        'SERVICE_GID: ${{ steps.digest_runtime_identity.outputs.gid }}',
+        'SLICER_API_IMAGE: ${{ steps.registry_identity.outputs.digest_ref }}',
+        '[ "$SLICER_API_IMAGE" = "$DIGEST_REF" ]',
+        'docker image inspect --format \'{{.Id}}\' "$RUNTIME_IMAGE_REF"',
+        'docker image inspect --format \'{{.Id}}\' "$DIGEST_REF"',
+        'node scripts/i2-orca-runtime-smoke.js',
+        '"$RUNTIME_IMAGE_REF"',
+        'node scripts/i7-production-compose-contract.js'
+    ], 'digest round trip');
+    assert.doesNotMatch(digestRoundtrip, /i2-image-runtime-diagnostics|PUBLICATION_IMAGE_REF|\$IMAGE_REF\b/,
+        'identity resolution must remain a separate local-alias step');
     assert.doesNotMatch(publication, /candidate-(?:latest|main)|:(?:latest|staging|production|prod|release)\b/i);
 
     assert.equal(count(publication, new RegExp(ATTEST_ACTION, 'g')), 2, 'exactly two signed attestations');
@@ -360,7 +459,12 @@ function validateContract(sources) {
     const evidence = stepText(publication, 'publication_evidence');
     requireIncludes(evidence, [
         'scripts/i8-write-publication-evidence.js', 'i8-s3a-signed-candidate-provenance-v2',
-        'registry_digest', 'bundle_sha256'
+        'registry_digest', 'bundle_sha256',
+        'REGISTRY_DIGEST: ${{ steps.registry_push.outputs.registry_digest }}',
+        'subject: `${process.env.REGISTRY_REPOSITORY}@${process.env.REGISTRY_DIGEST}`',
+        'manifest_digest: process.env.REGISTRY_DIGEST',
+        'DIGEST_RUNTIME_OUTCOME: ${{ steps.digest_runtime_identity.outcome }}',
+        'COMPOSE_ROUNDTRIP_OUTCOME: ${{ steps.digest_roundtrip.outcome }}'
     ], 'publication evidence');
     const evidenceBoundary = stepText(publication, 'publication_evidence_boundary');
     const boundaryFiles = [...evidenceBoundary.matchAll(
@@ -425,7 +529,6 @@ function validateContract(sources) {
         'i8-digest-raw-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json',
         'i8-tag-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json',
         'i8-digest-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json',
-        'i8-digest-identity-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt',
         'i8-final-tag-raw-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json',
         'i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err',
         'i8-wrong-repository-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err',
@@ -434,20 +537,43 @@ function validateContract(sources) {
         'exact_container_cleanup "$I2_UID_PROBE_NAME"',
         'exact_container_cleanup "$I2_GID_PROBE_NAME"',
         'exact_container_cleanup "$I2_ORCA_PROBE_NAME"',
-        'docker logout ghcr.io'
+        'docker logout ghcr.io',
+        'RUNTIME_IMAGE_REF: ${{ needs.preflight.outputs.image_ref }}',
+        'for exact_ref in "$TAG_REF" "$RUNTIME_IMAGE_REF" "$DIGEST_REF"; do',
+        'if [ "$actual_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]; then'
     ], 'publication cleanup');
     assert.doesNotMatch(cleanup, /\bdocker\s+(?:system|image|container|builder|volume)\s+prune\b/);
     const final = stepText(publication, 'final_enforcement');
     requireIncludes(final, [
         'REMOTE_PUBLISHED: ${{ steps.registry_push.outputs.remote_published }}',
+        'REGISTRY_IDENTITY_OUTCOME: ${{ steps.registry_identity.outcome }}',
+        'DIGEST_PULL_OUTCOME: ${{ steps.digest_pull.outcome }}',
+        'DIGEST_RUNTIME_IDENTITY_OUTCOME: ${{ steps.digest_runtime_identity.outcome }}',
+        'DIGEST_ROUNDTRIP_OUTCOME: ${{ steps.digest_roundtrip.outcome }}',
+        'PUSH_OUTCOME: ${{ steps.registry_push.outcome }}',
         '[ "$REMOTE_PUBLISHED" = "matching" ]',
         '[ "$REMOTE_PUBLISHED" != "matching" ]',
         'FINAL_TAG_IDENTITY_OUTCOME: ${{ steps.final_tag_identity.outcome }}',
         '[ "$FINAL_TAG_IDENTITY_OUTCOME" != "success" ]',
         'PUBLICATION_EVIDENCE_BOUNDARY_OUTCOME: ${{ steps.publication_evidence_boundary.outcome }}',
         '[ "$PUBLICATION_EVIDENCE_BOUNDARY_OUTCOME" != "success" ]',
-        'classification=BLOCKED_I8_PREPUBLICATION_GATE'
+        'PUBLICATION_CLEANUP_OUTCOME: ${{ steps.publication_cleanup.outcome }}',
+        '[ "$PUBLICATION_CLEANUP_OUTCOME" != "success" ]',
+        'classification=BLOCKED_I8_PREPUBLICATION_GATE',
+        '[ "$PUSH_OUTCOME" != "success" ]',
+        'failed_step=registry_push',
+        '[ "$REGISTRY_IDENTITY_OUTCOME" != "success" ]',
+        'failed_step=registry_identity',
+        '[ "$DIGEST_PULL_OUTCOME" != "success" ]',
+        'failed_step=digest_pull',
+        '[ "$DIGEST_RUNTIME_IDENTITY_OUTCOME" != "success" ]',
+        'failed_step=digest_runtime_identity',
+        '[ "$DIGEST_ROUNDTRIP_OUTCOME" != "success" ]',
+        'failed_step=digest_roundtrip'
     ], 'partial publication classification');
+    assert.match(final,
+        /elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$PUSH_OUTCOME" != "success" \]; then\n\s+classification=I8_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=registry_push\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$REGISTRY_IDENTITY_OUTCOME" != "success" \]; then\n\s+classification=I8_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=registry_identity\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$DIGEST_PULL_OUTCOME" != "success" \]; then\n\s+classification=I8_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=digest_pull\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$DIGEST_RUNTIME_IDENTITY_OUTCOME" != "success" \]; then\n\s+classification=I8_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=digest_runtime_identity\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$DIGEST_ROUNDTRIP_OUTCOME" != "success" \]; then\n\s+classification=I8_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=digest_roundtrip/,
+        'post-publication blockers must be classified in exact execution order with matching labels');
     assert.match(final,
         /if \[ "\$classification" != "I8_SIGNED_CANDIDATE_COMPLETE" \]; then\n\s+echo "::error title=I8 publication::\$classification"\n\s+exit 1\n\s+fi\s*$/,
         'the final aggregator must terminate every non-complete classification with failure');
@@ -627,12 +753,123 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
         mutation('different build config accepted', 'publication', (s) => replaceAllRequired(
             s, 'configDigest !== process.env.EXPECTED_LOCAL_IMAGE_ID',
             'configDigest === process.env.EXPECTED_LOCAL_IMAGE_ID')),
+        mutation('digest-pulled and gated image ID mismatch ignored', 'publication', (s) => replaceRequired(
+            s,
+            'if [ "$pulled_image_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]; then',
+            'if false; then'
+        )),
+        mutation('discovery-tag identity is not removed before digest pull', 'publication',
+            (s) => replaceRequired(s, '          docker image rm "$TAG_REF"\n', '')),
+        mutation('expected local image ID is not removed before digest pull', 'publication',
+            (s) => replaceRequired(s, '            docker image rm "$EXPECTED_LOCAL_IMAGE_ID"\n', '')),
+        mutation('complete pre-pull identity absence proof is weakened', 'publication',
+            (s) => replaceRequired(
+                s,
+                '             docker image inspect "$TAG_REF" >/dev/null 2>&1; then',
+                '             false; then'
+            )),
+        mutation('digest pull precedes original identity removal', 'publication', (s) => {
+            const line = '          docker pull "$DIGEST_REF"\n';
+            return replaceRequired(
+                replaceRequired(s, line, ''),
+                '          docker image rm "$TAG_REF"\n',
+                `${line}          docker image rm "$TAG_REF"\n`
+            );
+        }),
+        mutation('digest-pulled local publication alias omitted', 'publication', (s) => replaceRequired(
+            s, '          docker image tag "$DIGEST_REF" "$RUNTIME_IMAGE_REF"\n', '')),
+        mutation('local publication alias created before digest pull', 'publication', (s) => {
+            const line = '          docker image tag "$DIGEST_REF" "$RUNTIME_IMAGE_REF"\n';
+            return replaceRequired(
+                replaceRequired(s, line, ''),
+                '          docker pull "$DIGEST_REF"\n',
+                `${line}          docker pull "$DIGEST_REF"\n`
+            );
+        }),
+        mutation('local publication alias created before digest image ID equality', 'publication', (s) => {
+            const line = '          docker image tag "$DIGEST_REF" "$RUNTIME_IMAGE_REF"\n';
+            const without = replaceRequired(s, line, '');
+            return replaceRequired(
+                without,
+                '          pulled_image_id="$(docker image inspect --format \'{{.Id}}\' "$DIGEST_REF")"\n',
+                `${line}          pulled_image_id="$(docker image inspect --format '{{.Id}}' "$DIGEST_REF")"\n`
+            );
+        }),
+        mutation('local publication alias created inside digest mismatch branch', 'publication', (s) => {
+            const line = '          docker image tag "$DIGEST_REF" "$RUNTIME_IMAGE_REF"\n';
+            const without = replaceRequired(s, line, '');
+            return replaceRequired(
+                without,
+                '            exit 2\n          fi\n',
+                `            ${line.trim()}\n            exit 2\n          fi\n`
+            );
+        }),
+        mutation('local publication alias image ID verification omitted', 'publication',
+            (s) => replaceRequired(
+                s,
+                'if [ "$runtime_alias_image_id" != "$pulled_image_id" ]',
+                'if false'
+             )),
+        mutation('runtime alias output emitted before alias image ID equality', 'publication', (s) => {
+            const line = '          echo "pulled_image_id=$pulled_image_id" >> "$GITHUB_OUTPUT"\n';
+            return replaceRequired(
+                replaceRequired(s, line, ''),
+                '          if [ "$runtime_alias_image_id" != "$pulled_image_id" ] || \\\n',
+                `${line}          if [ "$runtime_alias_image_id" != "$pulled_image_id" ] || \\\n`
+            );
+        }),
+        mutation('runtime alias is derived from the discovery tag', 'publication',
+            (s) => replaceRequired(
+                s,
+                'RUNTIME_IMAGE_REF: ${{ needs.preflight.outputs.image_ref }}',
+                'RUNTIME_IMAGE_REF: ${{ steps.registry_preflight.outputs.tag_ref }}'
+            )),
+        mutation('runtime alias is not bound to the canonical candidate SHA', 'publication',
+            (s) => replaceRequired(
+                s,
+                '[ "$RUNTIME_IMAGE_REF" = "local/slicer-api-publication:$CANDIDATE_SHA" ]',
+                '[ "$RUNTIME_IMAGE_REF" = "local/slicer-api-publication:0000000000000000000000000000000000000000" ]'
+            )),
+        mutation('runtime diagnostics receives registry digest instead of bounded local alias',
+            'publication', (s) => replaceRequired(
+                s,
+                'IMAGE_REF: ${{ steps.digest_pull.outputs.runtime_image_ref }}',
+                'IMAGE_REF: ${{ steps.registry_identity.outputs.digest_ref }}'
+            )),
+        mutation('digest runtime identity step omitted', 'publication',
+            (s) => removeStep(s, 'digest_runtime_identity')),
+        mutation('round trip bypasses digest runtime identity failure', 'publication',
+            (s) => replaceRequired(
+                s,
+                "if: ${{ steps.digest_runtime_identity.outcome == 'success' }}",
+                "if: ${{ steps.digest_pull.outcome == 'success' }}"
+            )),
+        mutation('round trip service UID is not identity-step bound', 'publication',
+            (s) => replaceRequired(
+                s,
+                'SERVICE_UID: ${{ steps.digest_runtime_identity.outputs.uid }}',
+                'SERVICE_UID: 999'
+            )),
+        mutation('Compose loses digest-pinned image reference', 'publication',
+            (s) => replaceRequired(
+                s,
+                'SLICER_API_IMAGE: ${{ steps.registry_identity.outputs.digest_ref }}',
+                'SLICER_API_IMAGE: "${{ needs.preflight.outputs.image_ref }}"'
+            )),
         mutation('local image ID used as registry digest', 'publication', (s) => replaceRequired(
             s, 'subject-digest: ${{ steps.registry_push.outputs.registry_digest }}',
             'subject-digest: ${{ steps.exact_image_gate.outputs.image-id }}')),
         mutation('tag used instead of attested digest', 'publication', (s) => replaceRequired(
             s, 'subject-digest: ${{ steps.registry_push.outputs.registry_digest }}',
             'subject-digest: ${{ steps.candidate.outputs.candidate_tag }}')),
+        mutation('publication provenance registry identity uses the local alias', 'publication', (s) => {
+            const block = stepText(s, 'publication_evidence');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                'REGISTRY_DIGEST: ${{ steps.registry_push.outputs.registry_digest }}',
+                'REGISTRY_DIGEST: ${{ steps.digest_pull.outputs.runtime_image_ref }}'
+            ));
+        }),
         mutation('attestation registry push disabled', 'publication', (s) => replaceRequired(s, 'push-to-registry: true', 'push-to-registry: false')),
         mutation('build provenance omitted', 'publication', (s) => removeStep(s, 'provenance_attestation')),
         mutation('SBOM attestation omitted', 'publication', (s) => removeStep(s, 'sbom_attestation')),
@@ -683,6 +920,71 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
                 'PUBLICATION_EVIDENCE_BOUNDARY_OUTCOME: ignored'
             )),
         mutation('exact cleanup omitted', 'publication', (s) => removeStep(s, 'publication_cleanup')),
+        mutation('local publication alias cleanup omitted', 'publication', (s) => replaceRequired(
+            s,
+            'for exact_ref in "$TAG_REF" "$RUNTIME_IMAGE_REF" "$DIGEST_REF"; do',
+            'for exact_ref in "$TAG_REF" "$DIGEST_REF"; do'
+        )),
+        mutation('cleanup removes a reference without exact image ownership', 'publication',
+            (s) => replaceRequired(
+                s,
+                'if [ "$actual_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]; then',
+                'if false; then'
+            )),
+        mutation('registry artifact delete added', 'publication', (s) => replaceRequired(
+            s,
+            'docker logout ghcr.io',
+            'gh api --method DELETE repos/Botond1/3D-Printer-Slicer-API/packages/container/3d-printer-slicer-api\n'
+                + '          docker logout ghcr.io'
+        )),
+        mutation('multiline registry artifact delete added', 'publication', (s) => replaceRequired(
+            s,
+            'docker logout ghcr.io',
+            'gh api \\\n'
+                + '            --method DELETE \\\n'
+                + '            repos/Botond1/3D-Printer-Slicer-API/packages/container/3d-printer-slicer-api\n'
+                + '          docker logout ghcr.io'
+        )),
+        mutation('final aggregator ignores registry identity', 'publication', (s) => replaceAllRequired(
+            s,
+            'REGISTRY_IDENTITY_OUTCOME: ${{ steps.registry_identity.outcome }}',
+            'REGISTRY_IDENTITY_OUTCOME: ignored'
+        )),
+        mutation('final aggregator ignores registry push outcome', 'publication', (s) => replaceAllRequired(
+            s,
+            'PUSH_OUTCOME: ${{ steps.registry_push.outcome }}',
+            'PUSH_OUTCOME: ignored'
+        )),
+        mutation('final aggregator swaps registry identity and digest-pull blocker labels',
+            'publication', (s) => replaceRequired(
+                replaceRequired(
+                    replaceRequired(s, 'failed_step=registry_identity', 'failed_step=temporary_identity'),
+                    'failed_step=digest_pull',
+                    'failed_step=registry_identity'
+                ),
+                'failed_step=temporary_identity',
+                'failed_step=digest_pull'
+            )),
+        mutation('final aggregator ignores digest runtime identity', 'publication', (s) => replaceAllRequired(
+            s,
+            'DIGEST_RUNTIME_IDENTITY_OUTCOME: ${{ steps.digest_runtime_identity.outcome }}',
+            'DIGEST_RUNTIME_IDENTITY_OUTCOME: ignored'
+        )),
+        mutation('final aggregator ignores digest pull', 'publication', (s) => replaceAllRequired(
+            s,
+            'DIGEST_PULL_OUTCOME: ${{ steps.digest_pull.outcome }}',
+            'DIGEST_PULL_OUTCOME: ignored'
+        )),
+        mutation('final aggregator ignores digest round trip', 'publication', (s) => replaceAllRequired(
+            s,
+            'DIGEST_ROUNDTRIP_OUTCOME: ${{ steps.digest_roundtrip.outcome }}',
+            'DIGEST_ROUNDTRIP_OUTCOME: ignored'
+        )),
+        mutation('final aggregator ignores publication cleanup', 'publication', (s) => replaceAllRequired(
+            s,
+            'PUBLICATION_CLEANUP_OUTCOME: ${{ steps.publication_cleanup.outcome }}',
+            'PUBLICATION_CLEANUP_OUTCOME: ignored'
+        )),
         mutation('exact container absence proof omitted', 'publication', (s) => replaceAllRequired(
             s, 'container_cleanup_verification_failure', 'cleanup_failure')),
         mutation('exact image absence proof omitted', 'publication', (s) => replaceAllRequired(

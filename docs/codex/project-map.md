@@ -28,7 +28,10 @@
   exact source -> one local `linux/amd64` build -> full runtime/Orca/browser/
   abort/private-topology/SBOM/Grype gate -> GHCR login -> absent discovery tag
   -> push the same image -> resolve registry manifest digest -> digest-pinned
-  pull and runtime/Orca/Compose round trip -> SLSA and SPDX attestations ->
+  pull -> prove the pulled image ID equals the gated image ID -> create one
+  candidate-scoped local publication alias -> prove the alias image ID is the
+  pulled/gated image ID -> alias-bound helper/container and exact-image-ID Orca
+  smoke -> digest-pinned Compose validation -> SLSA and SPDX attestations ->
   GitHub API/OCI/local-bundle verification -> bounded v2 evidence -> exact
   cleanup and fail-closed aggregation.
 - Only the publication job requests `packages: write`, `attestations: write`,
@@ -36,21 +39,32 @@
   preflight and normal Image Validation have only `contents: read`.
 - `scripts/i8-publication-evidence.js` and
   `scripts/i8-write-publication-evidence.js` define the exact-key bounded
-  `i8-s3a-signed-candidate-provenance-v2` correlation contract. The exact npm
-  10.9.8 focused/adapted I8-C1 and shared Image Validation lane is green:
-  621/621 tests across 11 files.
-- Pre-correction local and remote HEAD are
-  `c49bfc698d4d41041e6216c76a11144ffb386183`. Source Validation run
-  `30163991878` and Image Validation run `30163991870` succeeded for that
-  SHA; Candidate Publication did not run and no registry side effect exists.
-- I8-C1 authorizes exactly one corrective commit and one normal non-force push
-  to the existing I8 branch. The commit's last non-empty line must be the exact
-  authorization trailer above. That push must trigger Source Validation, Image
-  Validation, and Candidate Publication for the new corrective SHA; all three
-  results remain pending and are not inferred from pre-correction evidence.
+  `i8-s3a-signed-candidate-provenance-v2` correlation contract. The C2A direct
+  helper/publication lane is green at 162/162, and the exact npm 10.9.8
+  focused/adapted and shared Image Validation lane is green at 663/663 tests
+  across 11 files.
+- I8-C1 is exact commit
+  `c9a7c93120c4e643907d5f44ddb95b14b9f50e5d`. Hosted Source run
+  `30222271889` and Image run `30222271890` succeeded. Candidate Publication
+  run `30222271939` failed at
+  `runtime_identity_failure:image_ref_invalid`; login, push, and attestation
+  were skipped, so no registry side effect exists.
+- The C1 failure was helper/action namespace drift: the shared action accepted
+  only the exact local `validation` and `publication` namespaces, while
+  `scripts/i2-image-runtime-diagnostics.js` accepted only `validation`.
+- C2 direct-source review proved that the two-namespace correction alone would
+  still pass a GHCR digest to the local-only helper. C2A creates the exact local
+  publication alias only after digest-pulled/gated image-ID equality, rechecks
+  the alias ID, uses the proven image for helper/Orca/container smoke, and keeps
+  Compose plus registry/signature/attestation/verification/evidence digest-bound.
+- Exactly one C2A corrective commit and one normal non-force push remain
+  authorized. The commit's last non-empty line must be the exact authorization
+  trailer above. Source Validation, Image Validation, and Candidate Publication
+  for C2A remain `PENDING` at the commit boundary; no publication, digest,
+  signature, or attestation success is claimed.
 - `main`, PR, merge, force-push, release/Git tag, mutable registry tag, deploy,
-  and repository-setting changes remain forbidden; no second corrective push
-  is authorized.
+  and repository-setting changes remain forbidden; no further corrective push
+  is authorized after C2A.
 - The exact-SHA candidate workflow is the reviewed trust assumption because
   build, gate, and push must share one job without a multi-GiB image-tar
   transfer. No deploy, promotion, mutable tag, VPS, proxy, firewall, secret,

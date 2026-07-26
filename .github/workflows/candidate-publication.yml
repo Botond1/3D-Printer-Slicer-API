@@ -356,17 +356,19 @@ jobs:
         env:
           EXPECTED_LOCAL_IMAGE_ID: ${{ steps.exact_image_gate.outputs.image-id }}
           DIGEST_REF: ${{ steps.registry_identity.outputs.digest_ref }}
+          RUNTIME_IMAGE_REF: ${{ needs.preflight.outputs.image_ref }}
           TAG_REF: ${{ steps.registry_preflight.outputs.tag_ref }}
         shell: bash
         run: |
           set -euo pipefail
+          [ "$RUNTIME_IMAGE_REF" = "local/slicer-api-publication:$CANDIDATE_SHA" ]
           docker image rm "$TAG_REF"
-          docker image rm "$IMAGE_REF"
+          docker image rm "$RUNTIME_IMAGE_REF"
           if docker image inspect "$EXPECTED_LOCAL_IMAGE_ID" >/dev/null 2>&1; then
             docker image rm "$EXPECTED_LOCAL_IMAGE_ID"
           fi
           if docker image inspect "$EXPECTED_LOCAL_IMAGE_ID" >/dev/null 2>&1 || \
-             docker image inspect "$IMAGE_REF" >/dev/null 2>&1 || \
+             docker image inspect "$RUNTIME_IMAGE_REF" >/dev/null 2>&1 || \
              docker image inspect "$TAG_REF" >/dev/null 2>&1; then
             echo "The local build identity was not fully removed before digest pull." >&2
             exit 2
@@ -377,27 +379,49 @@ jobs:
             echo "Digest pull config $pulled_image_id differs from the gated build $EXPECTED_LOCAL_IMAGE_ID." >&2
             exit 2
           fi
+          docker image tag "$DIGEST_REF" "$RUNTIME_IMAGE_REF"
+          runtime_alias_image_id="$(docker image inspect --format '{{.Id}}' "$RUNTIME_IMAGE_REF")"
+          if [ "$runtime_alias_image_id" != "$pulled_image_id" ] || \
+             [ "$runtime_alias_image_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]; then
+            echo "Runtime alias config $runtime_alias_image_id differs from the digest-pulled gated image." >&2
+            exit 2
+          fi
           echo "pulled_image_id=$pulled_image_id" >> "$GITHUB_OUTPUT"
+          echo "runtime_alias_image_id=$runtime_alias_image_id" >> "$GITHUB_OUTPUT"
+          echo "runtime_image_ref=$RUNTIME_IMAGE_REF" >> "$GITHUB_OUTPUT"
 
-      - name: Re-prove non-root runtime, liveness, Orca, and Compose by digest
-        id: digest_roundtrip
+      - name: Resolve identity from the digest-pulled exact local alias
+        id: digest_runtime_identity
         if: ${{ steps.digest_pull.outcome == 'success' }}
         env:
-          EXPECTED_IMAGE_ID: "${{ steps.exact_image_gate.outputs.image-id }}"
-          IMAGE_REF: "${{ steps.registry_identity.outputs.digest_ref }}"
-          SLICER_API_IMAGE: "${{ steps.registry_identity.outputs.digest_ref }}"
+          EXPECTED_IMAGE_ID: ${{ steps.exact_image_gate.outputs.image-id }}
+          IMAGE_REF: ${{ steps.digest_pull.outputs.runtime_image_ref }}
         shell: bash
         run: |
           set -euo pipefail
-          identity_output="$RUNNER_TEMP/i8-digest-identity-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
-          node scripts/i2-image-runtime-diagnostics.js | tee "$identity_output"
-          configured_user="$(sed -n 's/^configured_user=//p' "$identity_output")"
-          service_uid="$(sed -n 's/^uid=//p' "$identity_output")"
-          service_gid="$(sed -n 's/^gid=//p' "$identity_output")"
-          rm -f -- "$identity_output"
-          [ "$configured_user" = "slicer" ]
-          [[ "$service_uid" =~ ^[1-9][0-9]*$ ]]
-          [[ "$service_gid" =~ ^[1-9][0-9]*$ ]]
+          node scripts/i2-image-runtime-diagnostics.js
+
+      - name: Re-prove runtime and Compose from the digest-pulled exact image
+        id: digest_roundtrip
+        if: ${{ steps.digest_runtime_identity.outcome == 'success' }}
+        env:
+          CONFIGURED_USER: ${{ steps.digest_runtime_identity.outputs.configured_user }}
+          DIGEST_REF: ${{ steps.registry_identity.outputs.digest_ref }}
+          EXPECTED_IMAGE_ID: ${{ steps.exact_image_gate.outputs.image-id }}
+          RUNTIME_IMAGE_REF: ${{ steps.digest_pull.outputs.runtime_image_ref }}
+          SERVICE_UID: ${{ steps.digest_runtime_identity.outputs.uid }}
+          SERVICE_GID: ${{ steps.digest_runtime_identity.outputs.gid }}
+          SLICER_API_IMAGE: ${{ steps.registry_identity.outputs.digest_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$RUNTIME_IMAGE_REF" = "local/slicer-api-publication:$CANDIDATE_SHA" ]
+          [ "$SLICER_API_IMAGE" = "$DIGEST_REF" ]
+          [ "$CONFIGURED_USER" = "slicer" ]
+          [[ "$SERVICE_UID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$SERVICE_GID" =~ ^[1-9][0-9]*$ ]]
+          [ "$(docker image inspect --format '{{.Id}}' "$RUNTIME_IMAGE_REF")" = "$EXPECTED_IMAGE_ID" ]
+          [ "$(docker image inspect --format '{{.Id}}' "$DIGEST_REF")" = "$EXPECTED_IMAGE_ID" ]
 
           node scripts/i2-orca-runtime-smoke.js
           docker run --detach \
@@ -405,21 +429,21 @@ jobs:
             --pull never --restart no --network none --cap-drop ALL \
             --security-opt no-new-privileges --read-only --pids-limit 512 \
             --memory 4g --memory-swap 4g --cpus 2 --stop-timeout 30 \
-            --tmpfs "/app/input:rw,nosuid,nodev,noexec,size=64m,uid=${service_uid},gid=${service_gid},mode=0700" \
-            --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${service_uid},gid=${service_gid},mode=0700" \
-            --tmpfs "/app/configs/pricing-state:rw,nosuid,nodev,noexec,size=64m,uid=${service_uid},gid=${service_gid},mode=0700" \
-            --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=64m,uid=${service_uid},gid=${service_gid},mode=0700" \
+            --tmpfs "/app/input:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
+            --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
+            --tmpfs "/app/configs/pricing-state:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
+            --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
             --env SLICE_SERVICE_API_KEY=i8-digest-slice-active-260725-a1 \
             --env PRICING_API_KEY=i8-digest-pricing-active-260725-b1 \
             --env ARTIFACT_API_KEY=i8-digest-artifact-active-260725-c1 \
             --env OPERATIONS_API_KEY=i8-digest-operations-active-260725-d1 \
             --label io.s3a.validation-only=true \
             --label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID" \
-            "$IMAGE_REF"
+            "$RUNTIME_IMAGE_REF"
           container_pid="$(docker inspect --format '{{.State.Pid}}' "$I8_DIGEST_CONTAINER_NAME")"
           kernel_identity="$(/usr/bin/ps -o uid=,gid= -p "$container_pid")"
           read -r kernel_uid kernel_gid <<< "$kernel_identity"
-          [ "$kernel_uid" = "$service_uid" ] && [ "$kernel_gid" = "$service_gid" ]
+          [ "$kernel_uid" = "$SERVICE_UID" ] && [ "$kernel_gid" = "$SERVICE_GID" ]
           for attempt in $(seq 1 120); do
             running="$(docker inspect --format '{{.State.Running}}' "$I8_DIGEST_CONTAINER_NAME")"
             health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
@@ -596,6 +620,7 @@ jobs:
         env:
           EXPECTED_LOCAL_IMAGE_ID: ${{ steps.exact_image_gate.outputs.image-id }}
           DIGEST_REF: ${{ steps.registry_identity.outputs.digest_ref }}
+          RUNTIME_IMAGE_REF: ${{ needs.preflight.outputs.image_ref }}
           TAG_REF: ${{ steps.registry_preflight.outputs.tag_ref }}
           PROVENANCE_BUNDLE_PATH: ${{ steps.provenance_attestation.outputs.bundle-path }}
           SBOM_BUNDLE_PATH: ${{ steps.sbom_attestation.outputs.bundle-path }}
@@ -668,7 +693,7 @@ jobs:
           exact_container_cleanup "$I2_UID_PROBE_NAME"
           exact_container_cleanup "$I2_GID_PROBE_NAME"
           exact_container_cleanup "$I2_ORCA_PROBE_NAME"
-          for exact_ref in "$TAG_REF" "$IMAGE_REF" "$DIGEST_REF"; do
+          for exact_ref in "$TAG_REF" "$RUNTIME_IMAGE_REF" "$DIGEST_REF"; do
             [ -n "$exact_ref" ] || continue
             if actual_id="$(exact_image_id "$exact_ref")"; then image_state=0; else image_state=$?; fi
             if [ "$image_state" -eq 0 ]; then
@@ -710,7 +735,6 @@ jobs:
             "$RUNNER_TEMP/i8-digest-raw-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
             "$RUNNER_TEMP/i8-tag-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
             "$RUNNER_TEMP/i8-digest-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
-            "$RUNNER_TEMP/i8-digest-identity-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.txt"
             "$RUNNER_TEMP/i8-final-tag-raw-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
             "$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err"
             "$RUNNER_TEMP/i8-wrong-repository-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err"
@@ -777,7 +801,7 @@ jobs:
           REGISTRY_PUSH_OUTCOME: ${{ steps.registry_push.outcome }}
           REGISTRY_IDENTITY_OUTCOME: ${{ steps.registry_identity.outcome }}
           DIGEST_PULL_OUTCOME: ${{ steps.digest_pull.outcome }}
-          DIGEST_RUNTIME_OUTCOME: ${{ steps.digest_roundtrip.outcome }}
+          DIGEST_RUNTIME_OUTCOME: ${{ steps.digest_runtime_identity.outcome }}
           COMPOSE_ROUNDTRIP_OUTCOME: ${{ steps.digest_roundtrip.outcome }}
           PROVENANCE_ATTESTATION_OUTCOME: ${{ steps.provenance_attestation.outcome }}
           SBOM_ATTESTATION_OUTCOME: ${{ steps.sbom_attestation.outcome }}
@@ -1047,6 +1071,10 @@ jobs:
           REGISTRY_PREFLIGHT_OUTCOME: ${{ steps.registry_preflight.outcome }}
           PUSH_OUTCOME: ${{ steps.registry_push.outcome }}
           REMOTE_PUBLISHED: ${{ steps.registry_push.outputs.remote_published }}
+          REGISTRY_IDENTITY_OUTCOME: ${{ steps.registry_identity.outcome }}
+          DIGEST_PULL_OUTCOME: ${{ steps.digest_pull.outcome }}
+          DIGEST_RUNTIME_IDENTITY_OUTCOME: ${{ steps.digest_runtime_identity.outcome }}
+          DIGEST_ROUNDTRIP_OUTCOME: ${{ steps.digest_roundtrip.outcome }}
           PROVENANCE_OUTCOME: ${{ steps.provenance_attestation.outcome }}
           SBOM_ATTESTATION_OUTCOME: ${{ steps.sbom_attestation.outcome }}
           VERIFICATION_OUTCOME: ${{ steps.verify_attestations.outcome }}
@@ -1066,6 +1094,26 @@ jobs:
           if [ "$PREPUBLICATION_OUTCOME" != "success" ]; then
             classification=BLOCKED_I8_PREPUBLICATION_GATE
             failed_step=exact_image_gate
+          elif [ "$REMOTE_PUBLISHED" = "matching" ] && \
+               [ "$PUSH_OUTCOME" != "success" ]; then
+            classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
+            failed_step=registry_push
+          elif [ "$REMOTE_PUBLISHED" = "matching" ] && \
+               [ "$REGISTRY_IDENTITY_OUTCOME" != "success" ]; then
+            classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
+            failed_step=registry_identity
+          elif [ "$REMOTE_PUBLISHED" = "matching" ] && \
+               [ "$DIGEST_PULL_OUTCOME" != "success" ]; then
+            classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
+            failed_step=digest_pull
+          elif [ "$REMOTE_PUBLISHED" = "matching" ] && \
+               [ "$DIGEST_RUNTIME_IDENTITY_OUTCOME" != "success" ]; then
+            classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
+            failed_step=digest_runtime_identity
+          elif [ "$REMOTE_PUBLISHED" = "matching" ] && \
+               [ "$DIGEST_ROUNDTRIP_OUTCOME" != "success" ]; then
+            classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
+            failed_step=digest_roundtrip
           elif [ "$REMOTE_PUBLISHED" = "matching" ] && { \
               [ "$PROVENANCE_OUTCOME" != "success" ] || [ "$SBOM_ATTESTATION_OUTCOME" != "success" ]; }; then
             classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
@@ -1094,6 +1142,10 @@ jobs:
             classification=I8_PUBLICATION_INFRASTRUCTURE_FAILURE
             failed_step=final_tag_identity
           elif [ "$REMOTE_PUBLISHED" != "matching" ] || [ "$PUSH_OUTCOME" != "success" ] || \
+               [ "$REGISTRY_IDENTITY_OUTCOME" != "success" ] || \
+               [ "$DIGEST_PULL_OUTCOME" != "success" ] || \
+               [ "$DIGEST_RUNTIME_IDENTITY_OUTCOME" != "success" ] || \
+               [ "$DIGEST_ROUNDTRIP_OUTCOME" != "success" ] || \
                [ "$PUBLICATION_EVIDENCE_OUTCOME" != "success" ] || \
                [ "$FINAL_TAG_IDENTITY_OUTCOME" != "success" ] || \
                [ "$PUBLICATION_EVIDENCE_BOUNDARY_OUTCOME" != "success" ] || \

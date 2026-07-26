@@ -30,7 +30,11 @@
   Publication resolves a distinct lowercase registry digest, compares raw
   tag/digest manifests, verifies a single `linux/amd64` image and exact OCI
   source revision, pulls by digest after removing the local build identity,
-  and re-proves kernel identity, liveness, Orca, and production Compose.
+  and proves the pulled image ID equals the gated build before recreating the
+  exact local publication alias. The helper and runtime container use that
+  alias, Orca uses the same independently checked image ID, and production
+  Compose plus registry/signature/attestation/verification/evidence use only
+  the exact digest identity.
 - `actions/attest` is exact-commit pinned and would create two distinct
   digest-bound GitHub/Sigstore attestations: SLSA provenance and SPDX 2.3 SBOM.
   Verification requires GitHub API, OCI bundle, and local bounded-bundle paths,
@@ -47,17 +51,21 @@
   failed verification it is `I8_CANDIDATE_ATTESTATION_UNVERIFIED`. Published
   content is preserved for audit and is never overwritten, deleted, promoted,
   or deployed by this workflow.
-- Before the I8-C1 corrective push, local and remote HEAD are
-  `c49bfc698d4d41041e6216c76a11144ffb386183`; hosted Source run
-  `30163991878` and Image run `30163991870` are `SUCCESS`. Candidate
-  Publication has not run. The corrective SHA and its three exact hosted runs
-  remain pending. No registry side effect exists; GHCR digest, signature, and
-  provenance/SBOM attestations are `NOT_CREATED`.
-- I8-C1 authorizes one corrective commit and one normal non-force push to the
-  existing candidate branch only. `main`, PR, merge, force-push, a second
-  correction, release/Git tag, mutable registry tag, deploy, and repository
-  settings remain outside authority. Production readiness and external
-  topology remain `UNVERIFIED`.
+- I8-C1 is exact commit
+  `c9a7c93120c4e643907d5f44ddb95b14b9f50e5d`; hosted Source run
+  `30222271889` and Image run `30222271890` are `SUCCESS`. Candidate
+  Publication run `30222271939` is `FAILURE` at
+  `runtime_identity_failure:image_ref_invalid`. Registry login, push, and
+  attestation were skipped. No registry side effect exists; GHCR digest,
+  signature, and provenance/SBOM attestations are `NOT_CREATED`.
+- C2 direct-source review proved that a namespace-only correction would still
+  pass a GHCR digest to the local-only helper during the later round trip.
+  I8-C2A authorizes one remaining corrective commit and one normal non-force
+  push to the existing candidate branch only. Its Source, Image, and Candidate
+  Publication results are `PENDING` at the commit boundary. `main`, PR, merge,
+  force-push, any further correction, release/Git tag, mutable registry tag,
+  deploy, and repository settings remain outside authority. Production
+  readiness and external topology remain `UNVERIFIED`.
 - The exact-SHA candidate workflow is the reviewed trust assumption needed to
   keep build, complete gate, push, and attestation in one job without an
   image-tar transfer.

@@ -21,11 +21,13 @@ Canonical Codex knowledge:
 
 The I8 branch starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. Before the I8-C1 correction, local and
-remote HEAD are
-`c49bfc698d4d41041e6216c76a11144ffb386183`; hosted Source run
-`30163991878` and Image run `30163991870` are `SUCCESS`. Candidate Publication
-has not run. No registry, signature, or attestation side effect exists.
+`codex/i8-s3a-ghcr-signed-candidate`. I8-C1 is exact commit
+`c9a7c93120c4e643907d5f44ddb95b14b9f50e5d`. Its hosted Source run
+`30222271889` and Image run `30222271890` are `SUCCESS`; Candidate Publication
+run `30222271939` is `FAILURE` at
+`runtime_identity_failure:image_ref_invalid`. Registry login, push, and
+attestation were skipped, so C1 created no registry, signature, or attestation
+side effect.
 
 I8-C1 narrowly resolves the default-branch `workflow_dispatch` registration
 blocker. Candidate Publication retains its exact manual input contract for
@@ -53,21 +55,37 @@ then push only `candidate-<full-source-sha>` to the fixed GHCR repository.
 The downstream contract is digest-only:
 `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`. A discovery
 tag is not an immutable consumption reference. The proposed workflow refuses
-an existing tag, verifies manifest/config/platform/labels, performs a
-digest-pinned pull and runtime/Orca/production-Compose round trip, and creates
-distinct GitHub/Sigstore SLSA provenance and SPDX 2.3 attestations for the
-untagged repository name plus exact registry digest. I8 provenance v2 is
+an existing tag, verifies manifest/config/platform/labels, pulls the exact
+digest, and proves its image ID equals the gated build before recreating an
+exact local runtime alias. Production Compose and all registry, signature,
+attestation, verification, and evidence identities remain digest-bound. It
+creates distinct GitHub/Sigstore SLSA provenance and SPDX 2.3 attestations for
+the untagged repository name plus exact registry digest. I8 provenance v2 is
 bounded and fail closed, and its final aggregator distinguishes
 `BLOCKED_I8_PREPUBLICATION_GATE`, `I8_CANDIDATE_PUBLISHED_UNATTESTED`, and
 `I8_CANDIDATE_ATTESTATION_UNVERIFIED`.
 
-Exactly one corrective commit and one normal non-force push to the existing I8
-branch are authorized. The corrective commit's last non-empty line must be the
-exact trailer above; that push, not a manual dispatch attempt, must trigger
-Source Validation, Image Validation, and Candidate Publication for the new
-corrective SHA. Those three corrective hosted results remain pending. No
-second corrective push, `main` change, PR, merge, force-push, release, Git tag,
-mutable registry tag, deploy, or repository-setting change is authorized.
+The C1 failure was a helper/action namespace drift: the shared action accepted
+the exact run-local `validation` and `publication` namespaces, while the
+runtime-identity helper accepted only `validation`. C2 direct-source review
+then found that the original correction would still pass a GHCR digest to the
+local-only helper during the post-publication round trip. I8-C2A admits exactly
+the two local namespaces and keeps registry, digest, mutable, third-namespace,
+and injection-shaped references rejected. After a digest pull is proved to
+have the gated image ID, it recreates the exact candidate-scoped local
+publication alias. The runtime helper and container use that alias; Orca uses
+the independently checked exact image ID for the same image. Production
+Compose, registry identity, signature, attestation, verification, and evidence
+remain bound to the exact registry digest.
+
+Exactly one C2A corrective commit and one normal non-force push to the existing
+I8 branch remain authorized. The commit's last non-empty line must be the exact
+trailer above; that push, not a manual dispatch attempt, must trigger Source
+Validation, Image Validation, and Candidate Publication for the C2A SHA. All
+three C2A hosted results remain `PENDING` at the commit boundary. No hosted
+publication, digest, signature, or attestation success is claimed. No further
+corrective push, `main` change, PR, merge, force-push, release, Git tag, mutable
+registry tag, deploy, or repository-setting change is authorized.
 
 The exact-SHA candidate workflow is a reviewed trust assumption: build, full
 gate, push, and attestation remain in one job to preserve build identity

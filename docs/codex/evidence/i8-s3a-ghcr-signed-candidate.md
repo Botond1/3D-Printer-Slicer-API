@@ -4,37 +4,51 @@
 
 I8 starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. Before I8-C1, local and remote HEAD are
-`c49bfc698d4d41041e6216c76a11144ffb386183`, comprising
-`fa45cf6 -> 79a07d4 -> 01055b8 -> c49bfc6`. Hosted Source run
-`30163991878` and Image run `30163991870` are `SUCCESS`. Candidate
-Publication is `NOT_RUN`. No registry, signature, or attestation side effect
+`codex/i8-s3a-ghcr-signed-candidate`. I8-C1 is exact commit
+`c9a7c93120c4e643907d5f44ddb95b14b9f50e5d`. Hosted Source run
+`30222271889` and Image run `30222271890` are `SUCCESS`. Candidate Publication
+run `30222271939` is `FAILURE` at
+`runtime_identity_failure:image_ref_invalid`. Registry login, image push, and
+attestation were skipped. No registry, signature, or attestation side effect
 exists.
 
-The root cause is limited to GitHub event registration:
+The pre-C1 root cause was limited to GitHub event registration:
 `workflow_dispatch` cannot start a workflow that is absent from the default
 branch. I8-C1 resolves only that blocker by retaining the manual trigger for
-future default-branch integration while adding a push trigger restricted to
-the existing candidate branch. This is a pre-corrective-push checkpoint, not a
-hosted-publication success claim.
+future default-branch integration while adding a push trigger restricted to the
+existing candidate branch.
 
-I8-C1 authorizes exactly one corrective commit and one normal non-force push to
-the existing branch. The corrective SHA, discovery tag, and three
-push-triggered hosted runs do not exist yet and must not be inferred from the
-pre-correction runs below.
+The C1 hosted failure has a separate, exact root cause: the shared action
+accepted the local `validation` and `publication` namespaces, but
+`scripts/i2-image-runtime-diagnostics.js` accepted only `validation`. C2
+direct-source review also proved a second contract conflict: the proposed
+digest round trip would pass a GHCR digest to that local-only helper. C2A
+corrects both seams. The helper admits exactly
+`local/slicer-api-validation:<40-lowercase-sha>` and
+`local/slicer-api-publication:<40-lowercase-sha>` and does not admit a registry
+reference, digest reference, mutable reference, third namespace, or
+injection-shaped value.
+
+Exactly one C2A corrective commit and one normal non-force push to the existing
+branch remain authorized. C2A Source, Image, and Candidate Publication results
+are `PENDING` at the commit boundary and must not be inferred from the C1 runs
+below. This is not a hosted-publication success claim.
 
 Current classifications:
 
 | Evidence | Classification |
 | --- | --- |
-| Committed/pushed pre-I8-C1 implementation | `CREATED`, local and remote `c49bfc698d4d41041e6216c76a11144ffb386183` |
+| I8-C1 corrective implementation | `CREATED`, committed/pushed as `c9a7c93120c4e643907d5f44ddb95b14b9f50e5d` |
 | Focused/adapted I8-C1 and shared workflow tests | `VERIFIED_LOCAL`, 621/621 pass across 11 files with exact npm 10.9.8 |
-| Pre-I8-C1 hosted Source Validation | `SUCCESS`, run `30163991878` |
-| Pre-I8-C1 hosted Image Validation | `SUCCESS`, run `30163991870` |
-| Candidate Publication at pre-correction SHA | `NOT_RUN` |
-| I8-C1 trigger correction | `IMPLEMENTED_LOCAL`; accelerated focused/adapted lane and non-staged local gates green |
-| Corrective commit and remaining push | `PENDING`; exactly one normal non-force branch push authorized |
-| Corrective hosted Source/Image/Publication | `PENDING_NOT_RUN` |
+| I8-C2A direct helper/publication contracts | `VERIFIED_LOCAL`, 162/162 pass |
+| I8-C2A focused/adapted and shared workflow tests | `VERIFIED_LOCAL`, 663/663 pass across 11 files with exact npm 10.9.8 |
+| I8-C1 hosted Source Validation | `SUCCESS`, run `30222271889` |
+| I8-C1 hosted Image Validation | `SUCCESS`, run `30222271890` |
+| I8-C1 hosted Candidate Publication | `FAILURE`, run `30222271939`, `runtime_identity_failure:image_ref_invalid` |
+| I8-C1 registry login/push/attestation | `SKIPPED`; no registry side effect |
+| I8-C2A helper and digest-pulled local runtime-alias correction | `IMPLEMENTED_LOCAL_PENDING_COMMIT` |
+| I8-C2A commit and remaining push | `PENDING`; exactly one normal non-force branch push authorized |
+| I8-C2A hosted Source/Image/Publication | `PENDING` at the commit boundary |
 | GHCR candidate digest | `NOT_CREATED` |
 | GitHub/Sigstore signature | `NOT_CREATED` |
 | Build-provenance attestation | `NOT_CREATED` |
@@ -74,6 +88,8 @@ authorized target-branch push
   -> one previously absent candidate-<full-source-sha> discovery tag
   -> exact registry manifest digest resolution and cross-check
   -> remove local build identity and pull by digest
+  -> prove the digest-pulled image ID equals the gated image ID
+  -> create the exact candidate-scoped local publication alias for identity diagnostics
   -> kernel identity/liveness/Orca/production-Compose round trip
   -> digest-bound SLSA provenance and SPDX SBOM attestations
   -> GitHub API, OCI, and local-bundle verification plus negative probes
@@ -168,14 +184,23 @@ digest raw manifests, requires a direct single `linux/amd64` manifest,
 correlates its config digest to the original local image ID, and checks exact
 source/revision/title/description labels plus `USER=slicer`.
 
-It then removes the local tag/build identity, pulls only
+It then removes every local build identity, pulls only
 `ghcr.io/botond1/3d-printer-slicer-api@sha256:...`, requires the pulled config
-identity to equal the gated build, and re-runs kernel UID/GID, liveness, Orca,
-and production-Compose digest validation. A final tag lookup must still point
-to the verified digest.
+identity to equal the gated build, and only then recreates the exact local
+publication alias. A final tag lookup must still point to the verified digest.
 
-The discovery tag is not a consumption contract. Every downstream stage must
-use only:
+C2A preserves the runtime-identity helper's local-only contract. Only after the
+digest pull's image ID equals the gated image ID does the workflow create the
+exact candidate-scoped
+`local/slicer-api-publication:<full-lowercase-source-sha>` alias. That alias is
+passed to the helper and runtime container. Orca receives the independently
+checked exact image ID for the same digest-pulled image. Production Compose
+receives the digest reference, and registry, signature, attestation,
+verification, and provenance-v2 identity remain bound to the exact digest.
+
+The discovery tag is not a consumption contract. Production Compose and every
+registry, attestation, verification, and canonical evidence consumer must use
+only:
 
 ```text
 ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>
@@ -211,8 +236,8 @@ All paths constrain the exact repository, signer workflow, ref, source digest,
 subject digest, and predicate. Separate wrong-digest and wrong-repository
 probes must fail. An attestation ID or HTTP success alone is insufficient.
 
-No attestation has been created or cryptographically verified before the
-authorized corrective push.
+No attestation was created or cryptographically verified by C1. C2A hosted
+execution remains pending at the commit boundary.
 
 ## I8 provenance v2 and evidence boundary
 
@@ -257,7 +282,7 @@ After any observed matching push, the exact remote digest is preserved. The
 workflow never overwrites or deletes it, creates a mutable promotion tag, or
 deploys it.
 
-## I8-C1 accelerated local validation
+## I8-C1 local validation and hosted result
 
 Command:
 
@@ -313,10 +338,48 @@ The exact image resolved configured `USER=slicer`, kernel UID/GID inputs
 validation container, tag, image ID, or temporary output. This was local
 refactor validation, not a final candidate digest or hosted publication proof.
 
-Final I8-C1 staged safety, post-commit exact-range whitespace, and
-worktree-isolation results belong in the integrator report. Working-tree
-diff/whitespace and actionlint are green. The pre-correction Source and Image
-runs are green; corrective Source/Image/Publication results remain not run.
+I8-C1 was committed and pushed as
+`c9a7c93120c4e643907d5f44ddb95b14b9f50e5d`. Hosted Source run
+`30222271889` and Image run `30222271890` succeeded. Candidate Publication run
+`30222271939` failed closed at
+`runtime_identity_failure:image_ref_invalid`. Login, push, and attestation were
+skipped, and no registry side effect occurred. The local validation above did
+not prove the publication-only helper namespace.
+
+## I8-C2A helper and digest-pulled runtime alias correction
+
+C2A aligns the local-only runtime-identity helper with the shared action by
+accepting exactly two run-local namespaces: `validation` and `publication`.
+Both require the same full 40-character lowercase candidate SHA shape. Registry
+references, digest references, mutable references, any third namespace, and
+injection-shaped references remain rejected.
+
+The C2 direct-source review proved that changing only the helper namespace was
+insufficient: the later digest-roundtrip step would still pass a GHCR digest to
+the local-only helper. C2A preserves the corrected identity boundary:
+
+1. remove the original local build identity;
+2. pull the exact registry digest;
+3. require the pulled image ID to equal the gated image ID;
+4. create the exact candidate-scoped local publication alias;
+5. require the alias image ID to equal the pulled and gated image ID;
+6. use the alias for the runtime helper and container and the same exact image
+   ID for Orca;
+7. keep production Compose, registry, attestation, verification, and canonical
+   evidence on the exact digest.
+
+Production Compose remains on `SLICER_API_IMAGE=<digest-reference>`, and all
+registry, signature, attestation, verification, and provenance-v2 proofs remain
+digest-pinned. C2A has no hosted result
+at the commit boundary. Source Validation, Image Validation, and Candidate
+Publication are all `PENDING`; no publication, digest, signature, or
+attestation success is claimed.
+
+The C2A direct helper/publication contracts pass 162/162. The exact npm 10.9.8
+11-file focused/adapted and shared workflow lane passes 663/663, including
+mutations for identity removal and ordering, pulled/gated/alias ID equality,
+alias output ordering, registry-identity/digest-pull/final-cleanup aggregation,
+exact cleanup ownership, and single-line or multiline registry deletion.
 
 ## Read-only external observations and no-deploy boundary
 
@@ -330,13 +393,13 @@ package-setting, registry-delete, or mutable-promotion operation. External
 caller/proxy/firewall/egress/secret topology and deployed digest remain
 `UNVERIFIED`; production readiness remains `UNVERIFIED`.
 
-The I8-C1 authorization permits one corrective commit and one normal non-force
-push to the existing candidate branch. It does not permit a `main` push, PR,
-merge, force-push, second corrective push, release, Git tag, mutable image tag,
-deployment, SSH/VPS operation, registry overwrite/delete, or repository/
-environment/secret/branch-policy setting change.
+The I8-C2A authorization permits exactly one remaining corrective commit and one
+normal non-force push to the existing candidate branch. It does not permit a
+`main` push, PR, merge, force-push, any further corrective push, release, Git
+tag, mutable image tag, deployment, SSH/VPS operation, registry overwrite/
+delete, or repository/environment/secret/branch-policy setting change.
 
-The corrective push must automatically trigger Source Validation, Image
+The C2A corrective push must automatically trigger Source Validation, Image
 Validation, and Candidate Publication. Until all three exact-SHA runs and every
 publication/attestation/evidence/cleanup gate are green, no hosted publication
 or signing success claim is valid.
