@@ -4,13 +4,13 @@
 
 I8 starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. I8-C1 is exact commit
-`c9a7c93120c4e643907d5f44ddb95b14b9f50e5d`. Hosted Source run
-`30222271889` and Image run `30222271890` are `SUCCESS`. Candidate Publication
-run `30222271939` is `FAILURE` at
-`runtime_identity_failure:image_ref_invalid`. Registry login, image push, and
-attestation were skipped. No registry, signature, or attestation side effect
-exists.
+`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C2A
+commit `8df4d0d9972ce0a066ef0e630479f7367bc39938`. Hosted Source run
+`30224324987` and Image run `30224324996` are `SUCCESS`. Candidate Publication
+run `30224324993` is `FAILURE` at
+`runtime_resource_contract_failure:container_reference_invalid`. Registry
+login, image push, and attestation were skipped, and the candidate tag and GHCR
+package are absent. No registry, signature, or attestation side effect exists.
 
 The pre-C1 root cause was limited to GitHub event registration:
 `workflow_dispatch` cannot start a workflow that is absent from the default
@@ -29,10 +29,13 @@ corrects both seams. The helper admits exactly
 reference, digest reference, mutable reference, third namespace, or
 injection-shaped value.
 
-Exactly one C2A corrective commit and one normal non-force push to the existing
-branch remain authorized. C2A Source, Image, and Candidate Publication results
-are `PENDING` at the commit boundary and must not be inferred from the C1 runs
-below. This is not a hosted-publication success claim.
+The C2A hosted failure is distinct: the Candidate workflow supplied
+`s3a-publication-<run-id>-<run-attempt>` to the I4 runtime-envelope helper,
+whose main-container validator still admitted only `s3a-validation-*`. I8-C3
+corrects only that seam. Exactly one C3 corrective commit and one normal
+non-force push to the existing branch are authorized. C3 Source, Image, and
+Candidate Publication results are `PENDING` at the commit boundary. This is
+not a hosted-publication success claim.
 
 Current classifications:
 
@@ -46,9 +49,15 @@ Current classifications:
 | I8-C1 hosted Image Validation | `SUCCESS`, run `30222271890` |
 | I8-C1 hosted Candidate Publication | `FAILURE`, run `30222271939`, `runtime_identity_failure:image_ref_invalid` |
 | I8-C1 registry login/push/attestation | `SKIPPED`; no registry side effect |
-| I8-C2A helper and digest-pulled local runtime-alias correction | `IMPLEMENTED_LOCAL_PENDING_COMMIT` |
-| I8-C2A commit and remaining push | `PENDING`; exactly one normal non-force branch push authorized |
-| I8-C2A hosted Source/Image/Publication | `PENDING` at the commit boundary |
+| I8-C2A helper and digest-pulled local runtime-alias correction | `CREATED`, committed/pushed as `8df4d0d9972ce0a066ef0e630479f7367bc39938` |
+| I8-C2A hosted Source Validation | `SUCCESS`, run `30224324987` |
+| I8-C2A hosted Image Validation | `SUCCESS`, run `30224324996` |
+| I8-C2A hosted Candidate Publication | `FAILURE`, run `30224324993`, `runtime_resource_contract_failure:container_reference_invalid` |
+| I8-C2A registry login/push/attestation | `SKIPPED`; candidate tag/package absent; no registry side effect |
+| I8-C3 I4 namespace correction | `IMPLEMENTED_LOCAL_PENDING_COMMIT` |
+| I8-C3 focused namespace/workflow lane | `VERIFIED_LOCAL`, 686/686 pass across 12 files |
+| I8-C3 commit and remaining push | `PENDING`; exactly one commit and one normal non-force branch push authorized |
+| I8-C3 hosted Source/Image/Publication | `PENDING` at the commit boundary |
 | GHCR candidate digest | `NOT_CREATED` |
 | GitHub/Sigstore signature | `NOT_CREATED` |
 | Build-provenance attestation | `NOT_CREATED` |
@@ -370,16 +379,40 @@ the local-only helper. C2A preserves the corrected identity boundary:
 
 Production Compose remains on `SLICER_API_IMAGE=<digest-reference>`, and all
 registry, signature, attestation, verification, and provenance-v2 proofs remain
-digest-pinned. C2A has no hosted result
-at the commit boundary. Source Validation, Image Validation, and Candidate
-Publication are all `PENDING`; no publication, digest, signature, or
-attestation success is claimed.
+digest-pinned.
 
 The C2A direct helper/publication contracts pass 162/162. The exact npm 10.9.8
 11-file focused/adapted and shared workflow lane passes 663/663, including
 mutations for identity removal and ordering, pulled/gated/alias ID equality,
 alias output ordering, registry-identity/digest-pull/final-cleanup aggregation,
 exact cleanup ownership, and single-line or multiline registry deletion.
+
+I8-C2A was committed and pushed as
+`8df4d0d9972ce0a066ef0e630479f7367bc39938`. Hosted Source run
+`30224324987` and Image run `30224324996` succeeded. Candidate Publication run
+`30224324993` failed closed before registry login at
+`runtime_resource_contract_failure:container_reference_invalid`. Registry
+login, push, and attestation were skipped; the candidate tag and GHCR package
+are absent. No registry digest, signature, attestation, or candidate artifact
+was created.
+
+## I8-C3 executable namespace audit and correction
+
+The focused C3 lane passes 686/686 tests across 12 files. Its audit matrix is:
+
+| Surface | Executable contract | C3 classification |
+| --- | --- | --- |
+| I2 image alias | Exact `local/slicer-api-(validation|publication):<40-lowercase-sha>` full-string regex | `ALIGNED`; C2A alias/digest separation preserved |
+| I4 main container | Was validation-only; corrected to exact `s3a-(validation|publication)-<decimal-run-id>-<decimal-run-attempt>` full-string regex with 128-byte maximum | `SOLE_DRIFT_CORRECTED_LOCAL` |
+| I2 probe containers | Generic strict bounded container-name validation; UID/GID names are distinct and Orca rejects a pre-existing probe name | `ALIGNED` |
+| I6 containers and networks | Generic strict bounded names with all five environment-supplied names pairwise distinct | `ALIGNED` |
+| Evidence and temporary directories | Generated from run ID/attempt under exact runner-temp boundaries, with bounded contents and allowlists | `ALIGNED` |
+| Cleanup | Uses exact environment references and requires ownership labels plus exact image, container, and network IDs before removal | `ALIGNED` |
+| Candidate helper chain | No other executable validation-only namespace regex found | `ALIGNED` |
+
+This is a commit-boundary result only. I8-C3 hosted Source Validation, Image
+Validation, and Candidate Publication are all `PENDING`; the GHCR digest,
+signature, and attestations remain `NOT_CREATED`.
 
 ## Read-only external observations and no-deploy boundary
 
@@ -393,13 +426,14 @@ package-setting, registry-delete, or mutable-promotion operation. External
 caller/proxy/firewall/egress/secret topology and deployed digest remain
 `UNVERIFIED`; production readiness remains `UNVERIFIED`.
 
-The I8-C2A authorization permits exactly one remaining corrective commit and one
+The I8-C3 authorization permits exactly one remaining corrective commit and one
 normal non-force push to the existing candidate branch. It does not permit a
-`main` push, PR, merge, force-push, any further corrective push, release, Git
-tag, mutable image tag, deployment, SSH/VPS operation, registry overwrite/
-delete, or repository/environment/secret/branch-policy setting change.
+`main` push, PR, merge, force-push, any later corrective commit or push,
+release, Git tag, mutable image tag, deployment, SSH/VPS operation, registry
+overwrite/delete, or repository/environment/secret/branch-policy setting
+change.
 
-The C2A corrective push must automatically trigger Source Validation, Image
+The C3 corrective push must automatically trigger Source Validation, Image
 Validation, and Candidate Publication. Until all three exact-SHA runs and every
 publication/attestation/evidence/cleanup gate are green, no hosted publication
 or signing success claim is valid.

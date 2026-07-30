@@ -51,21 +51,29 @@
   failed verification it is `I8_CANDIDATE_ATTESTATION_UNVERIFIED`. Published
   content is preserved for audit and is never overwritten, deleted, promoted,
   or deployed by this workflow.
-- I8-C1 is exact commit
-  `c9a7c93120c4e643907d5f44ddb95b14b9f50e5d`; hosted Source run
-  `30222271889` and Image run `30222271890` are `SUCCESS`. Candidate
-  Publication run `30222271939` is `FAILURE` at
-  `runtime_identity_failure:image_ref_invalid`. Registry login, push, and
-  attestation were skipped. No registry side effect exists; GHCR digest,
-  signature, and provenance/SBOM attestations are `NOT_CREATED`.
-- C2 direct-source review proved that a namespace-only correction would still
-  pass a GHCR digest to the local-only helper during the later round trip.
-  I8-C2A authorizes one remaining corrective commit and one normal non-force
-  push to the existing candidate branch only. Its Source, Image, and Candidate
-  Publication results are `PENDING` at the commit boundary. `main`, PR, merge,
-  force-push, any further correction, release/Git tag, mutable registry tag,
-  deploy, and repository settings remain outside authority. Production
-  readiness and external topology remain `UNVERIFIED`.
+- I8-C2A is exact commit
+  `8df4d0d9972ce0a066ef0e630479f7367bc39938`; hosted Source run
+  `30224324987` and Image run `30224324996` are `SUCCESS`. Candidate
+  Publication run `30224324993` is `FAILURE` at
+  `runtime_resource_contract_failure:container_reference_invalid`. Registry
+  login, push, and attestation were skipped, and the candidate tag/package are
+  absent. No registry side effect exists; GHCR digest, signature, and
+  provenance/SBOM attestations are `NOT_CREATED`.
+- The C3 audit found I4's main-container validator to be the sole executable
+  validation-only namespace drift. The correction accepts only the full-string,
+  128-byte-bounded validation/publication forms. I2 image aliases remain exact
+  dual namespace; I2 probe and I6 container/network names remain generic,
+  strict, bounded, and distinct; per-run evidence/temp paths remain bounded;
+  cleanup still requires exact environment references, ownership labels, and
+  exact image/container/network identities. No other executable
+  validation-only regex exists in the Candidate helper chain.
+- The focused C3 lane is green at 686/686 across 12 files. I8-C3 authorizes
+  exactly one corrective commit and one normal non-force push to the existing
+  candidate branch only. Its Source, Image, and Candidate Publication results
+  are `PENDING` at the commit boundary. `main`, PR, merge, force-push, any later
+  correction, release/Git tag, mutable registry tag, deploy, and repository
+  settings remain outside authority. Production readiness and external
+  topology remain `UNVERIFIED`.
 - The exact-SHA candidate workflow is the reviewed trust assumption needed to
   keep build, complete gate, push, and attestation in one job without an
   image-tar transfer.

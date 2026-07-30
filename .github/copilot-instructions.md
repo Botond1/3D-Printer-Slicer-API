@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Copilot Instructions
 
-Last synchronized: 2026-07-26
+Last synchronized: 2026-07-30
 
 ## Architecture Notice
 This project uses both GitHub Copilot and Claude as primary agentic tools.
@@ -36,12 +36,26 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`.
 - Publication is not deployment. Preserve and classify any partial published
   candidate; never overwrite, delete, promote, or deploy it.
-- Pre-correction local and remote HEAD are
-  `c49bfc698d4d41041e6216c76a11144ffb386183`; hosted Source run
-  `30163991878` and Image run `30163991870` are `SUCCESS`. One normal
-  non-force corrective push to the existing I8 branch is authorized; its exact
-  Source/Image/Publication runs are pending. No registry side effect exists;
-  candidate digest, signature, and attestations are `NOT_CREATED`.
+- The current committed C2A boundary is
+  `8df4d0d9972ce0a066ef0e630479f7367bc39938`. Hosted Source run
+  `30224324987` and Image run `30224324996` are `SUCCESS`; Candidate run
+  `30224324993` is `FAILURE` at
+  `runtime_resource_contract_failure:container_reference_invalid`. Registry
+  login, push, and attestation were skipped; the candidate tag/package are
+  absent, so no registry side effect exists.
+- C3 corrects the sole namespace drift: the I4 main-container contract now
+  accepts only the full-string, 128-byte-bounded `s3a-validation-<run>-<attempt>`
+  and `s3a-publication-<run>-<attempt>` forms. I2 image aliases already use the
+  exact dual namespace; I2 probe and I6 container/network names remain generic,
+  strict, bounded, and distinct; per-run evidence/temp paths remain bounded;
+  cleanup remains bound to exact environment references, ownership labels, and
+  exact image/container/network identities. No other executable
+  validation-only regex exists in the Candidate helper chain.
+- The focused C3 lane is green at 686/686 across 12 files. Exactly one C3
+  commit and one normal non-force push are authorized; C3 hosted
+  Source/Image/Candidate results remain `PENDING` at the commit boundary.
+  Candidate digest, signature, and attestations remain `NOT_CREATED`, and no
+  later correction is authorized.
 - Preserve the no-`main`, no-PR/merge/force-push, no-release/Git-tag, no
   mutable-image-tag, no-deploy, and no-repository-setting-change boundary.
 

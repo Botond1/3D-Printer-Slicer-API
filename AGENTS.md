@@ -21,13 +21,14 @@ Canonical Codex knowledge:
 
 The I8 branch starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. I8-C1 is exact commit
-`c9a7c93120c4e643907d5f44ddb95b14b9f50e5d`. Its hosted Source run
-`30222271889` and Image run `30222271890` are `SUCCESS`; Candidate Publication
-run `30222271939` is `FAILURE` at
-`runtime_identity_failure:image_ref_invalid`. Registry login, push, and
-attestation were skipped, so C1 created no registry, signature, or attestation
-side effect.
+`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C2A
+commit `8df4d0d9972ce0a066ef0e630479f7367bc39938`. Its hosted Source run
+`30224324987` and Image run `30224324996` are `SUCCESS`; Candidate Publication
+run `30224324993` is `FAILURE` at
+`runtime_resource_contract_failure:container_reference_invalid`. Registry
+login, push, and attestation were skipped, and the candidate tag and GHCR
+package are absent. C2A therefore created no registry, signature, or
+attestation side effect.
 
 I8-C1 narrowly resolves the default-branch `workflow_dispatch` registration
 blocker. Candidate Publication retains its exact manual input contract for
@@ -65,27 +66,45 @@ bounded and fail closed, and its final aggregator distinguishes
 `BLOCKED_I8_PREPUBLICATION_GATE`, `I8_CANDIDATE_PUBLISHED_UNATTESTED`, and
 `I8_CANDIDATE_ATTESTATION_UNVERIFIED`.
 
-The C1 failure was a helper/action namespace drift: the shared action accepted
-the exact run-local `validation` and `publication` namespaces, while the
-runtime-identity helper accepted only `validation`. C2 direct-source review
-then found that the original correction would still pass a GHCR digest to the
-local-only helper during the post-publication round trip. I8-C2A admits exactly
-the two local namespaces and keeps registry, digest, mutable, third-namespace,
-and injection-shaped references rejected. After a digest pull is proved to
-have the gated image ID, it recreates the exact candidate-scoped local
-publication alias. The runtime helper and container use that alias; Orca uses
-the independently checked exact image ID for the same image. Production
-Compose, registry identity, signature, attestation, verification, and evidence
-remain bound to the exact registry digest.
+The historical C1 failure was helper/action image-alias namespace drift.
+I8-C2A corrected that seam and preserves the exact separation between the
+candidate-scoped local runtime alias and the canonical registry digest. After a
+digest pull is proved to have the gated image ID, the helper and runtime
+container use `local/slicer-api-publication:<40-lowercase-sha>`; Orca uses the
+independently checked exact image ID. Production Compose, registry identity,
+signature, attestation, verification, and evidence remain bound to the exact
+registry digest.
 
-Exactly one C2A corrective commit and one normal non-force push to the existing
-I8 branch remain authorized. The commit's last non-empty line must be the exact
-trailer above; that push, not a manual dispatch attempt, must trigger Source
-Validation, Image Validation, and Candidate Publication for the C2A SHA. All
-three C2A hosted results remain `PENDING` at the commit boundary. No hosted
-publication, digest, signature, or attestation success is claimed. No further
-corrective push, `main` change, PR, merge, force-push, release, Git tag, mutable
-registry tag, deploy, or repository-setting change is authorized.
+C2A then failed at the I4 main-container name contract: the Candidate workflow
+supplied `s3a-publication-<run-id>-<run-attempt>`, while
+`scripts/i4-image-runtime-envelope.js` admitted only the validation namespace.
+The I8-C3 correction admits exactly the full-string
+`s3a-(validation|publication)-<decimal-run-id>-<decimal-run-attempt>` forms
+with a 128-byte maximum. The complete executable namespace audit records:
+
+- I2 image aliases use exactly the local `validation` and `publication`
+  namespaces.
+- I4's main container was the sole validation-only drift and now uses the exact
+  two-namespace, full-string, bounded contract.
+- I2 probe names remain generic, strict, bounded, and distinct where required.
+- I6 container and network names remain generic, strict, bounded, and pairwise
+  distinct.
+- Evidence and temporary directories are generated per run and remain bounded.
+- Cleanup uses exact environment references and requires ownership labels plus
+  exact image, container, and network identities before removal.
+- No other executable validation-only regex exists in the Candidate helper
+  chain.
+
+The focused I8-C3 lane is green at 686/686 tests across 12 files. Exactly one
+C3 corrective commit and one normal non-force push to the existing I8 branch
+are authorized. The commit's last non-empty line must be the exact trailer
+above; that push, not a manual dispatch attempt, must trigger Source Validation,
+Image Validation, and Candidate Publication for the C3 SHA. All three I8-C3
+hosted results remain `PENDING` at the commit boundary. The GHCR digest,
+signature, and attestations remain `NOT_CREATED`; no hosted publication success
+is claimed. No later corrective commit or push, `main` change, PR, merge,
+force-push, release, Git tag, mutable registry tag, deploy, or
+repository-setting change is authorized.
 
 The exact-SHA candidate workflow is a reviewed trust assumption: build, full
 gate, push, and attestation remain in one job to preserve build identity

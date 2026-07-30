@@ -8,8 +8,13 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '../../..');
 const HELPER_PATH = path.join(ROOT, 'scripts/i4-image-runtime-envelope.js');
 const WORKFLOW_PATH = path.join(ROOT, '.github/actions/exact-image-gate/action.yml');
+const IMAGE_WORKFLOW_PATH = path.join(ROOT, '.github/workflows/image-validation.yml');
+const PUBLICATION_WORKFLOW_PATH = path.join(ROOT, '.github/workflows/candidate-publication.yml');
 const SOURCE = fs.readFileSync(HELPER_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const WORKFLOW = fs.readFileSync(WORKFLOW_PATH, 'utf8').replace(/\r\n?/g, '\n');
+const IMAGE_WORKFLOW = fs.readFileSync(IMAGE_WORKFLOW_PATH, 'utf8').replace(/\r\n?/g, '\n');
+const PUBLICATION_WORKFLOW = fs.readFileSync(PUBLICATION_WORKFLOW_PATH, 'utf8')
+    .replace(/\r\n?/g, '\n');
 const envelope = require(HELPER_PATH);
 const {
     CONTAINER_PROBE_FAILURES
@@ -19,6 +24,8 @@ const IMAGE_ID = `sha256:${'b'.repeat(64)}`;
 const CONTAINER_ID = 'c'.repeat(64);
 const UID = 1001;
 const GID = 1002;
+const RUN_ID = '30224324993';
+const RUN_ATTEMPT = '1';
 
 function step(id, source = WORKFLOW) {
     const marker = `        id: ${id}`;
@@ -56,11 +63,59 @@ function inspectLine(overrides = {}) {
     ].map(JSON.stringify).join('\t');
 }
 
+function mainContainerName(source) {
+    const match = source.match(/^\s+CONTAINER_NAME:\s+([^\n]+)$/m);
+    assert.ok(match, 'missing workflow main container name');
+    return match[1]
+        .replace('${{ github.run_id }}', RUN_ID)
+        .replace('${{ github.run_attempt }}', RUN_ATTEMPT);
+}
+
+function namespaceContract(imageWorkflow = IMAGE_WORKFLOW,
+    publicationWorkflow = PUBLICATION_WORKFLOW,
+    validate = envelope.validateContainerReference) {
+    const validationName = mainContainerName(imageWorkflow);
+    const publicationName = mainContainerName(publicationWorkflow);
+    assert.equal(validationName, `s3a-validation-${RUN_ID}-${RUN_ATTEMPT}`);
+    assert.equal(publicationName, `s3a-publication-${RUN_ID}-${RUN_ATTEMPT}`);
+    assert.notEqual(validationName, publicationName);
+    assert.equal(validate(validationName), validationName);
+    assert.equal(validate(publicationName), publicationName);
+    for (const rejected of [
+        `s3a-production-${RUN_ID}-${RUN_ATTEMPT}`,
+        `s3a-publish-${RUN_ID}-${RUN_ATTEMPT}`,
+        `s3a-anything-${RUN_ID}-${RUN_ATTEMPT}`,
+        `s3a-validation-${RUN_ID}`,
+        `s3a-publication--${RUN_ATTEMPT}`,
+        `s3a-validation-${RUN_ID}-${RUN_ATTEMPT}-extra`,
+        `s3a-validation--${RUN_ID}-${RUN_ATTEMPT}`,
+        `s3a-validation-${RUN_ID}.1-${RUN_ATTEMPT}`,
+        `s3a-validation-0x10-${RUN_ATTEMPT}`,
+        `s3a-validation-${RUN_ID}-A`,
+        `s3a-validation-${RUN_ID}-${RUN_ATTEMPT} `,
+        `s3a-publication-${RUN_ID}-${RUN_ATTEMPT}\n`,
+        `s3a-publication/${RUN_ID}-${RUN_ATTEMPT}`,
+        `s3a-publication:${RUN_ID}-${RUN_ATTEMPT}`,
+        `s3a-publication-${RUN_ID}-${RUN_ATTEMPT};docker`,
+        `other-publication-${RUN_ID}-${RUN_ATTEMPT}`,
+        `s3a-publication-${'9'.repeat(200)}-${RUN_ATTEMPT}`
+    ]) assert.throws(() => validate(rejected), { message: 'container_reference_invalid' });
+}
+
+function publicationNamespaceContract(source) {
+    namespaceContract(IMAGE_WORKFLOW, source);
+}
+
 function helperContract(source) {
     for (const anchor of [
         "spawnSync(command, args,", 'shell: false', 'timeout: options.timeout || DOCKER_TIMEOUT_MS',
         'maxBuffer: MAX_COMMAND_BYTES', "IMAGE_ID_PATTERN = /^sha256:[0-9a-f]{64}$/",
         "CONTAINER_ID_PATTERN = /^[0-9a-f]{64}$/", "'container', 'inspect', '--format'",
+        "CONTAINER_REFERENCE_PATTERN = /^s3a-(?:validation|publication)-[0-9]+-[0-9]+$/",
+        'MAX_CONTAINER_REFERENCE_BYTES = 128',
+        "Buffer.byteLength(reference, 'utf8') > MAX_CONTAINER_REFERENCE_BYTES",
+        'const reference = validateContainerReference(env.CONTAINER_NAME);',
+        'record.image !== expected.imageId',
         "'container', 'exec', '--user'", "'run', '--rm', '--pull', 'never', '--network', 'none'",
         "'--cap-drop', 'ALL'", "'--security-opt', 'no-new-privileges'", "'--read-only'",
         "'--pids-limit', '64'", "'--memory', '1g'", "'--memory-swap', '1g'",
@@ -159,6 +214,10 @@ function workflowContract(source) {
     assert.match(final, /process\.exit\(1\)/);
 }
 
+test('validation and publication workflows share the exact I4 main-container namespace validator', () => {
+    namespaceContract();
+});
+
 test('runtime inspect accepts only the exact read-only resource and tmpfs envelope', () => {
     const record = envelope.parseInspectOutput(inspectLine());
     assert.doesNotThrow(() => envelope.assertRuntimeInspect(record, {
@@ -239,6 +298,24 @@ test('runtime-envelope and final-aggregation weakening mutations are rejected', 
             '', workflowContract],
         ['final smoke aggregation bypassed', WORKFLOW,
             "process.env.SMOKE_OUTCOME !== 'success'", 'false', workflowContract],
+        ['validation-only namespace restored', SOURCE,
+            '(?:validation|publication)', 'validation', helperContract],
+        ['production namespace admitted', SOURCE,
+            '(?:validation|publication)', '(?:validation|publication|production)', helperContract],
+        ['arbitrary namespace admitted', SOURCE,
+            '(?:validation|publication)', '[a-z]+', helperContract],
+        ['optional namespace admitted', SOURCE,
+            '(?:validation|publication)', '(?:validation|publication)?', helperContract],
+        ['workflow/helper publication mismatch', PUBLICATION_WORKFLOW,
+            's3a-publication-${{ github.run_id }}-${{ github.run_attempt }}',
+            's3a-candidate-${{ github.run_id }}-${{ github.run_attempt }}',
+            publicationNamespaceContract],
+        ['publication workflow renamed to validation', PUBLICATION_WORKFLOW,
+            's3a-publication-${{ github.run_id }}-${{ github.run_attempt }}',
+            's3a-validation-${{ github.run_id }}-${{ github.run_attempt }}',
+            publicationNamespaceContract],
+        ['exact image identity removed', SOURCE,
+            'record.image !== expected.imageId', 'false', helperContract],
         ['helper shell enabled', SOURCE, 'shell: false', 'shell: true', helperContract],
         ['malformed UID accepted', SOURCE, "['slicer', String(gid)]",
             "[String(uid), String(gid)]", helperContract],

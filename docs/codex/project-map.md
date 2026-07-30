@@ -39,32 +39,34 @@
   preflight and normal Image Validation have only `contents: read`.
 - `scripts/i8-publication-evidence.js` and
   `scripts/i8-write-publication-evidence.js` define the exact-key bounded
-  `i8-s3a-signed-candidate-provenance-v2` correlation contract. The C2A direct
-  helper/publication lane is green at 162/162, and the exact npm 10.9.8
-  focused/adapted and shared Image Validation lane is green at 663/663 tests
-  across 11 files.
-- I8-C1 is exact commit
-  `c9a7c93120c4e643907d5f44ddb95b14b9f50e5d`. Hosted Source run
-  `30222271889` and Image run `30222271890` succeeded. Candidate Publication
-  run `30222271939` failed at
-  `runtime_identity_failure:image_ref_invalid`; login, push, and attestation
-  were skipped, so no registry side effect exists.
-- The C1 failure was helper/action namespace drift: the shared action accepted
-  only the exact local `validation` and `publication` namespaces, while
-  `scripts/i2-image-runtime-diagnostics.js` accepted only `validation`.
-- C2 direct-source review proved that the two-namespace correction alone would
-  still pass a GHCR digest to the local-only helper. C2A creates the exact local
-  publication alias only after digest-pulled/gated image-ID equality, rechecks
-  the alias ID, uses the proven image for helper/Orca/container smoke, and keeps
-  Compose plus registry/signature/attestation/verification/evidence digest-bound.
-- Exactly one C2A corrective commit and one normal non-force push remain
+  `i8-s3a-signed-candidate-provenance-v2` correlation contract. The focused
+  I8-C3 lane is green at 686/686 tests across 12 files.
+- I8-C2A is exact commit
+  `8df4d0d9972ce0a066ef0e630479f7367bc39938`. Hosted Source run
+  `30224324987` and Image run `30224324996` succeeded. Candidate Publication
+  run `30224324993` failed at
+  `runtime_resource_contract_failure:container_reference_invalid`; registry
+  login, push, and attestation were skipped, and the candidate tag/package are
+  absent, so no registry side effect exists.
+- C2A preserves the exact local publication alias only after
+  digest-pulled/gated image-ID equality and keeps Compose plus registry,
+  signature, attestation, verification, and evidence digest-bound.
+- The C3 namespace audit found I4's main-container validator to be the sole
+  validation-only drift. It is corrected to the exact full-string,
+  128-byte-bounded validation/publication contract. I2 aliases are exact dual
+  namespace; I2 probes and I6 container/network names remain generic, strict,
+  bounded, and distinct; evidence/temp directories remain per-run and bounded;
+  cleanup remains bound to exact environment references, ownership labels, and
+  exact image/container/network identities. No other executable
+  validation-only regex exists in the Candidate helper chain.
+- Exactly one C3 corrective commit and one normal non-force push remain
   authorized. The commit's last non-empty line must be the exact authorization
   trailer above. Source Validation, Image Validation, and Candidate Publication
-  for C2A remain `PENDING` at the commit boundary; no publication, digest,
+  for C3 remain `PENDING` at the commit boundary; no publication, digest,
   signature, or attestation success is claimed.
 - `main`, PR, merge, force-push, release/Git tag, mutable registry tag, deploy,
   and repository-setting changes remain forbidden; no further corrective push
-  is authorized after C2A.
+  is authorized after C3.
 - The exact-SHA candidate workflow is the reviewed trust assumption because
   build, gate, and push must share one job without a multi-GiB image-tar
   transfer. No deploy, promotion, mutable tag, VPS, proxy, firewall, secret,

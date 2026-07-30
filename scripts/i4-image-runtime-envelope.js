@@ -12,6 +12,8 @@ const {
 
 const IMAGE_ID_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const CONTAINER_ID_PATTERN = /^[0-9a-f]{64}$/;
+const CONTAINER_REFERENCE_PATTERN = /^s3a-(?:validation|publication)-[0-9]+-[0-9]+$/;
+const MAX_CONTAINER_REFERENCE_BYTES = 128;
 const POSITIVE_ID_PATTERN = /^[1-9][0-9]*$/;
 const MAX_COMMAND_BYTES = 128 * 1024;
 const DOCKER_TIMEOUT_MS = 12 * 60 * 1000;
@@ -36,6 +38,13 @@ function parsePositiveId(value, label) {
     const numeric = Number(text);
     if (!Number.isSafeInteger(numeric) || numeric <= 0) fail(`${label}_invalid`);
     return numeric;
+}
+
+function validateContainerReference(value) {
+    const reference = String(value || '');
+    if (Buffer.byteLength(reference, 'utf8') > MAX_CONTAINER_REFERENCE_BYTES
+        || !CONTAINER_REFERENCE_PATTERN.test(reference)) fail('container_reference_invalid');
+    return reference;
 }
 
 function run(command, args, options = {}) {
@@ -476,8 +485,7 @@ function main(env = process.env) {
     if (!IMAGE_ID_PATTERN.test(imageId)) fail('expected_image_id_invalid');
     const uid = parsePositiveId(env.SERVICE_UID, 'service_uid');
     const gid = parsePositiveId(env.SERVICE_GID, 'service_gid');
-    const reference = String(env.CONTAINER_NAME || '');
-    if (!/^s3a-validation-[0-9]+-[0-9]+$/.test(reference)) fail('container_reference_invalid');
+    const reference = validateContainerReference(env.CONTAINER_NAME);
 
     const record = inspectContainer(reference);
     assertRuntimeInspect(record, { imageId, uid, gid });
@@ -515,6 +523,7 @@ module.exports = {
     expectedTmpfs,
     parseInspectOutput,
     parsePositiveId,
+    validateContainerReference,
     assertRuntimeInspect,
     parseProbeOutput,
     proveMalformedIdentityRejected,

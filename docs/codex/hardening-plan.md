@@ -2,16 +2,17 @@
 
 ## I8/S3a signed-candidate publication checkpoint
 
-Status: `IN_PROGRESS`; I8-C1 failed prepublication and I8-C2A is pending its
+Status: `IN_PROGRESS`; I8-C2A failed prepublication and I8-C3 is pending its
 single corrective commit/push.
 
 The I8 branch starts from exact baseline
-`c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6`. I8-C1 is exact commit
-`c9a7c93120c4e643907d5f44ddb95b14b9f50e5d`. Source run `30222271889`
-and Image run `30222271890` are `SUCCESS`; Candidate Publication run
-`30222271939` is `FAILURE` at
-`runtime_identity_failure:image_ref_invalid`. Login, push, and attestation were
-skipped, so no registry side effect exists.
+`c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6`. The current committed boundary is
+I8-C2A commit `8df4d0d9972ce0a066ef0e630479f7367bc39938`. Source run
+`30224324987` and Image run `30224324996` are `SUCCESS`; Candidate Publication
+run `30224324993` is `FAILURE` at
+`runtime_resource_contract_failure:container_reference_invalid`. Registry
+login, push, and attestation were skipped, and the candidate tag/package are
+absent, so no registry side effect exists.
 
 Implemented on the branch:
 
@@ -35,6 +36,9 @@ Implemented on the branch:
   local publication alias for the runtime-identity helper and container;
 - exact two-namespace local helper validation for only `validation` and
   `publication`, aligned with the shared action;
+- exact I4 main-container validation for only
+  `s3a-(validation|publication)-<decimal-run-id>-<decimal-run-attempt>`, with a
+  full-string regex and 128-byte maximum;
 - alias-bound kernel identity and liveness, exact-image-ID Orca smoke, and
   digest-pinned production-Compose validation, with registry, signature,
   attestation, verification, and evidence identity also digest-pinned;
@@ -43,23 +47,22 @@ Implemented on the branch:
 - bounded I8 provenance v2, explicit partial-publication classifications,
   allowlisted upload, exact cleanup, and final fail-closed aggregation.
 
-The C2A direct helper/publication lane is green at 162/162. The exact npm
-10.9.8 focused/adapted and shared Image Validation contract lane is green at
-663/663 across 11 files. Syntax, tracked
-repository-safety, instruction mirrors, working-tree/candidate-range
-whitespace, and actionlint are green. Staged safety and the post-commit exact
-candidate-range check remain pre-push gates. The C1 hosted failure was a
-helper/action namespace drift: the shared action accepted local `validation`
-and `publication`, but `scripts/i2-image-runtime-diagnostics.js` accepted only
-`validation`. C2 direct-source review additionally proved that the proposed
-round trip would pass a GHCR digest to the local-only helper. C2A corrects both
-seams; no local result proves hosted publication.
+The focused I8-C3 lane is green at 686/686 across 12 files. The executable
+namespace audit found I4's validation-only main-container regex to be the sole
+drift. I2 image aliases already use the exact dual namespace; I2 probe names
+are generic, strict, bounded, and distinct where required; I6 container/network
+names are generic, strict, bounded, and pairwise distinct; evidence/temp
+directories are generated per run and bounded; and cleanup uses exact
+environment references plus ownership labels and exact image/container/network
+identities. No other executable validation-only regex exists in the Candidate
+helper chain. C2A's local-alias versus registry-digest separation remains
+unchanged; no local result proves hosted publication.
 
 Open exit gates:
 
-1. Complete C2A local/staged safety and the post-commit exact candidate-range
+1. Complete C3 local/staged safety and the post-commit exact candidate-range
    whitespace gate.
-2. Create exactly one C2A corrective commit whose last non-empty line is
+2. Create exactly one C3 corrective commit whose last non-empty line is
    `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
 3. Perform exactly one normal non-force push to the existing I8 branch and
    prove the new remote SHA plus baseline ancestry. Do not attempt manual
@@ -71,10 +74,10 @@ Open exit gates:
    bounded artifact identity, exact cleanup, and final aggregator success.
 
 Until all exits are green: candidate tag/digest `NOT_CREATED`; signature
-`NOT_CREATED`; attestations `NOT_CREATED`; C2A hosted I8 evidence `PENDING` at
+`NOT_CREATED`; attestations `NOT_CREATED`; C3 hosted I8 evidence `PENDING` at
 the commit boundary; deployment `NOT_RUN`; external topology and production
 readiness `UNVERIFIED`. No `main` change, PR, merge, force-push, further
-corrective push after C2A, release/Git tag, mutable image tag, deploy, or
+corrective push after C3, release/Git tag, mutable image tag, deploy, or
 repository-setting change is authorized.
 The exact-SHA candidate workflow remains the reviewed trust assumption needed
 for the same-job no-tar build/gate/push identity constraint.
@@ -214,7 +217,7 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1b - queue deadlines and abort contract | `VERIFIED` | S1a workspace ownership | integrated queue scheduling/deadline/counter/runtime lifecycle | Independent deadlines, request/shutdown AbortSignal propagation, typed `SLICE_QUEUE_SHUTDOWN`, single settlement, active-slot retention, and timer/listener/counter/workspace cleanup have deterministic local evidence. |
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `IN_PROGRESS` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | I3 implements a bounded Node HTTP-server subset; resource/archive, artifact/pricing, and container-permission exits remain open | I3 locally implements and focuses tests on header/request/keep-alive timeouts, header/connection counts, and requests/socket with bounded fallback. Final aggregate and exact-SHA evidence are pending; measured VPS/proxy/CPU/RAM/PID/disk/archive/model/output caps, streaming limits, artifact retention/correlation, atomic pricing, and read-only state separation remain incomplete. |
-| S3a - repository build/provenance and automatic-deploy separation | `IN_PROGRESS` | S0.1; exact hosted I7 baseline green | I8 factors one shared build-once gate and adds least-privilege digest-bound GHCR publication, attestations, verification, bounded v2 evidence, no-deploy aggregation, and an I8-C1 exact-branch push adapter while retaining manual dispatch | At C1 `c9a7c93120c4e643907d5f44ddb95b14b9f50e5d`, Source `30222271889` and Image `30222271890` succeeded; Candidate `30222271939` failed prepublication at `runtime_identity_failure:image_ref_invalid`, with login/push/attest skipped and no registry side effect. C2 direct-source review exposed the additional digest-to-local-helper conflict. C2A keeps the helper local-only, recreates its exact alias only after digest-pulled/gated image-ID equality, uses that proven image for helper/Orca/container smoke, and keeps Compose plus registry/signature/attestation/verification/evidence digest-bound. One C2A corrective commit/push remains, and its hosted results are `PENDING` at the commit boundary. GHCR digest/signature/attestations remain `NOT_CREATED`; S3b/deployed topology/readiness/rollback remain unverified or not started. |
+| S3a - repository build/provenance and automatic-deploy separation | `IN_PROGRESS` | S0.1; exact hosted I7 baseline green | I8 factors one shared build-once gate and adds least-privilege digest-bound GHCR publication, attestations, verification, bounded v2 evidence, no-deploy aggregation, and an I8-C1 exact-branch push adapter while retaining manual dispatch | At C2A `8df4d0d9972ce0a066ef0e630479f7367bc39938`, Source `30224324987` and Image `30224324996` succeeded; Candidate `30224324993` failed prepublication at `runtime_resource_contract_failure:container_reference_invalid`, with login/push/attest skipped, candidate tag/package absent, and no registry side effect. C3 corrects only I4's validation-only main-container regex to the exact bounded validation/publication contract while preserving C2A's local-alias/digest separation. The focused lane is 686/686 across 12 files. One C3 corrective commit/push remains, and its hosted results are `PENDING` at the commit boundary. GHCR digest/signature/attestations remain `NOT_CREATED`; S3b/deployed topology/readiness/rollback remain unverified or not started. |
 | S4 - service trust and topology | `IN_PROGRESS` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | I5 supplies scoped trust; I6 selects the internal private-peer/no-host-port topology | Repository validation requires authenticated peer ingress, auth rejection, no API external route, and calibrated API/native DNS/TCP/UDP denial. Deployed callers, proxy/firewall, secrets, digest, and egress remain `UNVERIFIED`. |
 | S3b - staging and promotion drill | `NOT_STARTED` | S3a evidence; S4 evidence; separate explicit user/owner authorization | staging/promotion/readiness/rollback drill only | Promote a verified immutable artifact through a human-authorized staging gate; readiness is bounded and meaningful; failure restores the prior artifact; the drill is recorded. No authorization or verification is inferred from S1a/S3a/S4 repository work. |
 | S5 - topology/optional async worker decision | `IN_PROGRESS` | I5 trust controls and S4 topology evidence | private-peer topology selected; async API/worker deferred | `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`. Complete exact deployed caller, proxy, secret, digest, firewall, and egress evidence without changing current endpoints. |
