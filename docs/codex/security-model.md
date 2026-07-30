@@ -83,6 +83,16 @@
   bundle must reject it. This reaches signature subject-digest policy instead
   of conflating a nonexistent registry manifest with cryptographic rejection;
   exact cleanup includes the probe and bounded error record.
+- C5 commit `5aef62386992f0dcab48b82e87c275e7dff1f291` has green Source/Image
+  runs and a quarantined exact digest
+  `sha256:fe546f2cd382089a167c4dff721a69bab1e5737b4da31bd0a37558f1f930f639`.
+  Both attestations were created, but Candidate run `30590102061` classified
+  `I8_CANDIDATE_ATTESTATION_UNVERIFIED`: the Node policy read an unbound
+  `REGISTRY_DIGEST` after the verifier commands.
+- C6 binds only `${{ steps.registry_push.outputs.registry_digest }}` into that
+  step and makes removal mutation-sensitive. It does not weaken the signed
+  subject comparison or substitute `DIGEST_REF`; every other heredoc input was
+  audited as supplied.
 - I8-C3 is exact commit
   `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`; hosted Source run
   `30545194526` and Image run `30545194494` are `SUCCESS`, with Image artifact
@@ -108,14 +118,24 @@
 - The historical focused C3 lane is green at 686/686 across 12 files.
   Post-correction C4 evidence is 734/734 affected tests, full JavaScript
   1296/1296, and Python 42/43 pass with one expected Windows POSIX-permission
-  skip. Local Docker is `NOT_RUN_ENVIRONMENT`. I8-C4 authorizes exactly one
-  corrective commit and one
-  normal non-force push to the existing candidate branch only. The replacement
-  Source, Image, and Candidate Publication results are `PENDING` at this commit
-  boundary. `main`, PR, merge, force-push, later correction, old-tag mutation,
-  release/Git tag, mutable registry tag, deploy, and repository settings remain
-  outside authority. Production readiness and external topology remain
-  `UNVERIFIED`.
+  skip. C5 Source run `30590102069` and Image run `30590102077` succeeded.
+  Candidate run `30590102061` published and attested immutable digest
+  `sha256:fe546f2cd382089a167c4dff721a69bab1e5737b4da31bd0a37558f1f930f639`,
+  then failed closed because its verification step did not bind the exact
+  registry digest used by a local policy check. C6 binds only that existing
+  `registry_push` output, with step-local contract and mutation coverage. C6
+  also corrects a direct-source-proven cleanup gap: action-created bundle files
+  are accepted only as regular `attestation.json` files below canonical,
+  direct-child runner-temp directories, and both each file and its exact parent
+  must be removed and absent. Containment and parent-removal mutations fail
+  closed.
+  Replacement exact-SHA hosted results are `PENDING` at this commit boundary.
+  Local Docker is `NOT_RUN_ENVIRONMENT`. The current user authority permits
+  staged corrective commits and normal non-force pushes to the existing
+  candidate branch until the signed-candidate workflow is green. `main`, PR,
+  merge, force-push, old-tag mutation, release/Git tag, mutable registry tag,
+  deploy, and repository settings remain outside authority. Production
+  readiness and external topology remain `UNVERIFIED`.
 - The exact-SHA candidate workflow is the reviewed trust assumption needed to
   keep build, complete gate, push, and attestation in one job without an
   image-tar transfer.

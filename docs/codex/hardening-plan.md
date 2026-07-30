@@ -2,24 +2,25 @@
 
 ## I8/S3a signed-candidate publication checkpoint
 
-Status: `IN_PROGRESS`; I8-C4 published an unattested quarantined candidate and
-I8-C5 restores the verified digest-runtime entrypoint contract.
+Status: `IN_PROGRESS`; I8-C5 published an attested but not fully verified
+quarantined candidate, and I8-C6 restores the exact verification digest binding
+plus exact action-created attestation-bundle parent cleanup.
 
 The I8 branch starts from exact baseline
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6`. The current committed boundary is
-I8-C4 commit `bf3e182455a99686f29450f7f1494929995ec5b5`. Source run
-`30588960830` and Image run `30588960851` are `SUCCESS`. Candidate Publication
-run `30588960869` is `FAILURE` after publication because the exact runtime
-exited `78` before attestations.
+I8-C5 commit `5aef62386992f0dcab48b82e87c275e7dff1f291`. Source run
+`30590102069` and Image run `30590102077` are `SUCCESS`. Candidate Publication
+run `30590102061` is `FAILURE` after publication, digest runtime success, and
+both attestations because its Node policy lacked `REGISTRY_DIGEST`.
 
 The quarantined discovery tag
-`candidate-bf3e182455a99686f29450f7f1494929995ec5b5` remains at manifest digest
-`sha256:d583a13847b4f45cc947d41fd0793597d61ed75d76712479923ba0c039f37718`
+`candidate-5aef62386992f0dcab48b82e87c275e7dff1f291` remains at manifest digest
+`sha256:fe546f2cd382089a167c4dff721a69bab1e5737b4da31bd0a37558f1f930f639`
 and config identity
-`sha256:25e176fa32b2a5c060829a877c698c07f9bfaa43c78fcfcf1582851dd55982d1`.
-GitHub/OCI provenance and SBOM attestations and the candidate artifact are
-absent; publication and evidence cleanup succeeded. The classification is
-`I8_CANDIDATE_PUBLISHED_UNATTESTED`.
+`sha256:ae6ffe01c345219e9be3859d9019b3648a81ab22de30615f75a807e683377ecd`.
+Both attestations exist; full positive/negative verification and the candidate
+artifact are incomplete. Cleanup succeeded and the classification is
+`I8_CANDIDATE_ATTESTATION_UNVERIFIED`.
 
 Implemented on the branch:
 
@@ -78,9 +79,9 @@ publication.
 
 Open exit gates:
 
-1. Complete C5 local/staged safety and the post-commit exact candidate-range
+1. Complete C6 local/staged safety and the post-commit exact candidate-range
    whitespace gate.
-2. Create the C5 corrective commit whose last non-empty line is
+2. Create the C6 corrective commit whose last non-empty line is
    `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
 3. Perform a normal non-force push to the existing I8 branch and
    prove the new remote SHA plus baseline ancestry. Do not attempt manual
@@ -93,7 +94,7 @@ Open exit gates:
 
 Until all exits are green: all quarantined tags/digests are preserved
 unchanged; the replacement tag/digest, signature, attestations, and candidate
-artifact are `PENDING` at the C5 commit boundary; deployment is `NOT_RUN`;
+artifact are `PENDING` at the C6 commit boundary; deployment is `NOT_RUN`;
 external topology and production readiness are `UNVERIFIED`. No `main` change,
 PR, merge, force-push, old-tag mutation,
 release/Git tag, mutable image tag, deploy, or repository-setting change is
@@ -236,7 +237,7 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1b - queue deadlines and abort contract | `VERIFIED` | S1a workspace ownership | integrated queue scheduling/deadline/counter/runtime lifecycle | Independent deadlines, request/shutdown AbortSignal propagation, typed `SLICE_QUEUE_SHUTDOWN`, single settlement, active-slot retention, and timer/listener/counter/workspace cleanup have deterministic local evidence. |
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `IN_PROGRESS` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | I3 implements a bounded Node HTTP-server subset; resource/archive, artifact/pricing, and container-permission exits remain open | I3 locally implements and focuses tests on header/request/keep-alive timeouts, header/connection counts, and requests/socket with bounded fallback. Final aggregate and exact-SHA evidence are pending; measured VPS/proxy/CPU/RAM/PID/disk/archive/model/output caps, streaming limits, artifact retention/correlation, atomic pricing, and read-only state separation remain incomplete. |
-| S3a - repository build/provenance and automatic-deploy separation | `IN_PROGRESS` | S0.1; exact hosted I7 baseline green | I8 factors one shared build-once gate and adds least-privilege digest-bound GHCR publication, attestations, verification, bounded v2 evidence, no-deploy aggregation, and an I8-C1 exact-branch push adapter while retaining manual dispatch | C4 `bf3e182455a99686f29450f7f1494929995ec5b5` has green Source/Image runs and an immutable candidate at digest `sha256:d583a13847b4f45cc947d41fd0793597d61ed75d76712479923ba0c039f37718`, but the Candidate run stopped before attestations when the digest runtime exited `78`. C5 restores exact entrypoint resource/log parity and makes the wrong-digest proof registry-independent. Exact-SHA hosted verification remains; local Docker is `NOT_RUN_ENVIRONMENT`. S3b/deployed topology/readiness/rollback remain unverified or not started. |
+| S3a - repository build/provenance and automatic-deploy separation | `IN_PROGRESS` | S0.1; exact hosted I7 baseline green | I8 factors one shared build-once gate and adds least-privilege digest-bound GHCR publication, attestations, verification, bounded v2 evidence, no-deploy aggregation, and an I8-C1 exact-branch push adapter while retaining manual dispatch | C5 `5aef62386992f0dcab48b82e87c275e7dff1f291` has green Source/Image runs and published plus attested immutable digest `sha256:fe546f2cd382089a167c4dff721a69bab1e5737b4da31bd0a37558f1f930f639`; Candidate verification failed closed because the verification step did not bind the exact registry digest consumed by its local policy check. C6 adds that step-local binding and exact canonical bundle-file plus parent cleanup, with mutation coverage. Exact-SHA hosted verification remains; local Docker is `NOT_RUN_ENVIRONMENT`. S3b/deployed topology/readiness/rollback remain unverified or not started. |
 | S4 - service trust and topology | `IN_PROGRESS` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | I5 supplies scoped trust; I6 selects the internal private-peer/no-host-port topology | Repository validation requires authenticated peer ingress, auth rejection, no API external route, and calibrated API/native DNS/TCP/UDP denial. Deployed callers, proxy/firewall, secrets, digest, and egress remain `UNVERIFIED`. |
 | S3b - staging and promotion drill | `NOT_STARTED` | S3a evidence; S4 evidence; separate explicit user/owner authorization | staging/promotion/readiness/rollback drill only | Promote a verified immutable artifact through a human-authorized staging gate; readiness is bounded and meaningful; failure restores the prior artifact; the drill is recorded. No authorization or verification is inferred from S1a/S3a/S4 repository work. |
 | S5 - topology/optional async worker decision | `IN_PROGRESS` | I5 trust controls and S4 topology evidence | private-peer topology selected; async API/worker deferred | `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`. Complete exact deployed caller, proxy, secret, digest, firewall, and egress evidence without changing current endpoints. |

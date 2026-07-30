@@ -4,21 +4,21 @@
 
 I8 starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C4
-commit `bf3e182455a99686f29450f7f1494929995ec5b5`. Hosted Source run
-`30588960830` and Image run `30588960851` are `SUCCESS`. Candidate Publication
-run `30588960869` is `FAILURE` after publication: the exact runtime exited `78`
-with status `exited`, PID `0`, and unhealthy state before attestations.
+`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C5
+commit `5aef62386992f0dcab48b82e87c275e7dff1f291`. Hosted Source run
+`30590102069` and Image run `30590102077` are `SUCCESS`. Candidate Publication
+run `30590102061` is `FAILURE` after publication, digest runtime success, and
+both attestations because the positive Node policy lacked `REGISTRY_DIGEST`.
 
-The quarantined C4 discovery tag
-`candidate-bf3e182455a99686f29450f7f1494929995ec5b5` remains unchanged at
+The quarantined C5 discovery tag
+`candidate-5aef62386992f0dcab48b82e87c275e7dff1f291` remains unchanged at
 manifest digest
-`sha256:d583a13847b4f45cc947d41fd0793597d61ed75d76712479923ba0c039f37718`
+`sha256:fe546f2cd382089a167c4dff721a69bab1e5737b4da31bd0a37558f1f930f639`
 and config identity
-`sha256:25e176fa32b2a5c060829a877c698c07f9bfaa43c78fcfcf1582851dd55982d1`.
-GitHub and OCI provenance/SBOM attestations are absent, the candidate artifact
-is absent, and hosted publication cleanup plus evidence cleanup succeeded. The
-exact classification is `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
+`sha256:ae6ffe01c345219e9be3859d9019b3648a81ab22de30615f75a807e683377ecd`.
+Both attestations exist, but full verification and the candidate artifact are
+incomplete. Hosted publication and evidence cleanup succeeded. The exact
+classification is `I8_CANDIDATE_ATTESTATION_UNVERIFIED`.
 
 The pre-C1 root cause was limited to GitHub event registration:
 `workflow_dispatch` cannot start a workflow that is absent from the default
@@ -45,8 +45,16 @@ I8-C4 corrected the distinct detach/PID observation race, and its hosted run
 then exposed a separate deterministic entrypoint contract omission. I8-C5
 mirrors the shared exact-image runtime's dynamic UID/GID, PID/memory/CPU/log/
 stop expectations and Docker log rotation in the digest-roundtrip invocation.
-Replacement Source, Image, and Candidate Publication results are `PENDING` at
-this commit boundary. No signed-candidate success is claimed.
+Its Source run `30590102069` and Image run `30590102077` succeeded. Candidate
+run `30590102061` built, gated, published, pulled, and attested immutable digest
+`sha256:fe546f2cd382089a167c4dff721a69bab1e5737b4da31bd0a37558f1f930f639`,
+but failed closed before cryptographic verification because the verification
+step did not bind the registry digest consumed by its local policy check. I8-C6
+adds that exact step-local binding. It also corrects a direct-source-proven
+cleanup gap by deleting each action-created attestation bundle and its
+canonical direct-child runner-temp parent, with fail-closed type, containment,
+and absence checks. Replacement hosted results are `PENDING` at this commit
+boundary. No signed-candidate success is claimed.
 
 Current classifications:
 
@@ -83,8 +91,12 @@ Current classifications:
 | I8-C4 hosted Source/Image | `SUCCESS`, runs `30588960830` / `30588960851` |
 | I8-C4 Candidate Publication | `FAILURE`, run `30588960869`, after publishing digest `sha256:d583a13847b4f45cc947d41fd0793597d61ed75d76712479923ba0c039f37718` |
 | I8-C4 attestations/evidence | `ABSENT`; publication/evidence cleanup `SUCCESS` |
-| I8-C5 digest-runtime parity correction | `IMPLEMENTED_LOCAL_PENDING_COMMIT`; focused contract/mutation lane 350/350 |
-| I8-C5 replacement hosted Source/Image/Publication | `PENDING` at the commit boundary |
+| I8-C5 digest-runtime parity correction | `IMPLEMENTED_COMMITTED_HOSTED_ATTESTATION_PARTIAL` |
+| I8-C5 hosted Source/Image | `SUCCESS`, runs `30590102069` / `30590102077` |
+| I8-C5 Candidate Publication | `I8_CANDIDATE_ATTESTATION_UNVERIFIED`, run `30590102061`, digest/runtime/attestations succeeded; positive policy binding failed |
+| I8-C5 publication/evidence cleanup | workflow reported `SUCCESS`, but exact bundle-parent cleanup was incomplete; Candidate artifact absent |
+| I8-C6 verification binding and exact bundle-parent cleanup | `IMPLEMENTED_LOCAL_PENDING_COMMIT` |
+| I8-C6 replacement hosted Source/Image/Publication | `PENDING` at the commit boundary |
 | Deployment | `NOT_RUN_NO_DEPLOY` |
 | External topology / production readiness | `UNVERIFIED` |
 
@@ -278,9 +290,12 @@ subject digest, and predicate. Separate wrong-digest and wrong-repository
 probes must fail. An attestation ID or HTTP success alone is insufficient.
 
 No attestation was created or cryptographically verified by C1 or C2A. The C3
-candidate was published, but GitHub and OCI provenance/SBOM attestations remain
-absent because `digest_roundtrip` failed first. C4 replacement attestation and
-verification remain `PENDING` at the commit boundary.
+and C4 candidates were published without attestations because their
+digest-roundtrip gates failed first. C5 created GitHub/OCI provenance and SBOM
+attestations for its exact immutable digest, but verification failed closed
+when a local Node policy check read an unbound `REGISTRY_DIGEST` environment
+value. C6 binds the existing `registry_push` output only to that verification
+step; exact-SHA hosted verification remains `PENDING` at the commit boundary.
 
 ## I8 provenance v2 and evidence boundary
 
@@ -484,10 +499,16 @@ Post-correction affected tests pass 734/734; the complete JavaScript suite
 passes 1296/1296; Python ran 43 tests with 42 pass and one expected Windows
 POSIX-permission skip. Local Docker is `NOT_RUN_ENVIRONMENT`.
 
-This is a commit-boundary result only. I8-C4 replacement Source Validation,
-Image Validation, and Candidate Publication produced the C4 partial-publication
-result recorded above. I8-C5 hosted results are `PENDING`; no C5 digest,
-attestation, verification, artifact, or cleanup success is claimed.
+This is a commit-boundary result only. I8-C5 Source Validation run
+`30590102069` and Image Validation run `30590102077` succeeded. Candidate
+Publication run `30590102061` published digest
+`sha256:fe546f2cd382089a167c4dff721a69bab1e5737b4da31bd0a37558f1f930f639`,
+proved config ID
+`sha256:ae6ffe01c345219e9be3859d9019b3648a81ab22de30615f75a807e683377ecd`,
+and created both attestations before failing closed at verification. Candidate
+publication cleanup and evidence cleanup reported success, but a direct-source
+audit proved that two action-created empty bundle parent directories were not
+removed; no Candidate artifact was uploaded. I8-C6 hosted results are `PENDING`.
 
 ## I8-C5 digest-runtime entrypoint parity correction
 
@@ -529,7 +550,7 @@ release, Git tag, mutable image tag, old-tag mutation, deployment, SSH/VPS
 operation, registry overwrite/delete, or repository/environment/secret/
 branch-policy setting change.
 
-The C5 corrective push must automatically trigger Source Validation, Image
+The C6 corrective push must automatically trigger Source Validation, Image
 Validation, and Candidate Publication. Until all three exact-SHA runs and every
 publication/attestation/evidence/cleanup gate are green, no hosted publication
 or signing success claim is valid.

@@ -437,6 +437,7 @@ function validateContract(sources) {
     const verification = stepText(publication, 'verify_attestations');
     requireIncludes(verification, [
         'gh attestation verify', '--bundle-from-oci', '--bundle',
+        'REGISTRY_DIGEST: ${{ steps.registry_push.outputs.registry_digest }}',
         PROVENANCE_PREDICATE, SBOM_PREDICATE, '--cert-identity',
         '--source-digest', '--source-ref', '--repo "$GITHUB_REPOSITORY"',
         '.github/workflows/candidate-publication.yml',
@@ -559,7 +560,20 @@ function validateContract(sources) {
         'docker logout ghcr.io',
         'RUNTIME_IMAGE_REF: ${{ needs.preflight.outputs.image_ref }}',
         'for exact_ref in "$TAG_REF" "$RUNTIME_IMAGE_REF" "$DIGEST_REF"; do',
-        'if [ "$actual_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]; then'
+        'if [ "$actual_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]; then',
+        'runner_temp_real="$(realpath -e -- "$RUNNER_TEMP")"',
+        'case "$bundle" in "$RUNNER_TEMP"/*) ;; *) cleanup_status=1; continue ;; esac',
+        '[ "$(basename -- "$bundle")" != "attestation.json" ]',
+        '[ ! -f "$bundle" ] || [ -L "$bundle" ]',
+        '[ ! -d "$bundle_parent" ] || [ -L "$bundle_parent" ]',
+        'bundle_real="$(realpath -e -- "$bundle")"',
+        'bundle_parent_real="$(realpath -e -- "$bundle_parent")"',
+        '[ "$(dirname -- "$bundle_parent_real")" != "$runner_temp_real" ]',
+        '[ "$bundle_real" != "$bundle_parent_real/attestation.json" ]',
+        'rm -- "$bundle" || {',
+        'rmdir -- "$bundle_dir"',
+        '[ -e "$bundle_dir" ] || [ -L "$bundle_dir" ]',
+        'bundle_parent_cleanup_verification_failure'
     ], 'publication cleanup');
     assert.doesNotMatch(cleanup, /\bdocker\s+(?:system|image|container|builder|volume)\s+prune\b/);
     const final = stepText(publication, 'final_enforcement');
@@ -908,6 +922,14 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
         mutation('source ref omitted', 'publication', (s) => replaceAllRequired(s, '--source-ref', '--format')),
         mutation('online verification omitted', 'publication', (s) => replaceAllRequired(
             s, '"$verification_dir/$label-api.json"', '"$verification_dir/$label-skipped.json"')),
+        mutation('verification registry digest binding omitted', 'publication', (s) => {
+            const block = stepText(s, 'verify_attestations');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                '          REGISTRY_DIGEST: ${{ steps.registry_push.outputs.registry_digest }}\n',
+                ''
+            ));
+        }),
         mutation('OCI verification omitted', 'publication', (s) => replaceAllRequired(s, '--bundle-from-oci', '--format')),
         mutation('offline verification omitted', 'publication', (s) => replaceRequired(s, '--bundle', '--format')),
         mutation('negative checks omitted', 'publication', (s) => removeStep(s, 'negative_verification')),
@@ -946,6 +968,51 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
             s,
             '            "$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bin"\n',
             ''
+        )),
+        mutation('attestation bundle parent containment omitted', 'publication', (s) => replaceRequired(
+            s,
+            '               [ "$(dirname -- "$bundle_parent_real")" != "$runner_temp_real" ] || \\\n',
+            ''
+        )),
+        mutation('attestation bundle lexical containment omitted', 'publication', (s) => replaceRequired(
+            s,
+            '            case "$bundle" in "$RUNNER_TEMP"/*) ;; *) cleanup_status=1; continue ;; esac\n',
+            ''
+        )),
+        mutation('attestation bundle file type guard omitted', 'publication', (s) => replaceRequired(
+            s,
+            '               [ ! -f "$bundle" ] || [ -L "$bundle" ] || \\\n',
+            ''
+        )),
+        mutation('attestation bundle parent type guard omitted', 'publication', (s) => replaceRequired(
+            s,
+            '               [ ! -d "$bundle_parent" ] || [ -L "$bundle_parent" ]; then\n',
+            '               false; then\n'
+        )),
+        mutation('attestation bundle realpath omitted', 'publication', (s) => replaceRequired(
+            s,
+            '            bundle_real="$(realpath -e -- "$bundle")" || {\n',
+            '            bundle_real="$bundle" || {\n'
+        )),
+        mutation('attestation bundle parent realpath omitted', 'publication', (s) => replaceRequired(
+            s,
+            '            bundle_parent_real="$(realpath -e -- "$bundle_parent")" || {\n',
+            '            bundle_parent_real="$bundle_parent" || {\n'
+        )),
+        mutation('attestation bundle file removal omitted', 'publication', (s) => replaceRequired(
+            s,
+            '            rm -- "$bundle" || {\n',
+            '            false || {\n'
+        )),
+        mutation('attestation bundle parent cleanup omitted', 'publication', (s) => replaceRequired(
+            s,
+            '            rmdir -- "$bundle_dir" || cleanup_error bundle_parent_remove_failure\n',
+            ''
+        )),
+        mutation('attestation bundle parent absence verification bypassed', 'publication', (s) => replaceRequired(
+            s,
+            '            if [ -e "$bundle_dir" ] || [ -L "$bundle_dir" ]; then\n',
+            '            if false; then\n'
         )),
         mutation('local publication alias cleanup omitted', 'publication', (s) => replaceRequired(
             s,

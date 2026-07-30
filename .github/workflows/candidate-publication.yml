@@ -489,6 +489,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DIGEST_REF: ${{ steps.registry_identity.outputs.digest_ref }}
+          REGISTRY_DIGEST: ${{ steps.registry_push.outputs.registry_digest }}
           PROVENANCE_BUNDLE_PATH: ${{ steps.provenance_attestation.outputs.bundle-path }}
           SBOM_BUNDLE_PATH: ${{ steps.sbom_attestation.outputs.bundle-path }}
         shell: bash
@@ -753,13 +754,49 @@ jobs:
             fi
           done
           verification_dir="$RUNNER_TEMP/$I8_VERIFICATION_SUBDIR"
+          runner_temp_real="$(realpath -e -- "$RUNNER_TEMP")" || {
+            cleanup_error runner_temp_realpath_failure
+            runner_temp_real=
+          }
+          bundle_dirs=()
           for bundle in "$PROVENANCE_BUNDLE_PATH" "$SBOM_BUNDLE_PATH"; do
             [ -n "$bundle" ] || continue
             case "$bundle" in "$RUNNER_TEMP"/*) ;; *) cleanup_status=1; continue ;; esac
-            if [ -f "$bundle" ] && [ ! -L "$bundle" ]; then
-              rm -- "$bundle" || cleanup_status=1
-            elif [ -e "$bundle" ] || [ -L "$bundle" ]; then
-              cleanup_status=1
+            bundle_parent="$(dirname -- "$bundle")"
+            if [ "$(basename -- "$bundle")" != "attestation.json" ] || \
+               [ ! -f "$bundle" ] || [ -L "$bundle" ] || \
+               [ ! -d "$bundle_parent" ] || [ -L "$bundle_parent" ]; then
+              cleanup_error bundle_shape_failure
+              continue
+            fi
+            bundle_real="$(realpath -e -- "$bundle")" || {
+              cleanup_error bundle_realpath_failure
+              continue
+            }
+            bundle_parent_real="$(realpath -e -- "$bundle_parent")" || {
+              cleanup_error bundle_parent_realpath_failure
+              continue
+            }
+            if [ -z "$runner_temp_real" ] || \
+               [ "$(dirname -- "$bundle_parent_real")" != "$runner_temp_real" ] || \
+               [ "$bundle_real" != "$bundle_parent_real/attestation.json" ]; then
+              cleanup_error bundle_containment_failure
+              continue
+            fi
+            rm -- "$bundle" || {
+              cleanup_error bundle_remove_failure
+              continue
+            }
+            already_recorded=0
+            for recorded_dir in "${bundle_dirs[@]}"; do
+              [ "$recorded_dir" = "$bundle_parent_real" ] && already_recorded=1
+            done
+            [ "$already_recorded" -eq 1 ] || bundle_dirs+=("$bundle_parent_real")
+          done
+          for bundle_dir in "${bundle_dirs[@]}"; do
+            rmdir -- "$bundle_dir" || cleanup_error bundle_parent_remove_failure
+            if [ -e "$bundle_dir" ] || [ -L "$bundle_dir" ]; then
+              cleanup_error bundle_parent_cleanup_verification_failure
             fi
           done
           if [ -d "$verification_dir" ] && [ ! -L "$verification_dir" ]; then

@@ -21,23 +21,24 @@ Canonical Codex knowledge:
 
 The I8 branch starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C4
-commit `bf3e182455a99686f29450f7f1494929995ec5b5`. Its hosted Source run
-`30588960830` and Image run `30588960851` are `SUCCESS`. Candidate Publication
-run `30588960869` is `FAILURE` after publishing its discovery tag. The bounded
-runtime proof correctly observed exit `78`, status `exited`, PID `0`, and
-unhealthy state before attestations.
+`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C5
+commit `5aef62386992f0dcab48b82e87c275e7dff1f291`. Its hosted Source run
+`30590102069` and Image run `30590102077` are `SUCCESS`. Candidate Publication
+run `30590102061` is `FAILURE` after publishing its discovery tag, passing the
+digest runtime, and creating both provenance and SBOM attestations. Its JSON
+policy then threw because the step did not bind `REGISTRY_DIGEST`.
 
-The C4 candidate tag
-`candidate-bf3e182455a99686f29450f7f1494929995ec5b5` is quarantined unchanged at
+The C5 candidate tag
+`candidate-5aef62386992f0dcab48b82e87c275e7dff1f291` is quarantined unchanged at
 manifest digest
-`sha256:d583a13847b4f45cc947d41fd0793597d61ed75d76712479923ba0c039f37718`
+`sha256:fe546f2cd382089a167c4dff721a69bab1e5737b4da31bd0a37558f1f930f639`
 and config identity
-`sha256:25e176fa32b2a5c060829a877c698c07f9bfaa43c78fcfcf1582851dd55982d1`.
-GitHub and OCI provenance/SBOM attestations and the Candidate evidence artifact
-are absent; hosted publication and evidence cleanup succeeded. The exact
-classification is `I8_CANDIDATE_PUBLISHED_UNATTESTED`. The older C3 candidate
-also remains quarantined and unchanged.
+`sha256:ae6ffe01c345219e9be3859d9019b3648a81ab22de30615f75a807e683377ecd`.
+Both GitHub/Sigstore attestations exist, but positive policy verification and
+the Candidate evidence artifact are incomplete; hosted publication and
+evidence cleanup succeeded. The exact classification is
+`I8_CANDIDATE_ATTESTATION_UNVERIFIED`. Older candidates also remain quarantined
+and unchanged.
 
 I8-C1 narrowly resolves the default-branch `workflow_dispatch` registration
 blocker. Candidate Publication retains its exact manual input contract for
@@ -141,8 +142,21 @@ probe that addressed a nonexistent OCI manifest with a bounded local
 wrong-content artifact and the already positively verified offline bundle, so
 verification reaches digest policy instead of failing at registry lookup.
 Digest identity, runtime user, topology, attestation, cleanup, and no-deploy
-behavior remain unchanged. C5 hosted results remain `PENDING` at this commit
-boundary.
+behavior remain unchanged. C5 hosted evidence confirms the runtime parity and
+attestation creation before the separate C6 binding defect.
+
+I8-C6 fixes the C5 verification binding defect. The verification Node policy
+reads `process.env.REGISTRY_DIGEST` to compare the signed subject, but the step
+previously supplied only `DIGEST_REF`; that guaranteed an
+`undefined.slice(7)` exception after the cryptographic verification commands.
+C6 binds only the exact registry-push digest and adds a step-local mutation.
+All other heredoc inputs were audited as bound. The same downstream audit found
+that `actions/attest` creates each bundle in a unique runner-temp directory
+while the old cleanup removed only the file. C6 now admits only a regular
+`attestation.json` in a canonical direct child of canonical `RUNNER_TEMP`,
+removes the file, removes its exact parent, and verifies absence. Containment
+and parent-removal mutations protect this cleanup. C6 hosted results remain
+`PENDING` at this commit boundary.
 
 The current user authorization permits staged continuation through corrective
 commits, normal non-force target-branch pushes, and exact-SHA hosted validation

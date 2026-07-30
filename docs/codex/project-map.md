@@ -40,20 +40,26 @@
 - `scripts/i8-publication-evidence.js` and
   `scripts/i8-write-publication-evidence.js` define the exact-key bounded
   `i8-s3a-signed-candidate-provenance-v2` correlation contract.
-- I8-C4 is exact commit
-  `bf3e182455a99686f29450f7f1494929995ec5b5`. Hosted Source run
-  `30588960830` and Image run `30588960851` succeeded. Candidate Publication
-  run `30588960869` published the quarantined discovery tag, then the bounded
-  runtime proof observed exit `78`, status `exited`, PID `0`, and unhealthy
-  state before attestations.
-- The C4 quarantined tag
-  `candidate-bf3e182455a99686f29450f7f1494929995ec5b5` is preserved at digest
-  `sha256:d583a13847b4f45cc947d41fd0793597d61ed75d76712479923ba0c039f37718`
+- I8-C5 is exact commit
+  `5aef62386992f0dcab48b82e87c275e7dff1f291`. Hosted Source run
+  `30590102069` and Image run `30590102077` succeeded. Candidate Publication
+  run `30590102061` published its discovery tag, passed the fixed digest
+  runtime, and created both attestations before the JSON policy failed on an
+  unbound `REGISTRY_DIGEST`.
+- The C5 quarantined tag
+  `candidate-5aef62386992f0dcab48b82e87c275e7dff1f291` is preserved at digest
+  `sha256:fe546f2cd382089a167c4dff721a69bab1e5737b4da31bd0a37558f1f930f639`
   and config identity
-  `sha256:25e176fa32b2a5c060829a877c698c07f9bfaa43c78fcfcf1582851dd55982d1`.
-  GitHub/OCI provenance and SBOM attestations and the Candidate artifact are
-  absent; hosted publication and evidence cleanup succeeded. Classification is
-  `I8_CANDIDATE_PUBLISHED_UNATTESTED`. The older C3 candidate remains unchanged.
+  `sha256:ae6ffe01c345219e9be3859d9019b3648a81ab22de30615f75a807e683377ecd`.
+  Attestations exist, but full verification and the Candidate artifact are
+  incomplete. The cleanup step reported success, but a direct-source audit
+  proved that the action-created empty bundle parent directories were not
+  removed, so exact temporary cleanup was incomplete. Classification is
+  `I8_CANDIDATE_ATTESTATION_UNVERIFIED`. Older candidates remain unchanged.
+- C6 binds the existing exact registry digest to the verification step and
+  removes each action-created attestation bundle plus its canonical,
+  direct-child runner-temp parent with fail-closed type, containment, and
+  absence checks. Exact-SHA hosted results remain `PENDING`.
 - C2A preserves the exact local publication alias only after
   digest-pulled/gated image-ID equality and keeps Compose plus registry,
   signature, attestation, verification, and evidence digest-bound.
@@ -92,13 +98,17 @@
   C5 contract and removal mutations protect every added value. Its wrong-digest
   negative proof uses a bounded local wrong-content artifact plus the already
   verified offline bundle, rather than a nonexistent OCI digest that would fail
-  during registry lookup before digest-policy evaluation. Exact-SHA hosted
-  results remain `PENDING` at this commit boundary.
+  during registry lookup before digest-policy evaluation. C5 hosted evidence
+  confirms this runtime and attestation path.
+- C6 binds the exact registry-push digest into the positive verification step
+  before its Node subject-policy check. The C5 verifier had `DIGEST_REF` but not
+  `REGISTRY_DIGEST`, so `process.env.REGISTRY_DIGEST.slice(7)` was guaranteed to
+  throw after the verifier commands. A step-local mutation protects the binding;
+  all other heredoc inputs were audited as present. C6 hosted results remain
+  `PENDING`.
 - `main`, PR, merge, force-push, release/Git tag, mutable registry tag, old-tag
-  mutation, deploy, and repository-setting changes remain forbidden; no
-  old-candidate mutation, deploy, and repository-setting changes remain
-  forbidden. Current user authority covers normal target-branch corrective
-  progression only.
+  mutation, deploy, and repository-setting changes remain forbidden. Current
+  user authority covers normal target-branch corrective progression only.
 - The exact-SHA candidate workflow is the reviewed trust assumption because
   build, gate, and push must share one job without a multi-GiB image-tar
   transfer. No deploy, promotion, mutable tag, VPS, proxy, firewall, secret,
