@@ -402,6 +402,15 @@ function validateContract(sources) {
         'docker image inspect --format \'{{.Id}}\' "$RUNTIME_IMAGE_REF"',
         'docker image inspect --format \'{{.Id}}\' "$DIGEST_REF"',
         'node scripts/i2-orca-runtime-smoke.js',
+        '--log-driver json-file --log-opt max-size=20m --log-opt max-file=5',
+        '--env "EXPECTED_SERVICE_UID=$SERVICE_UID"',
+        '--env "EXPECTED_SERVICE_GID=$SERVICE_GID"',
+        '--env EXPECTED_PIDS_LIMIT=512',
+        '--env EXPECTED_MEMORY_BYTES=4294967296',
+        '--env EXPECTED_CPU_LIMIT=2.0',
+        '--env EXPECTED_LOG_MAX_SIZE=20m',
+        '--env EXPECTED_LOG_MAX_FILES=5',
+        '--env EXPECTED_STOP_GRACE_PERIOD=30s',
         '"$RUNTIME_IMAGE_REF"',
         'node scripts/i7-production-compose-contract.js'
     ], 'digest round trip');
@@ -448,6 +457,12 @@ function validateContract(sources) {
     assert.doesNotMatch(verification, /--signer-workflow/,
         'mutually exclusive gh verifier identity flags must not be combined');
     requireIncludes(stepText(publication, 'negative_verification'), [
+        'wrong_digest_artifact="$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bin"',
+        '[ -e "$wrong_digest_artifact" ] || [ -L "$wrong_digest_artifact" ]',
+        "printf 'i8-local-wrong-digest-probe:%s\\n' \"$CANDIDATE_SHA\" > \"$wrong_digest_artifact\"",
+        'sha256sum "$wrong_digest_artifact"',
+        '[ "$wrong_digest" != "${DIGEST_REF##*@}" ]',
+        'gh attestation verify "$wrong_digest_artifact"',
         'wrong_digest', 'wrong_repository', 'gh attestation verify',
         'wrong_digest_status', 'wrong_repository_status',
         'provided artifact digest does not match any digest in statement',
@@ -455,6 +470,9 @@ function validateContract(sources) {
         'wrong_digest_reason=artifact_digest_policy_mismatch',
         'wrong_repository_reason=source_repository_uri_policy_mismatch'
     ], 'negative verification');
+    assert.doesNotMatch(stepText(publication, 'negative_verification'),
+        /oci:\/\/\$REGISTRY_REPOSITORY@\$wrong_digest/,
+        'the wrong-digest probe must reach offline bundle policy instead of registry lookup');
 
     const evidence = stepText(publication, 'publication_evidence');
     requireIncludes(evidence, [
@@ -530,6 +548,7 @@ function validateContract(sources) {
         'i8-tag-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json',
         'i8-digest-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json',
         'i8-final-tag-raw-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json',
+        'i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bin',
         'i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err',
         'i8-wrong-repository-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err',
         'created_attestation_paths.txt',
@@ -892,6 +911,9 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
         mutation('OCI verification omitted', 'publication', (s) => replaceAllRequired(s, '--bundle-from-oci', '--format')),
         mutation('offline verification omitted', 'publication', (s) => replaceRequired(s, '--bundle', '--format')),
         mutation('negative checks omitted', 'publication', (s) => removeStep(s, 'negative_verification')),
+        mutation('wrong digest probe uses a nonexistent registry manifest', 'publication', (s) =>
+            replaceRequired(s, 'gh attestation verify "$wrong_digest_artifact"',
+                'gh attestation verify "oci://$REGISTRY_REPOSITORY@$wrong_digest"')),
         mutation('final discovery-tag identity recheck omitted', 'publication',
             (s) => removeStep(s, 'final_tag_identity')),
         mutation('final discovery-tag digest comparison omitted', 'publication', (s) => replaceRequired(
@@ -920,6 +942,11 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
                 'PUBLICATION_EVIDENCE_BOUNDARY_OUTCOME: ignored'
             )),
         mutation('exact cleanup omitted', 'publication', (s) => removeStep(s, 'publication_cleanup')),
+        mutation('wrong-digest probe artifact cleanup omitted', 'publication', (s) => replaceRequired(
+            s,
+            '            "$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bin"\n',
+            ''
+        )),
         mutation('local publication alias cleanup omitted', 'publication', (s) => replaceRequired(
             s,
             'for exact_ref in "$TAG_REF" "$RUNTIME_IMAGE_REF" "$DIGEST_REF"; do',

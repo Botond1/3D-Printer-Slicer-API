@@ -430,6 +430,7 @@ jobs:
               --pull never --restart no --network none --cap-drop ALL \
               --security-opt no-new-privileges --read-only --pids-limit 512 \
               --memory 4g --memory-swap 4g --cpus 2 --stop-timeout 30 \
+              --log-driver json-file --log-opt max-size=20m --log-opt max-file=5 \
               --tmpfs "/app/input:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
               --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
               --tmpfs "/app/configs/pricing-state:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
@@ -438,6 +439,14 @@ jobs:
               --env PRICING_API_KEY=i8-digest-pricing-active-260725-b1 \
               --env ARTIFACT_API_KEY=i8-digest-artifact-active-260725-c1 \
               --env OPERATIONS_API_KEY=i8-digest-operations-active-260725-d1 \
+              --env "EXPECTED_SERVICE_UID=$SERVICE_UID" \
+              --env "EXPECTED_SERVICE_GID=$SERVICE_GID" \
+              --env EXPECTED_PIDS_LIMIT=512 \
+              --env EXPECTED_MEMORY_BYTES=4294967296 \
+              --env EXPECTED_CPU_LIMIT=2.0 \
+              --env EXPECTED_LOG_MAX_SIZE=20m \
+              --env EXPECTED_LOG_MAX_FILES=5 \
+              --env EXPECTED_STOP_GRACE_PERIOD=30s \
               --label io.s3a.validation-only=true \
               --label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID" \
               "$RUNTIME_IMAGE_REF"
@@ -554,14 +563,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          wrong_digest="sha256:0000000000000000000000000000000000000000000000000000000000000000"
-          if [ "$wrong_digest" = "${DIGEST_REF##*@}" ]; then
-            wrong_digest="sha256:1111111111111111111111111111111111111111111111111111111111111111"
-          fi
+          wrong_digest_artifact="$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bin"
           wrong_digest_error="$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err"
           wrong_repository_error="$RUNNER_TEMP/i8-wrong-repository-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err"
+          if [ -e "$wrong_digest_artifact" ] || [ -L "$wrong_digest_artifact" ]; then exit 2; fi
+          umask 077
+          printf 'i8-local-wrong-digest-probe:%s\n' "$CANDIDATE_SHA" > "$wrong_digest_artifact"
+          wrong_digest="sha256:$(sha256sum "$wrong_digest_artifact" | awk '{print $1}')"
+          [[ "$wrong_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [ "$wrong_digest" != "${DIGEST_REF##*@}" ]
           set +e
-          gh attestation verify "oci://$REGISTRY_REPOSITORY@$wrong_digest" \
+          gh attestation verify "$wrong_digest_artifact" \
             --repo "$GITHUB_REPOSITORY" --bundle "$PROVENANCE_BUNDLE_PATH" \
             --predicate-type "https://slsa.dev/provenance/v1" >/dev/null 2>"$wrong_digest_error"
           wrong_digest_status=$?
@@ -728,6 +740,7 @@ jobs:
             "$RUNNER_TEMP/i8-tag-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
             "$RUNNER_TEMP/i8-digest-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
             "$RUNNER_TEMP/i8-final-tag-raw-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+            "$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bin"
             "$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err"
             "$RUNNER_TEMP/i8-wrong-repository-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err"
             "$RUNNER_TEMP/created_attestation_paths.txt"

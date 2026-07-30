@@ -66,6 +66,23 @@
   failed verification it is `I8_CANDIDATE_ATTESTATION_UNVERIFIED`. Published
   content is preserved for audit and is never overwritten, deleted, promoted,
   or deployed by this workflow.
+- C4 commit `bf3e182455a99686f29450f7f1494929995ec5b5` proved that fail-closed
+  boundary: Source `30588960830` and Image `30588960851` succeeded, while
+  Candidate `30588960869` published digest
+  `sha256:d583a13847b4f45cc947d41fd0793597d61ed75d76712479923ba0c039f37718`
+  and then stopped before attestations when the exact runtime exited `78`.
+- Direct source evidence makes the cause deterministic: the post-push runtime
+  omitted all eight `EXPECTED_*` entrypoint variables and the matching bounded
+  Docker log configuration. C5 mirrors the already-green shared invocation
+  using dynamic non-root UID/GID and exact PID/memory/CPU/log/stop values.
+  Mutation tests fail if any parity element is removed; no root, relaxed mode,
+  timeout increase, retry, digest substitution, or cleanup weakening is added.
+- The C5 wrong-digest negative proof is registry-independent: a run-owned,
+  mode-restricted, bounded local file has a proved digest different from the
+  published manifest, and the already positively verified local provenance
+  bundle must reject it. This reaches signature subject-digest policy instead
+  of conflating a nonexistent registry manifest with cryptographic rejection;
+  exact cleanup includes the probe and bounded error record.
 - I8-C3 is exact commit
   `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`; hosted Source run
   `30545194526` and Image run `30545194494` are `SUCCESS`, with Image artifact

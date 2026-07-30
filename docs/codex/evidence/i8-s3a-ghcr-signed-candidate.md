@@ -4,20 +4,18 @@
 
 I8 starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C3
-commit `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`. Hosted Source run
-`30545194526` and Image run `30545194494` are `SUCCESS`; Image artifact
-`8760548898` exists. Candidate Publication run `30545194754` is `FAILURE`
-after publication at `digest_roundtrip`: host `ps` reported `process ID out of
-range` after detach/immediate PID handling. The exact PID inspected by that run
-is `UNVERIFIED` and must not be inferred.
+`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C4
+commit `bf3e182455a99686f29450f7f1494929995ec5b5`. Hosted Source run
+`30588960830` and Image run `30588960851` are `SUCCESS`. Candidate Publication
+run `30588960869` is `FAILURE` after publication: the exact runtime exited `78`
+with status `exited`, PID `0`, and unhealthy state before attestations.
 
-The quarantined discovery tag
-`candidate-81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3` remains unchanged at
+The quarantined C4 discovery tag
+`candidate-bf3e182455a99686f29450f7f1494929995ec5b5` remains unchanged at
 manifest digest
-`sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
+`sha256:d583a13847b4f45cc947d41fd0793597d61ed75d76712479923ba0c039f37718`
 and config identity
-`sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`.
+`sha256:25e176fa32b2a5c060829a877c698c07f9bfaa43c78fcfcf1582851dd55982d1`.
 GitHub and OCI provenance/SBOM attestations are absent, the candidate artifact
 is absent, and hosted publication cleanup plus evidence cleanup succeeded. The
 exact classification is `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
@@ -43,10 +41,12 @@ The historical C2A hosted failure is distinct: the Candidate workflow supplied
 `s3a-publication-<run-id>-<run-attempt>` to the I4 runtime-envelope helper,
 whose main-container validator still admitted only `s3a-validation-*`. I8-C3
 corrected only that seam before the hosted partial-publication result above.
-I8-C4 now corrects the distinct detach/PID observation race. Exactly one C4
-corrective commit and one normal non-force push to the existing branch remain
-authorized. Replacement Source, Image, and Candidate Publication results are
-`PENDING` at this commit boundary. No signed-candidate success is claimed.
+I8-C4 corrected the distinct detach/PID observation race, and its hosted run
+then exposed a separate deterministic entrypoint contract omission. I8-C5
+mirrors the shared exact-image runtime's dynamic UID/GID, PID/memory/CPU/log/
+stop expectations and Docker log rotation in the digest-roundtrip invocation.
+Replacement Source, Image, and Candidate Publication results are `PENDING` at
+this commit boundary. No signed-candidate success is claimed.
 
 Current classifications:
 
@@ -74,13 +74,17 @@ Current classifications:
 | I8-C3 provenance/SBOM attestations | `ABSENT` from GitHub and OCI |
 | I8-C3 candidate artifact | `ABSENT` |
 | I8-C3 publication/evidence cleanup | `SUCCESS` |
-| I8-C4 bounded state-proof correction | `IMPLEMENTED_LOCAL_PENDING_COMMIT` |
+| I8-C4 bounded state-proof correction | `IMPLEMENTED_COMMITTED_HOSTED_PARTIAL_PUBLICATION` |
 | I8-C4 affected Candidate/runtime/attestation lane | `VERIFIED_LOCAL`, 734/734 pass after final correction |
 | I8-C4 full JavaScript suite | `VERIFIED_LOCAL`, 1296/1296 pass |
 | I8-C4 full Python suite | `VERIFIED_LOCAL`, 43 run, 42 pass, one expected Windows POSIX-permission skip |
 | I8-C4 local Docker proof | `NOT_RUN_ENVIRONMENT` |
-| I8-C4 commit and remaining push | `PENDING`; exactly one commit and one normal non-force branch push authorized |
-| I8-C4 replacement hosted Source/Image/Publication | `PENDING` at the commit boundary |
+| I8-C4 commit | `bf3e182455a99686f29450f7f1494929995ec5b5` |
+| I8-C4 hosted Source/Image | `SUCCESS`, runs `30588960830` / `30588960851` |
+| I8-C4 Candidate Publication | `FAILURE`, run `30588960869`, after publishing digest `sha256:d583a13847b4f45cc947d41fd0793597d61ed75d76712479923ba0c039f37718` |
+| I8-C4 attestations/evidence | `ABSENT`; publication/evidence cleanup `SUCCESS` |
+| I8-C5 digest-runtime parity correction | `IMPLEMENTED_LOCAL_PENDING_COMMIT`; focused contract/mutation lane 350/350 |
+| I8-C5 replacement hosted Source/Image/Publication | `PENDING` at the commit boundary |
 | Deployment | `NOT_RUN_NO_DEPLOY` |
 | External topology / production readiness | `UNVERIFIED` |
 
@@ -481,8 +485,30 @@ passes 1296/1296; Python ran 43 tests with 42 pass and one expected Windows
 POSIX-permission skip. Local Docker is `NOT_RUN_ENVIRONMENT`.
 
 This is a commit-boundary result only. I8-C4 replacement Source Validation,
-Image Validation, and Candidate Publication are `PENDING`; no replacement
-digest, attestation, verification, artifact, or cleanup success is claimed.
+Image Validation, and Candidate Publication produced the C4 partial-publication
+result recorded above. I8-C5 hosted results are `PENDING`; no C5 digest,
+attestation, verification, artifact, or cleanup success is claimed.
+
+## I8-C5 digest-runtime entrypoint parity correction
+
+The C4 hosted runtime exited `78` because the digest-roundtrip `docker run`
+omitted all eight `EXPECTED_*` variables required by
+`scripts/i4-container-entrypoint.sh`. It also omitted the matching bounded
+`json-file` log configuration. The shared prepublication invocation already
+proved the exact contract. C5 mirrors dynamic service UID/GID plus PID `512`,
+memory `4294967296`, CPU `2.0`, log `20m` times `5`, stop grace `30s`, and
+matching Docker resource/log flags. Removal mutations protect every element.
+No entrypoint bypass, root runtime, relaxed tmpfs, timeout increase, retry,
+identity change, registry mutation, or cleanup weakening is introduced.
+
+The downstream audit also proved the old wrong-digest negative probe could not
+reach digest policy: its invented OCI digest had no manifest, so the CLI would
+fail during registry resolution first. C5 instead creates one bounded,
+mode-restricted, run-owned local file, proves its digest differs from the
+published manifest, and requires the already positively verified provenance
+bundle to reject it offline. Exact cleanup includes both that probe and its
+bounded error record. Candidate contract/mutation coverage rejects restoration
+of the nonexistent-registry lookup.
 
 ## Read-only external observations and no-deploy boundary
 
@@ -496,14 +522,14 @@ package-setting, registry-delete, or mutable-promotion operation. External
 caller/proxy/firewall/egress/secret topology and deployed digest remain
 `UNVERIFIED`; production readiness remains `UNVERIFIED`.
 
-The I8-C4 authorization permits exactly one remaining corrective commit and one
-normal non-force push to the existing candidate branch. It does not permit a
-`main` push, PR, merge, force-push, any later corrective commit or push,
+The current user authorization permits staged corrective commits and normal
+non-force pushes to the existing candidate branch until the signed-candidate
+workflow exits green. It does not permit a `main` push, PR, merge, force-push,
 release, Git tag, mutable image tag, old-tag mutation, deployment, SSH/VPS
-operation, registry overwrite/delete, or
-repository/environment/secret/branch-policy setting change.
+operation, registry overwrite/delete, or repository/environment/secret/
+branch-policy setting change.
 
-The C4 corrective push must automatically trigger Source Validation, Image
+The C5 corrective push must automatically trigger Source Validation, Image
 Validation, and Candidate Publication. Until all three exact-SHA runs and every
 publication/attestation/evidence/cleanup gate are green, no hosted publication
 or signing success claim is valid.

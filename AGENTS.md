@@ -21,23 +21,23 @@ Canonical Codex knowledge:
 
 The I8 branch starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C3
-commit `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`. Its hosted Source run
-`30545194526` and Image run `30545194494` are `SUCCESS`; Image artifact
-`8760548898` exists. Candidate Publication run `30545194754` is `FAILURE`
-after publishing the discovery tag, at `digest_roundtrip`: host `ps` reported
-`process ID out of range` after detach/immediate PID handling. The exact PID
-inspected by the failed run is `UNVERIFIED` and must not be inferred.
+`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C4
+commit `bf3e182455a99686f29450f7f1494929995ec5b5`. Its hosted Source run
+`30588960830` and Image run `30588960851` are `SUCCESS`. Candidate Publication
+run `30588960869` is `FAILURE` after publishing its discovery tag. The bounded
+runtime proof correctly observed exit `78`, status `exited`, PID `0`, and
+unhealthy state before attestations.
 
-The quarantined tag
-`candidate-81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3` remains unchanged at
+The C4 candidate tag
+`candidate-bf3e182455a99686f29450f7f1494929995ec5b5` is quarantined unchanged at
 manifest digest
-`sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
+`sha256:d583a13847b4f45cc947d41fd0793597d61ed75d76712479923ba0c039f37718`
 and config identity
-`sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`.
-GitHub and OCI provenance/SBOM attestations are absent, the candidate artifact
-is absent, and hosted publication cleanup plus evidence cleanup succeeded.
-The exact classification is `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
+`sha256:25e176fa32b2a5c060829a877c698c07f9bfaa43c78fcfcf1582851dd55982d1`.
+GitHub and OCI provenance/SBOM attestations and the Candidate evidence artifact
+are absent; hosted publication and evidence cleanup succeeded. The exact
+classification is `I8_CANDIDATE_PUBLISHED_UNATTESTED`. The older C3 candidate
+also remains quarantined and unchanged.
 
 I8-C1 narrowly resolves the default-branch `workflow_dispatch` registration
 blocker. Candidate Publication retains its exact manual input contract for
@@ -130,15 +130,25 @@ Candidate/runtime/attestation tests, full JavaScript 1296/1296, and Python
 42/43 pass with one expected Windows POSIX-permission skip. Local Docker proof
 is `NOT_RUN_ENVIRONMENT`.
 
-Exactly one C4 corrective commit and one normal non-force push to the existing
-I8 branch are authorized. The commit's last non-empty line must be the exact
-trailer above; that push, not a manual dispatch attempt, must trigger Source
-Validation, Image Validation, and Candidate Publication for the C4 SHA. All
-three C4 hosted results and the replacement-candidate digest, attestations,
-verification, evidence artifact, and cleanup result remain `PENDING` at this
-commit boundary. No later corrective commit or push, old-tag mutation,
-`main` change, PR, merge, force-push, release, Git tag, mutable registry tag,
-deploy, or repository-setting change is authorized.
+I8-C5 corrects the C4 digest-runtime invocation drift. The shared exact-image
+gate already passed dynamic UID/GID and the complete PID/memory/CPU/log/stop
+contract to `scripts/i4-container-entrypoint.sh`; the post-push digest runtime
+omitted those eight `EXPECTED_*` variables and the matching bounded Docker log
+configuration. Because the entrypoint treats omission as exit `78`, this is the
+verified C4 hosted root cause. C5 adds exact invocation parity plus removal
+mutation coverage. It also replaces a deterministic wrong-digest negative
+probe that addressed a nonexistent OCI manifest with a bounded local
+wrong-content artifact and the already positively verified offline bundle, so
+verification reaches digest policy instead of failing at registry lookup.
+Digest identity, runtime user, topology, attestation, cleanup, and no-deploy
+behavior remain unchanged. C5 hosted results remain `PENDING` at this commit
+boundary.
+
+The current user authorization permits staged continuation through corrective
+commits, normal non-force target-branch pushes, and exact-SHA hosted validation
+until the I8 signed candidate exits green. It does not authorize old-tag
+mutation, `main` change, PR, merge, force-push, release, Git tag, mutable
+registry tag, deploy, VPS/SSH, or repository-setting changes.
 
 The exact-SHA candidate workflow is a reviewed trust assumption: build, full
 gate, push, and attestation remain in one job to preserve build identity

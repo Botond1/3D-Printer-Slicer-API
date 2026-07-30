@@ -40,21 +40,20 @@
 - `scripts/i8-publication-evidence.js` and
   `scripts/i8-write-publication-evidence.js` define the exact-key bounded
   `i8-s3a-signed-candidate-provenance-v2` correlation contract.
-- I8-C3 is exact commit
-  `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`. Hosted Source run
-  `30545194526` and Image run `30545194494` succeeded, with artifact
-  `8760548898`. Candidate Publication run `30545194754` published the
-  quarantined discovery tag, then failed at `digest_roundtrip` when host `ps`
-  reported `process ID out of range` after detach/immediate PID handling. The
-  exact inspected PID is `UNVERIFIED`.
-- The quarantined tag
-  `candidate-81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3` is preserved at digest
-  `sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
+- I8-C4 is exact commit
+  `bf3e182455a99686f29450f7f1494929995ec5b5`. Hosted Source run
+  `30588960830` and Image run `30588960851` succeeded. Candidate Publication
+  run `30588960869` published the quarantined discovery tag, then the bounded
+  runtime proof observed exit `78`, status `exited`, PID `0`, and unhealthy
+  state before attestations.
+- The C4 quarantined tag
+  `candidate-bf3e182455a99686f29450f7f1494929995ec5b5` is preserved at digest
+  `sha256:d583a13847b4f45cc947d41fd0793597d61ed75d76712479923ba0c039f37718`
   and config identity
-  `sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`.
-  GitHub/OCI provenance and SBOM attestations and the candidate artifact are
+  `sha256:25e176fa32b2a5c060829a877c698c07f9bfaa43c78fcfcf1582851dd55982d1`.
+  GitHub/OCI provenance and SBOM attestations and the Candidate artifact are
   absent; hosted publication and evidence cleanup succeeded. Classification is
-  `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
+  `I8_CANDIDATE_PUBLISHED_UNATTESTED`. The older C3 candidate remains unchanged.
 - C2A preserves the exact local publication alias only after
   digest-pulled/gated image-ID equality and keeps Compose plus registry,
   signature, attestation, verification, and evidence digest-bound.
@@ -86,13 +85,20 @@
 - Post-correction affected tests are green at 734/734, full JavaScript at
   1296/1296, and Python at 42/43 pass with one expected Windows
   POSIX-permission skip. Local Docker is `NOT_RUN_ENVIRONMENT`.
-- Exactly one C4 corrective commit and one normal non-force push remain
-  authorized. The commit's last non-empty line must be the exact authorization
-  trailer above. Source Validation, Image Validation, and Candidate Publication
-  for the replacement C4 SHA remain `PENDING` at this commit boundary.
+- C5 restores exact parity between the shared prepublication container start
+  and the digest-roundtrip container start: dynamic expected UID/GID, matching
+  PID/memory/CPU/log/stop values, and bounded `json-file` rotation. The C4
+  runtime exited `78` because those entrypoint-required variables were omitted.
+  C5 contract and removal mutations protect every added value. Its wrong-digest
+  negative proof uses a bounded local wrong-content artifact plus the already
+  verified offline bundle, rather than a nonexistent OCI digest that would fail
+  during registry lookup before digest-policy evaluation. Exact-SHA hosted
+  results remain `PENDING` at this commit boundary.
 - `main`, PR, merge, force-push, release/Git tag, mutable registry tag, old-tag
   mutation, deploy, and repository-setting changes remain forbidden; no
-  further corrective push is authorized after C4.
+  old-candidate mutation, deploy, and repository-setting changes remain
+  forbidden. Current user authority covers normal target-branch corrective
+  progression only.
 - The exact-SHA candidate workflow is the reviewed trust assumption because
   build, gate, and push must share one job without a multi-GiB image-tar
   transfer. No deploy, promotion, mutable tag, VPS, proxy, firewall, secret,

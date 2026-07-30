@@ -13,6 +13,20 @@ const SOURCE = fs.readFileSync(HELPER_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const ACTION = fs.readFileSync(ACTION_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const PUBLICATION = fs.readFileSync(PUBLICATION_PATH, 'utf8').replace(/\r\n?/g, '\n');
 const OLD_TAG = 'candidate-81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3';
+const DIGEST_RUNTIME_ANCHORS = [
+    '--pull never', '--restart no', '--network none', '--cap-drop ALL',
+    '--security-opt no-new-privileges', '--read-only', '--pids-limit 512',
+    '--memory 4g', '--memory-swap 4g', '--cpus 2', '--stop-timeout 30',
+    '--log-driver json-file', '--log-opt max-size=20m', '--log-opt max-file=5',
+    '--env "EXPECTED_SERVICE_UID=$SERVICE_UID"',
+    '--env "EXPECTED_SERVICE_GID=$SERVICE_GID"',
+    '--env EXPECTED_PIDS_LIMIT=512',
+    '--env EXPECTED_MEMORY_BYTES=4294967296',
+    '--env EXPECTED_CPU_LIMIT=2.0',
+    '--env EXPECTED_LOG_MAX_SIZE=20m',
+    '--env EXPECTED_LOG_MAX_FILES=5',
+    '--env EXPECTED_STOP_GRACE_PERIOD=30s'
+];
 
 function workflowStep(source, id) {
     const lines = source.split('\n');
@@ -40,6 +54,12 @@ function workflowContract(action = ACTION, publication = PUBLICATION, source = S
     assert.match(roundTrip, /^\s*node scripts\/i8-runtime-state-proof\.js\s*$/m);
     assert.ok(roundTrip.indexOf('node scripts/i8-runtime-state-proof.js')
         < roundTrip.indexOf('node scripts/i7-production-compose-contract.js'));
+    for (const runtimeAnchor of DIGEST_RUNTIME_ANCHORS) {
+        assert.ok(roundTrip.includes(runtimeAnchor), `missing digest runtime anchor ${runtimeAnchor}`);
+    }
+    assert.match(roundTrip,
+        /container_id="\$\([\s\S]*docker run --detach[\s\S]*\n\s+"\$RUNTIME_IMAGE_REF"\n\s+\)"/,
+        'the digest runtime container must start from the proved local publication alias');
     assert.doesNotMatch(`${action}\n${publication}`,
         /docker inspect --format '\{\{\.State\.Pid\}\}'/);
     for (const field of [
@@ -105,12 +125,22 @@ test('workflow ordering, digest identity, quarantine, and mutation contracts rem
                 '          node scripts/i7-production-compose-contract.js',
                 '          gh api --method DELETE repos/Botond1/3D-Printer-Slicer-API/packages/container/x\n'
                     + '          node scripts/i7-production-compose-contract.js',
+                (value) => workflowContract(ACTION, value)],
+            ['digest runtime container switched from local alias to digest', PUBLICATION,
+                '              "$RUNTIME_IMAGE_REF"\n          )"',
+                '              "$DIGEST_REF"\n          )"',
                 (value) => workflowContract(ACTION, value)]
         ];
         for (const [name, original, from, to, validate] of mutations) {
             await t.test(name, () => {
                 assert.ok(original.includes(from), `missing mutation anchor ${name}`);
                 assert.throws(() => validate(original.replace(from, to)));
+            });
+        }
+        for (const runtimeAnchor of DIGEST_RUNTIME_ANCHORS) {
+            await t.test(`digest runtime contract rejects removal of ${runtimeAnchor}`, () => {
+                assert.ok(PUBLICATION.includes(runtimeAnchor), `missing mutation anchor ${runtimeAnchor}`);
+                assert.throws(() => workflowContract(ACTION, PUBLICATION.replace(runtimeAnchor, '')));
             });
         }
     });
