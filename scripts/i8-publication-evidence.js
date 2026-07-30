@@ -264,7 +264,7 @@ function validateCleanup(value) {
 function validateAggregator(value) {
     if (!exactKeys(value, EVIDENCE_KEYS.aggregator)) return 'aggregator_schema_mismatch';
     if (value.evidence_boundary !== 'bounded_allowlist_only'
-        || value.result !== 'I8_SIGNED_CANDIDATE_COMPLETE') {
+        || value.result !== 'I8_CANDIDATE_EVIDENCE_READY') {
         return 'aggregator_status_mismatch';
     }
     return null;

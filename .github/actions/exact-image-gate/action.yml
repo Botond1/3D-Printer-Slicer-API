@@ -181,70 +181,52 @@ runs:
             exit 2
           fi
           inert_slice_service_key="i5-validation-slice-active-260723-a1"
-          docker run --detach \
-            --name "$CONTAINER_NAME" \
-            --pull never \
-            --restart no \
-            --network none \
-            --cap-drop ALL \
-            --security-opt no-new-privileges \
-            --read-only \
-            --pids-limit 512 \
-            --memory 4g \
-            --memory-swap 4g \
-            --cpus 2 \
-            --stop-timeout 30 \
-            --log-driver json-file \
-            --log-opt max-size=20m \
-            --log-opt max-file=5 \
-            --tmpfs "/app/input:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
-            --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
-            --tmpfs /app/configs/pricing-state:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700 \
-            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700 \
-            --env "SLICE_SERVICE_API_KEY=$inert_slice_service_key" \
-            --env "SLICE_SERVICE_API_KEY_PREVIOUS=i5-validation-slice-previous-260723-a2" \
-            --env "PRICING_API_KEY=i5-validation-pricing-active-260723-b1" \
-            --env "PRICING_API_KEY_PREVIOUS=i5-validation-pricing-previous-260723-b2" \
-            --env "ARTIFACT_API_KEY=i5-validation-artifact-active-260723-c1" \
-            --env "ARTIFACT_API_KEY_PREVIOUS=i5-validation-artifact-previous-260723-c2" \
-            --env "OPERATIONS_API_KEY=i5-validation-operations-active-260723-d1" \
-            --env "OPERATIONS_API_KEY_PREVIOUS=i5-validation-operations-previous-260723-d2" \
-            --env "EXPECTED_SERVICE_UID=$SERVICE_UID" \
-            --env "EXPECTED_SERVICE_GID=$SERVICE_GID" \
-            --env "EXPECTED_PIDS_LIMIT=512" \
-            --env "EXPECTED_MEMORY_BYTES=4294967296" \
-            --env "EXPECTED_CPU_LIMIT=2.0" \
-            --env "EXPECTED_LOG_MAX_SIZE=20m" \
-            --env "EXPECTED_LOG_MAX_FILES=5" \
-            --env "EXPECTED_STOP_GRACE_PERIOD=30s" \
-            --label io.s3a.validation-only=true \
-            --label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID" \
-            "$IMAGE_REF"
-
-          container_pid="$(docker inspect --format '{{.State.Pid}}' "$CONTAINER_NAME")"
-          if [[ ! "$container_pid" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error title=I2 runtime identity::runtime_kernel_pid_failure"
+          container_id="$(
+            docker run --detach \
+              --name "$CONTAINER_NAME" \
+              --pull never \
+              --restart no \
+              --network none \
+              --cap-drop ALL \
+              --security-opt no-new-privileges \
+              --read-only \
+              --pids-limit 512 \
+              --memory 4g \
+              --memory-swap 4g \
+              --cpus 2 \
+              --stop-timeout 30 \
+              --log-driver json-file \
+              --log-opt max-size=20m \
+              --log-opt max-file=5 \
+              --tmpfs "/app/input:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
+              --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
+              --tmpfs /app/configs/pricing-state:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700 \
+              --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700 \
+              --env "SLICE_SERVICE_API_KEY=$inert_slice_service_key" \
+              --env "SLICE_SERVICE_API_KEY_PREVIOUS=i5-validation-slice-previous-260723-a2" \
+              --env "PRICING_API_KEY=i5-validation-pricing-active-260723-b1" \
+              --env "PRICING_API_KEY_PREVIOUS=i5-validation-pricing-previous-260723-b2" \
+              --env "ARTIFACT_API_KEY=i5-validation-artifact-active-260723-c1" \
+              --env "ARTIFACT_API_KEY_PREVIOUS=i5-validation-artifact-previous-260723-c2" \
+              --env "OPERATIONS_API_KEY=i5-validation-operations-active-260723-d1" \
+              --env "OPERATIONS_API_KEY_PREVIOUS=i5-validation-operations-previous-260723-d2" \
+              --env "EXPECTED_SERVICE_UID=$SERVICE_UID" \
+              --env "EXPECTED_SERVICE_GID=$SERVICE_GID" \
+              --env "EXPECTED_PIDS_LIMIT=512" \
+              --env "EXPECTED_MEMORY_BYTES=4294967296" \
+              --env "EXPECTED_CPU_LIMIT=2.0" \
+              --env "EXPECTED_LOG_MAX_SIZE=20m" \
+              --env "EXPECTED_LOG_MAX_FILES=5" \
+              --env "EXPECTED_STOP_GRACE_PERIOD=30s" \
+              --label io.s3a.validation-only=true \
+              --label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID" \
+              "$IMAGE_REF"
+          )"
+          if [[ ! "$container_id" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error title=I2 runtime identity::runtime_container_id_failure"
             exit 2
           fi
-          kernel_identity="$(/usr/bin/ps -o uid=,gid= -p "$container_pid")"
-          if [[ ! "$kernel_identity" =~ ^[[:space:]]*([0-9]+)[[:space:]]+([0-9]+)[[:space:]]*$ ]]; then
-            echo "::error title=I2 runtime identity::runtime_kernel_identity_shape_failure"
-            exit 2
-          fi
-          kernel_uid="${BASH_REMATCH[1]}"
-          kernel_gid="${BASH_REMATCH[2]}"
-          if [ "$kernel_uid" != "$SERVICE_UID" ] || [ "$kernel_gid" != "$SERVICE_GID" ] || \
-             [ "$kernel_uid" = "0" ] || [ "$kernel_gid" = "0" ]; then
-            echo "::error title=I2 runtime identity::runtime_kernel_identity_mismatch"
-            exit 2
-          fi
-          {
-            echo "configured_user=$CONFIGURED_USER"
-            echo "service_uid=$SERVICE_UID"
-            echo "service_gid=$SERVICE_GID"
-            echo "kernel_uid=$kernel_uid"
-            echo "kernel_gid=$kernel_gid"
-          } >> "$EVIDENCE_DIR/image-identity.txt"
+          echo "container_id=$container_id" >> "$GITHUB_OUTPUT"
 
       - name: Run bounded isolated Orca CLI and synthetic slice smoke
         id: orca_cli_smoke
@@ -270,6 +252,7 @@ runs:
       - name: Wait for the bounded liveness-only health check
         env:
           EXPECTED_IMAGE_ID: ${{ steps.image_identity.outputs.image_id }}
+          EXPECTED_CONTAINER_ID: ${{ steps.container_start.outputs.container_id }}
           SERVICE_UID: ${{ steps.runtime_identity.outputs.uid }}
           SERVICE_GID: ${{ steps.runtime_identity.outputs.gid }}
         id: smoke_gate
@@ -277,31 +260,22 @@ runs:
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 120); do
-            running="$(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME")"
-            health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$CONTAINER_NAME")"
-            if [ "$running" = "true" ] && [ "$health" = "healthy" ]; then
-              node scripts/i4-image-runtime-envelope.js
-              {
-                echo "### Image runtime smoke gate"
-                echo
-                echo "The existing Docker HEALTHCHECK reached \`healthy\`."
-                echo "This is bounded startup/liveness evidence only, not production readiness."
-              } >> "$GITHUB_STEP_SUMMARY"
-              echo "classification=success" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            if [ "$running" != "true" ] || [ "$health" = "unhealthy" ] || [ "$health" = "missing" ]; then
-              echo "classification=runtime_liveness_failure" >> "$GITHUB_OUTPUT"
-              echo "Container failed its liveness-only smoke gate (running=$running, health=$health)." >&2
-              exit 1
-            fi
-            sleep 2
-          done
-
-          echo "classification=runtime_liveness_failure" >> "$GITHUB_OUTPUT"
-          echo "Container did not become healthy within the 240-second bound." >&2
-          exit 1
+          node scripts/i8-runtime-state-proof.js
+          {
+            echo "configured_user=slicer"
+            echo "service_uid=$SERVICE_UID"
+            echo "service_gid=$SERVICE_GID"
+            echo "kernel_uid=$SERVICE_UID"
+            echo "kernel_gid=$SERVICE_GID"
+          } >> "$EVIDENCE_DIR/image-identity.txt"
+          node scripts/i4-image-runtime-envelope.js
+          {
+            echo "### Image runtime smoke gate"
+            echo
+            echo "The existing Docker HEALTHCHECK reached \`healthy\` with a positive host PID."
+            echo "This is bounded startup/liveness evidence only, not production readiness."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "classification=success" >> "$GITHUB_OUTPUT"
 
       - name: Prove private-peer ingress and API/native egress denial fail closed
         id: topology_gate

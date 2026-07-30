@@ -2,17 +2,25 @@
 
 ## I8/S3a signed-candidate publication checkpoint
 
-Status: `IN_PROGRESS`; I8-C2A failed prepublication and I8-C3 is pending its
-single corrective commit/push.
+Status: `IN_PROGRESS`; I8-C3 published an unattested quarantined candidate and
+I8-C4 is pending its single corrective commit/push.
 
 The I8 branch starts from exact baseline
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6`. The current committed boundary is
-I8-C2A commit `8df4d0d9972ce0a066ef0e630479f7367bc39938`. Source run
-`30224324987` and Image run `30224324996` are `SUCCESS`; Candidate Publication
-run `30224324993` is `FAILURE` at
-`runtime_resource_contract_failure:container_reference_invalid`. Registry
-login, push, and attestation were skipped, and the candidate tag/package are
-absent, so no registry side effect exists.
+I8-C3 commit `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`. Source run
+`30545194526` and Image run `30545194494` are `SUCCESS`, with Image artifact
+`8760548898`. Candidate Publication run `30545194754` is `FAILURE` after
+publication at `digest_roundtrip`: host `ps` reported `process ID out of range`
+after detach/immediate PID handling. The exact inspected PID is `UNVERIFIED`.
+
+The quarantined discovery tag
+`candidate-81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3` remains at manifest digest
+`sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
+and config identity
+`sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`.
+GitHub/OCI provenance and SBOM attestations and the candidate artifact are
+absent; publication and evidence cleanup succeeded. The classification is
+`I8_CANDIDATE_PUBLISHED_UNATTESTED`.
 
 Implemented on the branch:
 
@@ -42,27 +50,36 @@ Implemented on the branch:
 - alias-bound kernel identity and liveness, exact-image-ID Orca smoke, and
   digest-pinned production-Compose validation, with registry, signature,
   attestation, verification, and evidence identity also digest-pinned;
+- one bounded shared runtime-state proof before both shared prepublication and
+  post-push digest runtime consumers: exact container/image ID, allowlisted
+  state, stable repeated positive PID before host `ps`, matching positive
+  UID/GID, and post-`ps` same-state confirmation. Exact `running` status and
+  false paused/restarting/dead flags are required; non-ready, malformed,
+  timeout, and changed-state paths fail closed;
+- transport-abort cleanup that waits for the owned upload output stream to
+  close before workspace removal, with matched HTTP/application lifetime
+  evidence and no timeout or retry increase;
 - exact-digest SLSA provenance and SPDX 2.3 GitHub/Sigstore attestations,
   three-path positive verification, and two negative verification probes;
 - bounded I8 provenance v2, explicit partial-publication classifications,
-  allowlisted upload, exact cleanup, and final fail-closed aggregation.
+  allowlisted upload, exact cleanup, and final fail-closed aggregation. The
+  evidence record stops at `I8_CANDIDATE_EVIDENCE_READY`; only final
+  enforcement after upload and cleanup may claim
+  `I8_SIGNED_CANDIDATE_COMPLETE`, and its summary independently exposes both
+  cleanup outcomes.
 
-The focused I8-C3 lane is green at 686/686 across 12 files. The executable
-namespace audit found I4's validation-only main-container regex to be the sole
-drift. I2 image aliases already use the exact dual namespace; I2 probe names
-are generic, strict, bounded, and distinct where required; I6 container/network
-names are generic, strict, bounded, and pairwise distinct; evidence/temp
-directories are generated per run and bounded; and cleanup uses exact
-environment references plus ownership labels and exact image/container/network
-identities. No other executable validation-only regex exists in the Candidate
-helper chain. C2A's local-alias versus registry-digest separation remains
-unchanged; no local result proves hosted publication.
+The historical focused I8-C3 lane is green at 686/686 across 12 files. C4's
+post-correction affected lane is 734/734, full JavaScript is 1296/1296, and
+Python is 42/43 pass with one expected Windows POSIX-permission skip, including
+one-by-one final-dependency mutations. Local Docker proof is
+`NOT_RUN_ENVIRONMENT`. These local results do not prove replacement-candidate
+publication.
 
 Open exit gates:
 
-1. Complete C3 local/staged safety and the post-commit exact candidate-range
+1. Complete C4 local/staged safety and the post-commit exact candidate-range
    whitespace gate.
-2. Create exactly one C3 corrective commit whose last non-empty line is
+2. Create exactly one C4 corrective commit whose last non-empty line is
    `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
 3. Perform exactly one normal non-force push to the existing I8 branch and
    prove the new remote SHA plus baseline ancestry. Do not attempt manual
@@ -73,12 +90,13 @@ Open exit gates:
    IDs and bundle hashes, positive and negative cryptographic verification,
    bounded artifact identity, exact cleanup, and final aggregator success.
 
-Until all exits are green: candidate tag/digest `NOT_CREATED`; signature
-`NOT_CREATED`; attestations `NOT_CREATED`; C3 hosted I8 evidence `PENDING` at
-the commit boundary; deployment `NOT_RUN`; external topology and production
-readiness `UNVERIFIED`. No `main` change, PR, merge, force-push, further
-corrective push after C3, release/Git tag, mutable image tag, deploy, or
-repository-setting change is authorized.
+Until all exits are green: the old quarantined tag/digest above is preserved
+unchanged; the replacement tag/digest, signature, attestations, and candidate
+artifact are `PENDING` at the C4 commit boundary; deployment is `NOT_RUN`;
+external topology and production readiness are `UNVERIFIED`. No `main` change,
+PR, merge, force-push, further corrective push after C4, old-tag mutation,
+release/Git tag, mutable image tag, deploy, or repository-setting change is
+authorized.
 The exact-SHA candidate workflow remains the reviewed trust assumption needed
 for the same-job no-tar build/gate/push identity constraint.
 
@@ -217,7 +235,7 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1b - queue deadlines and abort contract | `VERIFIED` | S1a workspace ownership | integrated queue scheduling/deadline/counter/runtime lifecycle | Independent deadlines, request/shutdown AbortSignal propagation, typed `SLICE_QUEUE_SHUTDOWN`, single settlement, active-slot retention, and timer/listener/counter/workspace cleanup have deterministic local evidence. |
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `IN_PROGRESS` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | I3 implements a bounded Node HTTP-server subset; resource/archive, artifact/pricing, and container-permission exits remain open | I3 locally implements and focuses tests on header/request/keep-alive timeouts, header/connection counts, and requests/socket with bounded fallback. Final aggregate and exact-SHA evidence are pending; measured VPS/proxy/CPU/RAM/PID/disk/archive/model/output caps, streaming limits, artifact retention/correlation, atomic pricing, and read-only state separation remain incomplete. |
-| S3a - repository build/provenance and automatic-deploy separation | `IN_PROGRESS` | S0.1; exact hosted I7 baseline green | I8 factors one shared build-once gate and adds least-privilege digest-bound GHCR publication, attestations, verification, bounded v2 evidence, no-deploy aggregation, and an I8-C1 exact-branch push adapter while retaining manual dispatch | At C2A `8df4d0d9972ce0a066ef0e630479f7367bc39938`, Source `30224324987` and Image `30224324996` succeeded; Candidate `30224324993` failed prepublication at `runtime_resource_contract_failure:container_reference_invalid`, with login/push/attest skipped, candidate tag/package absent, and no registry side effect. C3 corrects only I4's validation-only main-container regex to the exact bounded validation/publication contract while preserving C2A's local-alias/digest separation. The focused lane is 686/686 across 12 files. One C3 corrective commit/push remains, and its hosted results are `PENDING` at the commit boundary. GHCR digest/signature/attestations remain `NOT_CREATED`; S3b/deployed topology/readiness/rollback remain unverified or not started. |
+| S3a - repository build/provenance and automatic-deploy separation | `IN_PROGRESS` | S0.1; exact hosted I7 baseline green | I8 factors one shared build-once gate and adds least-privilege digest-bound GHCR publication, attestations, verification, bounded v2 evidence, no-deploy aggregation, and an I8-C1 exact-branch push adapter while retaining manual dispatch | At C3 `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`, Source `30545194526` and Image `30545194494` succeeded; Candidate `30545194754` published digest `sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`, then failed at `digest_roundtrip` during detach/immediate-PID host `ps`. Attestations/artifact are absent, cleanup succeeded, and status is `I8_CANDIDATE_PUBLISHED_UNATTESTED`. C4 adds a bounded shared stable-PID/kernel-identity proof and reserves final completion for post-upload/post-cleanup enforcement. Narrow 28/28 and focused 659/659 are green; local Docker is `NOT_RUN_ENVIRONMENT`. One C4 commit/push and exact-SHA hosted verification remain. S3b/deployed topology/readiness/rollback remain unverified or not started. |
 | S4 - service trust and topology | `IN_PROGRESS` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | I5 supplies scoped trust; I6 selects the internal private-peer/no-host-port topology | Repository validation requires authenticated peer ingress, auth rejection, no API external route, and calibrated API/native DNS/TCP/UDP denial. Deployed callers, proxy/firewall, secrets, digest, and egress remain `UNVERIFIED`. |
 | S3b - staging and promotion drill | `NOT_STARTED` | S3a evidence; S4 evidence; separate explicit user/owner authorization | staging/promotion/readiness/rollback drill only | Promote a verified immutable artifact through a human-authorized staging gate; readiness is bounded and meaningful; failure restores the prior artifact; the drill is recorded. No authorization or verification is inferred from S1a/S3a/S4 repository work. |
 | S5 - topology/optional async worker decision | `IN_PROGRESS` | I5 trust controls and S4 topology evidence | private-peer topology selected; async API/worker deferred | `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`. Complete exact deployed caller, proxy, secret, digest, firewall, and egress evidence without changing current endpoints. |

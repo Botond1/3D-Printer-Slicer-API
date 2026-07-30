@@ -67,8 +67,20 @@ function createUpload(limits) {
                 if (settled) return;
                 settled = true;
                 delete req[ABORT_ACTIVE_UPLOAD];
-                if (error) callback(error);
-                else callback(null, { destination: workspace.directory, filename, path: target, size });
+                const complete = () => {
+                    if (error) callback(error);
+                    else callback(null, {
+                        destination: workspace.directory, filename, path: target, size
+                    });
+                };
+                if (!error || output.closed) {
+                    complete();
+                    return;
+                }
+                file.stream.unpipe(output);
+                file.stream.resume();
+                output.once('close', complete);
+                output.destroy(error);
             };
             file.stream.on('data', (chunk) => { size += chunk.length; });
             file.stream.once('error', finish);

@@ -39,15 +39,22 @@
   preflight and normal Image Validation have only `contents: read`.
 - `scripts/i8-publication-evidence.js` and
   `scripts/i8-write-publication-evidence.js` define the exact-key bounded
-  `i8-s3a-signed-candidate-provenance-v2` correlation contract. The focused
-  I8-C3 lane is green at 686/686 tests across 12 files.
-- I8-C2A is exact commit
-  `8df4d0d9972ce0a066ef0e630479f7367bc39938`. Hosted Source run
-  `30224324987` and Image run `30224324996` succeeded. Candidate Publication
-  run `30224324993` failed at
-  `runtime_resource_contract_failure:container_reference_invalid`; registry
-  login, push, and attestation were skipped, and the candidate tag/package are
-  absent, so no registry side effect exists.
+  `i8-s3a-signed-candidate-provenance-v2` correlation contract.
+- I8-C3 is exact commit
+  `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`. Hosted Source run
+  `30545194526` and Image run `30545194494` succeeded, with artifact
+  `8760548898`. Candidate Publication run `30545194754` published the
+  quarantined discovery tag, then failed at `digest_roundtrip` when host `ps`
+  reported `process ID out of range` after detach/immediate PID handling. The
+  exact inspected PID is `UNVERIFIED`.
+- The quarantined tag
+  `candidate-81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3` is preserved at digest
+  `sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
+  and config identity
+  `sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`.
+  GitHub/OCI provenance and SBOM attestations and the candidate artifact are
+  absent; hosted publication and evidence cleanup succeeded. Classification is
+  `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
 - C2A preserves the exact local publication alias only after
   digest-pulled/gated image-ID equality and keeps Compose plus registry,
   signature, attestation, verification, and evidence digest-bound.
@@ -59,14 +66,33 @@
   cleanup remains bound to exact environment references, ownership labels, and
   exact image/container/network identities. No other executable
   validation-only regex exists in the Candidate helper chain.
-- Exactly one C3 corrective commit and one normal non-force push remain
+- `scripts/i8-runtime-state-proof.js` is the shared C4 state seam for both
+  prepublication and post-push digest runtime validation. It binds exact
+  container/image identity and allowlisted state, requires the same positive
+  PID in consecutive healthy observations before host `ps`, matches positive
+  kernel UID/GID, and confirms the same state after `ps`. Status must be exactly
+  `running`; paused, restarting, dead, exited, unhealthy or missing health, OOM,
+  state error, malformed state/PID/identity, timeout, and post-`ps` state change
+  fail closed.
+- Failed upload storage callbacks wait for the owned output stream to close
+  before workspace cleanup. The live partial-request proof uses matching HTTP
+  receive and application upload deadlines, reflecting their shared production
+  default across Node and host filesystem variants.
+- Evidence generation may emit only `I8_CANDIDATE_EVIDENCE_READY`. The final
+  workflow step alone may emit `I8_SIGNED_CANDIDATE_COMPLETE`, after evidence
+  upload, publication cleanup, and evidence cleanup; every dependency has
+  one-by-one mutation coverage and both cleanup outcomes are independently
+  visible in the final summary.
+- Post-correction affected tests are green at 734/734, full JavaScript at
+  1296/1296, and Python at 42/43 pass with one expected Windows
+  POSIX-permission skip. Local Docker is `NOT_RUN_ENVIRONMENT`.
+- Exactly one C4 corrective commit and one normal non-force push remain
   authorized. The commit's last non-empty line must be the exact authorization
   trailer above. Source Validation, Image Validation, and Candidate Publication
-  for C3 remain `PENDING` at the commit boundary; no publication, digest,
-  signature, or attestation success is claimed.
-- `main`, PR, merge, force-push, release/Git tag, mutable registry tag, deploy,
-  and repository-setting changes remain forbidden; no further corrective push
-  is authorized after C3.
+  for the replacement C4 SHA remain `PENDING` at this commit boundary.
+- `main`, PR, merge, force-push, release/Git tag, mutable registry tag, old-tag
+  mutation, deploy, and repository-setting changes remain forbidden; no
+  further corrective push is authorized after C4.
 - The exact-SHA candidate workflow is the reviewed trust assumption because
   build, gate, and push must share one job without a multi-GiB image-tar
   transfer. No deploy, promotion, mutable tag, VPS, proxy, firewall, secret,

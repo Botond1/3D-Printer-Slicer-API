@@ -204,7 +204,7 @@ function workflowContract(source) {
     assert.match(source, /SERVICE_UID: \$\{\{ steps\.runtime_identity\.outputs\.uid \}\}/);
     assert.match(source, /SERVICE_GID: \$\{\{ steps\.runtime_identity\.outputs\.gid \}\}/);
     assert.match(smoke,
-        /if \[ "\$running" = "true" \] && \[ "\$health" = "healthy" \]; then[\s\S]*node scripts\/i4-image-runtime-envelope\.js[\s\S]*classification=success/);
+        /node scripts\/i8-runtime-state-proof\.js[\s\S]*node scripts\/i4-image-runtime-envelope\.js[\s\S]*classification=success/);
     assert.ok(source.indexOf('node scripts/i4-image-runtime-envelope.js')
         < source.indexOf('id: runtime_diagnostics'));
     const final = step('final_enforcement', source);
@@ -294,7 +294,7 @@ test('runtime-envelope and final-aggregation weakening mutations are rejected', 
             '--log-opt max-file=50', workflowContract],
         ['job scratch mount loses noexec', WORKFLOW, '/tmp:rw,nosuid,nodev,noexec,size=64m',
             '/tmp:rw,nosuid,nodev,size=64m', workflowContract],
-        ['runtime proof removed', WORKFLOW, '              node scripts/i4-image-runtime-envelope.js\n',
+        ['runtime proof removed', WORKFLOW, '          node scripts/i4-image-runtime-envelope.js\n',
             '', workflowContract],
         ['final smoke aggregation bypassed', WORKFLOW,
             "process.env.SMOKE_OUTCOME !== 'success'", 'false', workflowContract],

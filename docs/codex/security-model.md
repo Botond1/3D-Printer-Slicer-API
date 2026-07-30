@@ -45,20 +45,41 @@
   SBOM drift, unsigned/wrong-predicate attestations, missing verification,
   incomplete pre-gates, second builds, mutable tags, cleanup loss, and final
   aggregator removal.
+- The shared C4 runtime-state proof binds exact container ID and image ID,
+  allowlisted state, the same positive PID in consecutive healthy observations
+  before host `ps`, matching positive kernel UID/GID, and the same ready state
+  after `ps`. Exact `running` status and false paused/restarting/dead flags are
+  mandatory. Exit, paused, restarting, dead, unhealthy or missing health, OOM,
+  state error, malformed state/PID/identity, timeout, and post-`ps` state change
+  fail closed.
+- Failed multipart storage callbacks do not release lifecycle ownership until
+  the output file stream closes. This prevents Windows open-handle cleanup
+  races while retaining the same bounded upload and HTTP deadlines.
+- The bounded uploaded record may classify itself only as
+  `I8_CANDIDATE_EVIDENCE_READY`. Only final enforcement after evidence upload,
+  publication cleanup, and evidence cleanup may emit
+  `I8_SIGNED_CANDIDATE_COMPLETE`; one-by-one mutations cover every final input,
+  and both cleanup outcomes remain independently visible in failure summaries.
 - Partial publication fails closed. Before a matching push the classification
   is `BLOCKED_I8_PREPUBLICATION_GATE`; after a matching push but incomplete
   attestations it is `I8_CANDIDATE_PUBLISHED_UNATTESTED`; after attestations but
   failed verification it is `I8_CANDIDATE_ATTESTATION_UNVERIFIED`. Published
   content is preserved for audit and is never overwritten, deleted, promoted,
   or deployed by this workflow.
-- I8-C2A is exact commit
-  `8df4d0d9972ce0a066ef0e630479f7367bc39938`; hosted Source run
-  `30224324987` and Image run `30224324996` are `SUCCESS`. Candidate
-  Publication run `30224324993` is `FAILURE` at
-  `runtime_resource_contract_failure:container_reference_invalid`. Registry
-  login, push, and attestation were skipped, and the candidate tag/package are
-  absent. No registry side effect exists; GHCR digest, signature, and
-  provenance/SBOM attestations are `NOT_CREATED`.
+- I8-C3 is exact commit
+  `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`; hosted Source run
+  `30545194526` and Image run `30545194494` are `SUCCESS`, with Image artifact
+  `8760548898`. Candidate Publication run `30545194754` is `FAILURE` after
+  publication at `digest_roundtrip`: host `ps` reported `process ID out of
+  range` after detach/immediate PID handling. The exact inspected PID is
+  `UNVERIFIED`.
+- The quarantined discovery tag is preserved at digest
+  `sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
+  and config
+  `sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`.
+  GitHub/OCI provenance and SBOM attestations and the candidate artifact are
+  absent; hosted publication and evidence cleanup succeeded. The classification
+  is `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
 - The C3 audit found I4's main-container validator to be the sole executable
   validation-only namespace drift. The correction accepts only the full-string,
   128-byte-bounded validation/publication forms. I2 image aliases remain exact
@@ -67,13 +88,17 @@
   cleanup still requires exact environment references, ownership labels, and
   exact image/container/network identities. No other executable
   validation-only regex exists in the Candidate helper chain.
-- The focused C3 lane is green at 686/686 across 12 files. I8-C3 authorizes
-  exactly one corrective commit and one normal non-force push to the existing
-  candidate branch only. Its Source, Image, and Candidate Publication results
-  are `PENDING` at the commit boundary. `main`, PR, merge, force-push, any later
-  correction, release/Git tag, mutable registry tag, deploy, and repository
-  settings remain outside authority. Production readiness and external
-  topology remain `UNVERIFIED`.
+- The historical focused C3 lane is green at 686/686 across 12 files.
+  Post-correction C4 evidence is 734/734 affected tests, full JavaScript
+  1296/1296, and Python 42/43 pass with one expected Windows POSIX-permission
+  skip. Local Docker is `NOT_RUN_ENVIRONMENT`. I8-C4 authorizes exactly one
+  corrective commit and one
+  normal non-force push to the existing candidate branch only. The replacement
+  Source, Image, and Candidate Publication results are `PENDING` at this commit
+  boundary. `main`, PR, merge, force-push, later correction, old-tag mutation,
+  release/Git tag, mutable registry tag, deploy, and repository settings remain
+  outside authority. Production readiness and external topology remain
+  `UNVERIFIED`.
 - The exact-SHA candidate workflow is the reviewed trust assumption needed to
   keep build, complete gate, push, and attestation in one job without an
   image-tar transfer.

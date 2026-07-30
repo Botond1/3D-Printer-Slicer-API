@@ -4,7 +4,7 @@ applyTo: ".github/**"
 
 # GitHub Folder Instructions
 
-Last synchronized: 2026-07-26
+Last synchronized: 2026-07-30
 
 ## Scope
 - Keep Copilot instructions centralized in .github/copilot-instructions.md.
@@ -36,11 +36,32 @@ Last synchronized: 2026-07-26
   `ghcr.io/botond1/3d-printer-slicer-api`; refuse existing discovery tags,
   mutable tags, alternate repositories, and deploy. Downstream identity is
   exact digest only.
-- Pre-correction HEAD is
-  `c49bfc698d4d41041e6216c76a11144ffb386183`; Source `30163991878`
-  and Image `30163991870` are green. Exactly one normal non-force corrective
-  push to the existing I8 branch is authorized; corrective Source/Image/
-  Publication results remain pending and no registry side effect exists.
+- Pre-C4 HEAD is `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`; Source
+  `30545194526` and Image `30545194494` are green, with Image artifact
+  `8760548898`. Candidate `30545194754` published the quarantined discovery
+  tag, then failed at `digest_roundtrip` when host `ps` reported `process ID
+  out of range` after detach/immediate PID handling. The exact inspected PID is
+  `UNVERIFIED`. Its digest
+  `sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
+  and config identity
+  `sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`
+  must remain unchanged. Attestations and candidate artifact are absent;
+  cleanup succeeded; classification is
+  `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
+- C4 applies one bounded exact-ID/image, allowlisted-state proof before both
+  shared and digest runtime consumers. It requires a stable repeated positive
+  PID before host `ps`, matching positive UID/GID, and post-`ps` same-state
+  confirmation. Exact `running` status and false paused/restarting/dead flags
+  are required; non-ready, malformed, timeout, and state-change paths fail
+  closed. Failed upload storage callbacks wait for output close before
+  workspace cleanup. Evidence may report `I8_CANDIDATE_EVIDENCE_READY`; only final
+  enforcement after upload and both cleanup steps may report
+  `I8_SIGNED_CANDIDATE_COMPLETE`, with both cleanup outcomes visible.
+- Exactly one C4 commit and one normal non-force corrective push to the
+  existing I8 branch are authorized. Replacement Source/Image/Publication
+  results remain `PENDING`. Post-correction evidence is 734/734 affected tests,
+  full JavaScript 1296/1296, and Python 42/43 pass with one expected Windows
+  POSIX-permission skip. Local Docker is `NOT_RUN_ENVIRONMENT`.
 - Preserve no-`main`, no-PR/merge/force-push, no-release/Git-tag, no-mutable-
   tag, no-deploy, and no-repository-setting-change boundaries.
 

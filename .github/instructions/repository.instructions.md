@@ -4,7 +4,7 @@ applyTo: "**"
 
 # Repository Wide Instructions
 
-Last synchronized: 2026-07-26
+Last synchronized: 2026-07-30
 
 ## Architecture
 - Backend stack is Node.js + Express + Python helper scripts.
@@ -64,13 +64,35 @@ Last synchronized: 2026-07-26
   `image_ref`, `discovery_tag`, and `registry_repository` outputs. Publication remains
   build-once, full-gate-before-login/push, digest-only, signed/attested, and
   no-deploy. Never overwrite a discovery tag or create mutable promotion tags.
-- Pre-correction HEAD is
-  `c49bfc698d4d41041e6216c76a11144ffb386183`; Source run
-  `30163991878` and Image run `30163991870` are green. One normal
-  non-force corrective push to the existing I8 branch is authorized; its three
-  hosted runs remain pending. No registry side effect exists and no candidate
-  digest/signature/attestation exists. `main`, PR/merge/force-push, release/Git
-  tag, deploy, and repository settings remain outside authorization.
+- Pre-C4 HEAD is `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`. Source
+  `30545194526` and Image `30545194494` are green; Image artifact
+  `8760548898` exists. Candidate `30545194754` published the quarantined tag,
+  then failed at `digest_roundtrip` when host `ps` reported `process ID out of
+  range` after detach/immediate PID handling. The exact inspected PID is
+  `UNVERIFIED`. Preserve the tag unchanged at digest
+  `sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
+  and config
+  `sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`.
+  Attestations and candidate artifact are absent, cleanup succeeded, and the
+  classification is `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
+- C4 uses one bounded exact-container/image state proof in both shared
+  prepublication and post-push digest paths. It requires allowlisted state,
+  the same positive PID in consecutive healthy observations before host `ps`,
+  matching positive UID/GID, and a post-`ps` same-state confirmation. Exact
+  `running` status and false paused/restarting/dead flags are required; exited,
+  unhealthy, missing-health, OOM, state-error, malformed, timeout, and changed
+  state fail closed. Failed upload storage callbacks wait for output close
+  before workspace cleanup without changing deadline or retry policy.
+- Uploaded evidence may report only `I8_CANDIDATE_EVIDENCE_READY`; only final
+  enforcement after evidence upload, publication cleanup, and evidence cleanup
+  may report `I8_SIGNED_CANDIDATE_COMPLETE`; both cleanup outcomes remain
+  visible in the final summary.
+- Post-correction C4 evidence is 734/734 affected tests, full JavaScript
+  1296/1296, and Python 42/43 pass with one expected Windows POSIX-permission
+  skip. Local Docker is `NOT_RUN_ENVIRONMENT`. One C4 commit and one normal non-force corrective push
+  remain authorized. Replacement hosted results are `PENDING`. `main`,
+  PR/merge/force-push, later correction, old-tag mutation, release/Git tag,
+  deploy, and repository settings remain outside authorization.
 
 ## Testing
 - Use Python test runners under tests/testing-scripts/.

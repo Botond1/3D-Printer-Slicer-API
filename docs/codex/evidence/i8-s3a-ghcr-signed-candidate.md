@@ -4,13 +4,23 @@
 
 I8 starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C2A
-commit `8df4d0d9972ce0a066ef0e630479f7367bc39938`. Hosted Source run
-`30224324987` and Image run `30224324996` are `SUCCESS`. Candidate Publication
-run `30224324993` is `FAILURE` at
-`runtime_resource_contract_failure:container_reference_invalid`. Registry
-login, image push, and attestation were skipped, and the candidate tag and GHCR
-package are absent. No registry, signature, or attestation side effect exists.
+`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C3
+commit `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`. Hosted Source run
+`30545194526` and Image run `30545194494` are `SUCCESS`; Image artifact
+`8760548898` exists. Candidate Publication run `30545194754` is `FAILURE`
+after publication at `digest_roundtrip`: host `ps` reported `process ID out of
+range` after detach/immediate PID handling. The exact PID inspected by that run
+is `UNVERIFIED` and must not be inferred.
+
+The quarantined discovery tag
+`candidate-81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3` remains unchanged at
+manifest digest
+`sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
+and config identity
+`sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`.
+GitHub and OCI provenance/SBOM attestations are absent, the candidate artifact
+is absent, and hosted publication cleanup plus evidence cleanup succeeded. The
+exact classification is `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
 
 The pre-C1 root cause was limited to GitHub event registration:
 `workflow_dispatch` cannot start a workflow that is absent from the default
@@ -29,13 +39,14 @@ corrects both seams. The helper admits exactly
 reference, digest reference, mutable reference, third namespace, or
 injection-shaped value.
 
-The C2A hosted failure is distinct: the Candidate workflow supplied
+The historical C2A hosted failure is distinct: the Candidate workflow supplied
 `s3a-publication-<run-id>-<run-attempt>` to the I4 runtime-envelope helper,
 whose main-container validator still admitted only `s3a-validation-*`. I8-C3
-corrects only that seam. Exactly one C3 corrective commit and one normal
-non-force push to the existing branch are authorized. C3 Source, Image, and
-Candidate Publication results are `PENDING` at the commit boundary. This is
-not a hosted-publication success claim.
+corrected only that seam before the hosted partial-publication result above.
+I8-C4 now corrects the distinct detach/PID observation race. Exactly one C4
+corrective commit and one normal non-force push to the existing branch remain
+authorized. Replacement Source, Image, and Candidate Publication results are
+`PENDING` at this commit boundary. No signed-candidate success is claimed.
 
 Current classifications:
 
@@ -54,14 +65,22 @@ Current classifications:
 | I8-C2A hosted Image Validation | `SUCCESS`, run `30224324996` |
 | I8-C2A hosted Candidate Publication | `FAILURE`, run `30224324993`, `runtime_resource_contract_failure:container_reference_invalid` |
 | I8-C2A registry login/push/attestation | `SKIPPED`; candidate tag/package absent; no registry side effect |
-| I8-C3 I4 namespace correction | `IMPLEMENTED_LOCAL_PENDING_COMMIT` |
+| I8-C3 I4 namespace correction | `CREATED`, committed/pushed as `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3` |
 | I8-C3 focused namespace/workflow lane | `VERIFIED_LOCAL`, 686/686 pass across 12 files |
-| I8-C3 commit and remaining push | `PENDING`; exactly one commit and one normal non-force branch push authorized |
-| I8-C3 hosted Source/Image/Publication | `PENDING` at the commit boundary |
-| GHCR candidate digest | `NOT_CREATED` |
-| GitHub/Sigstore signature | `NOT_CREATED` |
-| Build-provenance attestation | `NOT_CREATED` |
-| SPDX SBOM attestation | `NOT_CREATED` |
+| I8-C3 hosted Source Validation | `SUCCESS`, run `30545194526` |
+| I8-C3 hosted Image Validation | `SUCCESS`, run `30545194494`, artifact `8760548898` |
+| I8-C3 hosted Candidate Publication | `FAILURE`, run `30545194754`, after publication at `digest_roundtrip` |
+| I8-C3 published candidate | `I8_CANDIDATE_PUBLISHED_UNATTESTED`; quarantined tag preserved at digest `sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`, config `sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657` |
+| I8-C3 provenance/SBOM attestations | `ABSENT` from GitHub and OCI |
+| I8-C3 candidate artifact | `ABSENT` |
+| I8-C3 publication/evidence cleanup | `SUCCESS` |
+| I8-C4 bounded state-proof correction | `IMPLEMENTED_LOCAL_PENDING_COMMIT` |
+| I8-C4 affected Candidate/runtime/attestation lane | `VERIFIED_LOCAL`, 734/734 pass after final correction |
+| I8-C4 full JavaScript suite | `VERIFIED_LOCAL`, 1296/1296 pass |
+| I8-C4 full Python suite | `VERIFIED_LOCAL`, 43 run, 42 pass, one expected Windows POSIX-permission skip |
+| I8-C4 local Docker proof | `NOT_RUN_ENVIRONMENT` |
+| I8-C4 commit and remaining push | `PENDING`; exactly one commit and one normal non-force branch push authorized |
+| I8-C4 replacement hosted Source/Image/Publication | `PENDING` at the commit boundary |
 | Deployment | `NOT_RUN_NO_DEPLOY` |
 | External topology / production readiness | `UNVERIFIED` |
 
@@ -176,6 +195,15 @@ peer ingress, no host port/default route, API and native egress denial,
 SPDX 2.3 generation, Grype HIGH=0/CRITICAL=0/known-Swiper=0, bounded evidence,
 and run-owned cleanup preconditions.
 
+I8-C4 uses `scripts/i8-runtime-state-proof.js` before both shared
+prepublication runtime consumers and the post-push digest runtime/Compose
+consumer. It binds the exact container ID and image ID, parses only an
+allowlisted state shape, requires the same positive PID in consecutive healthy
+observations before host `ps`, requires matching positive kernel UID/GID, and
+confirms the same ready state after `ps`. Exit, unhealthy or missing health,
+OOM, state error, malformed state/PID/identity, timeout, and post-`ps` state
+change fail closed.
+
 The normal Image Validation workflow remains read-only and never pushes or
 attests.
 
@@ -245,8 +273,10 @@ All paths constrain the exact repository, signer workflow, ref, source digest,
 subject digest, and predicate. Separate wrong-digest and wrong-repository
 probes must fail. An attestation ID or HTTP success alone is insufficient.
 
-No attestation was created or cryptographically verified by C1. C2A hosted
-execution remains pending at the commit boundary.
+No attestation was created or cryptographically verified by C1 or C2A. The C3
+candidate was published, but GitHub and OCI provenance/SBOM attestations remain
+absent because `digest_roundtrip` failed first. C4 replacement attestation and
+verification remain `PENDING` at the commit boundary.
 
 ## I8 provenance v2 and evidence boundary
 
@@ -261,6 +291,12 @@ tag, registry manifest/config digests, Dockerfile/package/lock/SBOM/scan
 hashes, runtime/topology/abort gates, digest round trip, both attestation
 identities and bundle hashes, signature verification, publication status,
 bounded upload, cleanup, and no-deploy result.
+
+The record's aggregator result is only `I8_CANDIDATE_EVIDENCE_READY`. It cannot
+claim `I8_SIGNED_CANDIDATE_COMPLETE`; that value is reserved for the final
+enforcement step after evidence-boundary validation, artifact upload,
+publication cleanup, and evidence cleanup. One-by-one mutation contracts cover
+every final aggregation dependency.
 
 Only these hosted files may be uploaded:
 
@@ -410,9 +446,43 @@ The focused C3 lane passes 686/686 tests across 12 files. Its audit matrix is:
 | Cleanup | Uses exact environment references and requires ownership labels plus exact image, container, and network IDs before removal | `ALIGNED` |
 | Candidate helper chain | No other executable validation-only namespace regex found | `ALIGNED` |
 
-This is a commit-boundary result only. I8-C3 hosted Source Validation, Image
-Validation, and Candidate Publication are all `PENDING`; the GHCR digest,
-signature, and attestations remain `NOT_CREATED`.
+I8-C3 was committed and pushed as
+`81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`. Hosted Source run
+`30545194526` and Image run `30545194494` succeeded. Candidate Publication run
+`30545194754` published the quarantined tag and exact digest above, then failed
+at `digest_roundtrip` when host `ps` reported `process ID out of range` after
+detach/immediate PID handling. The exact inspected PID remains `UNVERIFIED`.
+GitHub/OCI provenance and SBOM attestations and the candidate artifact are
+absent; publication and evidence cleanup succeeded. Final status is
+`I8_CANDIDATE_PUBLISHED_UNATTESTED`.
+
+## I8-C4 bounded runtime-state and final-aggregation correction
+
+C4 applies the bounded shared state proof described above to both runtime paths
+without changing I6 topology, build-once identity, digest-only consumption,
+attestation identity, cleanup ownership, or no-deploy boundaries. The state
+projection includes exact status plus running, paused, restarting, and dead
+flags. Only status `running` with all transition flags false can become ready,
+including the post-`ps` recheck. The focused coverage includes
+malformed/zero/negative/changing PIDs, exited/paused/restarting/dead/unhealthy/
+missing-health/OOM/state-error/timeout paths, kernel UID/GID mismatch,
+post-`ps` state change, old-tag quarantine, and one-by-one final-aggregation
+dependency mutations.
+
+The previously blocked full-JavaScript gate exposed a separate Windows
+transport-abort cleanup race. `app/routes/slice.routes.js` now defers the failed
+storage callback until the owned output stream has emitted `close`; the live
+HTTP test aligns the HTTP request and application upload deadlines with their
+shared production value. The correction adds no timeout increase or retry.
+Final aggregation also reports publication- and evidence-cleanup outcomes
+independently when an earlier partial-publication classification is primary.
+Post-correction affected tests pass 734/734; the complete JavaScript suite
+passes 1296/1296; Python ran 43 tests with 42 pass and one expected Windows
+POSIX-permission skip. Local Docker is `NOT_RUN_ENVIRONMENT`.
+
+This is a commit-boundary result only. I8-C4 replacement Source Validation,
+Image Validation, and Candidate Publication are `PENDING`; no replacement
+digest, attestation, verification, artifact, or cleanup success is claimed.
 
 ## Read-only external observations and no-deploy boundary
 
@@ -426,14 +496,14 @@ package-setting, registry-delete, or mutable-promotion operation. External
 caller/proxy/firewall/egress/secret topology and deployed digest remain
 `UNVERIFIED`; production readiness remains `UNVERIFIED`.
 
-The I8-C3 authorization permits exactly one remaining corrective commit and one
+The I8-C4 authorization permits exactly one remaining corrective commit and one
 normal non-force push to the existing candidate branch. It does not permit a
 `main` push, PR, merge, force-push, any later corrective commit or push,
-release, Git tag, mutable image tag, deployment, SSH/VPS operation, registry
-overwrite/delete, or repository/environment/secret/branch-policy setting
-change.
+release, Git tag, mutable image tag, old-tag mutation, deployment, SSH/VPS
+operation, registry overwrite/delete, or
+repository/environment/secret/branch-policy setting change.
 
-The C3 corrective push must automatically trigger Source Validation, Image
+The C4 corrective push must automatically trigger Source Validation, Image
 Validation, and Candidate Publication. Until all three exact-SHA runs and every
 publication/attestation/evidence/cleanup gate are green, no hosted publication
 or signing success claim is valid.

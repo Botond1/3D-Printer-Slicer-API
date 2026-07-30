@@ -24,6 +24,7 @@ const {
 } = require('../../../app/services/http-server');
 const { createSliceRouter } = require('../../../app/routes/slice.routes');
 const { createJobWorkspace } = require('../../../app/services/slice/workspace');
+const { resolveResourcePolicy } = require('../../../app/config/resource-policy');
 const errorHandler = require('../../../app/middleware/errorHandler');
 
 const ENVELOPE_FIELDS = Object.freeze([
@@ -161,6 +162,10 @@ async function createLiveSliceHarness(t, serverOptions) {
         onLifecycleSettled(info) {
             settlements.push(info);
             settleNext(info);
+        },
+        resourcePolicy: {
+            ...resolveResourcePolicy({}),
+            UPLOAD_TOTAL_TIMEOUT_MS: serverOptions.requestTimeout
         }
     }));
     app.use(errorHandler);
@@ -354,8 +359,8 @@ test('live partial-request timeout cannot become 2xx and cleans request-owned re
         'request workspace allocation'
     );
     const result = await exchange;
-    // The server-side request timeout remains 150 ms; this deadline only gives
-    // an overloaded aggregate test process enough time to observe async cleanup.
+    // HTTP receive and application upload deadlines both remain 150 ms, matching
+    // their shared production default; this bound only observes settled cleanup.
     await withDeadline(harness.nextSettlement, 5_000, 'partial request cleanup');
     const status = responseStatus(result.response);
 

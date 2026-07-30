@@ -36,13 +36,21 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`.
 - Publication is not deployment. Preserve and classify any partial published
   candidate; never overwrite, delete, promote, or deploy it.
-- The current committed C2A boundary is
-  `8df4d0d9972ce0a066ef0e630479f7367bc39938`. Hosted Source run
-  `30224324987` and Image run `30224324996` are `SUCCESS`; Candidate run
-  `30224324993` is `FAILURE` at
-  `runtime_resource_contract_failure:container_reference_invalid`. Registry
-  login, push, and attestation were skipped; the candidate tag/package are
-  absent, so no registry side effect exists.
+- The current committed C3 boundary is
+  `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`. Hosted Source run
+  `30545194526` and Image run `30545194494` are `SUCCESS`; Image artifact
+  `8760548898` exists. Candidate run `30545194754` is `FAILURE` after
+  publication at `digest_roundtrip`: host `ps` reported `process ID out of
+  range` after detach/immediate PID handling. The exact inspected PID is
+  `UNVERIFIED`.
+- Preserve the quarantined discovery tag
+  `candidate-81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3` unchanged at digest
+  `sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
+  and config identity
+  `sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`.
+  GitHub/OCI provenance and SBOM attestations and the candidate artifact are
+  absent; publication and evidence cleanup succeeded. Classification is
+  `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
 - C3 corrects the sole namespace drift: the I4 main-container contract now
   accepts only the full-string, 128-byte-bounded `s3a-validation-<run>-<attempt>`
   and `s3a-publication-<run>-<attempt>` forms. I2 image aliases already use the
@@ -51,11 +59,27 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   cleanup remains bound to exact environment references, ownership labels, and
   exact image/container/network identities. No other executable
   validation-only regex exists in the Candidate helper chain.
-- The focused C3 lane is green at 686/686 across 12 files. Exactly one C3
-  commit and one normal non-force push are authorized; C3 hosted
-  Source/Image/Candidate results remain `PENDING` at the commit boundary.
-  Candidate digest, signature, and attestations remain `NOT_CREATED`, and no
-  later correction is authorized.
+- C4 uses one bounded runtime-state proof before both shared prepublication and
+  post-push digest runtime validation: exact container/image identity,
+  allowlisted state, a stable repeated positive PID before host `ps`, matching
+  positive UID/GID, and a post-`ps` same-state confirmation. Status must be
+  `running`; paused, restarting, dead, exited, unhealthy or missing health,
+  OOM, state error, malformed state/PID/identity, timeout, and state change fail
+  closed.
+- Failed upload storage callbacks wait for the output stream to close before
+  workspace cleanup; HTTP and application upload deadlines remain aligned
+  without a timeout increase or retry.
+- Uploaded evidence may report only `I8_CANDIDATE_EVIDENCE_READY`;
+  `I8_SIGNED_CANDIDATE_COMPLETE` is reserved for final enforcement after
+  evidence upload and both cleanup steps. One-by-one final-dependency mutations
+  enforce this boundary, and both cleanup outcomes remain visible in the final
+  summary.
+- Post-correction C4 evidence is 734/734 affected tests, full JavaScript
+  1296/1296, and Python 42/43 pass with one expected Windows POSIX-permission
+  skip. Local Docker is `NOT_RUN_ENVIRONMENT`. Exactly one C4 commit and one normal
+  non-force push are authorized; the three replacement-candidate hosted runs
+  remain `PENDING` at this commit boundary, and no later correction is
+  authorized.
 - Preserve the no-`main`, no-PR/merge/force-push, no-release/Git-tag, no
   mutable-image-tag, no-deploy, and no-repository-setting-change boundary.
 

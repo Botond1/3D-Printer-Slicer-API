@@ -61,8 +61,7 @@ function workflowContract(source) {
         '[ "$SERVICE_UID" = "0" ]', '[ "$SERVICE_GID" = "0" ]',
         '--pull never', '--network none', '--cap-drop ALL', '--security-opt no-new-privileges',
         '--label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID"',
-        "docker inspect --format '{{.State.Pid}}'", '/usr/bin/ps -o uid=,gid= -p "$container_pid"',
-        '[ "$kernel_uid" != "$SERVICE_UID" ]', '[ "$kernel_gid" != "$SERVICE_GID" ]'
+        'container_id="$(', 'echo "container_id=$container_id" >> "$GITHUB_OUTPUT"'
     ]) assert.ok(start.includes(anchor), `start missing ${anchor}`);
     const mounts = [...start.matchAll(/--tmpfs "([^"]+)"/g)].map((match) => match[1]);
     assert.deepEqual(mounts.map((mount) => mount.split(':')[0]), ['/app/input', '/app/output']);
@@ -72,7 +71,9 @@ function workflowContract(source) {
             assert.ok(mount.split(':')[1].split(',').includes(option), `mount missing ${option}`);
         }
     }
-    assert.match(smoke, /if \[ "\$running" = "true" \] && \[ "\$health" = "healthy" \]; then/);
+    assert.match(smoke, /node scripts\/i8-runtime-state-proof\.js/);
+    assert.ok(smoke.indexOf('node scripts/i8-runtime-state-proof.js')
+        < smoke.indexOf('node scripts/i4-image-runtime-envelope.js'));
     assert.doesNotMatch(source, /\b999\b|mode=0777|I2_PROBE_[ABC]_NAME|runtime-ownership\.json|ownership_(?:characterization|finalization)/);
     for (const file of ['image-identity.txt', 'runtime-diagnostics.json',
         'topology-evidence.json', 'sbom.spdx.json', 'grype.json']) {
@@ -222,15 +223,14 @@ test('required workflow mutations are rejected', async (t) => {
         ['root gid accepted', '[ "$SERVICE_GID" = "0" ]', '[ "$SERVICE_GID" = "never" ]'],
         ['uid validation removed', '[[ ! "$SERVICE_UID" =~ ^[0-9]+$ ]]', 'false'],
         ['gid validation removed', '[[ ! "$SERVICE_GID" =~ ^[0-9]+$ ]]', 'false'],
-        ['kernel uid check removed', '[ "$kernel_uid" != "$SERVICE_UID" ]', 'false'],
-        ['kernel gid check removed', '[ "$kernel_gid" != "$SERVICE_GID" ]', 'false'],
+        ['runtime state proof removed', '          node scripts/i8-runtime-state-proof.js\n', ''],
         ['input uid missing', 'size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700', 'size=64m,gid=${SERVICE_GID},mode=0700'],
         ['output gid missing', 'size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700', 'size=64m,uid=${SERVICE_UID},mode=0700', 2],
         ['world writable', 'mode=0700', 'mode=0777'], ['noexec missing', 'nodev,noexec,size=64m', 'nodev,size=64m'],
         ['nosuid missing', 'rw,nosuid,nodev', 'rw,nodev'], ['nodev missing', 'nosuid,nodev,noexec', 'nosuid,noexec'],
         ['unbounded tmpfs', 'size=64m,uid=', 'uid='], ['only one mount', '            --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \\\n', ''],
         ['identity step bypassed', "        id: runtime_identity\n        if: ${{ always() && steps.build.outcome == 'success' }}", "        id: runtime_identity\n        if: ${{ false }}"],
-        ['health accepts exited container', 'if [ "$running" = "true" ] && [ "$health" = "healthy" ]; then', 'if [ "$health" = "healthy" ]; then'],
+        ['container identity output removed', '          echo "container_id=$container_id" >> "$GITHUB_OUTPUT"\n', ''],
         ['health weakened', "process.env.SMOKE_OUTCOME !== 'success'", 'false'],
         ['final identity ignored', "failures.push('runtime_identity_failure');", ''],
         ['final Orca smoke ignored', "failures.push('orca_cli_smoke_failure');", ''],

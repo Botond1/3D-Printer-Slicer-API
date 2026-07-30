@@ -424,40 +424,32 @@ jobs:
           [ "$(docker image inspect --format '{{.Id}}' "$DIGEST_REF")" = "$EXPECTED_IMAGE_ID" ]
 
           node scripts/i2-orca-runtime-smoke.js
-          docker run --detach \
-            --name "$I8_DIGEST_CONTAINER_NAME" \
-            --pull never --restart no --network none --cap-drop ALL \
-            --security-opt no-new-privileges --read-only --pids-limit 512 \
-            --memory 4g --memory-swap 4g --cpus 2 --stop-timeout 30 \
-            --tmpfs "/app/input:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
-            --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
-            --tmpfs "/app/configs/pricing-state:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
-            --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
-            --env SLICE_SERVICE_API_KEY=i8-digest-slice-active-260725-a1 \
-            --env PRICING_API_KEY=i8-digest-pricing-active-260725-b1 \
-            --env ARTIFACT_API_KEY=i8-digest-artifact-active-260725-c1 \
-            --env OPERATIONS_API_KEY=i8-digest-operations-active-260725-d1 \
-            --label io.s3a.validation-only=true \
-            --label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID" \
-            "$RUNTIME_IMAGE_REF"
-          container_pid="$(docker inspect --format '{{.State.Pid}}' "$I8_DIGEST_CONTAINER_NAME")"
-          kernel_identity="$(/usr/bin/ps -o uid=,gid= -p "$container_pid")"
-          read -r kernel_uid kernel_gid <<< "$kernel_identity"
-          [ "$kernel_uid" = "$SERVICE_UID" ] && [ "$kernel_gid" = "$SERVICE_GID" ]
-          for attempt in $(seq 1 120); do
-            running="$(docker inspect --format '{{.State.Running}}' "$I8_DIGEST_CONTAINER_NAME")"
-            health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
-              "$I8_DIGEST_CONTAINER_NAME")"
-            if [ "$running" = "true" ] && [ "$health" = "healthy" ]; then break; fi
-            if [ "$running" != "true" ] || [ "$health" = "unhealthy" ] || [ "$health" = "missing" ]; then
-              exit 2
-            fi
-            [ "$attempt" -lt 120 ] || exit 2
-            sleep 2
-          done
+          container_id="$(
+            docker run --detach \
+              --name "$I8_DIGEST_CONTAINER_NAME" \
+              --pull never --restart no --network none --cap-drop ALL \
+              --security-opt no-new-privileges --read-only --pids-limit 512 \
+              --memory 4g --memory-swap 4g --cpus 2 --stop-timeout 30 \
+              --tmpfs "/app/input:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
+              --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
+              --tmpfs "/app/configs/pricing-state:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
+              --tmpfs "/tmp:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \
+              --env SLICE_SERVICE_API_KEY=i8-digest-slice-active-260725-a1 \
+              --env PRICING_API_KEY=i8-digest-pricing-active-260725-b1 \
+              --env ARTIFACT_API_KEY=i8-digest-artifact-active-260725-c1 \
+              --env OPERATIONS_API_KEY=i8-digest-operations-active-260725-d1 \
+              --label io.s3a.validation-only=true \
+              --label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID" \
+              "$RUNTIME_IMAGE_REF"
+          )"
+          if [[ ! "$container_id" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "::error title=I8 digest runtime::runtime_container_id_failure"
+            exit 2
+          fi
+          CONTAINER_NAME="$I8_DIGEST_CONTAINER_NAME" \
+            EXPECTED_CONTAINER_ID="$container_id" \
+            node scripts/i8-runtime-state-proof.js
           node scripts/i7-production-compose-contract.js
-          echo "kernel_uid=$kernel_uid" >> "$GITHUB_OUTPUT"
-          echo "kernel_gid=$kernel_gid" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub and Sigstore build provenance for the exact digest
         id: provenance_attestation
@@ -954,7 +946,7 @@ jobs:
             },
             aggregator: {
               evidence_boundary: 'bounded_allowlist_only',
-              result: 'I8_SIGNED_CANDIDATE_COMPLETE'
+              result: 'I8_CANDIDATE_EVIDENCE_READY'
             },
             deployed_digest: 'not_applicable_no_deploy'
           };
@@ -1161,11 +1153,17 @@ jobs:
             echo
             echo "Classification: \`$classification\`."
             echo "Failed step: \`$failed_step\`."
+            echo "Publication cleanup outcome: \`$PUBLICATION_CLEANUP_OUTCOME\`."
+            echo "Evidence cleanup outcome: \`$EVIDENCE_CLEANUP_OUTCOME\`."
             if [ "$REMOTE_PUBLISHED" = "matching" ]; then
               echo "The remote discovery-tagged digest is preserved; no deploy or mutable tag was created."
               echo "Observed registry digest: \`$REGISTRY_DIGEST\`."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$PUBLICATION_CLEANUP_OUTCOME" != "success" ] || \
+             [ "$EVIDENCE_CLEANUP_OUTCOME" != "success" ]; then
+            echo "::error title=I8 cleanup::publication=$PUBLICATION_CLEANUP_OUTCOME,evidence=$EVIDENCE_CLEANUP_OUTCOME"
+          fi
           if [ "$classification" != "I8_SIGNED_CANDIDATE_COMPLETE" ]; then
             echo "::error title=I8 publication::$classification"
             exit 1

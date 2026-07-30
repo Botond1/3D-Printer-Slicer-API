@@ -205,7 +205,7 @@ function draft(env, evidenceRoot) {
         },
         aggregator: {
             evidence_boundary: 'bounded_allowlist_only',
-            result: 'I8_SIGNED_CANDIDATE_COMPLETE'
+            result: 'I8_CANDIDATE_EVIDENCE_READY'
         },
         deployed_digest: 'not_applicable_no_deploy'
     };

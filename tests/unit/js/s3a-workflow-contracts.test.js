@@ -783,19 +783,16 @@ function validateImage(gateSource, wrapperSource = WORKFLOWS.image) {
     addError(errors, Boolean(smokeGate), 'image: missing explicit smoke_gate step');
     if (smokeGate) {
         const smokeText = blockText(smokeGate);
-        addError(errors, /for\s+attempt\s+in\s+\$\(seq\s+1\s+120\)/.test(smokeText)
-            && /\.State\.Health\.Status/.test(smokeText) && /sleep\s+2/.test(smokeText)
-            && /\[ "\$running" = "true" \] && \[ "\$health" = "healthy" \]/.test(smokeText),
-        'image: smoke_gate must retain the bounded liveness-only health loop');
+        addError(errors, /^\s*node scripts\/i8-runtime-state-proof\.js\s*$/m.test(smokeText)
+            && smokeText.includes('steps.container_start.outputs.container_id')
+            && smokeText.includes('steps.image_identity.outputs.image_id')
+            && smokeText.includes('steps.runtime_identity.outputs.uid')
+            && smokeText.includes('steps.runtime_identity.outputs.gid'),
+        'image: smoke_gate must execute the exact bounded runtime state proof');
         addError(errors, stepKeyBlock(smokeGate, 'if') === null,
             'image: smoke_gate must not have a skippable if condition');
         addError(errors, stepScalar(smokeGate, 'continue-on-error') === 'true',
             'image: smoke_gate must return control for independent gates');
-        addError(errors, smokeText.includes('classification=runtime_liveness_failure'),
-            'image: smoke_gate must expose a stable runtime failure classification');
-        addError(errors, (smokeText.match(/classification=runtime_liveness_failure/g) || []).length === 2
-            && (smokeText.match(/exit 1/g) || []).length === 2,
-        'image: smoke_gate must exit nonzero after every runtime failure classification');
         const dockerRunStep = stepBlocks(document).find((step) => runCommands(step)
             .some((command) => /\bdocker\s+run\b/.test(command)));
         addError(errors, dockerRunStep && smokeGate.start > dockerRunStep.start,
@@ -1724,10 +1721,11 @@ test('image build, credential, isolation, scan, artifact, and cleanup mutations 
             '        id: smoke_gate\n        continue-on-error: true',
             '        id: smoke_gate', 'id: smoke_gate\n        shell: bash'),
         /smoke_gate must return control/],
-        ['smoke failure classification exits successfully', (source) => mutateOnce(source,
-            '              echo "Container failed its liveness-only smoke gate (running=$running, health=$health)." >&2\n              exit 1',
-            '              echo "Container failed its liveness-only smoke gate (running=$running, health=$health)." >&2\n              exit 0',
-            'health=$health)." >&2\n              exit 0'), /must exit nonzero after every runtime failure classification/],
+        ['runtime state proof failure is neutralized', (source) => mutateOnce(source,
+            '          node scripts/i8-runtime-state-proof.js',
+            '          node scripts/i8-runtime-state-proof.js || true',
+            'node scripts/i8-runtime-state-proof.js || true'),
+        /must execute the exact bounded runtime state proof/],
         ['runtime diagnostics step removed', (source) => mutateOnce(source,
             '        id: runtime_diagnostics', '        id: runtime_diagnostics_disabled',
             'id: runtime_diagnostics_disabled'), /missing bounded runtime_diagnostics/],
