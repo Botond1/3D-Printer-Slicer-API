@@ -2,7 +2,12 @@
 
 ## I9/S3b ephemeral staging and rollback checkpoint
 
-Status: `IMPLEMENTED_LOCAL_HOSTED_PENDING`.
+Status: `I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE`.
+
+Exact code-bearing SHA `c632a75fcb83f2dbcde93d31ef0170de095c4abd`
+passed hosted Source `30623957952`, Image `30623957930`, and I9 rehearsal
+`30623957946`. This completes the repository/hosted-ephemeral foundation only;
+real staging/production promotion remains `UNVERIFIED_NOT_AUTHORIZED`.
 
 Baseline is completed I8 SHA
 `1fffab87960c675a053ae814d374cab331fbb14d`; target branch is
@@ -298,7 +303,7 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S2 - resource/state envelope | `IN_PROGRESS` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | I3 implements a bounded Node HTTP-server subset; resource/archive, artifact/pricing, and container-permission exits remain open | I3 locally implements and focuses tests on header/request/keep-alive timeouts, header/connection counts, and requests/socket with bounded fallback. Final aggregate and exact-SHA evidence are pending; measured VPS/proxy/CPU/RAM/PID/disk/archive/model/output caps, streaming limits, artifact retention/correlation, atomic pricing, and read-only state separation remain incomplete. |
 | S3a - repository build/provenance and automatic-deploy separation | `VERIFIED_SIGNED_CANDIDATE; POLICY_UNVERIFIED` | S0.1; exact hosted I7 baseline green | I8 provides the shared build-once gate, least-privilege digest-bound GHCR publication, SLSA/SPDX attestations, positive and negative verification, bounded v2 evidence, and no-deploy aggregation | Exact I8 SHA `1fffab87960c675a053ae814d374cab331fbb14d` passed Source `30592235730`, Image `30592235708`, and Candidate Publication `30592235740`. Immutable digest `sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5` is signed and attested. Branch protection, required checks, approval policy, deployed topology, and production promotion remain `UNVERIFIED` and are not inferred from the candidate checkpoint. |
 | S4 - service trust and topology | `IN_PROGRESS` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | I5 supplies scoped trust; I6 selects the internal private-peer/no-host-port topology | Repository validation requires authenticated peer ingress, auth rejection, no API external route, and calibrated API/native DNS/TCP/UDP denial. Deployed callers, proxy/firewall, secrets, digest, and egress remain `UNVERIFIED`. |
-| S3b - staging and promotion drill | `IN_PROGRESS_EPHEMERAL_FOUNDATION` | signed S3a candidate; repository S4/S5 topology controls; explicit I9 authorization | I9 read-only hosted rehearsal only; real promotion remains separate | I9 implements an exact-digest previous/candidate rehearsal with fresh attestation checks, private-peer readiness, controlled storage-readiness failure, exact previous rollback, bounded evidence, and cleanup. Exit still requires all final exact-SHA hosted gates. Real staging environment, approval window, deployed caller/proxy/firewall/secrets, VPS change, production promotion, and live rollback remain `UNVERIFIED_NOT_AUTHORIZED`. |
+| S3b - staging and promotion drill | `VERIFIED_EPHEMERAL_FOUNDATION; PRODUCTION_UNVERIFIED` | signed S3a candidate; repository S4/S5 topology controls; explicit I9 authorization | I9 read-only hosted rehearsal only; real promotion remains separate | Code-bearing SHA `c632a75fcb83f2dbcde93d31ef0170de095c4abd` passed Source, Image, and I9 exact-digest previous/candidate rehearsal gates with fresh attestation checks, private-peer readiness, controlled storage-readiness failure, exact previous rollback, bounded evidence, and cleanup. Real staging environment, approval window, deployed caller/proxy/firewall/secrets, VPS change, production promotion, and live rollback remain `UNVERIFIED_NOT_AUTHORIZED`. |
 | S5 - topology/optional async worker decision | `IN_PROGRESS` | I5 trust controls and S4 topology evidence | private-peer topology selected; async API/worker deferred | `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`. Complete exact deployed caller, proxy, secret, digest, firewall, and egress evidence without changing current endpoints. |
 
 ## Current S0.1 verification checkpoint

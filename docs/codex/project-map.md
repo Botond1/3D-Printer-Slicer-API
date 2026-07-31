@@ -2,6 +2,11 @@
 
 ## Current I9/S3b ephemeral staging and rollback foundation
 
+Status: `I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE` for code-bearing SHA
+`c632a75fcb83f2dbcde93d31ef0170de095c4abd`. Hosted Source
+`30623957952`, Image `30623957930`, and I9 rehearsal `30623957946`
+succeeded without deployment or registry mutation.
+
 Direct source map:
 
 `i9-staging-rehearsal.json` -> read-only tag/digest and SLSA/SPDX verification
@@ -34,7 +39,7 @@ cleanup.
   distinct container generations, candidate-failure observation, exact
   previous-digest restoration, complete cleanup, and
   `not_applicable_ephemeral_no_deploy`.
-- The workflow is a hosted-ephemeral rehearsal. It does not prove a real
+- The verified workflow is a hosted-ephemeral rehearsal. It does not prove a real
   operator, proxy/firewall, production secret source, deployed digest, VPS
   change window, production readiness, or production rollback.
 
@@ -623,7 +628,7 @@ code order is authoritative.
 | Profiles/state | Immutable [`configs/prusa`](../../configs/prusa) and [`configs/orca`](../../configs/orca) profiles plus writable primary pricing state `configs/pricing-state/pricing.json`; legacy `configs/pricing.json` is migration/fallback input only. |
 | Integration runners | [`tests/testing-scripts`](../../tests/testing-scripts) with shared helpers in `common/`; reports are generated in ignored `results/`. |
 | Runtime/container | [`Dockerfile`](../../Dockerfile), [`docker-compose.yml`](../../docker-compose.yml), and [`docker-compose.dev.yml`](../../docker-compose.dev.yml). |
-| Automation | [`ci.yml`](../../.github/workflows/ci.yml) and [`image-validation.yml`](../../.github/workflows/image-validation.yml) validate an exact candidate without deployment; [`candidate-publication.yml`](../../.github/workflows/candidate-publication.yml) is the completed I8 exact-branch signed-candidate publisher; [`staging-rollback-rehearsal.yml`](../../.github/workflows/staging-rollback-rehearsal.yml) is the I9 registry-read-only hosted rehearsal; [`deploy.yml`](../../.github/workflows/deploy.yml) remains a manual no-deploy preflight. |
+| Automation | [`ci.yml`](../../.github/workflows/ci.yml) and [`image-validation.yml`](../../.github/workflows/image-validation.yml) validate an exact candidate without deployment; [`candidate-publication.yml`](../../.github/workflows/candidate-publication.yml) is the completed I8 exact-branch signed-candidate publisher; [`staging-rollback-rehearsal.yml`](../../.github/workflows/staging-rollback-rehearsal.yml) is the hosted-verified I9 registry-read-only rehearsal; [`deploy.yml`](../../.github/workflows/deploy.yml) remains a manual no-deploy preflight. |
 
 ## Runtime state and artifact lifecycle
 

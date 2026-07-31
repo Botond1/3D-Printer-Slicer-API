@@ -2,14 +2,20 @@
 
 ## I9/S3b ephemeral staging and rollback control delta
 
+Hosted classification:
+`I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE` at code-bearing SHA
+`c632a75fcb83f2dbcde93d31ef0170de095c4abd`; Source `30623957952`,
+Image `30623957930`, and I9 rehearsal `30623957946` succeeded. The
+classification is intentionally limited to the ephemeral runner boundary.
+
 | Control | Repository classification | Remaining boundary |
 | --- | --- | --- |
-| Immutable previous/candidate pair | `IMPLEMENTED_AND_TESTED` | The manifest requires distinct lowercase GHCR manifest, config, and source identities. The previous C6 digest is rehearsal-only and must pass fresh SLSA/SPDX verification. |
-| Workflow authority | `READ_ONLY_NO_DEPLOY` | Exact branch push, actor, remote HEAD, ancestry, and final trailer are required. Permissions are global none, preflight contents-read, and rehearsal contents/packages/attestations-read. |
-| Runtime identity and state | `IMPLEMENTED_AND_TESTED` | Both images must resolve to `User=slicer`, the same positive non-root UID/GID, exact config IDs, internal network, no host port/default route, and run-owned `0700` writable state. |
-| Meaningful readiness | `IMPLEMENTED_AND_TESTED` | Two consecutive private-peer passes require liveness, minimal and operations readiness, fresh detailed Python/storage/native/config/pricing/retention/queue health, idle queue, and exact auth rejection. |
-| Controlled failure and rollback | `IMPLEMENTED_AND_TESTED` | Candidate pricing state changes `0700 -> 0500 -> 0700`; liveness must survive and readiness must fail only with `STORAGE_UNSAFE`; automatic rollback must restore the exact previous digest under a new container/PID. |
-| Evidence and cleanup | `IMPLEMENTED_AND_TESTED` | Exact-key bounded JSON, allowlisted upload, run-owned state/image/container/network cleanup, no prune, remote immutable digests preserved, and final fail-closed aggregation. |
+| Immutable previous/candidate pair | `HOSTED_VERIFIED_EPHEMERAL` | The manifest requires distinct lowercase GHCR manifest, config, and source identities. I9 freshly verified both SLSA/SPDX attestations for the rehearsal-only previous C6 digest and signed C7 candidate. |
+| Workflow authority | `HOSTED_VERIFIED_READ_ONLY_NO_DEPLOY` | Exact branch push, actor, remote HEAD, ancestry, and final trailer passed. Permissions remained global none, preflight contents-read, and rehearsal contents/packages/attestations-read. |
+| Runtime identity and state | `HOSTED_VERIFIED_EPHEMERAL` | Both images resolved to `User=slicer`, shared UID/GID `999:999`, exact config IDs, internal network, no host port/default route, and run-owned `0700` writable state. |
+| Meaningful readiness | `HOSTED_VERIFIED_EPHEMERAL` | Two consecutive private-peer passes proved liveness, minimal and operations readiness, fresh detailed Python/storage/native/config/pricing/retention/queue health, idle queue, and exact auth rejection. |
+| Controlled failure and rollback | `HOSTED_VERIFIED_EPHEMERAL` | Candidate pricing state changed `0700 -> 0500 -> 0700`; liveness survived, readiness failed only with `STORAGE_UNSAFE`, and automatic rollback restored the exact previous digest under a new container/PID. |
+| Evidence and cleanup | `HOSTED_VERIFIED_EPHEMERAL` | Exact-key bounded JSON, allowlisted upload, run-owned state/image/container/network cleanup, no prune, remote immutable digests preserved, and final fail-closed aggregation all passed. |
 | Production topology/promotion | `UNVERIFIED_NOT_AUTHORIZED` | No VPS, deployed digest, proxy/firewall, production secret, caller, approval window, production readiness, or live rollback proof exists. |
 
 The rehearsal uses only synthetic geometry and freshly generated inert,

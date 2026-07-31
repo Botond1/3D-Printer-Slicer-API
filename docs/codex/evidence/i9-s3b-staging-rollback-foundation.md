@@ -2,7 +2,7 @@
 
 ## Status
 
-`IMPLEMENTED_LOCAL_HOSTED_PENDING`
+`I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE`
 
 This checkpoint is a hosted-ephemeral rehearsal only. It does not deploy,
 promote, contact the VPS, mutate a registry object, or establish production
@@ -120,8 +120,32 @@ adapter defects:
 The corrective delta captures absent-container/network probe status inside
 explicit conditional commands, passes only canonical expected-identity keys,
 removes one unsupported Buildx input, and adds one-by-one mutations. Final
-exact-SHA hosted Source/Image/I9 results remain pending at this commit-time
-checkpoint.
+code-bearing SHA `c632a75fcb83f2dbcde93d31ef0170de095c4abd`
+then passed Source `30623957952`, Image `30623957930`, and I9 rehearsal
+`30623957946`.
+
+## Final hosted evidence
+
+- I9 artifact `8790622022`: one allowlisted file, 5,033 bytes after
+  extraction, SHA-256
+  `ec5426bb7ca5a111eb67c241fa5b9409fc83822d5847c7345705a79b1230abab`.
+  Independent local revalidation passed the exact repository/SHA/run/job and
+  previous/current source/manifest/config identity contract.
+- The I9 record classified itself only
+  `I9_STAGING_REHEARSAL_EVIDENCE_READY`; the workflow's later final
+  aggregation alone emitted `I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE`.
+- Image artifact `8790673435`: six allowlisted files, 1,563,579 bytes
+  compressed, upload SHA-256
+  `41842232028f2aa97ddc9666bd16aafb8bdb457c7aaeacbfbf04a0fa4ccbbf05`.
+- SPDX 2.3 contained 506 packages and 14,232 files. Grype 0.110.0 reported
+  396 total matches, `HIGH=0`, `CRITICAL=0`, and known Swiper advisory count
+  `0`.
+- Exact run-local Image identity was
+  `sha256:f9fc4f65c8426d07f6d78ad0c39852279ce061a3737f7202384c77a95b2efce4`
+  with configured/kernel identity `999:999`; no registry object was created by
+  Image Validation or I9.
+- Hosted verification, runtime, evidence, action post-step, and exact cleanup
+  passed. Local downloaded evidence directories were independently removed.
 
 ## Honest remaining boundary
 

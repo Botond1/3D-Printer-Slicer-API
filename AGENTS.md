@@ -19,6 +19,14 @@ Canonical Codex knowledge:
 
 ## Current I9/S3b ephemeral staging and rollback foundation
 
+Repository checkpoint status:
+`I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE`. Exact code-bearing SHA
+`c632a75fcb83f2dbcde93d31ef0170de095c4abd` passed Source run
+`30623957952`, Image run `30623957930`, and I9 rehearsal run `30623957946`.
+I9 evidence artifact `8790622022` and Image evidence artifact `8790673435`
+were uploaded after their bounded gates and exact cleanup. This is an
+ephemeral hosted rehearsal result, not a production promotion.
+
 I9 starts from the completed I8 exact SHA
 `1fffab87960c675a053ae814d374cab331fbb14d` on
 `codex/i9-s3b-staging-rollback-foundation`. It adds a hosted-Linux,
@@ -57,10 +65,10 @@ previous digest must restart with a new container/PID and pass the full gate.
 Only bounded allowlisted evidence after exact runtime cleanup may classify
 `I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE`.
 
-This closes only a hosted-ephemeral rehearsal foundation. Actual caller/proxy,
+This closes only the hosted-ephemeral rehearsal foundation. Actual caller/proxy,
 firewall, secret delivery, deployed digest, VPS state, change approval,
 production promotion, and production rollback remain `UNVERIFIED` and require
-separate authorization. Commit-time hosted status is recorded in
+separate authorization. Exact hosted status is recorded in
 [`docs/codex/evidence/i9-s3b-staging-rollback-foundation.md`](docs/codex/evidence/i9-s3b-staging-rollback-foundation.md).
 
 ## Historical I8/S3a signed-candidate publication status
