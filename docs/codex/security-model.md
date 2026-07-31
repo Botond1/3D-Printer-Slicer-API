@@ -1,6 +1,33 @@
 # Security model
 
-## I8/S3a signed-candidate publication control delta
+## I9/S3b ephemeral staging and rollback control delta
+
+| Control | Repository classification | Remaining boundary |
+| --- | --- | --- |
+| Immutable previous/candidate pair | `IMPLEMENTED_AND_TESTED` | The manifest requires distinct lowercase GHCR manifest, config, and source identities. The previous C6 digest is rehearsal-only and must pass fresh SLSA/SPDX verification. |
+| Workflow authority | `READ_ONLY_NO_DEPLOY` | Exact branch push, actor, remote HEAD, ancestry, and final trailer are required. Permissions are global none, preflight contents-read, and rehearsal contents/packages/attestations-read. |
+| Runtime identity and state | `IMPLEMENTED_AND_TESTED` | Both images must resolve to `User=slicer`, the same positive non-root UID/GID, exact config IDs, internal network, no host port/default route, and run-owned `0700` writable state. |
+| Meaningful readiness | `IMPLEMENTED_AND_TESTED` | Two consecutive private-peer passes require liveness, minimal and operations readiness, fresh detailed Python/storage/native/config/pricing/retention/queue health, idle queue, and exact auth rejection. |
+| Controlled failure and rollback | `IMPLEMENTED_AND_TESTED` | Candidate pricing state changes `0700 -> 0500 -> 0700`; liveness must survive and readiness must fail only with `STORAGE_UNSAFE`; automatic rollback must restore the exact previous digest under a new container/PID. |
+| Evidence and cleanup | `IMPLEMENTED_AND_TESTED` | Exact-key bounded JSON, allowlisted upload, run-owned state/image/container/network cleanup, no prune, remote immutable digests preserved, and final fail-closed aggregation. |
+| Production topology/promotion | `UNVERIFIED_NOT_AUTHORIZED` | No VPS, deployed digest, proxy/firewall, production secret, caller, approval window, production readiness, or live rollback proof exists. |
+
+The rehearsal uses only synthetic geometry and freshly generated inert,
+audience-scoped credentials. Credentials and environment dumps are excluded
+from evidence. Registry access is read-only; no existing digest or tag can be
+overwritten or deleted. Hosted results remain commit-specific and are recorded
+in
+[`evidence/i9-s3b-staging-rollback-foundation.md`](evidence/i9-s3b-staging-rollback-foundation.md).
+
+## Historical I8/S3a signed-candidate publication control delta
+
+I8-C7 completed at exact SHA
+`1fffab87960c675a053ae814d374cab331fbb14d` with successful Source run
+`30592235730`, Image run `30592235708`, and Candidate Publication run
+`30592235740`. Digest
+`sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5`
+is signed, attested, positively and negatively verified, and was never
+deployed. Later historical `PENDING` text is superseded by this closure.
 
 - `.github/workflows/candidate-publication.yml` retains exact-input
   `workflow_dispatch` for future default-branch integration and adds `push`

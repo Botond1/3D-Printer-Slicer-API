@@ -1,6 +1,54 @@
 # Hardening plan
 
-## I8/S3a signed-candidate publication checkpoint
+## I9/S3b ephemeral staging and rollback checkpoint
+
+Status: `IMPLEMENTED_LOCAL_HOSTED_PENDING`.
+
+Baseline is completed I8 SHA
+`1fffab87960c675a053ae814d374cab331fbb14d`; target branch is
+`codex/i9-s3b-staging-rollback-foundation`. I9 consumes the exact signed C7
+digest plus a distinct C6 rehearsal-only previous digest. Both are pulled and
+verified read-only; no registry, deployment, VPS, repository-setting, or
+production side effect is in scope.
+
+Exit gates for this checkpoint:
+
+1. Exact actor/repository/ref/remote-HEAD/ancestry/final-trailer preflight.
+2. Fresh tag-to-digest, manifest/config/platform/source/User and both
+   SLSA/SPDX attestation proofs for previous and candidate.
+3. Dynamic shared positive non-root UID/GID and exact production Compose
+   identity with only run-owned `0700` writable state.
+4. Two consecutive private-peer liveness, minimal readiness, operations
+   readiness, fresh detailed Python/subsystem readiness, idle queue, exact auth
+   rejection, and Orca synthetic-slice proofs for previous and candidate.
+5. Controlled pricing-state `0700 -> 0500 -> 0700` fault where liveness stays
+   up and all readiness surfaces converge to exactly `STORAGE_UNSAFE`.
+6. Automatic exact-previous rollback with a distinct container/PID, repeated
+   readiness/Orca proof, bounded evidence, exact cleanup, and final fail-closed
+   aggregation.
+7. Exact final SHA Source Validation, Image Validation, and I9 rehearsal runs
+   all green.
+
+Success may classify only
+`I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE`. It does not complete real S3b
+promotion: production caller/proxy/firewall/secret delivery, deployed digest,
+VPS state, human approval/change window, and live rollback remain
+`UNVERIFIED_NOT_AUTHORIZED`.
+
+See
+[`evidence/i9-s3b-staging-rollback-foundation.md`](evidence/i9-s3b-staging-rollback-foundation.md).
+
+## Historical I8/S3a signed-candidate publication checkpoint
+
+Current closure: `I8_SIGNED_CANDIDATE_COMPLETE` at
+`1fffab87960c675a053ae814d374cab331fbb14d`. Source `30592235730`, Image
+`30592235708`, and Candidate Publication `30592235740` succeeded. The immutable
+manifest/config identities are
+`sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5`
+and
+`sha256:b16f951a9701335b35b4ef248c2b1764d06c17f5e90ee6c2c2245bedc3026d42`.
+The older C6/C7 pre-run narrative and open-exit list below are preserved as
+historical troubleshooting context and are superseded by this closure.
 
 Status: `IN_PROGRESS`; I8-C6 published and positively verified an attested
 candidate, then failed closed only on version-specific negative-verifier
@@ -248,9 +296,9 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1b - queue deadlines and abort contract | `VERIFIED` | S1a workspace ownership | integrated queue scheduling/deadline/counter/runtime lifecycle | Independent deadlines, request/shutdown AbortSignal propagation, typed `SLICE_QUEUE_SHUTDOWN`, single settlement, active-slot retention, and timer/listener/counter/workspace cleanup have deterministic local evidence. |
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `IN_PROGRESS` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | I3 implements a bounded Node HTTP-server subset; resource/archive, artifact/pricing, and container-permission exits remain open | I3 locally implements and focuses tests on header/request/keep-alive timeouts, header/connection counts, and requests/socket with bounded fallback. Final aggregate and exact-SHA evidence are pending; measured VPS/proxy/CPU/RAM/PID/disk/archive/model/output caps, streaming limits, artifact retention/correlation, atomic pricing, and read-only state separation remain incomplete. |
-| S3a - repository build/provenance and automatic-deploy separation | `IN_PROGRESS` | S0.1; exact hosted I7 baseline green | I8 factors one shared build-once gate and adds least-privilege digest-bound GHCR publication, attestations, verification, bounded v2 evidence, no-deploy aggregation, and an I8-C1 exact-branch push adapter while retaining manual dispatch | C6 `71e3a7df1972b78a7c8cc2cc03508558186027ce` has green Source/Image runs and published, attested, positively verified immutable digest `sha256:26df5afe5ad48062c8e1d5213b305282d9386688e1666e2ef0a56487de5e8b6c`; both controlled negative calls returned nonzero, but exact CLI diagnostic prose caused fail-closed classification. C7 requires semantic one-dimension negative results, re-proves the signed subject and unchanged bundle, reuses the full positive identity policy, and discards unused diagnostics without prose coupling. Exact-SHA hosted verification remains; local Docker is `NOT_RUN_ENVIRONMENT`. S3b/deployed topology/readiness/rollback remain unverified or not started. |
+| S3a - repository build/provenance and automatic-deploy separation | `VERIFIED_SIGNED_CANDIDATE; POLICY_UNVERIFIED` | S0.1; exact hosted I7 baseline green | I8 provides the shared build-once gate, least-privilege digest-bound GHCR publication, SLSA/SPDX attestations, positive and negative verification, bounded v2 evidence, and no-deploy aggregation | Exact I8 SHA `1fffab87960c675a053ae814d374cab331fbb14d` passed Source `30592235730`, Image `30592235708`, and Candidate Publication `30592235740`. Immutable digest `sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5` is signed and attested. Branch protection, required checks, approval policy, deployed topology, and production promotion remain `UNVERIFIED` and are not inferred from the candidate checkpoint. |
 | S4 - service trust and topology | `IN_PROGRESS` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | I5 supplies scoped trust; I6 selects the internal private-peer/no-host-port topology | Repository validation requires authenticated peer ingress, auth rejection, no API external route, and calibrated API/native DNS/TCP/UDP denial. Deployed callers, proxy/firewall, secrets, digest, and egress remain `UNVERIFIED`. |
-| S3b - staging and promotion drill | `NOT_STARTED` | S3a evidence; S4 evidence; separate explicit user/owner authorization | staging/promotion/readiness/rollback drill only | Promote a verified immutable artifact through a human-authorized staging gate; readiness is bounded and meaningful; failure restores the prior artifact; the drill is recorded. No authorization or verification is inferred from S1a/S3a/S4 repository work. |
+| S3b - staging and promotion drill | `IN_PROGRESS_EPHEMERAL_FOUNDATION` | signed S3a candidate; repository S4/S5 topology controls; explicit I9 authorization | I9 read-only hosted rehearsal only; real promotion remains separate | I9 implements an exact-digest previous/candidate rehearsal with fresh attestation checks, private-peer readiness, controlled storage-readiness failure, exact previous rollback, bounded evidence, and cleanup. Exit still requires all final exact-SHA hosted gates. Real staging environment, approval window, deployed caller/proxy/firewall/secrets, VPS change, production promotion, and live rollback remain `UNVERIFIED_NOT_AUTHORIZED`. |
 | S5 - topology/optional async worker decision | `IN_PROGRESS` | I5 trust controls and S4 topology evidence | private-peer topology selected; async API/worker deferred | `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`. Complete exact deployed caller, proxy, secret, digest, firewall, and egress evidence without changing current endpoints. |
 
 ## Current S0.1 verification checkpoint

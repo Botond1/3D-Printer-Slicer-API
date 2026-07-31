@@ -17,7 +17,63 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
-## Current I8/S3a signed-candidate publication status
+## Current I9/S3b ephemeral staging and rollback foundation
+
+I9 starts from the completed I8 exact SHA
+`1fffab87960c675a053ae814d374cab331fbb14d` on
+`codex/i9-s3b-staging-rollback-foundation`. It adds a hosted-Linux,
+registry-read-only rehearsal; it does not deploy, promote a production tag, or
+contact the VPS.
+
+The rehearsal manifest binds the signed C7 candidate digest
+`sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5`
+and the distinct C6 rehearsal-only previous digest
+`sha256:26df5afe5ad48062c8e1d5213b305282d9386688e1666e2ef0a56487de5e8b6c`.
+C6 is accepted only after fresh I9 verification of both SLSA provenance and
+SPDX attestations; this does not retroactively classify it as a
+production-approved release.
+
+`.github/workflows/staging-rollback-rehearsal.yml` is an exact-branch push
+workflow with global non-cancelling concurrency. Preflight is `contents: read`;
+the rehearsal job adds only `packages: read` and `attestations: read`. It
+requires actor/repository/ref/remote-HEAD/baseline/trailer identity and never
+requests a write, OIDC, deployment environment, registry push, SSH, or release
+permission.
+
+The runtime pulls both immutable digests, dynamically proves the same positive
+non-root service UID/GID, prepares only run-owned `0700` state and inert scoped
+credentials, and starts the production Compose contract with `--pull never`
+and no build. A hardened private peer requires two consecutive liveness,
+minimal readiness, authenticated operations readiness, fresh detailed
+readiness with Python, idle queue, and missing/wrong-key rejection observations.
+An offline Orca 2.3.1 synthetic slice runs against previous, candidate, and
+restored-previous identities.
+
+After candidate readiness, the drill changes only the run-owned pricing-state
+directory from `0700` to `0500`. `/health` must remain live while fresh
+detailed readiness, `/ready`, and operations readiness fail with exactly
+`STORAGE_UNSAFE`. Mode `0700` is restored unconditionally and the exact
+previous digest must restart with a new container/PID and pass the full gate.
+Only bounded allowlisted evidence after exact runtime cleanup may classify
+`I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE`.
+
+This closes only a hosted-ephemeral rehearsal foundation. Actual caller/proxy,
+firewall, secret delivery, deployed digest, VPS state, change approval,
+production promotion, and production rollback remain `UNVERIFIED` and require
+separate authorization. Commit-time hosted status is recorded in
+[`docs/codex/evidence/i9-s3b-staging-rollback-foundation.md`](docs/codex/evidence/i9-s3b-staging-rollback-foundation.md).
+
+## Historical I8/S3a signed-candidate publication status
+
+The section below preserves the I8 correction history. I8-C7 is now closed at
+exact SHA `1fffab87960c675a053ae814d374cab331fbb14d`: Source run
+`30592235730`, Image run `30592235708`, and Candidate Publication run
+`30592235740` succeeded. The immutable candidate digest is
+`sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5`
+with config identity
+`sha256:b16f951a9701335b35b4ef248c2b1764d06c17f5e90ee6c2c2245bedc3026d42`;
+both attestations, positive/negative verification, bounded evidence, and exact
+cleanup passed. Later pre-run C6/C7 statements are historical, not current.
 
 The I8 branch starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
