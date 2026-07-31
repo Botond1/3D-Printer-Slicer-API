@@ -83,11 +83,11 @@ bounded evidence -> exact cleanup`.
 - Actionlint 1.7.7: pass after correcting job-level context use.
 - Docker Compose config: pass on Docker Desktop 29.6.1.
 - Full JavaScript: 1550/1550 pass. Python: 43 run, 42 pass, one expected
-  Windows/POSIX permission skip. Syntax: 180 JavaScript and 32 Python files.
+  Windows/POSIX permission skip. Syntax: 187 JavaScript and 32 Python files.
 - Exact npm 10.9.8 production dependency audit: zero findings. Instruction
-  mirrors: 2/2 pass. Staged repository-safety and whitespace gates passed for
-  the implementation and test commits; final documentation-stage/tracked
-  safety and hosted Source/Image/I9 results remain pending at this commit-time
+  mirrors: 2/2 pass. Repository safety covered 324 tracked files and each
+  staged commit; worktree and exact baseline-to-candidate whitespace gates
+  passed. Hosted Source/Image/I9 results remain pending at this commit-time
   checkpoint.
 - Local Linux ownership/readiness rollback execution is
   `NOT_RUN_ENVIRONMENT`; Windows bind ownership cannot represent the hosted
