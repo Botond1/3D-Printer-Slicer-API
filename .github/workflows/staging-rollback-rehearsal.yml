@@ -262,6 +262,7 @@ jobs:
             provenance: 'https://slsa.dev/provenance/v1',
             sbom: 'https://spdx.dev/Document/v2.3'
           };
+          const MAX_VERIFICATION_RESULT_BYTES = 32 * 1024 * 1024;
           for (const [label, candidate] of Object.entries(candidates)) {
             for (const [predicateLabel, predicate] of Object.entries(predicates)) {
               for (const mode of ['api', 'oci']) {
@@ -269,7 +270,7 @@ jobs:
                   `${label}-${predicateLabel}-${mode}.json`);
                 const stat = fs.lstatSync(target);
                 if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0
-                    || stat.size > 512 * 1024
+                    || stat.size > MAX_VERIFICATION_RESULT_BYTES
                     || path.dirname(fs.realpathSync(target)) !== process.env.VERIFICATION_DIR) process.exit(2);
                 const result = JSON.parse(fs.readFileSync(target, 'utf8'));
                 const matched = Array.isArray(result) && result.some((entry) => {

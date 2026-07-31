@@ -108,6 +108,8 @@ function validateWorkflowSource(source) {
         '--signer-digest "$source_sha"', '--source-ref "$CANDIDATE_WORKFLOW_REF"',
         '--source-digest "$source_sha"',
         '--cert-oidc-issuer "https://token.actions.githubusercontent.com"',
+        'const MAX_VERIFICATION_RESULT_BYTES = 32 * 1024 * 1024;',
+        'stat.size > MAX_VERIFICATION_RESULT_BYTES',
         "for (const mode of ['api', 'oci'])",
         'subject?.name === process.env.REGISTRY_REPOSITORY',
         'subject?.digest?.sha256 === candidate.digest.slice(7)',
@@ -116,6 +118,8 @@ function validateWorkflowSource(source) {
     ]) assert.ok(verification.includes(fragment), `missing attestation contract: ${fragment}`);
     assert.equal(occurrences(verification, 'gh attestation verify "oci://$digest_ref"'), 2,
         'API and OCI verifier invocations must both remain');
+    assert.doesNotMatch(verification, /512 \* 1024/,
+        'signed SPDX verification output is known to exceed the old 512 KiB cap');
 
     const cleanup = stepBlock(source, 'verification_cleanup');
     assert.match(cleanup, /if: \$\{\{ always\(\) \}\}/);
