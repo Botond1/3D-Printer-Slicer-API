@@ -79,10 +79,10 @@ bounded evidence -> exact cleanup`.
 ## Local verification
 
 - Focused manifest/evidence/runtime/workflow/final-aggregation lane:
-  198/198 pass.
+  201/201 pass.
 - Actionlint 1.7.7: pass after correcting job-level context use.
 - Docker Compose config: pass on Docker Desktop 29.6.1.
-- Full JavaScript: 1550/1550 pass. Python: 43 run, 42 pass, one expected
+- Full JavaScript: 1553/1553 pass. Python: 43 run, 42 pass, one expected
   Windows/POSIX permission skip. Syntax: 187 JavaScript and 32 Python files.
 - Exact npm 10.9.8 production dependency audit: zero findings. Instruction
   mirrors: 2/2 pass. Repository safety covered 324 tracked files and each
@@ -102,6 +102,26 @@ bounded evidence -> exact cleanup`.
   Factoring it into another reusable workflow/action is deferred until that can
   preserve the same job token, pulled image identities, run-owned state, and
   always-running cleanup without duplicating pulls or broadening permissions.
+
+## Hosted correction history
+
+Initial exact SHA `f17e4c71dbdb89958066b3c7dec9bc2a9d9c704b` passed Source run
+`30623476966` and Image run `30623476931`. I9 run `30623476962` verified both
+immutable identities and all four API/OCI provenance/SPDX paths, then completed
+the full previous/candidate/storage-failure/rollback/Orca/runtime-cleanup
+rehearsal. It failed closed after the rehearsal for two independent workflow
+adapter defects:
+
+- the always-running post-cleanup inherited Bash `-e`, so the expected
+  already-absent network probe exited before its status could be classified;
+- the second evidence validation call used stale expected-identity field names
+  rather than the canonical evidence schema names.
+
+The corrective delta captures absent-container/network probe status inside
+explicit conditional commands, passes only canonical expected-identity keys,
+removes one unsupported Buildx input, and adds one-by-one mutations. Final
+exact-SHA hosted Source/Image/I9 results remain pending at this commit-time
+checkpoint.
 
 ## Honest remaining boundary
 

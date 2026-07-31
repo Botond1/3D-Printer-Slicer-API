@@ -82,6 +82,8 @@ function validateWorkflowSource(source) {
         'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f'
     ]) assert.match(source, new RegExp(action.replaceAll('/', '\\/')));
     assert.equal(occurrences(source, 'persist-credentials: false'), 2);
+    assert.doesNotMatch(source, /^\s+install:/m,
+        'setup-buildx must not receive an unsupported install input');
 
     const identity = stepBlock(source, 'registry_identity');
     for (const fragment of [
@@ -155,6 +157,8 @@ function validateWorkflowSource(source) {
         'io.s3b.rehearsal', 'io.s3b.run-id', 'com.docker.compose.project',
         'com.docker.compose.service', '[ "$run_label" = "$GITHUB_RUN_ID" ]',
         'docker container rm --force "$container_id"',
+        'if record="$(docker container inspect --format',
+        'if network_record="$(docker network inspect --format',
         '[ "$network_project" != "i9-s3b-rehearsal" ]',
         '[ "$network_role" != "slicer-api-private" ]',
         'docker network rm "$network_id"',
@@ -169,9 +173,14 @@ function validateWorkflowSource(source) {
     assert.match(source, /require\('\.\/scripts\/i9-staging-evidence'\)/);
     assert.match(source, /validateStagingEvidence\(value, \{/);
     for (const key of [
-        'source_sha', 'source_ref', 'previous_source_sha', 'previous_digest',
-        'candidate_source_sha', 'candidate_digest'
+        'repository', 'rehearsal_sha', 'run_id', 'run_attempt', 'job',
+        'previous_source_sha', 'previous_registry_digest', 'previous_config_digest',
+        'current_source_sha', 'current_registry_digest', 'current_config_digest'
     ]) assert.match(source, new RegExp(`${key}: process\\.env\\.`));
+    for (const staleKey of ['source_sha', 'source_ref', 'previous_digest',
+        'candidate_source_sha', 'candidate_digest']) {
+        assert.doesNotMatch(source, new RegExp(`\\b${staleKey}: process\\.env\\.`));
+    }
     assert.match(source,
         /path: \$\{\{ runner\.temp \}\}\/\$\{\{ env\.EVIDENCE_SUBDIR \}\}\/i9-staging-rollback-evidence\.json/);
     assert.match(source, /if-no-files-found: error/);
