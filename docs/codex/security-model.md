@@ -93,6 +93,24 @@
   step and makes removal mutation-sensitive. It does not weaken the signed
   subject comparison or substitute `DIGEST_REF`; every other heredoc input was
   audited as supplied.
+- C6 commit `71e3a7df1972b78a7c8cc2cc03508558186027ce` has green Source run
+  `30591301132` and Image run `30591301127`. Candidate run `30591301158`
+  published digest
+  `sha256:26df5afe5ad48062c8e1d5213b305282d9386688e1666e2ef0a56487de5e8b6c`,
+  created both attestations, and passed all positive API/OCI/offline
+  verifications. Both negative verifier calls returned nonzero; the step failed
+  only on exact CLI diagnostic prose. Publication, canonical bundle-parent,
+  and evidence cleanup succeeded.
+- C7 removes diagnostic-text acceptance. Both probes reuse the full positive
+  certificate, signer, source, predicate, and bundle policy; the signed offline
+  subject and bundle hash are re-proved; exactly one subject dimension changes;
+  both results must be nonzero independently; unused stderr goes to
+  `/dev/null`. Removal and cross-dimension mutations fail closed.
+- C7 local gates are green at 312/312 focused tests, 1352/1352 complete
+  JavaScript tests, and 43 Python tests with 42 pass plus one expected Windows
+  POSIX-permission skip. Syntax, tracked safety, instruction mirrors, whitespace,
+  and zero-finding production audit gates are green. Local Docker and actionlint
+  remain `NOT_RUN_ENVIRONMENT`.
 - I8-C3 is exact commit
   `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`; hosted Source run
   `30545194526` and Image run `30545194494` are `SUCCESS`, with Image artifact
@@ -128,8 +146,9 @@
   are accepted only as regular `attestation.json` files below canonical,
   direct-child runner-temp directories, and both each file and its exact parent
   must be removed and absent. Containment and parent-removal mutations fail
-  closed.
-  Replacement exact-SHA hosted results are `PENDING` at this commit boundary.
+  closed. Hosted C6 proved these controls before the distinct negative
+  diagnostic-text failure. C7 replacement exact-SHA hosted results are
+  `PENDING` at this commit boundary.
   Local Docker is `NOT_RUN_ENVIRONMENT`. The current user authority permits
   staged corrective commits and normal non-force pushes to the existing
   candidate branch until the signed-candidate workflow is green. `main`, PR,

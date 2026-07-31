@@ -59,7 +59,21 @@
 - C6 binds the existing exact registry digest to the verification step and
   removes each action-created attestation bundle plus its canonical,
   direct-child runner-temp parent with fail-closed type, containment, and
-  absence checks. Exact-SHA hosted results remain `PENDING`.
+  absence checks. Source run `30591301132` and Image run `30591301127`
+  succeeded. Candidate run `30591301158` proved publication, digest runtime,
+  both attestations, positive API/OCI/offline verification, and exact cleanup,
+  then failed only because two nonzero negative calls were followed by an
+  obsolete exact diagnostic-text check.
+- C7 reuses the full positive certificate/signer/source/predicate policy in both
+  negative calls. It re-proves the unchanged provenance bundle and exact signed
+  offline subject, changes only the artifact bytes or repository, requires each
+  nonzero result independently, and sends unused stderr to `/dev/null`.
+  Exact-SHA hosted results remain `PENDING`.
+- C7 local evidence is 312/312 focused tests, 1352/1352 complete JavaScript
+  tests, 43 Python tests with 42 pass and one expected Windows POSIX-permission
+  skip, 173 JavaScript plus 32 Python syntax files, 307 tracked safety files,
+  and zero production dependency findings. Docker and actionlint are
+  `NOT_RUN_ENVIRONMENT`.
 - C2A preserves the exact local publication alias only after
   digest-pulled/gated image-ID equality and keeps Compose plus registry,
   signature, attestation, verification, and evidence digest-bound.
@@ -104,8 +118,11 @@
   before its Node subject-policy check. The C5 verifier had `DIGEST_REF` but not
   `REGISTRY_DIGEST`, so `process.env.REGISTRY_DIGEST.slice(7)` was guaranteed to
   throw after the verifier commands. A step-local mutation protects the binding;
-  all other heredoc inputs were audited as present. C6 hosted results remain
-  `PENDING`.
+  all other heredoc inputs were audited as present. Hosted C6 proved the
+  correction and exact bundle-parent cleanup, then failed at the independent
+  version-specific negative diagnostic-text assertion. C7 removes that prose
+  coupling while retaining semantic signed-subject and verifier rejection
+  proofs.
 - `main`, PR, merge, force-push, release/Git tag, mutable registry tag, old-tag
   mutation, deploy, and repository-setting changes remain forbidden. Current
   user authority covers normal target-branch corrective progression only.

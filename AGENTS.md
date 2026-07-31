@@ -21,24 +21,26 @@ Canonical Codex knowledge:
 
 The I8 branch starts exactly from
 `c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6` on
-`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C5
-commit `5aef62386992f0dcab48b82e87c275e7dff1f291`. Its hosted Source run
-`30590102069` and Image run `30590102077` are `SUCCESS`. Candidate Publication
-run `30590102061` is `FAILURE` after publishing its discovery tag, passing the
-digest runtime, and creating both provenance and SBOM attestations. Its JSON
-policy then threw because the step did not bind `REGISTRY_DIGEST`.
+`codex/i8-s3a-ghcr-signed-candidate`. The current committed boundary is I8-C6
+commit `71e3a7df1972b78a7c8cc2cc03508558186027ce`. Hosted Source run
+`30591301132` and Image run `30591301127` are `SUCCESS`; Image evidence artifact
+`8778528680` exists. Candidate Publication run `30591301158` is `FAILURE` after
+publication, digest round trip, both attestations, and all positive GitHub API,
+OCI, and offline bundle verifications succeeded. Both controlled negative
+probes returned nonzero as required, but the step then coupled acceptance to an
+obsolete exact `gh` CLI diagnostic sentence.
 
-The C5 candidate tag
-`candidate-5aef62386992f0dcab48b82e87c275e7dff1f291` is quarantined unchanged at
+The C6 candidate tag
+`candidate-71e3a7df1972b78a7c8cc2cc03508558186027ce` is quarantined unchanged at
 manifest digest
-`sha256:fe546f2cd382089a167c4dff721a69bab1e5737b4da31bd0a37558f1f930f639`
+`sha256:26df5afe5ad48062c8e1d5213b305282d9386688e1666e2ef0a56487de5e8b6c`
 and config identity
-`sha256:ae6ffe01c345219e9be3859d9019b3648a81ab22de30615f75a807e683377ecd`.
-Both GitHub/Sigstore attestations exist, but positive policy verification and
-the Candidate evidence artifact are incomplete; hosted publication and
-evidence cleanup succeeded. The exact classification is
-`I8_CANDIDATE_ATTESTATION_UNVERIFIED`. Older candidates also remain quarantined
-and unchanged.
+`sha256:8d4de3647161d5688688191c9eb7af301d43216ab22ce0142d0a244e00c72c82`.
+Both GitHub/Sigstore attestations exist and positive verification succeeded,
+but the Candidate evidence artifact is incomplete. Exact publication,
+attestation-bundle-parent, and evidence cleanup succeeded. The exact
+classification remains `I8_CANDIDATE_ATTESTATION_UNVERIFIED`. Older candidates
+also remain quarantined and unchanged.
 
 I8-C1 narrowly resolves the default-branch `workflow_dispatch` registration
 blocker. Candidate Publication retains its exact manual input contract for
@@ -145,7 +147,7 @@ Digest identity, runtime user, topology, attestation, cleanup, and no-deploy
 behavior remain unchanged. C5 hosted evidence confirms the runtime parity and
 attestation creation before the separate C6 binding defect.
 
-I8-C6 fixes the C5 verification binding defect. The verification Node policy
+I8-C6 fixed the C5 verification binding defect. The verification Node policy
 reads `process.env.REGISTRY_DIGEST` to compare the signed subject, but the step
 previously supplied only `DIGEST_REF`; that guaranteed an
 `undefined.slice(7)` exception after the cryptographic verification commands.
@@ -155,8 +157,22 @@ that `actions/attest` creates each bundle in a unique runner-temp directory
 while the old cleanup removed only the file. C6 now admits only a regular
 `attestation.json` in a canonical direct child of canonical `RUNNER_TEMP`,
 removes the file, removes its exact parent, and verifies absence. Containment
-and parent-removal mutations protect this cleanup. C6 hosted results remain
-`PENDING` at this commit boundary.
+and parent-removal mutations protect this cleanup. Hosted C6 proved both fixes,
+then exposed only the distinct diagnostic-text coupling in negative
+verification.
+
+I8-C7 keeps the same positively verified bundle and changes exactly one
+dimension per negative probe: wrong local bytes with the correct repository,
+then the exact digest with a distinct repository. It requires each verifier
+status to be nonzero independently, re-proves the signed offline subject and
+unchanged bundle, reuses the full positive identity policy, sends unused stderr
+to `/dev/null`, and forbids diagnostic-text acceptance. Exact-SHA hosted
+results remain `PENDING` at this commit boundary.
+Local C7 evidence is green for 312/312 focused tests, 1352/1352 complete
+JavaScript tests, and 43 Python tests with 42 pass plus one expected Windows
+POSIX-permission skip. Syntax passes for 173 JavaScript and 32 Python files;
+tracked safety covers 307 files and the production audit has zero findings.
+Local Docker and actionlint remain `NOT_RUN_ENVIRONMENT`.
 
 The current user authorization permits staged continuation through corrective
 commits, normal non-force target-branch pushes, and exact-SHA hosted validation

@@ -560,40 +560,69 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DIGEST_REF: ${{ steps.registry_identity.outputs.digest_ref }}
+          REGISTRY_DIGEST: ${{ steps.registry_push.outputs.registry_digest }}
           PROVENANCE_BUNDLE_PATH: ${{ steps.provenance_attestation.outputs.bundle-path }}
         shell: bash
         run: |
           set -euo pipefail
           wrong_digest_artifact="$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bin"
-          wrong_digest_error="$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err"
-          wrong_repository_error="$RUNNER_TEMP/i8-wrong-repository-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err"
+          wrong_repository="Botond1/3D-Printer-Slicer-API-wrong"
+          [ "$wrong_repository" != "$GITHUB_REPOSITORY" ]
           if [ -e "$wrong_digest_artifact" ] || [ -L "$wrong_digest_artifact" ]; then exit 2; fi
           umask 077
           printf 'i8-local-wrong-digest-probe:%s\n' "$CANDIDATE_SHA" > "$wrong_digest_artifact"
           wrong_digest="sha256:$(sha256sum "$wrong_digest_artifact" | awk '{print $1}')"
           [[ "$wrong_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
-          [ "$wrong_digest" != "${DIGEST_REF##*@}" ]
+          [ "$wrong_digest" != "$REGISTRY_DIGEST" ]
+          cert_identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/candidate-publication.yml@$GITHUB_REF"
+          identity_args=(--cert-identity "$cert_identity"
+            --signer-digest "$CANDIDATE_SHA" --source-ref "$GITHUB_REF"
+            --source-digest "$CANDIDATE_SHA"
+            --cert-oidc-issuer "https://token.actions.githubusercontent.com" --format json)
+          verified_provenance="$I8_VERIFICATION_DIR/provenance-offline.json"
+          [ -f "$verified_provenance" ] && [ ! -L "$verified_provenance" ]
+          [[ "$PROVENANCE_BUNDLE_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [ "$(sha256sum "$PROVENANCE_BUNDLE_PATH" | awk '{print $1}')" = \
+            "$PROVENANCE_BUNDLE_SHA256" ]
+          VERIFIED_PROVENANCE="$verified_provenance" WRONG_DIGEST="$wrong_digest" node <<'NODE'
+          const fs = require('node:fs');
+          const result = JSON.parse(fs.readFileSync(process.env.VERIFIED_PROVENANCE, 'utf8'));
+          const expectedDigest = process.env.REGISTRY_DIGEST.slice(7);
+          const wrongDigest = process.env.WRONG_DIGEST.slice(7);
+          const exactSubject = Array.isArray(result) && result.some((entry) => {
+            const verification = entry?.verificationResult;
+            const certificate = verification?.signature?.certificate;
+            return verification?.statement?.predicateType === 'https://slsa.dev/provenance/v1'
+              && verification.statement.subject?.some((subject) =>
+                subject?.name === process.env.REGISTRY_REPOSITORY
+                && subject?.digest?.sha256 === expectedDigest)
+              && verification.verifiedTimestamps?.length > 0
+              && certificate?.sourceRepositoryURI
+                === `https://github.com/${process.env.GITHUB_REPOSITORY}`;
+          });
+          const wrongSubject = result.some((entry) =>
+            entry?.verificationResult?.statement?.subject?.some((subject) =>
+              subject?.digest?.sha256 === wrongDigest));
+          if (!exactSubject || wrongSubject) process.exit(2);
+          NODE
           set +e
           gh attestation verify "$wrong_digest_artifact" \
-            --repo "$GITHUB_REPOSITORY" --bundle "$PROVENANCE_BUNDLE_PATH" \
-            --predicate-type "https://slsa.dev/provenance/v1" >/dev/null 2>"$wrong_digest_error"
+            --repo "$GITHUB_REPOSITORY" "${identity_args[@]}" \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --bundle "$PROVENANCE_BUNDLE_PATH" >/dev/null 2>/dev/null
           wrong_digest_status=$?
           gh attestation verify "oci://$DIGEST_REF" \
-            --repo "Botond1/3D-Printer-Slicer-API-wrong" --bundle "$PROVENANCE_BUNDLE_PATH" \
-            --predicate-type "https://slsa.dev/provenance/v1" >/dev/null 2>"$wrong_repository_error"
+            --repo "$wrong_repository" "${identity_args[@]}" \
+            --predicate-type "https://slsa.dev/provenance/v1" \
+            --bundle "$PROVENANCE_BUNDLE_PATH" >/dev/null 2>/dev/null
           wrong_repository_status=$?
           set -e
-          if [ "$wrong_digest_status" -eq 0 ] || [ "$wrong_repository_status" -eq 0 ]; then
-            echo "A required negative attestation verification unexpectedly succeeded." >&2
+          if [ "$wrong_digest_status" -eq 0 ]; then
+            echo "Wrong-digest attestation verification unexpectedly succeeded." >&2
             exit 2
           fi
-          if ! grep -Fq "provided artifact digest does not match any digest in statement" "$wrong_digest_error"; then
-            echo "Wrong-digest verification failed for a reason other than the required digest-policy mismatch." >&2
-            exit 2
-          fi
-          expected_repository_error="expected SourceRepositoryURI to be https://github.com/Botond1/3D-Printer-Slicer-API-wrong, got https://github.com/$GITHUB_REPOSITORY"
-          if ! grep -Fq "$expected_repository_error" "$wrong_repository_error"; then
-            echo "Wrong-repository verification failed for a reason other than the required repository-policy mismatch." >&2
+          if [ "$wrong_repository_status" -eq 0 ]; then
+            echo "Wrong-repository attestation verification unexpectedly succeeded." >&2
             exit 2
           fi
           echo "wrong_digest_reason=artifact_digest_policy_mismatch"
@@ -742,8 +771,6 @@ jobs:
             "$RUNNER_TEMP/i8-digest-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
             "$RUNNER_TEMP/i8-final-tag-raw-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
             "$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bin"
-            "$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err"
-            "$RUNNER_TEMP/i8-wrong-repository-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err"
             "$RUNNER_TEMP/created_attestation_paths.txt"
           )
           for target in "${exact_temp_files[@]}"; do

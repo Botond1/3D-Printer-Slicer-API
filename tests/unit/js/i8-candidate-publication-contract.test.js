@@ -457,23 +457,68 @@ function validateContract(sources) {
     ], 'attestation verification');
     assert.doesNotMatch(verification, /--signer-workflow/,
         'mutually exclusive gh verifier identity flags must not be combined');
-    requireIncludes(stepText(publication, 'negative_verification'), [
+    const negativeVerification = stepText(publication, 'negative_verification');
+    requireIncludes(negativeVerification, [
+        "if: ${{ steps.verify_attestations.outcome == 'success' }}",
+        'REGISTRY_DIGEST: ${{ steps.registry_push.outputs.registry_digest }}',
         'wrong_digest_artifact="$RUNNER_TEMP/i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bin"',
         '[ -e "$wrong_digest_artifact" ] || [ -L "$wrong_digest_artifact" ]',
         "printf 'i8-local-wrong-digest-probe:%s\\n' \"$CANDIDATE_SHA\" > \"$wrong_digest_artifact\"",
         'sha256sum "$wrong_digest_artifact"',
-        '[ "$wrong_digest" != "${DIGEST_REF##*@}" ]',
+        '[ "$wrong_digest" != "$REGISTRY_DIGEST" ]',
+        'wrong_repository="Botond1/3D-Printer-Slicer-API-wrong"',
+        '[ "$wrong_repository" != "$GITHUB_REPOSITORY" ]',
+        'cert_identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/candidate-publication.yml@$GITHUB_REF"',
+        'identity_args=(--cert-identity "$cert_identity"',
+        '--signer-digest "$CANDIDATE_SHA" --source-ref "$GITHUB_REF"',
+        '--source-digest "$CANDIDATE_SHA"',
+        '--cert-oidc-issuer "https://token.actions.githubusercontent.com" --format json)',
+        'verified_provenance="$I8_VERIFICATION_DIR/provenance-offline.json"',
+        '[ -f "$verified_provenance" ] && [ ! -L "$verified_provenance" ]',
+        '[[ "$PROVENANCE_BUNDLE_SHA256" =~ ^[0-9a-f]{64}$ ]]',
+        '"$PROVENANCE_BUNDLE_SHA256" ]',
+        'VERIFIED_PROVENANCE="$verified_provenance" WRONG_DIGEST="$wrong_digest" node',
+        "verification?.statement?.predicateType === 'https://slsa.dev/provenance/v1'",
+        'subject?.name === process.env.REGISTRY_REPOSITORY',
+        'subject?.digest?.sha256 === expectedDigest',
+        'certificate?.sourceRepositoryURI',
+        'subject?.digest?.sha256 === wrongDigest',
+        'if (!exactSubject || wrongSubject) process.exit(2);',
         'gh attestation verify "$wrong_digest_artifact"',
-        'wrong_digest', 'wrong_repository', 'gh attestation verify',
-        'wrong_digest_status', 'wrong_repository_status',
-        'provided artifact digest does not match any digest in statement',
-        'expected SourceRepositoryURI to be https://github.com/Botond1/3D-Printer-Slicer-API-wrong',
+        '--repo "$GITHUB_REPOSITORY" "${identity_args[@]}"',
+        'gh attestation verify "oci://$DIGEST_REF"',
+        '--repo "$wrong_repository" "${identity_args[@]}"',
+        '--bundle "$PROVENANCE_BUNDLE_PATH" >/dev/null 2>/dev/null',
+        'set +e', 'set -e',
+        'if [ "$wrong_digest_status" -eq 0 ]; then',
+        'if [ "$wrong_repository_status" -eq 0 ]; then',
         'wrong_digest_reason=artifact_digest_policy_mismatch',
         'wrong_repository_reason=source_repository_uri_policy_mismatch'
     ], 'negative verification');
-    assert.doesNotMatch(stepText(publication, 'negative_verification'),
+    assert.equal(count(negativeVerification,
+        /--predicate-type "https:\/\/slsa\.dev\/provenance\/v1"/g), 2,
+    'both negative probes keep the exact positively verified predicate');
+    assert.equal(count(negativeVerification,
+        /--bundle "\$PROVENANCE_BUNDLE_PATH" >\/dev\/null 2>\/dev\/null/g), 2,
+    'both negative probes discard diagnostics with a zero-byte sink');
+    assert.ok(
+        negativeVerification.indexOf('set +e')
+            < negativeVerification.indexOf('wrong_digest_status=$?')
+        && negativeVerification.indexOf('wrong_digest_status=$?')
+            < negativeVerification.indexOf('wrong_repository_status=$?')
+        && negativeVerification.indexOf('wrong_repository_status=$?')
+            < negativeVerification.lastIndexOf('set -e')
+        && negativeVerification.lastIndexOf('set -e')
+            < negativeVerification.indexOf('if [ "$wrong_digest_status" -eq 0 ]; then')
+        && negativeVerification.indexOf('if [ "$wrong_digest_status" -eq 0 ]; then')
+            < negativeVerification.indexOf('if [ "$wrong_repository_status" -eq 0 ]; then'),
+    'negative verifier status capture and restored fail-closed shell order');
+    assert.doesNotMatch(negativeVerification,
         /oci:\/\/\$REGISTRY_REPOSITORY@\$wrong_digest/,
         'the wrong-digest probe must reach offline bundle policy instead of registry lookup');
+    assert.doesNotMatch(negativeVerification,
+        /\bgrep\b|provided artifact digest|SourceRepositoryURI|wrong_(?:digest|repository)_error|\.err\b/,
+        'negative acceptance must not depend on version-specific verifier diagnostics');
 
     const evidence = stepText(publication, 'publication_evidence');
     requireIncludes(evidence, [
@@ -550,8 +595,6 @@ function validateContract(sources) {
         'i8-digest-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json',
         'i8-final-tag-raw-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json',
         'i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.bin',
-        'i8-wrong-digest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err',
-        'i8-wrong-repository-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.err',
         'created_attestation_paths.txt',
         'exact_container_cleanup "$I8_DIGEST_CONTAINER_NAME"',
         'exact_container_cleanup "$I2_UID_PROBE_NAME"',
@@ -576,6 +619,8 @@ function validateContract(sources) {
         'bundle_parent_cleanup_verification_failure'
     ], 'publication cleanup');
     assert.doesNotMatch(cleanup, /\bdocker\s+(?:system|image|container|builder|volume)\s+prune\b/);
+    assert.doesNotMatch(cleanup, /i8-(?:wrong-digest|wrong-repository).*\.err/,
+        'zero-byte negative diagnostics must not create cleanup-owned stderr files');
     const final = stepText(publication, 'final_enforcement');
     requireIncludes(final, [
         'REMOTE_PUBLISHED: ${{ steps.registry_push.outputs.remote_published }}',
@@ -933,9 +978,143 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
         mutation('OCI verification omitted', 'publication', (s) => replaceAllRequired(s, '--bundle-from-oci', '--format')),
         mutation('offline verification omitted', 'publication', (s) => replaceRequired(s, '--bundle', '--format')),
         mutation('negative checks omitted', 'publication', (s) => removeStep(s, 'negative_verification')),
+        mutation('negative checks bypass positive verification', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                "if: ${{ steps.verify_attestations.outcome == 'success' }}",
+                'if: ${{ always() }}'
+            ));
+        }),
+        mutation('negative verification registry digest binding omitted', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                '          REGISTRY_DIGEST: ${{ steps.registry_push.outputs.registry_digest }}\n',
+                ''
+            ));
+        }),
+        mutation('wrong digest distinctness proof bypassed', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block, '[ "$wrong_digest" != "$REGISTRY_DIGEST" ]', 'true'));
+        }),
+        mutation('wrong repository distinctness proof bypassed', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block, '[ "$wrong_repository" != "$GITHUB_REPOSITORY" ]', 'true'));
+        }),
         mutation('wrong digest probe uses a nonexistent registry manifest', 'publication', (s) =>
             replaceRequired(s, 'gh attestation verify "$wrong_digest_artifact"',
                 'gh attestation verify "oci://$REGISTRY_REPOSITORY@$wrong_digest"')),
+        mutation('wrong digest probe changes repository too', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                '--repo "$GITHUB_REPOSITORY" "${identity_args[@]}"',
+                '--repo "$wrong_repository" "${identity_args[@]}"'
+            ));
+        }),
+        mutation('wrong repository probe changes digest too', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block, 'gh attestation verify "oci://$DIGEST_REF"',
+                'gh attestation verify "$wrong_digest_artifact"'));
+        }),
+        mutation('wrong repository probe restores correct repository', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                'wrong_repository="Botond1/3D-Printer-Slicer-API-wrong"',
+                'wrong_repository="$GITHUB_REPOSITORY"'
+            ));
+        }),
+        mutation('wrong digest probe changes predicate too', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block, PROVENANCE_PREDICATE, 'https://example.invalid/provenance'));
+        }),
+        mutation('negative certificate identity omitted', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block, '--cert-identity "$cert_identity"', '--owner Botond1'));
+        }),
+        mutation('negative signer digest omitted', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block, '--signer-digest "$CANDIDATE_SHA"', '--owner Botond1'));
+        }),
+        mutation('negative source ref omitted', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block, '--source-ref "$GITHUB_REF"', '--owner Botond1'));
+        }),
+        mutation('negative source digest omitted', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block, '--source-digest "$CANDIDATE_SHA"', '--owner Botond1'));
+        }),
+        mutation('negative OIDC issuer omitted', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                '--cert-oidc-issuer "https://token.actions.githubusercontent.com"',
+                '--owner Botond1'
+            ));
+        }),
+        mutation('negative verified provenance file guard bypassed', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                '[ -f "$verified_provenance" ] && [ ! -L "$verified_provenance" ]',
+                'true'
+            ));
+        }),
+        mutation('negative provenance bundle identity bypassed', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                '[ "$(sha256sum "$PROVENANCE_BUNDLE_PATH" | awk \'{print $1}\')" = \\\n'
+                    + '            "$PROVENANCE_BUNDLE_SHA256" ]',
+                'true'
+            ));
+        }),
+        mutation('negative signed subject correlation bypassed', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block, 'if (!exactSubject || wrongSubject) process.exit(2);',
+                'if (false) process.exit(2);'));
+        }),
+        mutation('wrong digest nonzero requirement bypassed', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block, 'if [ "$wrong_digest_status" -eq 0 ]; then', 'if false; then'));
+        }),
+        mutation('wrong repository nonzero requirement bypassed', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block, 'if [ "$wrong_repository_status" -eq 0 ]; then', 'if false; then'));
+        }),
+        mutation('negative verifier fail-closed shell restoration omitted', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(block, '          set -e\n', ''));
+        }),
+        mutation('negative zero-byte diagnostic sink removed', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                '--bundle "$PROVENANCE_BUNDLE_PATH" >/dev/null 2>/dev/null',
+                '--bundle "$PROVENANCE_BUNDLE_PATH" >/dev/null 2>"$RUNNER_TEMP/unbounded.err"'
+            ));
+        }),
+        mutation('negative acceptance restores diagnostic prose coupling', 'publication', (s) => {
+            const block = stepText(s, 'negative_verification');
+            return replaceRequired(s, block, replaceRequired(
+                block,
+                'echo "wrong_digest_reason=artifact_digest_policy_mismatch"',
+                'grep -Fq "provided artifact digest" "$wrong_digest_error"'
+            ));
+        }),
         mutation('final discovery-tag identity recheck omitted', 'publication',
             (s) => removeStep(s, 'final_tag_identity')),
         mutation('final discovery-tag digest comparison omitted', 'publication', (s) => replaceRequired(
