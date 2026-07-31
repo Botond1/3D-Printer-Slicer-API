@@ -1,0 +1,729 @@
+name: S3b Ephemeral Staging and Rollback Rehearsal (NO DEPLOY)
+
+on:
+  push:
+    branches:
+      - codex/i9-s3b-staging-rollback-foundation
+
+permissions:
+  contents: none
+
+concurrency:
+  group: i9-s3b-ephemeral-staging-rollback
+  cancel-in-progress: false
+
+env:
+  I9_BASELINE_SHA: 1fffab87960c675a053ae814d374cab331fbb14d
+  REGISTRY_REPOSITORY: ghcr.io/botond1/3d-printer-slicer-api
+  CURRENT_SOURCE_SHA: 1fffab87960c675a053ae814d374cab331fbb14d
+  CURRENT_DISCOVERY_TAG: candidate-1fffab87960c675a053ae814d374cab331fbb14d
+  CURRENT_REGISTRY_DIGEST: sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5
+  CURRENT_CONFIG_DIGEST: sha256:b16f951a9701335b35b4ef248c2b1764d06c17f5e90ee6c2c2245bedc3026d42
+  PREVIOUS_SOURCE_SHA: 71e3a7df1972b78a7c8cc2cc03508558186027ce
+  PREVIOUS_DISCOVERY_TAG: candidate-71e3a7df1972b78a7c8cc2cc03508558186027ce
+  PREVIOUS_REGISTRY_DIGEST: sha256:26df5afe5ad48062c8e1d5213b305282d9386688e1666e2ef0a56487de5e8b6c
+  PREVIOUS_CONFIG_DIGEST: sha256:8d4de3647161d5688688191c9eb7af301d43216ab22ce0142d0a244e00c72c82
+  CANDIDATE_WORKFLOW_REF: refs/heads/codex/i8-s3a-ghcr-signed-candidate
+  VERIFICATION_SUBDIR: i9-verification-${{ github.run_id }}-${{ github.run_attempt }}
+  EVIDENCE_SUBDIR: i9-staging-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  preflight:
+    name: Prove exact I9 rehearsal authorization
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      rehearsal_sha: ${{ steps.authorization.outputs.rehearsal_sha }}
+    steps:
+      - name: Accept only the exact authorized branch push
+        id: authorization
+        env:
+          EVENT_ACTOR: ${{ github.actor }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_REPOSITORY: ${{ github.repository }}
+          EVENT_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "push" ] || \
+             [ "$EVENT_ACTOR" != "Botond1" ] || \
+             [ "$EVENT_REPOSITORY" != "Botond1/3D-Printer-Slicer-API" ] || \
+             [ "$EVENT_REF" != "refs/heads/codex/i9-s3b-staging-rollback-foundation" ] || \
+             [[ ! "$EVENT_SHA" =~ ^[0-9a-f]{40}$ ]] || \
+             [ "$EVENT_SHA" = "$I9_BASELINE_SHA" ]; then
+            echo "I9 rehearsal authorization does not match the exact push contract." >&2
+            exit 2
+          fi
+          echo "rehearsal_sha=$EVENT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the exact authorized I9 source
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ steps.authorization.outputs.rehearsal_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove ancestry, remote head, immutable inputs, and exact trailer
+        env:
+          REHEARSAL_SHA: ${{ steps.authorization.outputs.rehearsal_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required_trailer="I9-Rehearsal: RUN_I9_EPHEMERAL_STAGING_ROLLBACK"
+          [ "$(git rev-parse HEAD)" = "$REHEARSAL_SHA" ]
+          remote_sha="$(git ls-remote --exit-code origin \
+            refs/heads/codex/i9-s3b-staging-rollback-foundation | awk '{print $1}')"
+          [ "$remote_sha" = "$REHEARSAL_SHA" ]
+          git merge-base --is-ancestor "$I9_BASELINE_SHA" "$REHEARSAL_SHA"
+          git merge-base --is-ancestor "$CURRENT_SOURCE_SHA" "$REHEARSAL_SHA"
+          git merge-base --is-ancestor "$PREVIOUS_SOURCE_SHA" "$CURRENT_SOURCE_SHA"
+          git diff --quiet "$CURRENT_SOURCE_SHA" "$REHEARSAL_SHA" -- \
+            docker-compose.production.yml configs Dockerfile package.json package-lock.json app
+          [ "$CURRENT_SOURCE_SHA" != "$PREVIOUS_SOURCE_SHA" ]
+          [ "$CURRENT_REGISTRY_DIGEST" != "$PREVIOUS_REGISTRY_DIGEST" ]
+          [ "$CURRENT_CONFIG_DIGEST" != "$PREVIOUS_CONFIG_DIGEST" ]
+          last_nonempty_line="$(
+            git show -s --format=%B "$REHEARSAL_SHA" |
+              awk 'NF { last = $0 } END { if (last != "") print last }'
+          )"
+          if [ "$last_nonempty_line" != "$required_trailer" ]; then
+            echo "I9 rehearsal push lacks the exact final authorization trailer." >&2
+            exit 2
+          fi
+
+  staging-rollback-rehearsal:
+    name: Verify, rehearse promotion, induce failure, and roll back
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+      attestations: read
+    env:
+      REHEARSAL_SHA: ${{ needs.preflight.outputs.rehearsal_sha }}
+      CURRENT_IMAGE_REF: ghcr.io/botond1/3d-printer-slicer-api@sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5
+      PREVIOUS_IMAGE_REF: ghcr.io/botond1/3d-printer-slicer-api@sha256:26df5afe5ad48062c8e1d5213b305282d9386688e1666e2ef0a56487de5e8b6c
+    steps:
+      - name: Checkout the exact authorized rehearsal source without credentials
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ needs.preflight.outputs.rehearsal_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Re-prove source and immutable candidate identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$GITHUB_REPOSITORY" = "Botond1/3D-Printer-Slicer-API" ]
+          [ "$GITHUB_REF" = "refs/heads/codex/i9-s3b-staging-rollback-foundation" ]
+          [ "$(git rev-parse HEAD)" = "$REHEARSAL_SHA" ]
+          [ "$REGISTRY_REPOSITORY" = "ghcr.io/botond1/3d-printer-slicer-api" ]
+          [ "$CURRENT_IMAGE_REF" = "$REGISTRY_REPOSITORY@$CURRENT_REGISTRY_DIGEST" ]
+          [ "$PREVIOUS_IMAGE_REF" = "$REGISTRY_REPOSITORY@$PREVIOUS_REGISTRY_DIGEST" ]
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+          package-manager-cache: false
+
+      - name: Require the exact immutable I9 rehearsal manifest
+        id: manifest_contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e "require('./scripts/i9-staging-manifest').loadStagingManifest(process.cwd())"
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx for bounded manifest inspection
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+        with:
+          install: false
+
+      - name: Authenticate read-only to the fixed GHCR repository
+        id: registry_login
+        if: ${{ steps.manifest_contract.outcome == 'success' }}
+        uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prove both discovery tags and immutable manifest identities
+        id: registry_identity
+        if: ${{ steps.registry_login.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          verification_dir="$RUNNER_TEMP/$VERIFICATION_SUBDIR"
+          if [ -e "$verification_dir" ] || [ -L "$verification_dir" ]; then exit 2; fi
+          mkdir -m 0700 -- "$verification_dir"
+          [ "$(realpath "$verification_dir")" = "$verification_dir" ]
+          echo "VERIFICATION_DIR=$verification_dir" >> "$GITHUB_ENV"
+
+          inspect_candidate() {
+            local label="$1" source_sha="$2" discovery_tag="$3"
+            local expected_digest="$4" expected_config="$5"
+            local tag_ref="$REGISTRY_REPOSITORY:$discovery_tag"
+            local digest_ref="$REGISTRY_REPOSITORY@$expected_digest"
+            local tag_raw="$verification_dir/$label-tag-raw.json"
+            local digest_raw="$verification_dir/$label-digest-raw.json"
+            local digest_summary="$verification_dir/$label-digest-summary.json"
+            docker buildx imagetools inspect "$tag_ref" --raw > "$tag_raw"
+            docker buildx imagetools inspect "$digest_ref" --raw > "$digest_raw"
+            docker buildx imagetools inspect "$digest_ref" --format '{{json .}}' > "$digest_summary"
+            for target in "$tag_raw" "$digest_raw" "$digest_summary"; do
+              [ -f "$target" ] && [ ! -L "$target" ]
+              size="$(stat -c '%s' "$target")"
+              [ "$size" -gt 0 ] && [ "$size" -le 262144 ]
+              [ "$(dirname "$(realpath "$target")")" = "$verification_dir" ]
+            done
+            tag_hash="sha256:$(sha256sum "$tag_raw" | awk '{print $1}')"
+            digest_hash="sha256:$(sha256sum "$digest_raw" | awk '{print $1}')"
+            [ "$tag_hash" = "$expected_digest" ]
+            [ "$digest_hash" = "$expected_digest" ]
+            cmp -- "$tag_raw" "$digest_raw"
+            LABEL="$label" SOURCE_SHA="$source_sha" EXPECTED_DIGEST="$expected_digest" \
+              EXPECTED_CONFIG="$expected_config" DIGEST_RAW="$digest_raw" \
+              DIGEST_SUMMARY="$digest_summary" node <<'NODE'
+          const fs = require('node:fs');
+          const raw = JSON.parse(fs.readFileSync(process.env.DIGEST_RAW, 'utf8'));
+          const summary = JSON.parse(fs.readFileSync(process.env.DIGEST_SUMMARY, 'utf8'));
+          const image = summary?.image;
+          if (typeof raw?.mediaType !== 'string' || raw.mediaType.includes('index')
+              || raw?.config?.digest !== process.env.EXPECTED_CONFIG
+              || summary?.manifest?.digest !== process.env.EXPECTED_DIGEST
+              || summary?.manifest?.mediaType?.includes('index')
+              || image?.os !== 'linux' || image?.architecture !== 'amd64'
+              || image?.config?.User !== 'slicer'
+              || image?.config?.Labels?.['org.opencontainers.image.revision']
+                  !== process.env.SOURCE_SHA
+              || image?.config?.Labels?.['org.opencontainers.image.source']
+                  !== `https://github.com/${process.env.GITHUB_REPOSITORY}`) process.exit(2);
+          NODE
+          }
+
+          inspect_candidate current "$CURRENT_SOURCE_SHA" "$CURRENT_DISCOVERY_TAG" \
+            "$CURRENT_REGISTRY_DIGEST" "$CURRENT_CONFIG_DIGEST"
+          inspect_candidate previous "$PREVIOUS_SOURCE_SHA" "$PREVIOUS_DISCOVERY_TAG" \
+            "$PREVIOUS_REGISTRY_DIGEST" "$PREVIOUS_CONFIG_DIGEST"
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Verify both candidates' provenance and SBOM attestations through API and OCI
+        id: attestation_verification
+        if: ${{ steps.registry_identity.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$VERIFICATION_DIR" = "$RUNNER_TEMP/$VERIFICATION_SUBDIR" ]
+          [ "$(realpath "$VERIFICATION_DIR")" = "$VERIFICATION_DIR" ]
+          cert_identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/candidate-publication.yml@$CANDIDATE_WORKFLOW_REF"
+
+          verify_candidate() {
+            local label="$1" source_sha="$2" digest="$3"
+            local digest_ref="$REGISTRY_REPOSITORY@$digest"
+            local common_args=(--repo "$GITHUB_REPOSITORY" --cert-identity "$cert_identity"
+              --signer-digest "$source_sha" --source-ref "$CANDIDATE_WORKFLOW_REF"
+              --source-digest "$source_sha"
+              --cert-oidc-issuer "https://token.actions.githubusercontent.com" --format json)
+            for predicate_label in provenance sbom; do
+              if [ "$predicate_label" = "provenance" ]; then
+                predicate="https://slsa.dev/provenance/v1"
+              else
+                predicate="https://spdx.dev/Document/v2.3"
+              fi
+              gh attestation verify "oci://$digest_ref" "${common_args[@]}" \
+                --predicate-type "$predicate" > \
+                "$VERIFICATION_DIR/$label-$predicate_label-api.json"
+              gh attestation verify "oci://$digest_ref" "${common_args[@]}" \
+                --predicate-type "$predicate" --bundle-from-oci > \
+                "$VERIFICATION_DIR/$label-$predicate_label-oci.json"
+            done
+          }
+
+          verify_candidate current "$CURRENT_SOURCE_SHA" "$CURRENT_REGISTRY_DIGEST"
+          verify_candidate previous "$PREVIOUS_SOURCE_SHA" "$PREVIOUS_REGISTRY_DIGEST"
+
+          CERT_IDENTITY="$cert_identity" node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const candidates = {
+            current: {source: process.env.CURRENT_SOURCE_SHA, digest: process.env.CURRENT_REGISTRY_DIGEST},
+            previous: {source: process.env.PREVIOUS_SOURCE_SHA, digest: process.env.PREVIOUS_REGISTRY_DIGEST}
+          };
+          const predicates = {
+            provenance: 'https://slsa.dev/provenance/v1',
+            sbom: 'https://spdx.dev/Document/v2.3'
+          };
+          for (const [label, candidate] of Object.entries(candidates)) {
+            for (const [predicateLabel, predicate] of Object.entries(predicates)) {
+              for (const mode of ['api', 'oci']) {
+                const target = path.join(process.env.VERIFICATION_DIR,
+                  `${label}-${predicateLabel}-${mode}.json`);
+                const stat = fs.lstatSync(target);
+                if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0
+                    || stat.size > 512 * 1024
+                    || path.dirname(fs.realpathSync(target)) !== process.env.VERIFICATION_DIR) process.exit(2);
+                const result = JSON.parse(fs.readFileSync(target, 'utf8'));
+                const matched = Array.isArray(result) && result.some((entry) => {
+                  const verification = entry?.verificationResult;
+                  const certificate = verification?.signature?.certificate;
+                  return verification?.statement?.predicateType === predicate
+                    && verification.statement.subject?.some((subject) =>
+                      subject?.name === process.env.REGISTRY_REPOSITORY
+                      && subject?.digest?.sha256 === candidate.digest.slice(7))
+                    && verification.verifiedTimestamps?.length > 0
+                    && certificate?.subjectAlternativeName === process.env.CERT_IDENTITY
+                    && certificate?.buildSignerURI === process.env.CERT_IDENTITY
+                    && certificate?.buildSignerDigest === candidate.source
+                    && certificate?.sourceRepositoryURI
+                      === `https://github.com/${process.env.GITHUB_REPOSITORY}`
+                    && certificate?.sourceRepositoryRef === process.env.CANDIDATE_WORKFLOW_REF
+                    && certificate?.sourceRepositoryDigest === candidate.source
+                    && certificate?.issuer === 'https://token.actions.githubusercontent.com';
+                });
+                if (!matched) process.exit(2);
+              }
+            }
+          }
+          NODE
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Remove only exact bounded registry and attestation verification inputs
+        id: verification_cleanup
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -u
+          status=0
+          verification_dir="$RUNNER_TEMP/$VERIFICATION_SUBDIR"
+          if [ -L "$verification_dir" ]; then
+            status=1
+          elif [ -d "$verification_dir" ]; then
+            allowed='^(current|previous)-(tag-raw|digest-raw|digest-summary|provenance-api|provenance-oci|sbom-api|sbom-oci)\.json$'
+            while IFS= read -r -d '' target; do
+              name="$(basename "$target")"
+              if [[ ! "$name" =~ $allowed ]] || [ ! -f "$target" ] || [ -L "$target" ] || \
+                 [ "$(dirname "$(realpath "$target")")" != "$verification_dir" ]; then
+                status=1
+                continue
+              fi
+              rm -- "$target" || status=1
+            done < <(find "$verification_dir" -mindepth 1 -maxdepth 1 -print0)
+            rmdir -- "$verification_dir" || status=1
+          elif [ -e "$verification_dir" ]; then
+            status=1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "classification=verification_cleanup_failure" >> "$GITHUB_OUTPUT"
+            exit "$status"
+          fi
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare the exact bounded I9 evidence directory
+        id: evidence_setup
+        if: ${{ steps.attestation_verification.outcome == 'success' && steps.verification_cleanup.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence_dir="$RUNNER_TEMP/$EVIDENCE_SUBDIR"
+          if [ -e "$evidence_dir" ] || [ -L "$evidence_dir" ]; then exit 2; fi
+          mkdir -m 0700 -- "$evidence_dir"
+          [ "$(realpath "$evidence_dir")" = "$evidence_dir" ]
+          echo "EVIDENCE_DIR=$evidence_dir" >> "$GITHUB_ENV"
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Pull both immutable digests and resolve the shared non-root service identity
+        id: runtime_images
+        if: ${{ steps.evidence_setup.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$PREVIOUS_IMAGE_REF" >/dev/null
+          docker pull "$CURRENT_IMAGE_REF" >/dev/null
+
+          resolve_identity() {
+            local label="$1" image_ref="$2" expected_config="$3"
+            local record
+            record="$(docker image inspect --format '{{.Id}}|{{json .Config.User}}' "$image_ref")"
+            [ "$record" = "$expected_config|\"slicer\"" ]
+            local probe_name="i9-id-$label-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            if docker container inspect "$probe_name" >/dev/null 2>&1; then exit 2; fi
+            local uid gid
+            uid="$(timeout 20s docker run --rm --name "$probe_name" --pull never \
+              --network none --read-only --cap-drop ALL \
+              --security-opt no-new-privileges --pids-limit 16 \
+              --memory 64m --memory-swap 64m --cpus 0.25 \
+              --label io.s3b.rehearsal=true \
+              --label "io.s3b.run-id=$GITHUB_RUN_ID" \
+              --label "io.s3b.expected-image=$expected_config" \
+              --entrypoint /usr/bin/id "$image_ref" -u)"
+            if docker container inspect "$probe_name" >/dev/null 2>&1; then exit 2; fi
+            gid="$(timeout 20s docker run --rm --name "$probe_name" --pull never \
+              --network none --read-only --cap-drop ALL \
+              --security-opt no-new-privileges --pids-limit 16 \
+              --memory 64m --memory-swap 64m --cpus 0.25 \
+              --label io.s3b.rehearsal=true \
+              --label "io.s3b.run-id=$GITHUB_RUN_ID" \
+              --label "io.s3b.expected-image=$expected_config" \
+              --entrypoint /usr/bin/id "$image_ref" -g)"
+            if docker container inspect "$probe_name" >/dev/null 2>&1; then exit 2; fi
+            [[ "$uid" =~ ^[1-9][0-9]*$ ]] && [[ "$gid" =~ ^[1-9][0-9]*$ ]]
+            printf '%s:%s\n' "$uid" "$gid"
+          }
+
+          previous_identity="$(resolve_identity previous "$PREVIOUS_IMAGE_REF" "$PREVIOUS_CONFIG_DIGEST")"
+          candidate_identity="$(resolve_identity candidate "$CURRENT_IMAGE_REF" "$CURRENT_CONFIG_DIGEST")"
+          [ "$previous_identity" = "$candidate_identity" ]
+          service_uid="${candidate_identity%%:*}"
+          service_gid="${candidate_identity##*:}"
+          [ "$service_uid" != "0" ] && [ "$service_gid" != "0" ]
+          {
+            echo "SLICER_UID=$service_uid"
+            echo "SLICER_GID=$service_gid"
+          } >> "$GITHUB_ENV"
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare run-owned staging state and inert scoped credentials
+        id: runtime_setup
+        if: ${{ steps.runtime_images.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          stage_root="$RUNNER_TEMP/i9-stage-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if [ -e "$stage_root" ] || [ -L "$stage_root" ]; then exit 2; fi
+          mkdir -m 0700 -- "$stage_root"
+          [ "$(realpath "$stage_root")" = "$stage_root" ]
+          for name in input output pricing-state; do
+            sudo --non-interactive install -d -o "$SLICER_UID" -g "$SLICER_GID" \
+              -m 0700 -- "$stage_root/$name"
+            [ "$(stat -c '%u:%g:%a:%F' "$stage_root/$name")" \
+              = "$SLICER_UID:$SLICER_GID:700:directory" ]
+            [ "$(realpath "$stage_root/$name")" = "$stage_root/$name" ]
+          done
+
+          env_file="$stage_root/service.env"
+          slice_key="$(openssl rand -hex 32)"
+          pricing_key="$(openssl rand -hex 32)"
+          artifact_key="$(openssl rand -hex 32)"
+          operations_key="$(openssl rand -hex 32)"
+          [ "$slice_key" != "$pricing_key" ] && [ "$slice_key" != "$artifact_key" ] && \
+            [ "$slice_key" != "$operations_key" ] && [ "$pricing_key" != "$artifact_key" ] && \
+            [ "$pricing_key" != "$operations_key" ] && [ "$artifact_key" != "$operations_key" ]
+          {
+            printf 'NODE_ENV=production\nPORT=3000\nTRUST_PROXY=false\n'
+            printf 'SLICE_SERVICE_API_KEY=%s\n' "$slice_key"
+            printf 'PRICING_API_KEY=%s\n' "$pricing_key"
+            printf 'ARTIFACT_API_KEY=%s\n' "$artifact_key"
+            printf 'OPERATIONS_API_KEY=%s\n' "$operations_key"
+          } > "$env_file"
+          [ "$(stat -c '%a:%F' "$env_file")" = "600:regular file" ]
+          [ "$(dirname "$(realpath "$env_file")")" = "$stage_root" ]
+          {
+            echo "CANDIDATE_SHA=$REHEARSAL_SHA"
+            echo "I9_STAGE_ROOT=$stage_root"
+            echo "I9_REHEARSAL_MANIFEST=$GITHUB_WORKSPACE/.github/i9-staging-rehearsal.json"
+            echo "SLICER_ENV_FILE=$env_file"
+            echo "SLICER_INPUT_DIR=$stage_root/input"
+            echo "SLICER_OUTPUT_DIR=$stage_root/output"
+            echo "SLICER_CONFIGS_DIR=$GITHUB_WORKSPACE/configs"
+            echo "SLICER_PRICING_STATE_DIR=$stage_root/pricing-state"
+          } >> "$GITHUB_ENV"
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Run the bounded production-Compose staging and automatic rollback rehearsal
+        id: rehearsal
+        if: ${{ steps.runtime_setup.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a
+          . "$SLICER_ENV_FILE"
+          set +a
+          node scripts/i9-staging-rollback-rehearsal.js
+
+      - name: Verify or remove only the exact run-owned staging directory
+        id: runtime_post_cleanup
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -u
+          status=0
+          remove_owned_container() {
+            local reference="$1" expected_kind="$2"
+            local record inspect_status
+            record="$(docker container inspect --format \
+              '{{.Id}}|{{.Image}}|{{index .Config.Labels "io.s3b.rehearsal"}}|{{index .Config.Labels "io.s3b.run-id"}}|{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}' \
+              "$reference" 2>/dev/null)"
+            inspect_status=$?
+            if [ "$inspect_status" -eq 1 ] && [ -z "$record" ]; then return 0; fi
+            if [ "$inspect_status" -ne 0 ]; then return 1; fi
+            IFS='|' read -r container_id image_id rehearsal_label run_label \
+              compose_project compose_service <<EOF
+          $record
+          EOF
+            case "$image_id" in
+              "$CURRENT_CONFIG_DIGEST"|"$PREVIOUS_CONFIG_DIGEST") ;;
+              *) return 1 ;;
+            esac
+            if [ "$expected_kind" = "compose" ]; then
+              [ "$compose_project" = "i9-s3b-rehearsal" ] && \
+                [ "$compose_service" = "slicer-api" ] || return 1
+            else
+              [ "$rehearsal_label" = "true" ] && \
+                [ "$run_label" = "$GITHUB_RUN_ID" ] || return 1
+            fi
+            [[ "$container_id" =~ ^[0-9a-f]{64}$ ]] || return 1
+            docker container rm --force "$container_id" >/dev/null || return 1
+          }
+          for reference in \
+            "i9-id-previous-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "i9-id-candidate-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "i9-peer-previous-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "i9-peer-candidate-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "i9-peer-rollback-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" \
+            "i9-peer-failure-rollback-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"; do
+            remove_owned_container "$reference" rehearsal || status=1
+          done
+          remove_owned_container 3d-psa-backend-server compose || status=1
+
+          network_record="$(docker network inspect --format \
+            '{{.Id}}|{{index .Labels "com.docker.compose.project"}}|{{index .Labels "com.docker.compose.network"}}' \
+            slicer-api-private 2>/dev/null)"
+          network_status=$?
+          if [ "$network_status" -eq 0 ]; then
+            IFS='|' read -r network_id network_project network_role <<EOF
+          $network_record
+          EOF
+            if [[ ! "$network_id" =~ ^[0-9a-f]{64}$ ]] || \
+               [ "$network_project" != "i9-s3b-rehearsal" ] || \
+               [ "$network_role" != "slicer-api-private" ]; then
+              status=1
+            else
+              docker network rm "$network_id" >/dev/null || status=1
+            fi
+          elif [ "$network_status" -ne 1 ] || [ -n "$network_record" ]; then
+            status=1
+          fi
+
+          for image_ref in "$CURRENT_IMAGE_REF" "$PREVIOUS_IMAGE_REF"; do
+            if docker image inspect "$image_ref" >/dev/null 2>&1; then
+              docker image rm "$image_ref" >/dev/null || status=1
+            fi
+            if docker image inspect "$image_ref" >/dev/null 2>&1; then status=1; fi
+          done
+
+          stage_root="$RUNNER_TEMP/i9-stage-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if [ -L "$stage_root" ]; then
+            status=1
+          elif [ -d "$stage_root" ]; then
+            if [ "$(dirname "$stage_root")" != "$RUNNER_TEMP" ] || \
+               [ "$(realpath "$stage_root")" != "$stage_root" ]; then
+              status=1
+            else
+              sudo --non-interactive rm --recursive --force --one-file-system -- "$stage_root" \
+                || status=1
+            fi
+          elif [ -e "$stage_root" ]; then
+            status=1
+          fi
+          if [ -e "$stage_root" ] || [ -L "$stage_root" ]; then status=1; fi
+          if [ "$status" -ne 0 ]; then
+            echo "classification=runtime_post_cleanup_failure" >> "$GITHUB_OUTPUT"
+            exit "$status"
+          fi
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Generate bounded I9 staging and rollback evidence
+        id: evidence_write
+        if: ${{ always() && steps.evidence_setup.outcome == 'success' }}
+        continue-on-error: true
+        env:
+          MANIFEST_OUTCOME: ${{ steps.manifest_contract.outcome }}
+          REGISTRY_IDENTITY_OUTCOME: ${{ steps.registry_identity.outcome }}
+          ATTESTATION_VERIFICATION_OUTCOME: ${{ steps.attestation_verification.outcome }}
+          VERIFICATION_CLEANUP_OUTCOME: ${{ steps.verification_cleanup.outcome }}
+          REHEARSAL_OUTCOME: ${{ steps.rehearsal.outcome }}
+          REHEARSAL_CLASSIFICATION: ${{ steps.rehearsal.outputs.classification }}
+          ROLLBACK_CLASSIFICATION: ${{ steps.rehearsal.outputs.rollback_classification }}
+          RUNTIME_CLEANUP_CLASSIFICATION: ${{ steps.rehearsal.outputs.cleanup_classification }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/i9-write-staging-evidence.js
+
+      - name: Require the exact bounded I9 evidence contract
+        id: evidence_boundary
+        if: ${{ steps.evidence_write.outcome == 'success' }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const {
+            EVIDENCE_FILE,
+            MAX_EVIDENCE_BYTES,
+            validateStagingEvidence
+          } = require('./scripts/i9-staging-evidence');
+          const root = path.resolve(process.env.RUNNER_TEMP, process.env.EVIDENCE_SUBDIR);
+          if (process.env.EVIDENCE_DIR !== root || fs.realpathSync(root) !== root) process.exit(2);
+          const target = path.join(root, EVIDENCE_FILE);
+          const stat = fs.lstatSync(target);
+          if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0
+              || stat.size > MAX_EVIDENCE_BYTES || path.dirname(fs.realpathSync(target)) !== root) process.exit(2);
+          const value = JSON.parse(fs.readFileSync(target, 'utf8'));
+          const error = validateStagingEvidence(value, {
+            source_sha: process.env.REHEARSAL_SHA,
+            source_ref: process.env.GITHUB_REF,
+            run_id: process.env.GITHUB_RUN_ID,
+            run_attempt: process.env.GITHUB_RUN_ATTEMPT,
+            job: process.env.GITHUB_JOB,
+            previous_source_sha: process.env.PREVIOUS_SOURCE_SHA,
+            previous_digest: process.env.PREVIOUS_REGISTRY_DIGEST,
+            candidate_source_sha: process.env.CURRENT_SOURCE_SHA,
+            candidate_digest: process.env.CURRENT_REGISTRY_DIGEST
+          });
+          if (error) {
+            console.error(error);
+            process.exit(2);
+          }
+          NODE
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Upload only the bounded I9 rehearsal evidence
+        id: evidence_upload
+        if: ${{ steps.evidence_boundary.outcome == 'success' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: i9-staging-rollback-evidence-${{ needs.preflight.outputs.rehearsal_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/i9-staging-rollback-evidence.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
+          include-hidden-files: false
+
+      - name: Remove only the exact bounded I9 evidence directory
+        id: evidence_cleanup
+        if: ${{ always() }}
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -u
+          status=0
+          evidence_dir="$RUNNER_TEMP/$EVIDENCE_SUBDIR"
+          if [ -L "$evidence_dir" ]; then
+            status=1
+          elif [ -d "$evidence_dir" ]; then
+            for name in i9-staging-runtime-draft.json i9-staging-rollback-evidence.json; do
+              target="$evidence_dir/$name"
+              if [ -f "$target" ] && [ ! -L "$target" ] && \
+                 [ "$(dirname "$(realpath "$target")")" = "$evidence_dir" ]; then
+                rm -- "$target" || status=1
+              elif [ -e "$target" ] || [ -L "$target" ]; then
+                status=1
+              fi
+            done
+            if find "$evidence_dir" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+              status=1
+            else
+              rmdir -- "$evidence_dir" || status=1
+            fi
+          elif [ -e "$evidence_dir" ]; then
+            status=1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "classification=evidence_cleanup_failure" >> "$GITHUB_OUTPUT"
+            exit "$status"
+          fi
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce the final fail-closed I9 rehearsal result
+        id: final_enforcement
+        if: ${{ always() }}
+        env:
+          REGISTRY_LOGIN_OUTCOME: ${{ steps.registry_login.outcome }}
+          MANIFEST_OUTCOME: ${{ steps.manifest_contract.outcome }}
+          REGISTRY_IDENTITY_OUTCOME: ${{ steps.registry_identity.outcome }}
+          ATTESTATION_VERIFICATION_OUTCOME: ${{ steps.attestation_verification.outcome }}
+          VERIFICATION_CLEANUP_OUTCOME: ${{ steps.verification_cleanup.outcome }}
+          EVIDENCE_SETUP_OUTCOME: ${{ steps.evidence_setup.outcome }}
+          RUNTIME_IMAGES_OUTCOME: ${{ steps.runtime_images.outcome }}
+          RUNTIME_SETUP_OUTCOME: ${{ steps.runtime_setup.outcome }}
+          REHEARSAL_OUTCOME: ${{ steps.rehearsal.outcome }}
+          REHEARSAL_CLASSIFICATION: ${{ steps.rehearsal.outputs.classification }}
+          ROLLBACK_CLASSIFICATION: ${{ steps.rehearsal.outputs.rollback_classification }}
+          RUNTIME_CLEANUP_CLASSIFICATION: ${{ steps.rehearsal.outputs.cleanup_classification }}
+          RUNTIME_POST_CLEANUP_OUTCOME: ${{ steps.runtime_post_cleanup.outcome }}
+          EVIDENCE_WRITE_OUTCOME: ${{ steps.evidence_write.outcome }}
+          EVIDENCE_BOUNDARY_OUTCOME: ${{ steps.evidence_boundary.outcome }}
+          EVIDENCE_UPLOAD_OUTCOME: ${{ steps.evidence_upload.outcome }}
+          EVIDENCE_CLEANUP_OUTCOME: ${{ steps.evidence_cleanup.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          classification=I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE
+          failed_step=none
+          if [ "$VERIFICATION_CLEANUP_OUTCOME" != "success" ] || \
+             [ "$RUNTIME_POST_CLEANUP_OUTCOME" != "success" ] || \
+             [ "$EVIDENCE_CLEANUP_OUTCOME" != "success" ]; then
+            classification=BLOCKED_I9_CLEANUP_FAILURE
+            failed_step=cleanup
+          elif [ "$MANIFEST_OUTCOME" != "success" ]; then
+            classification=BLOCKED_I9_MANIFEST_CONTRACT
+            failed_step=manifest
+          elif [ "$REGISTRY_LOGIN_OUTCOME" != "success" ] || \
+               [ "$REGISTRY_IDENTITY_OUTCOME" != "success" ]; then
+            classification=BLOCKED_I9_REGISTRY_READ_CAPABILITY
+            failed_step=registry_identity
+          elif [ "$ATTESTATION_VERIFICATION_OUTCOME" != "success" ]; then
+            classification=BLOCKED_I9_ATTESTATION_VERIFICATION
+            failed_step=attestation_verification
+          elif [ "$RUNTIME_IMAGES_OUTCOME" != "success" ]; then
+            classification=BLOCKED_I9_RUNTIME_IDENTITY_MISMATCH
+            failed_step=runtime_images
+          elif [ "$RUNTIME_SETUP_OUTCOME" != "success" ]; then
+            classification=BLOCKED_I9_HOST_OWNERSHIP_CAPABILITY
+            failed_step=runtime_setup
+          elif [ "$RUNTIME_CLEANUP_CLASSIFICATION" != "success" ]; then
+            classification=BLOCKED_I9_CLEANUP_FAILURE
+            failed_step=runtime_cleanup
+          elif [ "$ROLLBACK_CLASSIFICATION" != "success" ]; then
+            classification=BLOCKED_I9_ROLLBACK_FAILURE
+            failed_step=rollback
+          elif [ "$REHEARSAL_OUTCOME" != "success" ] || \
+               [ "$REHEARSAL_CLASSIFICATION" != "success" ]; then
+            classification=BLOCKED_I9_REHEARSAL_GATE
+            failed_step=rehearsal
+          elif [ "$EVIDENCE_SETUP_OUTCOME" != "success" ] || \
+               [ "$EVIDENCE_WRITE_OUTCOME" != "success" ] || \
+               [ "$EVIDENCE_BOUNDARY_OUTCOME" != "success" ] || \
+               [ "$EVIDENCE_UPLOAD_OUTCOME" != "success" ]; then
+            classification=BLOCKED_I9_EVIDENCE_FAILURE
+            failed_step=evidence
+          fi
+          {
+            echo "### I9 ephemeral staging and rollback rehearsal"
+            echo
+            echo "Classification: \`$classification\`."
+            echo "Failed step: \`$failed_step\`."
+            echo "Runtime cleanup: \`$RUNTIME_CLEANUP_CLASSIFICATION\`."
+            echo "Evidence cleanup: \`$EVIDENCE_CLEANUP_OUTCOME\`."
+            echo "This run used hosted ephemeral Docker only; it did not deploy to a VPS or production."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$classification" != "I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE" ]; then
+            echo "::error title=I9 rehearsal::$classification"
+            exit 1
+          fi
