@@ -61,39 +61,61 @@ not claim deployed proxy, firewall, secret, digest, VPS, or readiness proof.
 
 ### Immutable candidate image contract
 
-The repository defines a fail-closed GHCR candidate-publication path. It
-retains exact-input `workflow_dispatch` for future default-branch integration
-and adds a push trigger only for
-`codex/i8-s3a-ghcr-signed-candidate`. On that push path the candidate is
-`github.sha`; repository `Botond1/3D-Printer-Slicer-API`, ref
-`refs/heads/codex/i8-s3a-ghcr-signed-candidate`, and actor `Botond1` must match
-exactly, the registry is hardcoded to
-`ghcr.io/botond1/3d-printer-slicer-api`, and the commit's last non-empty line
-must be:
+Protected `main` is verified at
+`8253160eef1c3e00c1e40826ec61fd97563ddd9b`. Source run `32662043454` and
+Image run `32662043476` succeeded. Main strictly requires the two no-deploy
+GitHub Actions checks, a pull request, administrator enforcement and resolved
+conversations; force-push and deletion are disabled. Merge commit is the sole
+enabled merge strategy. Required reviews are zero because `Botond1` is the only
+collaborator and cannot self-approve; that is a capability limit, not human
+approval. Rulesets are empty and required signatures are not enabled.
 
-```text
-I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE
-```
+I11 productizes the fail-closed GHCR path as manual `workflow_dispatch` only
+from the exact current protected-main SHA. It has two modes:
 
-Both trigger paths emit the same canonical `candidate_sha`, `image_ref`,
-`discovery_tag`, and `registry_repository` outputs. The discovery tag is
-derived from the full source SHA and is not an immutable consumption reference.
-After a successful publication and attestation run, consumers must use only:
+- `publish_new`: `existing_registry_digest` is empty, confirmation is exactly
+  `PUBLISH_SIGNED_MAIN_CANDIDATE`, and the SHA-derived discovery tag must be
+  proven absent before the once-built, fully gated image is pushed.
+- `recover_exact_digest`: confirmation is exactly
+  `RECOVER_SIGNED_MAIN_CANDIDATE`, the supplied lowercase
+  `sha256:<64 hex>` digest and existing SHA-derived tag/config identity must
+  match the once-built image, and no registry push, overwrite or delete occurs.
+
+Only the publication job may receive registry/attestation/OIDC write
+permissions. It uses the `candidate-publication` environment with
+`deployment: false`. Environment ID `20443404498` is live-verified as of
+2026-08-23 with protected branches enabled, custom branch policies disabled,
+exactly one `branch_policy` protection rule (ID `63481958`), and no reviewer or
+wait-timer rules, secrets, variables or deployments. No reviewer is possible
+while `Botond1` is the sole collaborator.
+
+The discovery tag is derived from the full source SHA and is not an immutable
+consumption reference. After a successful publication/recovery and attestation
+run, consumers must use only:
 
 ```text
 ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>
 ```
 
-The path builds once, completes the full image gate before push,
-resolves and round-trips the registry digest, and verifies digest-bound
+The path builds once, completes the full exact-image gate before registry
+mutation, resolves and round-trips the digest, and verifies digest-bound
 GitHub/Sigstore SLSA provenance plus SPDX SBOM attestations. It never creates
-`latest`, semver, staging, or production tags and never deploys. Before the
-single authorized normal non-force corrective branch push, Source run
-`30163991878` and Image run `30163991870` are green; the corrective
-Source/Image/Publication runs are pending. No registry, signature, or
-attestation side effect exists.
-Nothing in this contract authorizes a `main` change, PR, merge, force-push,
-release, Git tag, mutable image tag, deployment, or repository-setting change.
+`latest`, semver, staging or production tags and never deploys.
+
+After a successful protected-main Candidate Publication, an automatic
+`workflow_run` rehearsal accepts exactly one bounded publication artifact. It
+combines the artifact's current signed digest with the policy-pinned previous
+signed digest into a dynamic digest-only manifest, verifies both images' SLSA
+and SPDX attestations through API and OCI, then reuses the hardened I9 runtime
+lane: private-peer readiness, controlled `STORAGE_UNSAFE` failure, automatic
+exact-previous rollback, bounded evidence and exact cleanup. The rehearsal is
+registry-read-only/no-deploy and has no OIDC, environment or VPS authority.
+
+I11 implementation/local gates, hosted Source/Image, publication, digest,
+attestations, publication artifact and automatic rehearsal results remain
+`PENDING` until observed. Historical hosted S4/S5 topology and I9 rollback
+results are ephemeral validation only; they do not prove the production proxy,
+firewall, secrets, deployed digest, Hostinger/VPS readiness or live rollback.
 
 ---
 

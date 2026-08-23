@@ -1,130 +1,230 @@
-name: S3b Ephemeral Staging and Rollback Rehearsal (NO DEPLOY)
+name: Signed Main Candidate Ephemeral Rehearsal (NO DEPLOY)
 
 on:
-  push:
+  workflow_run:
+    workflows:
+      - Candidate Publication - Signed GHCR (NO DEPLOY)
+    types:
+      - completed
     branches:
-      - codex/i9-s3b-staging-rollback-foundation
+      - main
 
-permissions:
-  contents: none
+permissions: {}
 
 concurrency:
-  group: i9-s3b-ephemeral-staging-rollback
+  group: signed-main-candidate-ephemeral-rehearsal
   cancel-in-progress: false
 
 env:
-  I9_BASELINE_SHA: 1fffab87960c675a053ae814d374cab331fbb14d
   REGISTRY_REPOSITORY: ghcr.io/botond1/3d-printer-slicer-api
-  CURRENT_SOURCE_SHA: 1fffab87960c675a053ae814d374cab331fbb14d
-  CURRENT_DISCOVERY_TAG: candidate-1fffab87960c675a053ae814d374cab331fbb14d
-  CURRENT_REGISTRY_DIGEST: sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5
-  CURRENT_CONFIG_DIGEST: sha256:b16f951a9701335b35b4ef248c2b1764d06c17f5e90ee6c2c2245bedc3026d42
-  PREVIOUS_SOURCE_SHA: 71e3a7df1972b78a7c8cc2cc03508558186027ce
-  PREVIOUS_DISCOVERY_TAG: candidate-71e3a7df1972b78a7c8cc2cc03508558186027ce
-  PREVIOUS_REGISTRY_DIGEST: sha256:26df5afe5ad48062c8e1d5213b305282d9386688e1666e2ef0a56487de5e8b6c
-  PREVIOUS_CONFIG_DIGEST: sha256:8d4de3647161d5688688191c9eb7af301d43216ab22ce0142d0a244e00c72c82
-  CANDIDATE_WORKFLOW_REF: refs/heads/codex/i8-s3a-ghcr-signed-candidate
-  VERIFICATION_SUBDIR: i9-verification-${{ github.run_id }}-${{ github.run_attempt }}
-  EVIDENCE_SUBDIR: i9-staging-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+  PUBLICATION_ARTIFACT_SUBDIR: signed-main-publication-artifact-${{ github.run_id }}-${{ github.run_attempt }}
+  REHEARSAL_INPUT_SUBDIR: signed-main-rehearsal-input-${{ github.run_id }}-${{ github.run_attempt }}
+  VERIFICATION_SUBDIR: signed-main-verification-${{ github.run_id }}-${{ github.run_attempt }}
+  EVIDENCE_SUBDIR: signed-main-staging-evidence-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
   preflight:
-    name: Prove exact I9 rehearsal authorization
+    name: Prove the exact successful main publication artifact
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
+      actions: read
     outputs:
-      rehearsal_sha: ${{ steps.authorization.outputs.rehearsal_sha }}
+      candidate_sha: ${{ steps.upstream.outputs.candidate_sha }}
+      publication_run_id: ${{ steps.upstream.outputs.publication_run_id }}
+      publication_run_attempt: ${{ steps.upstream.outputs.publication_run_attempt }}
+      publication_workflow_id: ${{ steps.upstream.outputs.publication_workflow_id }}
+      publication_artifact_id: ${{ steps.artifact.outputs.publication_artifact_id }}
+      publication_artifact_name: ${{ steps.artifact.outputs.publication_artifact_name }}
+      publication_artifact_digest: ${{ steps.artifact.outputs.publication_artifact_digest }}
     steps:
-      - name: Accept only the exact authorized branch push
-        id: authorization
+      - name: Accept only the exact successful protected-main publication event
+        id: upstream
         env:
-          EVENT_ACTOR: ${{ github.actor }}
           EVENT_NAME: ${{ github.event_name }}
-          EVENT_REF: ${{ github.ref }}
           EVENT_REPOSITORY: ${{ github.repository }}
-          EVENT_SHA: ${{ github.sha }}
+          UPSTREAM_NAME: ${{ github.event.workflow_run.name }}
+          UPSTREAM_PATH: ${{ github.event.workflow_run.path }}
+          UPSTREAM_EVENT: ${{ github.event.workflow_run.event }}
+          UPSTREAM_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          UPSTREAM_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          UPSTREAM_SHA: ${{ github.event.workflow_run.head_sha }}
+          UPSTREAM_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+          UPSTREAM_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          UPSTREAM_WORKFLOW_ID: ${{ github.event.workflow_run.workflow_id }}
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" != "push" ] || \
-             [ "$EVENT_ACTOR" != "Botond1" ] || \
+          if [ "$EVENT_NAME" != "workflow_run" ] || \
              [ "$EVENT_REPOSITORY" != "Botond1/3D-Printer-Slicer-API" ] || \
-             [ "$EVENT_REF" != "refs/heads/codex/i9-s3b-staging-rollback-foundation" ] || \
-             [[ ! "$EVENT_SHA" =~ ^[0-9a-f]{40}$ ]] || \
-             [ "$EVENT_SHA" = "$I9_BASELINE_SHA" ]; then
-            echo "I9 rehearsal authorization does not match the exact push contract." >&2
+             [ "$UPSTREAM_NAME" != "Candidate Publication - Signed GHCR (NO DEPLOY)" ] || \
+             [ "$UPSTREAM_PATH" != ".github/workflows/candidate-publication.yml" ] || \
+             [ "$UPSTREAM_EVENT" != "workflow_dispatch" ] || \
+             [ "$UPSTREAM_CONCLUSION" != "success" ] || \
+             [ "$UPSTREAM_BRANCH" != "main" ] || \
+             [ "$UPSTREAM_REPOSITORY" != "$EVENT_REPOSITORY" ] || \
+             [[ ! "$UPSTREAM_SHA" =~ ^[0-9a-f]{40}$ ]] || \
+             [[ ! "$UPSTREAM_RUN_ID" =~ ^[1-9][0-9]*$ ]] || \
+             [[ ! "$UPSTREAM_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]] || \
+             [[ ! "$UPSTREAM_WORKFLOW_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Publication workflow_run identity is outside the rehearsal contract." >&2
             exit 2
           fi
-          echo "rehearsal_sha=$EVENT_SHA" >> "$GITHUB_OUTPUT"
+          {
+            echo "candidate_sha=$UPSTREAM_SHA"
+            echo "publication_run_id=$UPSTREAM_RUN_ID"
+            echo "publication_run_attempt=$UPSTREAM_RUN_ATTEMPT"
+            echo "publication_workflow_id=$UPSTREAM_WORKFLOW_ID"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Checkout the exact authorized I9 source
+      - name: Checkout the exact published main candidate
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          ref: ${{ steps.authorization.outputs.rehearsal_sha }}
+          ref: ${{ steps.upstream.outputs.candidate_sha }}
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Prove ancestry, remote head, immutable inputs, and exact trailer
+      - name: Re-prove the immutable upstream run through the GitHub API
         env:
-          REHEARSAL_SHA: ${{ steps.authorization.outputs.rehearsal_sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ steps.upstream.outputs.candidate_sha }}
+          PUBLICATION_RUN_ID: ${{ steps.upstream.outputs.publication_run_id }}
+          PUBLICATION_RUN_ATTEMPT: ${{ steps.upstream.outputs.publication_run_attempt }}
+          PUBLICATION_WORKFLOW_ID: ${{ steps.upstream.outputs.publication_workflow_id }}
         shell: bash
         run: |
           set -euo pipefail
-          required_trailer="I9-Rehearsal: RUN_I9_EPHEMERAL_STAGING_ROLLBACK"
-          [ "$(git rev-parse HEAD)" = "$REHEARSAL_SHA" ]
-          remote_sha="$(git ls-remote --exit-code origin \
-            refs/heads/codex/i9-s3b-staging-rollback-foundation | awk '{print $1}')"
-          [ "$remote_sha" = "$REHEARSAL_SHA" ]
-          git merge-base --is-ancestor "$I9_BASELINE_SHA" "$REHEARSAL_SHA"
-          git merge-base --is-ancestor "$CURRENT_SOURCE_SHA" "$REHEARSAL_SHA"
-          git merge-base --is-ancestor "$PREVIOUS_SOURCE_SHA" "$CURRENT_SOURCE_SHA"
-          git diff --quiet "$CURRENT_SOURCE_SHA" "$REHEARSAL_SHA" -- \
-            docker-compose.production.yml configs Dockerfile package.json package-lock.json app
-          [ "$CURRENT_SOURCE_SHA" != "$PREVIOUS_SOURCE_SHA" ]
-          [ "$CURRENT_REGISTRY_DIGEST" != "$PREVIOUS_REGISTRY_DIGEST" ]
-          [ "$CURRENT_CONFIG_DIGEST" != "$PREVIOUS_CONFIG_DIGEST" ]
-          last_nonempty_line="$(
-            git show -s --format=%B "$REHEARSAL_SHA" |
-              awk 'NF { last = $0 } END { if (last != "") print last }'
-          )"
-          if [ "$last_nonempty_line" != "$required_trailer" ]; then
-            echo "I9 rehearsal push lacks the exact final authorization trailer." >&2
-            exit 2
-          fi
+          [ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]
+          git fetch --no-tags --depth=1 origin refs/heads/main
+          main_sha="$(git rev-parse FETCH_HEAD)"
+          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$CANDIDATE_SHA" "$main_sha"
+          run_file="$RUNNER_TEMP/publication-run-$PUBLICATION_RUN_ID.json"
+          if [ -e "$run_file" ] || [ -L "$run_file" ]; then exit 2; fi
+          umask 077
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PUBLICATION_RUN_ID" > "$run_file"
+          [ -f "$run_file" ] && [ ! -L "$run_file" ]
+          [ "$(stat -c '%s' "$run_file")" -gt 0 ]
+          [ "$(stat -c '%s' "$run_file")" -le 262144 ]
+          jq -e \
+            --arg repo "$GITHUB_REPOSITORY" \
+            --arg sha "$CANDIDATE_SHA" \
+            --arg run "$PUBLICATION_RUN_ID" \
+            --arg attempt "$PUBLICATION_RUN_ATTEMPT" \
+            --arg workflow "$PUBLICATION_WORKFLOW_ID" '
+              (.id | tostring) == $run and
+              (.run_attempt | tostring) == $attempt and
+              (.workflow_id | tostring) == $workflow and
+              .name == "Candidate Publication - Signed GHCR (NO DEPLOY)" and
+              .path == ".github/workflows/candidate-publication.yml" and
+              .event == "workflow_dispatch" and .conclusion == "success" and
+              .head_branch == "main" and .head_sha == $sha and
+              .head_repository.full_name == $repo and .repository.full_name == $repo
+            ' "$run_file" >/dev/null
+          rm -- "$run_file"
+          if [ -e "$run_file" ] || [ -L "$run_file" ]; then exit 2; fi
+
+      - name: Resolve exactly one bounded publication artifact
+        id: artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATE_SHA: ${{ steps.upstream.outputs.candidate_sha }}
+          PUBLICATION_RUN_ID: ${{ steps.upstream.outputs.publication_run_id }}
+          PUBLICATION_RUN_ATTEMPT: ${{ steps.upstream.outputs.publication_run_attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_file="$RUNNER_TEMP/publication-artifacts-$PUBLICATION_RUN_ID.json"
+          if [ -e "$artifact_file" ] || [ -L "$artifact_file" ]; then exit 2; fi
+          umask 077
+          gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$PUBLICATION_RUN_ID/artifacts?per_page=100" \
+            > "$artifact_file"
+          [ -f "$artifact_file" ] && [ ! -L "$artifact_file" ]
+          [ "$(stat -c '%s' "$artifact_file")" -gt 0 ]
+          [ "$(stat -c '%s' "$artifact_file")" -le 1048576 ]
+          expected_name="i11-main-signed-candidate-$CANDIDATE_SHA-$PUBLICATION_RUN_ID-$PUBLICATION_RUN_ATTEMPT"
+          jq -e --arg name "$expected_name" '
+            .total_count == 1 and (.artifacts | length) == 1 and
+            .artifacts[0].name == $name and .artifacts[0].expired == false and
+            (.artifacts[0].id | type) == "number" and .artifacts[0].id > 0 and
+            (.artifacts[0].size_in_bytes | type) == "number" and
+            .artifacts[0].size_in_bytes > 0 and .artifacts[0].size_in_bytes <= 136314880 and
+            (.artifacts[0].digest | test("^sha256:[0-9a-f]{64}$"))
+          ' "$artifact_file" >/dev/null
+          artifact_id="$(jq -r '.artifacts[0].id' "$artifact_file")"
+          artifact_name="$(jq -r '.artifacts[0].name' "$artifact_file")"
+          artifact_digest="$(jq -r '.artifacts[0].digest' "$artifact_file")"
+          rm -- "$artifact_file"
+          if [ -e "$artifact_file" ] || [ -L "$artifact_file" ]; then exit 2; fi
+          {
+            echo "publication_artifact_id=$artifact_id"
+            echo "publication_artifact_name=$artifact_name"
+            echo "publication_artifact_digest=$artifact_digest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Remove only exact preflight API response files
+        id: preflight_cleanup
+        if: ${{ always() }}
+        env:
+          PUBLICATION_RUN_ID: ${{ steps.upstream.outputs.publication_run_id }}
+        shell: bash
+        run: |
+          set -u
+          status=0
+          for target in \
+            "$RUNNER_TEMP/publication-run-$PUBLICATION_RUN_ID.json" \
+            "$RUNNER_TEMP/publication-artifacts-$PUBLICATION_RUN_ID.json"; do
+            if [ -f "$target" ] && [ ! -L "$target" ] && \
+               [ "$(dirname "$(realpath "$target")")" = "$RUNNER_TEMP" ]; then
+              rm -- "$target" || status=1
+            elif [ -e "$target" ] || [ -L "$target" ]; then
+              status=1
+            fi
+            if [ -e "$target" ] || [ -L "$target" ]; then status=1; fi
+          done
+          exit "$status"
 
   staging-rollback-rehearsal:
-    name: Verify, rehearse promotion, induce failure, and roll back
+    name: Verify exact digests, rehearse failure, and roll back
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
+      actions: read
       packages: read
       attestations: read
     env:
-      REHEARSAL_SHA: ${{ needs.preflight.outputs.rehearsal_sha }}
-      CURRENT_IMAGE_REF: ghcr.io/botond1/3d-printer-slicer-api@sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5
-      PREVIOUS_IMAGE_REF: ghcr.io/botond1/3d-printer-slicer-api@sha256:26df5afe5ad48062c8e1d5213b305282d9386688e1666e2ef0a56487de5e8b6c
+      CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
+      PUBLICATION_RUN_ID: ${{ needs.preflight.outputs.publication_run_id }}
+      PUBLICATION_RUN_ATTEMPT: ${{ needs.preflight.outputs.publication_run_attempt }}
+      PUBLICATION_WORKFLOW_ID: ${{ needs.preflight.outputs.publication_workflow_id }}
+      PUBLICATION_ARTIFACT_ID: ${{ needs.preflight.outputs.publication_artifact_id }}
+      PUBLICATION_ARTIFACT_NAME: ${{ needs.preflight.outputs.publication_artifact_name }}
+      PUBLICATION_ARTIFACT_DIGEST: ${{ needs.preflight.outputs.publication_artifact_digest }}
     steps:
-      - name: Checkout the exact authorized rehearsal source without credentials
+      - name: Checkout the exact published main candidate without credentials
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
-          ref: ${{ needs.preflight.outputs.rehearsal_sha }}
-          fetch-depth: 1
+          ref: ${{ needs.preflight.outputs.candidate_sha }}
+          fetch-depth: 0
           persist-credentials: false
 
-      - name: Re-prove source and immutable candidate identities
+      - name: Re-prove the protected-main source boundary
         shell: bash
         run: |
           set -euo pipefail
           [ "$GITHUB_REPOSITORY" = "Botond1/3D-Printer-Slicer-API" ]
-          [ "$GITHUB_REF" = "refs/heads/codex/i9-s3b-staging-rollback-foundation" ]
-          [ "$(git rev-parse HEAD)" = "$REHEARSAL_SHA" ]
+          [ "$GITHUB_EVENT_NAME" = "workflow_run" ]
+          [ "$GITHUB_REF" = "refs/heads/main" ]
+          [ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]
           [ "$REGISTRY_REPOSITORY" = "ghcr.io/botond1/3d-printer-slicer-api" ]
-          [ "$CURRENT_IMAGE_REF" = "$REGISTRY_REPOSITORY@$CURRENT_REGISTRY_DIGEST" ]
-          [ "$PREVIOUS_IMAGE_REF" = "$REGISTRY_REPOSITORY@$PREVIOUS_REGISTRY_DIGEST" ]
+          git fetch --no-tags --depth=1 origin refs/heads/main
+          main_sha="$(git rev-parse FETCH_HEAD)"
+          git merge-base --is-ancestor "$CANDIDATE_SHA" "$main_sha"
 
       - name: Set up Node.js 20
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
@@ -132,27 +232,139 @@ jobs:
           node-version: '20'
           package-manager-cache: false
 
-      - name: Require the exact immutable I9 rehearsal manifest
-        id: manifest_contract
+      - name: Download and safely extract the exact publication artifact
+        id: publication_artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
-          node -e "require('./scripts/i9-staging-manifest').loadStagingManifest(process.cwd())"
+          artifact_dir="$RUNNER_TEMP/$PUBLICATION_ARTIFACT_SUBDIR"
+          archive="$RUNNER_TEMP/signed-main-publication-$PUBLICATION_RUN_ID-$PUBLICATION_RUN_ATTEMPT.zip"
+          if [ -e "$artifact_dir" ] || [ -L "$artifact_dir" ] || \
+             [ -e "$archive" ] || [ -L "$archive" ]; then exit 2; fi
+          umask 077
+          mkdir -m 0700 -- "$artifact_dir"
+          [ "$(realpath "$artifact_dir")" = "$artifact_dir" ]
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$PUBLICATION_ARTIFACT_ID/zip" \
+            > "$archive"
+          [ -f "$archive" ] && [ ! -L "$archive" ]
+          archive_size="$(stat -c '%s' "$archive")"
+          [ "$archive_size" -gt 0 ] && [ "$archive_size" -le 136314880 ]
+          archive_digest="sha256:$(sha256sum "$archive" | awk '{print $1}')"
+          [ "$archive_digest" = "$PUBLICATION_ARTIFACT_DIGEST" ]
+          ARCHIVE="$archive" ARTIFACT_DIR="$artifact_dir" python3 <<'PY'
+          import os
+          import shutil
+          import stat
+          import zipfile
+          from pathlib import Path, PurePosixPath
+
+          limits = {
+              'i11-main-candidate-provenance.json': 96 * 1024,
+              'image-identity.txt': 4 * 1024,
+              'runtime-diagnostics.json': 64 * 1024,
+              'topology-evidence.json': 16 * 1024,
+              'sbom.spdx.json': 16 * 1024 * 1024,
+              'grype.json': 100 * 1024 * 1024,
+          }
+          archive = Path(os.environ['ARCHIVE']).resolve(strict=True)
+          root = Path(os.environ['ARTIFACT_DIR']).resolve(strict=True)
+          if archive.parent != root.parent or root.parent != Path(os.environ['RUNNER_TEMP']).resolve():
+              raise SystemExit('artifact_boundary_failure')
+          with zipfile.ZipFile(archive, 'r') as source:
+              infos = source.infolist()
+              names = [info.filename for info in infos]
+              if len(names) != len(set(names)) or sorted(names) != sorted(limits):
+                  raise SystemExit('artifact_allowlist_mismatch')
+              for info in infos:
+                  name = info.filename
+                  pure = PurePosixPath(name)
+                  mode = (info.external_attr >> 16) & 0o170000
+                  if pure.name != name or pure.is_absolute() or '..' in pure.parts \
+                          or info.is_dir() or mode == stat.S_IFLNK or info.flag_bits & 0x1 \
+                          or info.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED) \
+                          or not 0 < info.file_size <= limits[name]:
+                      raise SystemExit('artifact_entry_boundary_failure')
+                  target = root / name
+                  with source.open(info, 'r') as incoming, target.open('xb') as outgoing:
+                      copied = shutil.copyfileobj(incoming, outgoing, length=1024 * 1024)
+                  os.chmod(target, 0o600)
+                  actual = target.stat()
+                  if actual.st_size != info.file_size or target.resolve() != target:
+                      raise SystemExit('artifact_extraction_failure')
+          PY
+          rm -- "$archive"
+          if [ -e "$archive" ] || [ -L "$archive" ]; then exit 2; fi
+          echo "PUBLICATION_ARTIFACT_DIR=$artifact_dir" >> "$GITHUB_ENV"
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
+      - name: Materialize and validate the digest-only rehearsal manifest
+        id: rehearsal_input
+        if: ${{ steps.publication_artifact.outcome == 'success' }}
+        env:
+          PUBLICATION_WORKFLOW_NAME: Candidate Publication - Signed GHCR (NO DEPLOY)
+          PUBLICATION_WORKFLOW_PATH: .github/workflows/candidate-publication.yml
+          PUBLICATION_EVENT: workflow_dispatch
+          PUBLICATION_CONCLUSION: success
+          PUBLICATION_HEAD_BRANCH: main
+          PUBLICATION_HEAD_SHA: ${{ needs.preflight.outputs.candidate_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          rehearsal_input_dir="$RUNNER_TEMP/$REHEARSAL_INPUT_SUBDIR"
+          if [ -e "$rehearsal_input_dir" ] || [ -L "$rehearsal_input_dir" ]; then exit 2; fi
+          echo "REHEARSAL_INPUT_DIR=$rehearsal_input_dir" >> "$GITHUB_ENV"
+          export REHEARSAL_INPUT_DIR="$rehearsal_input_dir"
+          node scripts/release-rehearsal-input.js
+          manifest="$rehearsal_input_dir/signed-main-candidate-staging-rehearsal-manifest.json"
+          [ -f "$manifest" ] && [ ! -L "$manifest" ]
+          [ "$(dirname "$(realpath "$manifest")")" = "$rehearsal_input_dir" ]
+          STAGING_REHEARSAL_MANIFEST="$manifest" node <<'NODE'
+          const fs = require('node:fs');
+          const {loadStagingRehearsalManifest} = require('./scripts/staging-rehearsal-manifest');
+          const manifest = loadStagingRehearsalManifest(
+            process.env.STAGING_REHEARSAL_MANIFEST
+          ).value;
+          const values = {
+            STAGING_REHEARSAL_MANIFEST: process.env.STAGING_REHEARSAL_MANIFEST,
+            REHEARSAL_SHA: manifest.candidate.source_sha,
+            CANDIDATE_SHA: manifest.candidate.source_sha,
+            CURRENT_SOURCE_SHA: manifest.candidate.source_sha,
+            CURRENT_REGISTRY_DIGEST: manifest.candidate.digest,
+            CURRENT_CONFIG_DIGEST: manifest.candidate.config_digest,
+            CURRENT_IMAGE_REF: `${manifest.repository}@${manifest.candidate.digest}`,
+            CANDIDATE_SOURCE_REF: manifest.candidate.attestation.source_ref,
+            CANDIDATE_SIGNER_WORKFLOW: manifest.candidate.attestation.signer_workflow,
+            PREVIOUS_SOURCE_SHA: manifest.previous.source_sha,
+            PREVIOUS_REGISTRY_DIGEST: manifest.previous.digest,
+            PREVIOUS_CONFIG_DIGEST: manifest.previous.config_digest,
+            PREVIOUS_IMAGE_REF: `${manifest.repository}@${manifest.previous.digest}`,
+            PREVIOUS_SOURCE_REF: manifest.previous.attestation.source_ref,
+            PREVIOUS_SIGNER_WORKFLOW: manifest.previous.attestation.signer_workflow
+          };
+          for (const value of Object.values(values)) {
+            if (typeof value !== 'string' || value.includes('\n')) process.exit(2);
+          }
+          fs.appendFileSync(process.env.GITHUB_ENV,
+            Object.entries(values).map(([key, value]) => `${key}=${value}\n`).join(''));
+          NODE
           echo "classification=success" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx for bounded manifest inspection
+        if: ${{ steps.rehearsal_input.outcome == 'success' }}
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
       - name: Authenticate read-only to the fixed GHCR repository
         id: registry_login
-        if: ${{ steps.manifest_contract.outcome == 'success' }}
+        if: ${{ steps.rehearsal_input.outcome == 'success' }}
         uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Prove both discovery tags and immutable manifest identities
+      - name: Prove both exact digest manifests and image identities
         id: registry_identity
         if: ${{ steps.registry_login.outcome == 'success' }}
         shell: bash
@@ -165,27 +377,21 @@ jobs:
           echo "VERIFICATION_DIR=$verification_dir" >> "$GITHUB_ENV"
 
           inspect_candidate() {
-            local label="$1" source_sha="$2" discovery_tag="$3"
-            local expected_digest="$4" expected_config="$5"
-            local tag_ref="$REGISTRY_REPOSITORY:$discovery_tag"
+            local label="$1" source_sha="$2"
+            local expected_digest="$3" expected_config="$4"
             local digest_ref="$REGISTRY_REPOSITORY@$expected_digest"
-            local tag_raw="$verification_dir/$label-tag-raw.json"
             local digest_raw="$verification_dir/$label-digest-raw.json"
             local digest_summary="$verification_dir/$label-digest-summary.json"
-            docker buildx imagetools inspect "$tag_ref" --raw > "$tag_raw"
             docker buildx imagetools inspect "$digest_ref" --raw > "$digest_raw"
             docker buildx imagetools inspect "$digest_ref" --format '{{json .}}' > "$digest_summary"
-            for target in "$tag_raw" "$digest_raw" "$digest_summary"; do
+            for target in "$digest_raw" "$digest_summary"; do
               [ -f "$target" ] && [ ! -L "$target" ]
               size="$(stat -c '%s' "$target")"
               [ "$size" -gt 0 ] && [ "$size" -le 262144 ]
               [ "$(dirname "$(realpath "$target")")" = "$verification_dir" ]
             done
-            tag_hash="sha256:$(sha256sum "$tag_raw" | awk '{print $1}')"
             digest_hash="sha256:$(sha256sum "$digest_raw" | awk '{print $1}')"
-            [ "$tag_hash" = "$expected_digest" ]
             [ "$digest_hash" = "$expected_digest" ]
-            cmp -- "$tag_raw" "$digest_raw"
             LABEL="$label" SOURCE_SHA="$source_sha" EXPECTED_DIGEST="$expected_digest" \
               EXPECTED_CONFIG="$expected_config" DIGEST_RAW="$digest_raw" \
               DIGEST_SUMMARY="$digest_summary" node <<'NODE'
@@ -206,9 +412,9 @@ jobs:
           NODE
           }
 
-          inspect_candidate current "$CURRENT_SOURCE_SHA" "$CURRENT_DISCOVERY_TAG" \
+          inspect_candidate candidate "$CURRENT_SOURCE_SHA" \
             "$CURRENT_REGISTRY_DIGEST" "$CURRENT_CONFIG_DIGEST"
-          inspect_candidate previous "$PREVIOUS_SOURCE_SHA" "$PREVIOUS_DISCOVERY_TAG" \
+          inspect_candidate previous "$PREVIOUS_SOURCE_SHA" \
             "$PREVIOUS_REGISTRY_DIGEST" "$PREVIOUS_CONFIG_DIGEST"
           echo "classification=success" >> "$GITHUB_OUTPUT"
 
@@ -222,13 +428,14 @@ jobs:
           set -euo pipefail
           [ "$VERIFICATION_DIR" = "$RUNNER_TEMP/$VERIFICATION_SUBDIR" ]
           [ "$(realpath "$VERIFICATION_DIR")" = "$VERIFICATION_DIR" ]
-          cert_identity="https://github.com/$GITHUB_REPOSITORY/.github/workflows/candidate-publication.yml@$CANDIDATE_WORKFLOW_REF"
 
           verify_candidate() {
-            local label="$1" source_sha="$2" digest="$3"
+            local label="$1" source_sha="$2" source_ref="$3" signer_workflow="$4"
+            local digest="$5"
             local digest_ref="$REGISTRY_REPOSITORY@$digest"
+            local cert_identity="https://github.com/$GITHUB_REPOSITORY/$signer_workflow@$source_ref"
             local common_args=(--repo "$GITHUB_REPOSITORY" --cert-identity "$cert_identity"
-              --signer-digest "$source_sha" --source-ref "$CANDIDATE_WORKFLOW_REF"
+              --signer-digest "$source_sha" --source-ref "$source_ref"
               --source-digest "$source_sha"
               --cert-oidc-issuer "https://token.actions.githubusercontent.com" --format json)
             for predicate_label in provenance sbom; do
@@ -246,15 +453,27 @@ jobs:
             done
           }
 
-          verify_candidate current "$CURRENT_SOURCE_SHA" "$CURRENT_REGISTRY_DIGEST"
-          verify_candidate previous "$PREVIOUS_SOURCE_SHA" "$PREVIOUS_REGISTRY_DIGEST"
+          verify_candidate candidate "$CURRENT_SOURCE_SHA" "$CANDIDATE_SOURCE_REF" \
+            "$CANDIDATE_SIGNER_WORKFLOW" "$CURRENT_REGISTRY_DIGEST"
+          verify_candidate previous "$PREVIOUS_SOURCE_SHA" "$PREVIOUS_SOURCE_REF" \
+            "$PREVIOUS_SIGNER_WORKFLOW" "$PREVIOUS_REGISTRY_DIGEST"
 
-          CERT_IDENTITY="$cert_identity" node <<'NODE'
+          node <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');
           const candidates = {
-            current: {source: process.env.CURRENT_SOURCE_SHA, digest: process.env.CURRENT_REGISTRY_DIGEST},
-            previous: {source: process.env.PREVIOUS_SOURCE_SHA, digest: process.env.PREVIOUS_REGISTRY_DIGEST}
+            candidate: {
+              source: process.env.CURRENT_SOURCE_SHA,
+              sourceRef: process.env.CANDIDATE_SOURCE_REF,
+              workflow: process.env.CANDIDATE_SIGNER_WORKFLOW,
+              digest: process.env.CURRENT_REGISTRY_DIGEST
+            },
+            previous: {
+              source: process.env.PREVIOUS_SOURCE_SHA,
+              sourceRef: process.env.PREVIOUS_SOURCE_REF,
+              workflow: process.env.PREVIOUS_SIGNER_WORKFLOW,
+              digest: process.env.PREVIOUS_REGISTRY_DIGEST
+            }
           };
           const predicates = {
             provenance: 'https://slsa.dev/provenance/v1',
@@ -262,6 +481,8 @@ jobs:
           };
           const MAX_VERIFICATION_RESULT_BYTES = 32 * 1024 * 1024;
           for (const [label, candidate] of Object.entries(candidates)) {
+            const certIdentity = `https://github.com/${process.env.GITHUB_REPOSITORY}/`
+              + `${candidate.workflow}@${candidate.sourceRef}`;
             for (const [predicateLabel, predicate] of Object.entries(predicates)) {
               for (const mode of ['api', 'oci']) {
                 const target = path.join(process.env.VERIFICATION_DIR,
@@ -279,12 +500,12 @@ jobs:
                       subject?.name === process.env.REGISTRY_REPOSITORY
                       && subject?.digest?.sha256 === candidate.digest.slice(7))
                     && verification.verifiedTimestamps?.length > 0
-                    && certificate?.subjectAlternativeName === process.env.CERT_IDENTITY
-                    && certificate?.buildSignerURI === process.env.CERT_IDENTITY
+                    && certificate?.subjectAlternativeName === certIdentity
+                    && certificate?.buildSignerURI === certIdentity
                     && certificate?.buildSignerDigest === candidate.source
                     && certificate?.sourceRepositoryURI
                       === `https://github.com/${process.env.GITHUB_REPOSITORY}`
-                    && certificate?.sourceRepositoryRef === process.env.CANDIDATE_WORKFLOW_REF
+                    && certificate?.sourceRepositoryRef === candidate.sourceRef
                     && certificate?.sourceRepositoryDigest === candidate.source
                     && certificate?.issuer === 'https://token.actions.githubusercontent.com';
                 });
@@ -307,7 +528,7 @@ jobs:
           if [ -L "$verification_dir" ]; then
             status=1
           elif [ -d "$verification_dir" ]; then
-            allowed='^(current|previous)-(tag-raw|digest-raw|digest-summary|provenance-api|provenance-oci|sbom-api|sbom-oci)\.json$'
+            allowed='^(candidate|previous)-(digest-raw|digest-summary|provenance-api|provenance-oci|sbom-api|sbom-oci)\.json$'
             while IFS= read -r -d '' target; do
               name="$(basename "$target")"
               if [[ ! "$name" =~ $allowed ]] || [ ! -f "$target" ] || [ -L "$target" ] || \
@@ -327,7 +548,7 @@ jobs:
           fi
           echo "classification=success" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare the exact bounded I9 evidence directory
+      - name: Prepare the exact bounded rehearsal evidence directory
         id: evidence_setup
         if: ${{ steps.attestation_verification.outcome == 'success' && steps.verification_cleanup.outcome == 'success' }}
         shell: bash
@@ -428,9 +649,7 @@ jobs:
           [ "$(stat -c '%a:%F' "$env_file")" = "600:regular file" ]
           [ "$(dirname "$(realpath "$env_file")")" = "$stage_root" ]
           {
-            echo "CANDIDATE_SHA=$REHEARSAL_SHA"
             echo "I9_STAGE_ROOT=$stage_root"
-            echo "I9_REHEARSAL_MANIFEST=$GITHUB_WORKSPACE/.github/i9-staging-rehearsal.json"
             echo "SLICER_ENV_FILE=$env_file"
             echo "SLICER_INPUT_DIR=$stage_root/input"
             echo "SLICER_OUTPUT_DIR=$stage_root/output"
@@ -552,12 +771,12 @@ jobs:
           fi
           echo "classification=success" >> "$GITHUB_OUTPUT"
 
-      - name: Generate bounded I9 staging and rollback evidence
+      - name: Generate bounded signed-main-candidate rehearsal evidence
         id: evidence_write
         if: ${{ always() && steps.evidence_setup.outcome == 'success' }}
         continue-on-error: true
         env:
-          MANIFEST_OUTCOME: ${{ steps.manifest_contract.outcome }}
+          REHEARSAL_INPUT_OUTCOME: ${{ steps.rehearsal_input.outcome }}
           REGISTRY_IDENTITY_OUTCOME: ${{ steps.registry_identity.outcome }}
           ATTESTATION_VERIFICATION_OUTCOME: ${{ steps.attestation_verification.outcome }}
           VERIFICATION_CLEANUP_OUTCOME: ${{ steps.verification_cleanup.outcome }}
@@ -568,9 +787,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/i9-write-staging-evidence.js
+          node scripts/write-staging-rehearsal-evidence.js
 
-      - name: Require the exact bounded I9 evidence contract
+      - name: Require the exact bounded signed-main-candidate evidence contract
         id: evidence_boundary
         if: ${{ steps.evidence_write.outcome == 'success' }}
         continue-on-error: true
@@ -583,8 +802,11 @@ jobs:
           const {
             EVIDENCE_FILE,
             MAX_EVIDENCE_BYTES,
-            validateStagingEvidence
-          } = require('./scripts/i9-staging-evidence');
+            validateStagingRehearsalEvidence
+          } = require('./scripts/staging-rehearsal-evidence');
+          const {
+            loadStagingRehearsalManifest
+          } = require('./scripts/staging-rehearsal-manifest');
           const root = path.resolve(process.env.RUNNER_TEMP, process.env.EVIDENCE_SUBDIR);
           if (process.env.EVIDENCE_DIR !== root || fs.realpathSync(root) !== root) process.exit(2);
           const target = path.join(root, EVIDENCE_FILE);
@@ -592,18 +814,25 @@ jobs:
           if (!stat.isFile() || stat.isSymbolicLink() || stat.size <= 0
               || stat.size > MAX_EVIDENCE_BYTES || path.dirname(fs.realpathSync(target)) !== root) process.exit(2);
           const value = JSON.parse(fs.readFileSync(target, 'utf8'));
-          const error = validateStagingEvidence(value, {
+          const manifest = loadStagingRehearsalManifest(
+            process.env.STAGING_REHEARSAL_MANIFEST
+          ).value;
+          const error = validateStagingRehearsalEvidence(value, {
             repository: process.env.GITHUB_REPOSITORY,
-            rehearsal_sha: process.env.REHEARSAL_SHA,
+            rehearsal_sha: process.env.CANDIDATE_SHA,
             run_id: process.env.GITHUB_RUN_ID,
             run_attempt: process.env.GITHUB_RUN_ATTEMPT,
             job: process.env.GITHUB_JOB,
-            previous_source_sha: process.env.PREVIOUS_SOURCE_SHA,
-            previous_registry_digest: process.env.PREVIOUS_REGISTRY_DIGEST,
-            previous_config_digest: process.env.PREVIOUS_CONFIG_DIGEST,
-            current_source_sha: process.env.CURRENT_SOURCE_SHA,
-            current_registry_digest: process.env.CURRENT_REGISTRY_DIGEST,
-            current_config_digest: process.env.CURRENT_CONFIG_DIGEST
+            publication_run_id: manifest.artifact.publication_run_id,
+            publication_run_attempt: manifest.artifact.publication_run_attempt,
+            publication_artifact_id: manifest.artifact.artifact_id,
+            publication_artifact_digest: manifest.artifact.artifact_digest,
+            previous_source_sha: manifest.previous.source_sha,
+            previous_registry_digest: manifest.previous.digest,
+            previous_config_digest: manifest.previous.config_digest,
+            candidate_source_sha: manifest.candidate.source_sha,
+            candidate_registry_digest: manifest.candidate.digest,
+            candidate_config_digest: manifest.candidate.config_digest
           });
           if (error) {
             console.error(error);
@@ -612,19 +841,19 @@ jobs:
           NODE
           echo "classification=success" >> "$GITHUB_OUTPUT"
 
-      - name: Upload only the bounded I9 rehearsal evidence
+      - name: Upload only the bounded signed-main-candidate rehearsal evidence
         id: evidence_upload
         if: ${{ steps.evidence_boundary.outcome == 'success' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: i9-staging-rollback-evidence-${{ needs.preflight.outputs.rehearsal_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/i9-staging-rollback-evidence.json
+          name: signed-main-candidate-staging-rollback-evidence-${{ needs.preflight.outputs.candidate_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/signed-main-candidate-staging-rollback-evidence.json
           if-no-files-found: error
           retention-days: 7
           overwrite: false
           include-hidden-files: false
 
-      - name: Remove only the exact bounded I9 evidence directory
+      - name: Remove only exact bounded evidence and publication inputs
         id: evidence_cleanup
         if: ${{ always() }}
         continue-on-error: true
@@ -632,39 +861,58 @@ jobs:
         run: |
           set -u
           status=0
-          evidence_dir="$RUNNER_TEMP/$EVIDENCE_SUBDIR"
-          if [ -L "$evidence_dir" ]; then
-            status=1
-          elif [ -d "$evidence_dir" ]; then
-            for name in i9-staging-runtime-draft.json i9-staging-rollback-evidence.json; do
-              target="$evidence_dir/$name"
-              if [ -f "$target" ] && [ ! -L "$target" ] && \
-                 [ "$(dirname "$(realpath "$target")")" = "$evidence_dir" ]; then
+          remove_allowlisted_dir() {
+            local directory="$1" allowed="$2"
+            if [ -L "$directory" ]; then
+              return 1
+            elif [ -d "$directory" ]; then
+              if [ "$(dirname "$directory")" != "$RUNNER_TEMP" ] || \
+                 [ "$(realpath "$directory")" != "$directory" ]; then return 1; fi
+              while IFS= read -r -d '' target; do
+                name="$(basename "$target")"
+                if [[ ! "$name" =~ $allowed ]] || [ ! -f "$target" ] || [ -L "$target" ] || \
+                   [ "$(dirname "$(realpath "$target")")" != "$directory" ]; then
+                  status=1
+                  continue
+                fi
                 rm -- "$target" || status=1
-              elif [ -e "$target" ] || [ -L "$target" ]; then
+              done < <(find "$directory" -mindepth 1 -maxdepth 1 -print0)
+              if find "$directory" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
                 status=1
+              else
+                rmdir -- "$directory" || status=1
               fi
-            done
-            if find "$evidence_dir" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
-              status=1
-            else
-              rmdir -- "$evidence_dir" || status=1
+            elif [ -e "$directory" ]; then
+              return 1
             fi
-          elif [ -e "$evidence_dir" ]; then
+          }
+          evidence_allowed='^(i9-staging-runtime-draft|signed-main-candidate-staging-rollback-evidence)\.json$'
+          input_allowed='^signed-main-candidate-staging-rehearsal-manifest\.json$'
+          artifact_allowed='^(i11-main-candidate-provenance\.json|image-identity\.txt|runtime-diagnostics\.json|topology-evidence\.json|sbom\.spdx\.json|grype\.json)$'
+          remove_allowlisted_dir "$RUNNER_TEMP/$EVIDENCE_SUBDIR" "$evidence_allowed" || status=1
+          remove_allowlisted_dir "$RUNNER_TEMP/$REHEARSAL_INPUT_SUBDIR" "$input_allowed" || status=1
+          remove_allowlisted_dir "$RUNNER_TEMP/$PUBLICATION_ARTIFACT_SUBDIR" "$artifact_allowed" || status=1
+          archive="$RUNNER_TEMP/signed-main-publication-$PUBLICATION_RUN_ID-$PUBLICATION_RUN_ATTEMPT.zip"
+          if [ -f "$archive" ] && [ ! -L "$archive" ] && \
+             [ "$(dirname "$(realpath "$archive")")" = "$RUNNER_TEMP" ]; then
+            rm -- "$archive" || status=1
+          elif [ -e "$archive" ] || [ -L "$archive" ]; then
             status=1
           fi
+          if [ -e "$archive" ] || [ -L "$archive" ]; then status=1; fi
           if [ "$status" -ne 0 ]; then
-            echo "classification=evidence_cleanup_failure" >> "$GITHUB_OUTPUT"
+            echo "classification=bounded_input_cleanup_failure" >> "$GITHUB_OUTPUT"
             exit "$status"
           fi
           echo "classification=success" >> "$GITHUB_OUTPUT"
 
-      - name: Enforce the final fail-closed I9 rehearsal result
+      - name: Enforce the final fail-closed signed-main-candidate rehearsal result
         id: final_enforcement
         if: ${{ always() }}
         env:
+          PUBLICATION_ARTIFACT_OUTCOME: ${{ steps.publication_artifact.outcome }}
+          REHEARSAL_INPUT_OUTCOME: ${{ steps.rehearsal_input.outcome }}
           REGISTRY_LOGIN_OUTCOME: ${{ steps.registry_login.outcome }}
-          MANIFEST_OUTCOME: ${{ steps.manifest_contract.outcome }}
           REGISTRY_IDENTITY_OUTCOME: ${{ steps.registry_identity.outcome }}
           ATTESTATION_VERIFICATION_OUTCOME: ${{ steps.attestation_verification.outcome }}
           VERIFICATION_CLEANUP_OUTCOME: ${{ steps.verification_cleanup.outcome }}
@@ -683,48 +931,51 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          classification=I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE
+          classification=SIGNED_MAIN_CANDIDATE_EPHEMERAL_REHEARSAL_COMPLETE
           failed_step=none
           if [ "$VERIFICATION_CLEANUP_OUTCOME" != "success" ] || \
              [ "$RUNTIME_POST_CLEANUP_OUTCOME" != "success" ] || \
              [ "$EVIDENCE_CLEANUP_OUTCOME" != "success" ]; then
-            classification=BLOCKED_I9_CLEANUP_FAILURE
+            classification=BLOCKED_SIGNED_MAIN_CANDIDATE_CLEANUP_FAILURE
             failed_step=cleanup
-          elif [ "$MANIFEST_OUTCOME" != "success" ]; then
-            classification=BLOCKED_I9_MANIFEST_CONTRACT
-            failed_step=manifest
+          elif [ "$PUBLICATION_ARTIFACT_OUTCOME" != "success" ]; then
+            classification=BLOCKED_SIGNED_MAIN_CANDIDATE_ARTIFACT
+            failed_step=publication_artifact
+          elif [ "$REHEARSAL_INPUT_OUTCOME" != "success" ]; then
+            classification=BLOCKED_SIGNED_MAIN_CANDIDATE_REHEARSAL_INPUT
+            failed_step=rehearsal_input
           elif [ "$REGISTRY_LOGIN_OUTCOME" != "success" ] || \
                [ "$REGISTRY_IDENTITY_OUTCOME" != "success" ]; then
-            classification=BLOCKED_I9_REGISTRY_READ_CAPABILITY
+            classification=BLOCKED_SIGNED_MAIN_CANDIDATE_REGISTRY_READ
             failed_step=registry_identity
           elif [ "$ATTESTATION_VERIFICATION_OUTCOME" != "success" ]; then
-            classification=BLOCKED_I9_ATTESTATION_VERIFICATION
+            classification=BLOCKED_SIGNED_MAIN_CANDIDATE_ATTESTATION
             failed_step=attestation_verification
           elif [ "$RUNTIME_IMAGES_OUTCOME" != "success" ]; then
-            classification=BLOCKED_I9_RUNTIME_IDENTITY_MISMATCH
+            classification=BLOCKED_SIGNED_MAIN_CANDIDATE_RUNTIME_IDENTITY
             failed_step=runtime_images
           elif [ "$RUNTIME_SETUP_OUTCOME" != "success" ]; then
-            classification=BLOCKED_I9_HOST_OWNERSHIP_CAPABILITY
+            classification=BLOCKED_SIGNED_MAIN_CANDIDATE_HOST_OWNERSHIP
             failed_step=runtime_setup
           elif [ "$RUNTIME_CLEANUP_CLASSIFICATION" != "success" ]; then
-            classification=BLOCKED_I9_CLEANUP_FAILURE
+            classification=BLOCKED_SIGNED_MAIN_CANDIDATE_CLEANUP_FAILURE
             failed_step=runtime_cleanup
           elif [ "$ROLLBACK_CLASSIFICATION" != "success" ]; then
-            classification=BLOCKED_I9_ROLLBACK_FAILURE
+            classification=BLOCKED_SIGNED_MAIN_CANDIDATE_ROLLBACK
             failed_step=rollback
           elif [ "$REHEARSAL_OUTCOME" != "success" ] || \
                [ "$REHEARSAL_CLASSIFICATION" != "success" ]; then
-            classification=BLOCKED_I9_REHEARSAL_GATE
+            classification=BLOCKED_SIGNED_MAIN_CANDIDATE_REHEARSAL
             failed_step=rehearsal
           elif [ "$EVIDENCE_SETUP_OUTCOME" != "success" ] || \
                [ "$EVIDENCE_WRITE_OUTCOME" != "success" ] || \
                [ "$EVIDENCE_BOUNDARY_OUTCOME" != "success" ] || \
                [ "$EVIDENCE_UPLOAD_OUTCOME" != "success" ]; then
-            classification=BLOCKED_I9_EVIDENCE_FAILURE
+            classification=BLOCKED_SIGNED_MAIN_CANDIDATE_EVIDENCE
             failed_step=evidence
           fi
           {
-            echo "### I9 ephemeral staging and rollback rehearsal"
+            echo "### Signed main candidate ephemeral staging and rollback rehearsal"
             echo
             echo "Classification: \`$classification\`."
             echo "Failed step: \`$failed_step\`."
@@ -732,7 +983,7 @@ jobs:
             echo "Evidence cleanup: \`$EVIDENCE_CLEANUP_OUTCOME\`."
             echo "This run used hosted ephemeral Docker only; it did not deploy to a VPS or production."
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$classification" != "I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE" ]; then
-            echo "::error title=I9 rehearsal::$classification"
+          if [ "$classification" != "SIGNED_MAIN_CANDIDATE_EPHEMERAL_REHEARSAL_COMPLETE" ]; then
+            echo "::error title=Signed main candidate rehearsal::$classification"
             exit 1
           fi

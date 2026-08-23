@@ -3,10 +3,10 @@
 const {createPublicationEvidenceContract} = require('./publication-evidence-contract');
 
 module.exports = createPublicationEvidenceContract(Object.freeze({
-    schemaVersion: 'i8-s3a-signed-candidate-provenance-v2',
-    sourceRef: 'refs/heads/codex/i8-s3a-ghcr-signed-candidate',
+    schemaVersion: 'i11-main-signed-candidate-provenance-v1',
+    sourceRef: 'refs/heads/main',
     workflowName: 'Candidate Publication - Signed GHCR (NO DEPLOY)',
     workflowPath: '.github/workflows/candidate-publication.yml',
-    aggregatorResult: 'I8_CANDIDATE_EVIDENCE_READY',
-    publicationPolicy: 'fresh_only'
+    aggregatorResult: 'I11_MAIN_CANDIDATE_EVIDENCE_READY',
+    publicationPolicy: 'recoverable'
 }));

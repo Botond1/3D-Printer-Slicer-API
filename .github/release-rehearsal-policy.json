@@ -1,0 +1,38 @@
+{
+  "schema_version": "signed-main-candidate-release-rehearsal-policy-v1",
+  "repository": "ghcr.io/botond1/3d-printer-slicer-api",
+  "platform": "linux/amd64",
+  "previous": {
+    "role": "previous_signed_candidate",
+    "source_sha": "1fffab87960c675a053ae814d374cab331fbb14d",
+    "digest": "sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5",
+    "config_digest": "sha256:b16f951a9701335b35b4ef248c2b1764d06c17f5e90ee6c2c2245bedc3026d42",
+    "configured_user": "slicer",
+    "attestation": {
+      "signer_repository": "Botond1/3D-Printer-Slicer-API",
+      "signer_workflow": ".github/workflows/candidate-publication.yml",
+      "source_ref": "refs/heads/codex/i8-s3a-ghcr-signed-candidate",
+      "source_digest": "1fffab87960c675a053ae814d374cab331fbb14d",
+      "issuer": "https://token.actions.githubusercontent.com",
+      "provenance_predicate": "https://slsa.dev/provenance/v1",
+      "sbom_predicate": "https://spdx.dev/Document/v2.3"
+    }
+  },
+  "candidate": {
+    "role": "signed_main_candidate",
+    "source_ref": "refs/heads/main",
+    "publication_workflow_name": "Candidate Publication - Signed GHCR (NO DEPLOY)",
+    "publication_workflow_path": ".github/workflows/candidate-publication.yml",
+    "publication_evidence_file": "i11-main-candidate-provenance.json"
+  },
+  "controls": {
+    "distinct_digests_required": true,
+    "digest_only_runtime_required": true,
+    "per_image_attestation_verification_required": true,
+    "source_ancestry_required": true,
+    "config_compose_compatibility_required": true,
+    "registry_writes_forbidden": true,
+    "mutable_tags_forbidden": true,
+    "deploy_forbidden": true
+  }
+}

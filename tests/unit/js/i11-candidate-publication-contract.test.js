@@ -11,13 +11,13 @@ const PATHS = Object.freeze({
     image: '.github/workflows/image-validation.yml',
     gate: '.github/actions/exact-image-gate/action.yml'
 });
-const BASELINE_SHA = 'c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6';
-const BRANCH = 'codex/i8-s3a-ghcr-signed-candidate';
+const BASELINE_SHA = '8253160eef1c3e00c1e40826ec61fd97563ddd9b';
+const BRANCH = 'main';
 const GHCR_REPOSITORY = 'ghcr.io/botond1/3d-printer-slicer-api';
 const GITHUB_REPOSITORY = 'Botond1/3D-Printer-Slicer-API';
 const PUSH_ACTOR = 'Botond1';
-const CONFIRMATION = 'PUBLISH_I8_SIGNED_GHCR_CANDIDATE';
-const PUBLICATION_TRAILER = `I8-Publication: ${CONFIRMATION}`;
+const CONFIRMATION = 'PUBLISH_SIGNED_MAIN_CANDIDATE';
+const RECOVERY_CONFIRMATION = 'RECOVER_SIGNED_MAIN_CANDIDATE';
 const ATTEST_ACTION = 'actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6';
 const LOGIN_ACTION = 'docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7';
 const BUILD_ACTION = 'docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294';
@@ -146,18 +146,15 @@ function validateContract(sources) {
     assert.doesNotMatch(`${publication}\n${image}\n${gate}`, /\t|\r/, 'workflow sources use spaces/LF');
 
     const trigger = mappingBlock(publication, 'on', 0);
-    assert.deepEqual(directKeys(trigger), ['workflow_dispatch', 'push'],
-        'publication accepts only exact manual and candidate-branch push events');
+    assert.deepEqual(directKeys(trigger), ['workflow_dispatch'],
+        'publication accepts only exact manual events');
     const dispatch = mappingBlock(publication, 'workflow_dispatch', 2);
-    const push = mappingBlock(publication, 'push', 2);
-    assert.equal(push.text.trimEnd(), `  push:\n    branches:\n      - ${BRANCH}`,
-        'push publication is limited to one exact branch without tags or wildcards');
     const inputs = mappingBlock(dispatch.text, 'inputs', 4);
     const inputKeys = directKeys(inputs);
-    assert.ok([
-        JSON.stringify(['candidate_sha', 'confirmation']),
-        JSON.stringify(['candidate_sha', 'confirmation', 'registry_repository'])
-    ].includes(JSON.stringify(inputKeys)), 'only exact authorization inputs are accepted');
+    assert.deepEqual(inputKeys, [
+        'candidate_sha', 'publication_mode', 'existing_registry_digest',
+        'confirmation', 'registry_repository'
+    ], 'only exact authorization and recovery inputs are accepted');
     for (const inputName of ['candidate_sha', 'confirmation']) {
         const input = mappingBlock(inputs.text, inputName, 6);
         requireIncludes(input.text, ['required: true', 'type: string'], `${inputName} input`);
@@ -168,8 +165,8 @@ function validateContract(sources) {
     }
     requireIncludes(publication, [
         BASELINE_SHA, `refs/heads/${BRANCH}`, GHCR_REPOSITORY, GITHUB_REPOSITORY,
-        CONFIRMATION, PUBLICATION_TRAILER, '^[0-9a-f]{40}$', 'cancel-in-progress: false',
-        'group: i8-candidate-publication-${{ github.sha }}',
+        CONFIRMATION, RECOVERY_CONFIRMATION, '^[0-9a-f]{40}$', 'cancel-in-progress: false',
+        'group: main-candidate-publication',
         'git merge-base --is-ancestor', 'persist-credentials: false', 'fetch-depth: 0'
     ], 'preflight');
     const eventAdapter = stepText(publication, 'candidate');
@@ -179,33 +176,27 @@ function validateContract(sources) {
         'EVENT_SHA: ${{ github.sha }}',
         'EVENT_REF: ${{ github.ref }}',
         'EVENT_REPOSITORY: ${{ github.repository }}',
-        'if [ "$EVENT_REPOSITORY" != "$exact_repository" ] || [ "$EVENT_REF" != "$exact_ref" ]; then',
-        'case "$EVENT_NAME" in',
-        'workflow_dispatch)',
-        'push)',
+        '[ "$EVENT_NAME" != "workflow_dispatch" ]',
+        `[ "$EVENT_ACTOR" != "${PUSH_ACTOR}" ]`,
+        '[ "$EVENT_REPOSITORY" != "$exact_repository" ]',
+        '[ "$EVENT_REF" != "$exact_ref" ]',
+        'case "$publication_mode" in',
+        'publish_new)',
+        'recover_exact_digest)',
         'candidate_sha="$REQUESTED_SHA"',
-        'candidate_sha="$EVENT_SHA"',
-        `if [ "$EVENT_ACTOR" != "${PUSH_ACTOR}" ]; then`,
-        'registry_repository="$exact_registry_repository"',
         'if [ "$registry_repository" != "$exact_registry_repository" ]; then',
         '[ "$candidate_sha" != "$EVENT_SHA" ]',
         'echo "registry_repository=$registry_repository"',
-        'Unsupported Candidate Publication event'
+        'Unsupported candidate publication mode'
     ], 'event adapter');
     assert.doesNotMatch(eventAdapter, /contains\s*\(|\$\{[^}\n]*:-/,
         'event adapter must not use substring authorization or fallback defaults');
     const authorizationProof = stepText(publication, 'authorization_proof');
     requireIncludes(authorizationProof, [
-        `required_trailer="${PUBLICATION_TRAILER}"`,
-        'git show -s --format=%B "$CANDIDATE_SHA"',
-        "awk 'NF { last = $0 } END { if (last != \"\") print last }'",
-        'if [ "$last_nonempty_line" != "$required_trailer" ]; then',
-        'workflow_dispatch)',
-        'push)',
-        'Unsupported Candidate Publication event after checkout'
+        'refs/heads/main',
+        '[ "$remote_sha" = "$CANDIDATE_SHA" ]',
+        'git merge-base --is-ancestor'
     ], 'post-checkout authorization proof');
-    assert.doesNotMatch(authorizationProof, /contains\s*\(|=\s*~|\*"\$required_trailer"\*/,
-        'push trailer authorization must use exact equality');
     const preflightJob = mappingBlock(publication, 'preflight', 2);
     assert.ok(!directKeys(preflightJob).includes('if')
         && !directKeys(preflightJob).includes('continue-on-error'),
@@ -214,7 +205,8 @@ function validateContract(sources) {
         'no preflight authorization step may ignore failure');
     const preflightOutputs = mappingBlock(preflightJob.text, 'outputs', 4);
     assert.deepEqual(directKeys(preflightOutputs), [
-        'candidate_sha', 'image_ref', 'discovery_tag', 'registry_repository'
+        'candidate_sha', 'image_ref', 'discovery_tag', 'registry_repository',
+        'publication_mode', 'existing_registry_digest'
     ], 'canonical preflight output key set');
     requireIncludes(preflightOutputs.text, [
         'candidate_sha: ${{ steps.candidate.outputs.sha }}',
@@ -264,7 +256,9 @@ function validateContract(sources) {
         assert.deepEqual(entries, [['contents', 'read']], 'normal image validation stays read-only');
     }
     assert.doesNotMatch(image, /packages:\s*write|attestations:\s*write|id-token:\s*write|docker\/login-action|actions\/attest|docker push/);
-    assert.doesNotMatch(publication, /\$\{\{\s*secrets\.(?!GITHUB_TOKEN\b)|\benvironment:|docker\s+(?:system|image|container)\s+prune\b|docker\s+(?:manifest|image)\s+(?:rm|delete)\b.*ghcr\.io|(?:latest|staging|production|release):/i);
+    assert.match(publication,
+        /environment:\n\s+name: candidate-publication\n\s+deployment: false/);
+    assert.doesNotMatch(publication, /\$\{\{\s*secrets\.(?!GITHUB_TOKEN\b)|docker\s+(?:system|image|container)\s+prune\b|docker\s+(?:manifest|image)\s+(?:rm|delete)\b.*ghcr\.io|(?:latest|staging|production|release):/i);
     assert.doesNotMatch(publication, /\bgh\s+api\b/i,
         'the bounded publication workflow has no GitHub API mutation path');
     const joinedPublicationShell = publication.replace(/\\\r?\n\s*/g, ' ');
@@ -299,6 +293,22 @@ function validateContract(sources) {
     const loginId = stepIdContaining(publication, LOGIN_ACTION);
     assert.ok(stepRange(publication, 'exact_image_gate').start < stepRange(publication, loginId).start,
         'login is after the complete gate');
+    const registryWriteAuthorization = stepText(publication, 'registry_write_authorization');
+    requireIncludes(registryWriteAuthorization, [
+        "if: ${{ steps.exact_image_gate.outcome == 'success' }}",
+        'EXPECTED_MAIN_SHA: ${{ needs.preflight.outputs.candidate_sha }}',
+        'git ls-remote --exit-code origin refs/heads/main',
+        '[ "$remote_sha" = "$EXPECTED_MAIN_SHA" ]',
+        'classification=success'
+    ], 'registry-write main-head reauthorization');
+    assert.ok(stepRange(publication, 'exact_image_gate').start
+            < stepRange(publication, 'registry_write_authorization').start
+        && stepRange(publication, 'registry_write_authorization').start
+            < stepRange(publication, loginId).start,
+    'the protected-main head is re-proved after the full gate and immediately before login');
+    requireIncludes(stepText(publication, loginId), [
+        "if: ${{ steps.registry_write_authorization.outcome == 'success' }}"
+    ], 'registry login authorization');
     assert.ok(stepRange(publication, 'exact_image_gate').start < stepRange(publication, 'registry_push').start,
         'push is after the complete gate');
     assert.ok(stepRange(publication, 'registry_preflight').start < stepRange(publication, 'registry_push').start,
@@ -314,16 +324,47 @@ function validateContract(sources) {
         'id: digest_runtime_identity', 'id: digest_roundtrip', 'docker pull "$DIGEST_REF"',
         'node scripts/i7-production-compose-contract.js'
     ], 'registry identity');
+    const registryPreflight = stepText(publication, 'registry_preflight');
+    requireIncludes(registryPreflight, [
+        'docker buildx imagetools inspect "$tag_ref" --raw >"$raw_file"',
+        'observed_digest="sha256:$(sha256sum "$raw_file"'
+    ], 'recovery raw-manifest byte identity');
+    const registryPush = stepText(publication, 'registry_push');
+    requireIncludes(registryPush, [
+        'docker buildx imagetools inspect "$TAG_REF" --raw > "$remote_raw"',
+        'registry_digest="sha256:$(sha256sum "$remote_raw"',
+        'docker image tag "$IMAGE_REF" "$TAG_REF"',
+        'echo "local_tag_created=true" >> "$GITHUB_OUTPUT"'
+    ], 'publication raw-manifest byte identity');
+    assert.ok(registryPush.includes(
+        '          docker image tag "$IMAGE_REF" "$TAG_REF"\n'
+        + '          echo "local_tag_created=true" >> "$GITHUB_OUTPUT"'
+    ), 'the fresh local discovery tag is recorded immediately after creation');
+    const registryIdentity = stepText(publication, 'registry_identity');
+    requireIncludes(registryIdentity, [
+        'docker buildx imagetools inspect "$TAG_REF" --raw > "$tag_raw"',
+        'docker buildx imagetools inspect "$DIGEST_REF" --raw > "$digest_raw"',
+        'tag_hash="sha256:$(sha256sum "$tag_raw"',
+        'digest_hash="sha256:$(sha256sum "$digest_raw"',
+        'cmp -- "$tag_raw" "$digest_raw"'
+    ], 'tag and digest exact-byte identity');
+    assert.doesNotMatch(publication, /raw_manifest="\$\(/,
+        'raw registry manifests must never pass through newline-stripping command substitution');
     const digestPull = stepText(publication, 'digest_pull');
     requireIncludes(digestPull, [
         'RUNTIME_IMAGE_REF: ${{ needs.preflight.outputs.image_ref }}',
         '[ "$RUNTIME_IMAGE_REF" = "local/slicer-api-publication:$CANDIDATE_SHA" ]',
+        '[ "$PUBLICATION_MODE" = "publish_new" ]',
+        '[ "$(docker image inspect --format \'{{.Id}}\' "$TAG_REF")" = "$EXPECTED_LOCAL_IMAGE_ID" ]',
         'docker image rm "$TAG_REF"',
+        'elif [ "$PUBLICATION_MODE" = "publish_new" ]; then',
+        'The run-owned fresh publication tag is missing before digest pull.',
         'docker image rm "$RUNTIME_IMAGE_REF"',
         'docker image rm "$EXPECTED_LOCAL_IMAGE_ID"',
         'docker image inspect "$EXPECTED_LOCAL_IMAGE_ID" >/dev/null 2>&1 ||',
         'docker image inspect "$RUNTIME_IMAGE_REF" >/dev/null 2>&1 ||',
         'docker image inspect "$TAG_REF" >/dev/null 2>&1; then',
+        '             docker image inspect "$TAG_REF" >/dev/null 2>&1; then',
         'docker pull "$DIGEST_REF"',
         'pulled_image_id="$(docker image inspect --format \'{{.Id}}\' "$DIGEST_REF")"',
         'if [ "$pulled_image_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]; then',
@@ -335,6 +376,13 @@ function validateContract(sources) {
         'runtime_alias_image_id=$runtime_alias_image_id',
         'runtime_image_ref=$RUNTIME_IMAGE_REF'
     ], 'digest pull and local publication alias');
+    assert.ok(digestPull.includes(
+        '          if docker image inspect "$TAG_REF" >/dev/null 2>&1; then\n'
+        + '            [ "$PUBLICATION_MODE" = "publish_new" ]\n'
+        + '            [ "$(docker image inspect --format \'{{.Id}}\' "$TAG_REF")" = "$EXPECTED_LOCAL_IMAGE_ID" ]\n'
+        + '            docker image rm "$TAG_REF"\n'
+        + '          elif [ "$PUBLICATION_MODE" = "publish_new" ]; then'
+    ), 'only an exact run-owned fresh tag may be removed before digest pull');
     assert.ok(
         digestPull.indexOf('docker image rm "$TAG_REF"')
             < digestPull.indexOf('docker pull "$DIGEST_REF"')
@@ -522,9 +570,10 @@ function validateContract(sources) {
 
     const evidence = stepText(publication, 'publication_evidence');
     requireIncludes(evidence, [
-        'scripts/i8-write-publication-evidence.js', 'i8-s3a-signed-candidate-provenance-v2',
+        'scripts/i11-write-publication-evidence.js', 'i11-main-signed-candidate-provenance-v1',
         'registry_digest', 'bundle_sha256',
         'REGISTRY_DIGEST: ${{ steps.registry_push.outputs.registry_digest }}',
+        'REGISTRY_OPERATION: ${{ steps.registry_push.outputs.registry_operation }}',
         'subject: `${process.env.REGISTRY_REPOSITORY}@${process.env.REGISTRY_DIGEST}`',
         'manifest_digest: process.env.REGISTRY_DIGEST',
         'DIGEST_RUNTIME_OUTCOME: ${{ steps.digest_runtime_identity.outcome }}',
@@ -535,8 +584,8 @@ function validateContract(sources) {
         /^\s+\['([^']+)',\s*[^\]]+\],?$/gm
     )].map((match) => match[1]).sort();
     assert.deepEqual(boundaryFiles, [
-        'grype.json', 'grype.yaml', 'i8-candidate-provenance.json',
-        'i8-publication-draft.json', 'image-identity.txt', 'runtime-diagnostics.json',
+        'grype.json', 'grype.yaml', 'i11-main-candidate-provenance.json',
+        'i11-publication-draft.json', 'image-identity.txt', 'runtime-diagnostics.json',
         'sbom.spdx.json', 'syft.yaml', 'topology-evidence.json'
     ], 'publication evidence boundary has the exact nine-file allowlist');
     requireIncludes(evidenceBoundary, [
@@ -544,8 +593,8 @@ function validateContract(sources) {
         'JSON.stringify(actual) !== JSON.stringify(expected)',
         '!details.isFile()', 'details.isSymbolicLink()',
         'path.dirname(fs.realpathSync(target)) !== root',
-        "['i8-publication-draft.json', 96 * 1024]",
-        "['i8-candidate-provenance.json', 96 * 1024]",
+        "['i11-publication-draft.json', 96 * 1024]",
+        "['i11-main-candidate-provenance.json', 96 * 1024]",
         "['sbom.spdx.json', 16 * 1024 * 1024]",
         "['grype.json', 100 * 1024 * 1024]"
     ], 'publication evidence boundary');
@@ -558,16 +607,17 @@ function validateContract(sources) {
     assert.doesNotMatch(upload, /bundle(?:s)?[./_-]|verification(?:s)?[./_-]/i, 'raw bundles/verifier output are not uploaded');
 
     requireIncludes(publication, [
-        'BLOCKED_I8_PREPUBLICATION_GATE', 'I8_CANDIDATE_PUBLISHED_UNATTESTED',
-        'I8_CANDIDATE_ATTESTATION_UNVERIFIED', 'id: publication_cleanup',
-        'id: final_enforcement', 'if: ${{ always() }}', 'I8_PUBLICATION_INFRASTRUCTURE_FAILURE',
+        'BLOCKED_I11_PREPUBLICATION_GATE', 'I11_CANDIDATE_PUBLISHED_UNATTESTED',
+        'I11_CANDIDATE_ATTESTATION_UNVERIFIED', 'BLOCKED_I11_RECOVERY_IDENTITY',
+        'id: publication_cleanup', 'id: final_enforcement', 'if: ${{ always() }}',
+        'I11_PUBLICATION_INFRASTRUCTURE_FAILURE',
         'cleanup_failure'
     ], 'partial-state/final enforcement');
-    const registryPush = stepText(publication, 'registry_push');
-    assert.ok(registryPush.indexOf('docker push "$TAG_REF"')
-        < registryPush.indexOf('remote_publication_state=matching'),
+    const registryPushFinal = stepText(publication, 'registry_push');
+    assert.ok(registryPushFinal.indexOf('docker push "$TAG_REF"')
+        < registryPushFinal.indexOf('remote_publication_state=matching'),
     'remote publication is observed only after the push attempt');
-    requireIncludes(registryPush, [
+    requireIncludes(registryPushFinal, [
         'push_status="${PIPESTATUS[0]}"', 'docker buildx imagetools inspect "$TAG_REF" --raw',
         'remote_publication_state=matching', 'remote_publication_state=foreign',
         'remote_publication_state=unknown',
@@ -602,7 +652,13 @@ function validateContract(sources) {
         'exact_container_cleanup "$I2_ORCA_PROBE_NAME"',
         'docker logout ghcr.io',
         'RUNTIME_IMAGE_REF: ${{ needs.preflight.outputs.image_ref }}',
-        'for exact_ref in "$TAG_REF" "$RUNTIME_IMAGE_REF" "$DIGEST_REF"; do',
+        'LOCAL_TAG_CREATED: ${{ steps.registry_push.outputs.local_tag_created }}',
+        '[ "$LOCAL_TAG_CREATED" = "true" ] || cleanup_error local_tag_creation_proof_failure',
+        '[ -z "$LOCAL_TAG_CREATED" ] || cleanup_error local_tag_creation_proof_failure',
+        'if [ "$PUBLICATION_MODE" = "publish_new" ] &&',
+        '[ "$LOCAL_TAG_CREATED" = "true" ] &&',
+        '[ "$tag_actual_id" = "$EXPECTED_LOCAL_IMAGE_ID" ]; then',
+        'for exact_ref in "$RUNTIME_IMAGE_REF" "$DIGEST_REF"; do',
         'if [ "$actual_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]; then',
         'runner_temp_real="$(realpath -e -- "$RUNNER_TEMP")"',
         'case "$bundle" in "$RUNNER_TEMP"/*) ;; *) cleanup_status=1; continue ;; esac',
@@ -637,7 +693,12 @@ function validateContract(sources) {
         '[ "$PUBLICATION_EVIDENCE_BOUNDARY_OUTCOME" != "success" ]',
         'PUBLICATION_CLEANUP_OUTCOME: ${{ steps.publication_cleanup.outcome }}',
         '[ "$PUBLICATION_CLEANUP_OUTCOME" != "success" ]',
-        'classification=BLOCKED_I8_PREPUBLICATION_GATE',
+        'classification=BLOCKED_I11_PREPUBLICATION_GATE',
+        '[ "$PUBLICATION_MODE" != "publish_new" ] &&',
+        '[ "$PUBLICATION_MODE" != "recover_exact_digest" ]; then',
+        'failed_step=publication_mode',
+        '[ "$REGISTRY_LOGIN_OUTCOME" != "success" ]; then',
+        'failed_step=registry_login',
         '[ "$PUSH_OUTCOME" != "success" ]',
         'failed_step=registry_push',
         '[ "$REGISTRY_IDENTITY_OUTCOME" != "success" ]',
@@ -650,10 +711,10 @@ function validateContract(sources) {
         'failed_step=digest_roundtrip'
     ], 'partial publication classification');
     assert.match(final,
-        /elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$PUSH_OUTCOME" != "success" \]; then\n\s+classification=I8_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=registry_push\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$REGISTRY_IDENTITY_OUTCOME" != "success" \]; then\n\s+classification=I8_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=registry_identity\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$DIGEST_PULL_OUTCOME" != "success" \]; then\n\s+classification=I8_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=digest_pull\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$DIGEST_RUNTIME_IDENTITY_OUTCOME" != "success" \]; then\n\s+classification=I8_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=digest_runtime_identity\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$DIGEST_ROUNDTRIP_OUTCOME" != "success" \]; then\n\s+classification=I8_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=digest_roundtrip/,
+        /elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$PUSH_OUTCOME" != "success" \]; then\n\s+classification=I11_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=registry_push\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$REGISTRY_IDENTITY_OUTCOME" != "success" \]; then\n\s+classification=I11_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=registry_identity\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$DIGEST_PULL_OUTCOME" != "success" \]; then\n\s+classification=I11_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=digest_pull\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$DIGEST_RUNTIME_IDENTITY_OUTCOME" != "success" \]; then\n\s+classification=I11_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=digest_runtime_identity\n\s+elif \[ "\$REMOTE_PUBLISHED" = "matching" \] && \\\n\s+\[ "\$DIGEST_ROUNDTRIP_OUTCOME" != "success" \]; then\n\s+classification=I11_CANDIDATE_PUBLISHED_UNATTESTED\n\s+failed_step=digest_roundtrip/,
         'post-publication blockers must be classified in exact execution order with matching labels');
     assert.match(final,
-        /if \[ "\$classification" != "I8_SIGNED_CANDIDATE_COMPLETE" \]; then\n\s+echo "::error title=I8 publication::\$classification"\n\s+exit 1\n\s+fi\s*$/,
+        /if \[ "\$classification" != "I11_MAIN_SIGNED_CANDIDATE_COMPLETE" \]; then\n\s+echo "::error title=I11 publication::\$classification"\n\s+exit 1\n\s+fi\s*$/,
         'the final aggregator must terminate every non-complete classification with failure');
     assert.ok(stepRange(publication, 'publication_cleanup').start < stepRange(publication, 'final_enforcement').start);
 }
@@ -704,7 +765,7 @@ function mutation(name, surface, transform) {
     }];
 }
 
-test('Candidate Publication accepts only exact manual/push authorization and remains least-privilege, build-once, digest-bound, and fail-closed', () => {
+test('Candidate Publication accepts only exact manual publish/recovery authorization and remains least-privilege, build-once, digest-bound, and fail-closed', () => {
     validateContract(ORIGINAL);
 });
 
@@ -712,32 +773,6 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
     const loginId = stepIdContaining(ORIGINAL.publication, LOGIN_ACTION);
     const uploadId = stepIdContaining(ORIGINAL.publication, 'actions/upload-artifact@');
     const cases = [
-        mutation('push branch wildcard', 'publication', (s) => replaceRequired(
-            s,
-            `  push:\n    branches:\n      - ${BRANCH}`,
-            "  push:\n    branches:\n      - '**'"
-        )),
-        mutation('different push branch', 'publication', (s) => replaceRequired(
-            s,
-            `  push:\n    branches:\n      - ${BRANCH}`,
-            '  push:\n    branches:\n      - main'
-        )),
-        mutation('different push actor', 'publication', (s) => replaceRequired(
-            s, `if [ "$EVENT_ACTOR" != "${PUSH_ACTOR}" ]; then`,
-            'if [ "$EVENT_ACTOR" != "OtherActor" ]; then')),
-        mutation('push actor check removed', 'publication', (s) => replaceRequired(
-            s, `if [ "$EVENT_ACTOR" != "${PUSH_ACTOR}" ]; then`, 'if false; then')),
-        mutation('push trailer omitted', 'publication', (s) => replaceRequired(
-            s, `required_trailer="${PUBLICATION_TRAILER}"`, 'required_trailer=""')),
-        mutation('push trailer uses substring authorization', 'publication', (s) => replaceRequired(
-            s,
-            'if [ "$last_nonempty_line" != "$required_trailer" ]; then',
-            'if [[ "$last_nonempty_line" != *"$required_trailer"* ]]; then'
-        )),
-        mutation('push SHA uses manual input', 'publication', (s) => replaceRequired(
-            s, 'candidate_sha="$EVENT_SHA"', 'candidate_sha="$REQUESTED_SHA"')),
-        mutation('event adapter adds a fallback', 'publication', (s) => replaceRequired(
-            s, 'candidate_sha="$EVENT_SHA"', 'candidate_sha="${REQUESTED_SHA:-$EVENT_SHA}"')),
         mutation('manual dispatch contract removed', 'publication', (s) => replaceRequired(
             s, '  workflow_dispatch:\n', '  schedule:\n')),
         mutation('preflight gains write permission', 'publication', (s) => replaceRequired(
@@ -755,11 +790,9 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
             '        id: authorization_proof\n',
             '        id: authorization_proof\n        continue-on-error: true\n'
         )),
-        mutation('repository and ref guard removed', 'publication', (s) => replaceRequired(
-            s,
-            'if [ "$EVENT_REPOSITORY" != "$exact_repository" ] || [ "$EVENT_REF" != "$exact_ref" ]; then',
-            'if false; then'
-        )),
+        mutation('repository guard removed', 'publication', (s) => replaceRequired(
+            s, '[ "$EVENT_REPOSITORY" != "$exact_repository" ]',
+            '[ "$EVENT_REPOSITORY" != "$EVENT_REPOSITORY" ]')),
         mutation('fixed registry comparison removed', 'publication', (s) => replaceRequired(
             s, 'if [ "$registry_repository" != "$exact_registry_repository" ]; then', 'if false; then')),
         mutation('candidate and event SHA comparison removed', 'publication', (s) => replaceRequired(
@@ -771,7 +804,7 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
             'registry_repository: ${{ steps.candidate.outputs.registry_repository }}',
             'registry_repository: ghcr.io/other/repository'
         )),
-        mutation('wrong target branch', 'publication', (s) => replaceAllRequired(s, BRANCH, 'main')),
+        mutation('wrong target branch', 'publication', (s) => replaceAllRequired(s, BRANCH, 'other')),
         mutation('wrong baseline', 'publication', (s) => replaceAllRequired(s, BASELINE_SHA, 'a'.repeat(40))),
         mutation('wrong registry repository', 'publication', (s) => replaceAllRequired(s, GHCR_REPOSITORY, 'ghcr.io/other/repository')),
         mutation('wrong GitHub repository', 'publication', (s) => replaceAllRequired(s, GITHUB_REPOSITORY, 'Other/Repository')),
@@ -792,6 +825,19 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
         mutation('extra local action added', 'publication', (s) => replaceRequired(
             s, `uses: ${SHARED_GATE}`, `uses: ${SHARED_GATE}\n      - uses: ./.github/actions/unreviewed`)),
         mutation('login precedes full gate', 'publication', (s) => moveStepBefore(s, loginId, 'exact_image_gate')),
+        mutation('registry-write main-head reauthorization omitted', 'publication',
+            (s) => removeStep(s, 'registry_write_authorization')),
+        mutation('registry login bypasses the main-head reauthorization', 'publication',
+            (s) => replaceRequired(
+                s,
+                "if: ${{ steps.registry_write_authorization.outcome == 'success' }}",
+                "if: ${{ steps.exact_image_gate.outcome == 'success' }}"
+            )),
+        mutation('registry-write main-head equality guard removed', 'publication',
+            (s) => replaceRequired(
+                s, '[ "$remote_sha" = "$EXPECTED_MAIN_SHA" ]',
+                '[ "$remote_sha" = "$remote_sha" ]'
+            )),
         mutation('push precedes full gate', 'publication', (s) => moveStepBefore(s, 'registry_push', 'exact_image_gate')),
         mutation('shell docker build added', 'publication', (s) => replaceRequired(
             s, 'docker push "$TAG_REF"', 'docker build .\n          docker push "$TAG_REF"')),
@@ -807,6 +853,22 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
             s,
             '[ "$INPUT_RETAIN_IMAGE" = "false" ] && [ "$INPUT_PUBLISH_MODE" = "false" ]',
             '[ "$INPUT_RETAIN_IMAGE" = "false" ] && [ "$INPUT_PUBLISH_MODE" = "true" ]')),
+        mutation('final publication mode enum guard removed', 'publication', (s) => replaceRequired(
+            s,
+            '          elif [ "$PUBLICATION_MODE" != "publish_new" ] && \\\n'
+                + '               [ "$PUBLICATION_MODE" != "recover_exact_digest" ]; then\n'
+                + '            classification=BLOCKED_I11_PREPUBLICATION_GATE\n'
+                + '            failed_step=publication_mode\n',
+            ''
+        )),
+        mutation('final login failure is absorbed into recovery identity', 'publication',
+            (s) => replaceRequired(
+                s,
+                '          elif [ "$REGISTRY_LOGIN_OUTCOME" != "success" ]; then\n'
+                    + '            classification=BLOCKED_I11_PREPUBLICATION_GATE\n'
+                    + '            failed_step=registry_login\n',
+                ''
+            )),
         mutation('remote publication observation omitted', 'publication', (s) => replaceAllRequired(
             s, 'remote_publication_state=matching', 'remote_state_omitted=matching')),
         mutation('remote publication unknown state omitted', 'publication', (s) => replaceAllRequired(
@@ -828,9 +890,25 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
         mutation('uppercase registry digest accepted', 'publication', (s) => replaceAllRequired(
             s, '^sha256:[0-9a-f]{64}$', '^sha256:[0-9A-Fa-f]{64}$')),
         mutation('overwrite preflight removed', 'publication', (s) => removeStep(s, 'registry_preflight')),
+        mutation('recovery manifest passes through newline-stripping command substitution',
+            'publication', (s) => replaceRequired(
+                s,
+                '              docker buildx imagetools inspect "$tag_ref" --raw >"$raw_file" 2>"$error_file"\n'
+                    + '              observed_digest="sha256:$(sha256sum "$raw_file" | awk \'{print $1}\')"',
+                '              raw_manifest="$(docker buildx imagetools inspect "$tag_ref" --raw 2>"$error_file")"\n'
+                    + '              printf \'%s\' "$raw_manifest" >"$raw_file"\n'
+                    + '              observed_digest="sha256:$(printf \'%s\' "$raw_manifest" | sha256sum | awk \'{print $1}\')"'
+            )),
+        mutation('tag and digest raw equality becomes decoded shell-string equality',
+            'publication', (s) => replaceRequired(
+                s, '          cmp -- "$tag_raw" "$digest_raw"',
+                '          [ "$(cat "$tag_raw")" = "$(cat "$digest_raw")" ]'
+            )),
         mutation('different build config accepted', 'publication', (s) => replaceAllRequired(
             s, 'configDigest !== process.env.EXPECTED_LOCAL_IMAGE_ID',
             'configDigest === process.env.EXPECTED_LOCAL_IMAGE_ID')),
+        mutation('fresh local discovery tag creation is not recorded', 'publication',
+            (s) => replaceRequired(s, '          echo "local_tag_created=true" >> "$GITHUB_OUTPUT"\n', '')),
         mutation('digest-pulled and gated image ID mismatch ignored', 'publication', (s) => replaceRequired(
             s,
             'if [ "$pulled_image_id" != "$EXPECTED_LOCAL_IMAGE_ID" ]; then',
@@ -838,6 +916,20 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
         )),
         mutation('discovery-tag identity is not removed before digest pull', 'publication',
             (s) => replaceRequired(s, '          docker image rm "$TAG_REF"\n', '')),
+        mutation('local discovery tag ownership guard removed', 'publication',
+            (s) => replaceRequired(
+                s,
+                '            [ "$(docker image inspect --format \'{{.Id}}\' "$TAG_REF")" = "$EXPECTED_LOCAL_IMAGE_ID" ]\n',
+                ''
+            )),
+        mutation('recovery accepts a preexisting local discovery tag', 'publication',
+            (s) => replaceRequired(
+                s,
+                '            [ "$PUBLICATION_MODE" = "publish_new" ]\n'
+                    + '            [ "$(docker image inspect --format \'{{.Id}}\' "$TAG_REF")" = "$EXPECTED_LOCAL_IMAGE_ID" ]',
+                '            [ "$PUBLICATION_MODE" = "$PUBLICATION_MODE" ]\n'
+                    + '            [ "$(docker image inspect --format \'{{.Id}}\' "$TAG_REF")" = "$EXPECTED_LOCAL_IMAGE_ID" ]'
+            )),
         mutation('expected local image ID is not removed before digest pull', 'publication',
             (s) => replaceRequired(s, '            docker image rm "$EXPECTED_LOCAL_IMAGE_ID"\n', '')),
         mutation('complete pre-pull identity absence proof is weakened', 'publication',
@@ -1195,9 +1287,17 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
         )),
         mutation('local publication alias cleanup omitted', 'publication', (s) => replaceRequired(
             s,
-            'for exact_ref in "$TAG_REF" "$RUNTIME_IMAGE_REF" "$DIGEST_REF"; do',
-            'for exact_ref in "$TAG_REF" "$DIGEST_REF"; do'
+            'for exact_ref in "$RUNTIME_IMAGE_REF" "$DIGEST_REF"; do',
+            'for exact_ref in "$DIGEST_REF"; do'
         )),
+        mutation('recovery cleanup deletes a preexisting local discovery tag', 'publication',
+            (s) => replaceRequired(
+                s,
+                '              if [ "$PUBLICATION_MODE" = "publish_new" ] && \\\n'
+                    + '                 [ "$LOCAL_TAG_CREATED" = "true" ] && \\\n'
+                    + '                 [ "$tag_actual_id" = "$EXPECTED_LOCAL_IMAGE_ID" ]; then',
+                '              if [ "$tag_actual_id" = "$EXPECTED_LOCAL_IMAGE_ID" ]; then'
+            )),
         mutation('cleanup removes a reference without exact image ownership', 'publication',
             (s) => replaceRequired(
                 s,
@@ -1262,9 +1362,9 @@ test('publication authorization, identity, attestation, evidence, and cleanup mu
             s, 'container_cleanup_verification_failure', 'cleanup_failure')),
         mutation('exact image absence proof omitted', 'publication', (s) => replaceAllRequired(
             s, 'image_cleanup_verification_failure', 'cleanup_failure')),
-        mutation('prepublication partial state omitted', 'publication', (s) => replaceAllRequired(s, 'BLOCKED_I8_PREPUBLICATION_GATE', 'publication_failure')),
-        mutation('published-unattested state omitted', 'publication', (s) => replaceAllRequired(s, 'I8_CANDIDATE_PUBLISHED_UNATTESTED', 'publication_failure')),
-        mutation('attestation-unverified state omitted', 'publication', (s) => replaceAllRequired(s, 'I8_CANDIDATE_ATTESTATION_UNVERIFIED', 'publication_failure')),
+        mutation('prepublication partial state omitted', 'publication', (s) => replaceAllRequired(s, 'BLOCKED_I11_PREPUBLICATION_GATE', 'publication_failure')),
+        mutation('published-unattested state omitted', 'publication', (s) => replaceAllRequired(s, 'I11_CANDIDATE_PUBLISHED_UNATTESTED', 'publication_failure')),
+        mutation('attestation-unverified state omitted', 'publication', (s) => replaceAllRequired(s, 'I11_CANDIDATE_ATTESTATION_UNVERIFIED', 'publication_failure')),
         mutation('final aggregator exits successfully on failure', 'publication', (s) => {
             const block = stepText(s, 'final_enforcement');
             return replaceRequired(s, block, replaceRequired(

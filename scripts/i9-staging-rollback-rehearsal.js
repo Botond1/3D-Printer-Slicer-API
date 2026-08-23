@@ -27,6 +27,10 @@ const {
     EXACT_GHCR_REPOSITORY,
     loadStagingManifest
 } = require('./i9-staging-manifest');
+const {
+    MANIFEST_FILE: PRODUCTIZED_MANIFEST_FILE,
+    loadStagingRehearsalManifest
+} = require('./staging-rehearsal-manifest');
 
 const DRAFT_FILE = 'i9-staging-runtime-draft.json';
 
@@ -52,8 +56,23 @@ function candidateFromManifest(repository, value) {
 }
 
 function loadManifest(env) {
-    void env;
-    const loaded = loadStagingManifest(path.resolve(__dirname, '..'));
+    let loaded;
+    if (env.STAGING_REHEARSAL_MANIFEST || env.REHEARSAL_INPUT_DIR) {
+        if (!env.RUNNER_TEMP || !env.STAGING_REHEARSAL_MANIFEST
+            || !env.REHEARSAL_INPUT_DIR) fail('staging_manifest_path_mismatch');
+        const runnerTemp = fs.realpathSync(path.resolve(env.RUNNER_TEMP));
+        const inputRoot = path.resolve(env.REHEARSAL_INPUT_DIR);
+        const inputDetails = fs.lstatSync(inputRoot);
+        const expected = path.join(inputRoot, PRODUCTIZED_MANIFEST_FILE);
+        if (path.dirname(inputRoot) !== runnerTemp || !inputDetails.isDirectory()
+            || inputDetails.isSymbolicLink() || fs.realpathSync(inputRoot) !== inputRoot
+            || path.resolve(env.STAGING_REHEARSAL_MANIFEST) !== expected) {
+            fail('staging_manifest_path_mismatch');
+        }
+        loaded = loadStagingRehearsalManifest(expected);
+    } else {
+        loaded = loadStagingManifest(path.resolve(__dirname, '..'));
+    }
     const raw = loaded.value;
     const previous = candidateFromManifest(raw.repository, raw.previous);
     const candidate = candidateFromManifest(raw.repository, raw.candidate);

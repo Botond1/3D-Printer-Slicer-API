@@ -1,21 +1,55 @@
 # Security model
 
-## I10 mainline-governance control delta
+## I11 protected-main signed-candidate control delta
 
-| Control | Commit-time classification | Remaining boundary |
+Status at this documentation boundary:
+`PENDING_LOCAL_AND_HOSTED_VALIDATION`. The exact protected-main baseline is
+`8253160eef1c3e00c1e40826ec61fd97563ddd9b`; implementation branch is
+`codex/i11-release-productization`. The GitHub environment setup below is live-
+verified; no I11 implementation, registry, attestation, hosted, rehearsal or
+production success is claimed here.
+
+| Control | Commit-time classification | Fail-closed boundary |
 | --- | --- | --- |
-| Mainline validation triggers | `IMPLEMENTED_AND_MUTATION_TESTED` | Source and Image target PRs to main, merge-group checks and main pushes. Exact hosted PR/main results remain pending. |
-| Main-push whitespace range | `IMPLEMENTED_AND_MUTATION_TESTED` | A nonzero exact event-before commit must exist and be an ancestor of the candidate; no current-main empty range is accepted. |
-| Branch governance bootstrap | `LIVE_BOOTSTRAP_VERIFIED` | PR required, admins enforced, force-push/deletion denied and conversation resolution required. Exact Source/Image required contexts are added only after their first I10 PR observations. |
-| Human approval | `HUMAN_REVIEWER_CAPABILITY_UNAVAILABLE` | The sole collaborator cannot approve their own PR. Zero-review bootstrap is explicit and must not be represented as human review. |
-| Deployment/publication | `OUT_OF_SCOPE_NO_AUTHORITY` | I10 has no registry, attestation, environment, SSH/VPS, deploy or production capability. |
+| Trigger and identity | `PENDING_IMPLEMENTATION_VALIDATION` | Manual `workflow_dispatch` only; exact repository, actor `Botond1`, `refs/heads/main`, event SHA, requested SHA, remote main HEAD and post-baseline ancestry must agree. Push/PR/merge-group/schedule/repository-dispatch paths are rejected. |
+| New publication | `PENDING_IMPLEMENTATION_VALIDATION` | `publish_new` requires empty `existing_registry_digest`, exact `PUBLISH_SIGNED_MAIN_CANDIDATE`, a proven-absent SHA-derived discovery tag, and a full once-built image gate before login/push. Existing/ambiguous tags block; no overwrite, retry-by-mutation or second build. |
+| Exact recovery | `PENDING_IMPLEMENTATION_VALIDATION` | `recover_exact_digest` requires exact `RECOVER_SIGNED_MAIN_CANDIDATE` and one lowercase `sha256:<64 hex>` digest. The existing tag's manifest digest and config identity must match the once-built candidate. Recovery performs no push, overwrite or delete and continues exact-digest attestation/verification only. |
+| Job permissions | `PENDING_IMPLEMENTATION_VALIDATION` | Global none; preflight contents-read only; publication alone may receive contents-read, packages-write, attestations-write and OIDC-write after preflight. No SSH, deploy, environment-secret disclosure or repository-write authority. |
+| GitHub environment | `LIVE_CONFIG_VERIFIED` | On 2026-08-23, `candidate-publication` ID `20443404498` has protected branches true, custom branch policies false, exactly one `branch_policy` protection rule (ID `63481958`), and no reviewer/wait-timer rules, secrets, variables or deployments. Workflow binds `deployment: false`. |
+| Human approval | `HUMAN_REVIEWER_CAPABILITY_UNAVAILABLE` | `Botond1` is the sole collaborator and cannot self-approve. An empty environment-reviewer list is an explicit capability constraint, not human review. |
+| Evidence and terminal status | `PENDING_IMPLEMENTATION_VALIDATION` | Mode-aware evidence must distinguish `published_new` from `recovered_existing`, must never claim tag absence or a registry write during recovery, and may claim completion only after digest identity, attestations, verification, upload boundary and exact cleanup pass. |
+| Automatic ephemeral rehearsal | `PENDING_IMPLEMENTATION_AND_HOSTED_VALIDATION` | Only a successful main Candidate Publication `workflow_run` may enter. Exact upstream API/run/SHA plus one bounded artifact determine a dynamic previous/current digest-only manifest; both images require SLSA/SPDX API+OCI verification before hardened I9 readiness, controlled `STORAGE_UNSAFE`, automatic exact-previous rollback, bounded evidence and cleanup. Permissions are read-only; no registry write/OIDC/environment/deploy/VPS authority. |
+| Deployment/promotion | `OUT_OF_SCOPE_NO_AUTHORITY` | Both modes are candidate publication only. Mutable/release/staging/production tags, deploy, VPS/SSH, registry deletion and production changes remain forbidden. |
 
-The pre-integration remote `main` still held a historical auto-deploy workflow,
-so protection was installed before any integration push. The I9 descendant
-replaces that workflow with the manual no-deploy preflight. Final Source/Image
-required-context binding, merge and exact-main hosted proof remain pending at
-commit time. See
-[`evidence/i10-mainline-governance.md`](evidence/i10-mainline-governance.md).
+Hosted S4/S5 private-peer and I9 rollback results are synthetic, ephemeral
+repository validation. They do not establish deployed callers, proxy/firewall,
+secret delivery, exact production digest, Hostinger/VPS state, live readiness
+or production rollback. See
+[`evidence/i11-mainline-signed-candidate.md`](evidence/i11-mainline-signed-candidate.md).
+
+The automatic rehearsal deliberately accepts a published candidate that is an
+ancestor of the then-current protected `main`: GitHub sources `workflow_run`
+orchestration from the current default branch, while the job checks out the
+candidate's own scripts and immutable publication artifact. A later protected
+workflow-only main change can therefore orchestrate an older candidate. This is
+a bounded repository-governance residual and must not be represented as an
+exact deployed-workflow or production proof.
+
+## Verified I10 mainline-governance control delta
+
+| Control | Final classification | Evidence and remaining boundary |
+| --- | --- | --- |
+| Mainline validation triggers | `VERIFIED_EXACT_MAIN` | Final main SHA `8253160eef1c3e00c1e40826ec61fd97563ddd9b`; Source `32662043454` and Image `32662043476` succeeded. PR, merge-group and exact-main paths remain read-only/no-deploy. |
+| Required checks | `LIVE_POLICY_VERIFIED` | Strict contexts are exactly `Validate exact source candidate (NO DEPLOY)` and `Build once, inspect, scan, and discard (NO DEPLOY)`, both bound to GitHub Actions app ID `15368`. |
+| Main protection | `LIVE_POLICY_VERIFIED_WITH_UNSIGNED_GAP` | Exactly `main` is protected; PR required, admins enforced, force-push/deletion false, conversation resolution true. Merge commit only; squash/rebase false. Rulesets are empty and required signatures are not enabled. |
+| Workflow token policy | `LIVE_POLICY_VERIFIED` | Default Actions workflow permission is read; Actions cannot approve pull requests. |
+| Human approval | `HUMAN_REVIEWER_CAPABILITY_UNAVAILABLE` | Required approvals are zero because the sole collaborator cannot self-approve. This is not a human-review pass. |
+| Deployment/publication | `VERIFIED_ABSENT_FROM_I10` | I10 added no registry, attestation, environment, SSH/VPS, deploy or production capability and ran no publication/deployment workflow. |
+
+The unchanged
+[`evidence/i10-mainline-governance.md`](evidence/i10-mainline-governance.md)
+records the honest pre-merge checkpoint; the live exact-SHA/policy results above
+close its intentionally pending exits without rewriting historical evidence.
 
 ## I9/S3b ephemeral staging and rollback control delta
 
@@ -28,7 +62,7 @@ classification is intentionally limited to the ephemeral runner boundary.
 | Control | Repository classification | Remaining boundary |
 | --- | --- | --- |
 | Immutable previous/candidate pair | `HOSTED_VERIFIED_EPHEMERAL` | The manifest requires distinct lowercase GHCR manifest, config, and source identities. I9 freshly verified both SLSA/SPDX attestations for the rehearsal-only previous C6 digest and signed C7 candidate. |
-| Workflow authority | `HOSTED_VERIFIED_READ_ONLY_NO_DEPLOY` | Exact branch push, actor, remote HEAD, ancestry, and final trailer passed. Permissions remained global none, preflight contents-read, and rehearsal contents/packages/attestations-read. |
+| Workflow authority | `HOSTED_VERIFIED_READ_ONLY_NO_DEPLOY` | Historical I9 exact-branch push, actor, remote HEAD, ancestry and trailer passed. I11 replaces the current workflow trigger with successful protected-main Candidate Publication `workflow_run`; that automatic path remains `PENDING`, while permissions stay global none and read-only per job. |
 | Runtime identity and state | `HOSTED_VERIFIED_EPHEMERAL` | Both images resolved to `User=slicer`, shared UID/GID `999:999`, exact config IDs, internal network, no host port/default route, and run-owned `0700` writable state. |
 | Meaningful readiness | `HOSTED_VERIFIED_EPHEMERAL` | Two consecutive private-peer passes proved liveness, minimal and operations readiness, fresh detailed Python/storage/native/config/pricing/retention/queue health, idle queue, and exact auth rejection. |
 | Controlled failure and rollback | `HOSTED_VERIFIED_EPHEMERAL` | Candidate pricing state changed `0700 -> 0500 -> 0700`; liveness survived, readiness failed only with `STORAGE_UNSAFE`, and automatic rollback restored the exact previous digest under a new container/PID. |
@@ -528,7 +562,7 @@ delta above when reading test classifications.
 | Native Python/slicer compromise can use unintended egress if deployment drifts. | Critical | Historical I5 A/B proved ordinary-bridge egress. I6 selects an internal-only API/no-host-port topology and repository validation requires calibrated API/native DNS/TCP/UDP denial. | **S4/S5 deployment gate:** verify callers, proxy behavior, firewall, and API/native egress on the exact deployed digest. |
 | Scoped service trust is repository-tested but deployed topology is incomplete. | Critical | I5 tests active/previous audiences, two-restart revocation, finite legacy migration, Origin policy, proxy identity, readiness, and observability. Final candidate/hosted evidence, deployed callers/proxy/firewall, and production secret lifecycle are pending or `UNVERIFIED`. | **S4 service trust/topology + S3b promotion gate:** prove final deployed private ingress, denied unintended caller, denied API/native egress, secret ownership/mode/state, and exact digest before production. An agent cannot grant an exception. |
 | Multipart/HTTP ingress can exhaust resources beyond the application subset. | High | S1a covers bounded multipart fields and cleanup. I3 applies bounded Node header/request/keep-alive timeouts, headers, connections, and requests/socket with fallback. Actual VPS capacity/proxy timeouts, total streamed upload duration, and measured memory/disk/CPU envelopes remain unverified. | **S2:** measure and enforce host/proxy upload duration, connection/concurrency, memory, CPU, and disk envelopes under synthetic load. |
-| Validation is not yet a production promotion chain. | Critical | S3a removed automatic deployment and exact source S3a-B2 passed, but its hosted image failed both persistent runtime liveness and the HIGH scanner path. Branch protection and required checks remain external `UNVERIFIED`. | **S3a image/runtime + repository administrator:** resolve liveness and vulnerability evidence without weakening gates, then verify policy. **S4/S3b:** only after S4 evidence and separate explicit user/owner authorization, prove immutable promotion, staging readiness, and rollback. |
+| Validation is not yet a production promotion chain. | Critical | I10 verifies protected-main Source/Image governance and the I11 publication environment is live-configured. Manual main publication/recovery and its automatic artifact-bound ephemeral rehearsal are still `PENDING`; hosted S4/S5/I9 evidence does not verify the deployed proxy/firewall/secrets/digest/VPS or a human change window. | **I11:** complete exact-main publication/recovery, cryptographic evidence and automatic no-deploy rehearsal. **S4/S5/S3b operator gate:** separately authorize and prove exact deployed topology, secrets, digest, readiness and rollback before production. |
 
 ## Historical S0 control inventory
 

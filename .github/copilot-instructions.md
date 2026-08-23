@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Copilot Instructions
 
-Last synchronized: 2026-07-30
+Last synchronized: 2026-08-23
 
 ## Architecture Notice
 This project uses both GitHub Copilot and Claude as primary agentic tools.
@@ -19,69 +19,53 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
 
 - Normal Image Validation remains read-only and never pushes, attests, or
   deploys.
-- Candidate Publication retains exact-input `workflow_dispatch` and also
-  accepts `push` only for `codex/i8-s3a-ghcr-signed-candidate`.
-- Push authorization derives `github.sha` and requires exact repository
-  `Botond1/3D-Printer-Slicer-API`, exact ref
-  `refs/heads/codex/i8-s3a-ghcr-signed-candidate`, actor `Botond1`, hardcoded
-  `ghcr.io/botond1/3d-printer-slicer-api`, and exact final non-empty commit
-  line `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
-- Both event paths fail closed and emit canonical `candidate_sha`, `image_ref`,
-  `discovery_tag`, and `registry_repository` outputs.
-- Only its publication job may hold packages/attestations/OIDC write
-  permissions, and only after the complete shared gate succeeds on the same
-  once-built `linux/amd64` image may it log in and push.
-- Refuse any existing discovery tag. Never create `latest`, release, staging,
-  or production tags. Consumption is only by
-  `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`.
-- Publication is not deployment. Preserve and classify any partial published
-  candidate; never overwrite, delete, promote, or deploy it.
-- The current committed C3 boundary is
-  `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`. Hosted Source run
-  `30545194526` and Image run `30545194494` are `SUCCESS`; Image artifact
-  `8760548898` exists. Candidate run `30545194754` is `FAILURE` after
-  publication at `digest_roundtrip`: host `ps` reported `process ID out of
-  range` after detach/immediate PID handling. The exact inspected PID is
-  `UNVERIFIED`.
-- Preserve the quarantined discovery tag
-  `candidate-81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3` unchanged at digest
-  `sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
-  and config identity
-  `sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`.
-  GitHub/OCI provenance and SBOM attestations and the candidate artifact are
-  absent; publication and evidence cleanup succeeded. Classification is
-  `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
-- C3 corrects the sole namespace drift: the I4 main-container contract now
-  accepts only the full-string, 128-byte-bounded `s3a-validation-<run>-<attempt>`
-  and `s3a-publication-<run>-<attempt>` forms. I2 image aliases already use the
-  exact dual namespace; I2 probe and I6 container/network names remain generic,
-  strict, bounded, and distinct; per-run evidence/temp paths remain bounded;
-  cleanup remains bound to exact environment references, ownership labels, and
-  exact image/container/network identities. No other executable
-  validation-only regex exists in the Candidate helper chain.
-- C4 uses one bounded runtime-state proof before both shared prepublication and
-  post-push digest runtime validation: exact container/image identity,
-  allowlisted state, a stable repeated positive PID before host `ps`, matching
-  positive UID/GID, and a post-`ps` same-state confirmation. Status must be
-  `running`; paused, restarting, dead, exited, unhealthy or missing health,
-  OOM, state error, malformed state/PID/identity, timeout, and state change fail
-  closed.
-- Failed upload storage callbacks wait for the output stream to close before
-  workspace cleanup; HTTP and application upload deadlines remain aligned
-  without a timeout increase or retry.
-- Uploaded evidence may report only `I8_CANDIDATE_EVIDENCE_READY`;
-  `I8_SIGNED_CANDIDATE_COMPLETE` is reserved for final enforcement after
-  evidence upload and both cleanup steps. One-by-one final-dependency mutations
-  enforce this boundary, and both cleanup outcomes remain visible in the final
-  summary.
-- Post-correction C4 evidence is 734/734 affected tests, full JavaScript
-  1296/1296, and Python 42/43 pass with one expected Windows POSIX-permission
-  skip. Local Docker is `NOT_RUN_ENVIRONMENT`. Exactly one C4 commit and one normal
-  non-force push are authorized; the three replacement-candidate hosted runs
-  remain `PENDING` at this commit boundary, and no later correction is
-  authorized.
-- Preserve the no-`main`, no-PR/merge/force-push, no-release/Git-tag, no
-  mutable-image-tag, no-deploy, and no-repository-setting-change boundary.
+- I10 is live-verified at protected-main SHA
+  `8253160eef1c3e00c1e40826ec61fd97563ddd9b`. Source run `32662043454` and
+  Image run `32662043476` succeeded. Strict main protection binds both
+  no-deploy GitHub Actions contexts, requires a PR, includes administrators,
+  forbids force-push/deletion, requires conversation resolution and enables
+  merge commits only. Required approvals are zero because the sole collaborator
+  cannot self-approve; this is not human review. Required signatures are not
+  enabled.
+- I11 Candidate Publication accepts manual `workflow_dispatch` only from exact
+  current protected `main`. Repository, actor `Botond1`, main ref,
+  requested/event/checkout/remote SHA, post-I10 ancestry and fixed GHCR
+  repository must all agree; every other event or identity fails closed.
+- `publish_new` requires empty `existing_registry_digest`, exact confirmation
+  `PUBLISH_SIGNED_MAIN_CANDIDATE`, and a proven-absent SHA-derived discovery tag.
+  It may push only the once-built image after the complete exact-image gate.
+- `recover_exact_digest` requires exact confirmation
+  `RECOVER_SIGNED_MAIN_CANDIDATE` and one lowercase `sha256:<64 hex>` digest.
+  The existing SHA-derived tag, manifest digest and config identity must match
+  the once-built image. Recovery performs no registry push, overwrite or delete.
+- Only the publication job may hold packages/attestations/OIDC write
+  permissions, after read-only preflight. It binds environment
+  `candidate-publication` with `deployment: false`. Environment ID
+  `20443404498` is `LIVE_CONFIG_VERIFIED` on 2026-08-23: protected branches
+  true, custom branch policies false, exactly one `branch_policy` protection
+  rule (ID `63481958`), and no reviewer/wait-timer rules, secrets, variables or
+  deployments.
+- Both modes use digest-only downstream identity:
+  `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`. Never create
+  or overwrite mutable, release, staging or production tags.
+- Mode-aware evidence must never claim tag absence or a registry write during
+  recovery. It may report only `I11_MAIN_CANDIDATE_EVIDENCE_READY`; final
+  enforcement may claim `I11_MAIN_SIGNED_CANDIDATE_COMPLETE` only after exact
+  digest identity, attestations, verification, bounded upload and both cleanup
+  outcomes succeed.
+- A successful protected-main publication automatically starts only the
+  completed/main `workflow_run` rehearsal. It re-proves the upstream API/run and
+  one bounded six-file artifact, generates the distinct previous/current
+  digest-only manifest, verifies both images' SLSA/SPDX API+OCI attestations,
+  and executes hardened I9 readiness, `STORAGE_UNSAFE`, automatic rollback,
+  bounded evidence and exact cleanup. It has read permissions only.
+- Publication is not deployment. Preserve and classify partial candidates;
+  matching exact recovery may continue without registry mutation, while foreign
+  or ambiguous identity blocks. I11 code/gates, hosted runs, digest,
+  attestations, evidence and automatic rehearsal are `PENDING` until observed.
+- Hosted S4/S5 and I9 results are ephemeral repository evidence, not production
+  proof. Deployed callers, proxy/firewall, secrets, digest, Hostinger/VPS,
+  readiness and rollback remain separately authorized and unverified.
 
 ## Technology Baseline
 - Backend: Node.js + Express

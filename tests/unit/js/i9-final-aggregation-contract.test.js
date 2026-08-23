@@ -10,9 +10,11 @@ const WORKFLOW = fs.readFileSync(
     path.join(ROOT, '.github/workflows/staging-rollback-rehearsal.yml'), 'utf8'
 ).replace(/\r\n?/g, '\n');
 
+const COMPLETION = 'SIGNED_MAIN_CANDIDATE_EPHEMERAL_REHEARSAL_COMPLETE';
 const INPUTS = Object.freeze([
+    ['PUBLICATION_ARTIFACT_OUTCOME', 'steps.publication_artifact.outcome'],
+    ['REHEARSAL_INPUT_OUTCOME', 'steps.rehearsal_input.outcome'],
     ['REGISTRY_LOGIN_OUTCOME', 'steps.registry_login.outcome'],
-    ['MANIFEST_OUTCOME', 'steps.manifest_contract.outcome'],
     ['REGISTRY_IDENTITY_OUTCOME', 'steps.registry_identity.outcome'],
     ['ATTESTATION_VERIFICATION_OUTCOME', 'steps.attestation_verification.outcome'],
     ['VERIFICATION_CLEANUP_OUTCOME', 'steps.verification_cleanup.outcome'],
@@ -49,9 +51,9 @@ function assertFinalContract(source) {
     const final = stepBlock(source, 'final_enforcement');
     const withoutFinal = source.replace(final, '');
     assert.match(final, /if: \$\{\{ always\(\) \}\}/);
-    assert.doesNotMatch(withoutFinal, /I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE/,
+    assert.doesNotMatch(withoutFinal, new RegExp(COMPLETION),
         'only final enforcement may claim completion');
-    assert.equal(final.split('I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE').length - 1, 2);
+    assert.equal(final.split(COMPLETION).length - 1, 2);
     for (const [name, expression] of INPUTS) {
         assert.match(final, new RegExp(
             `${name}: \\$\\{\\{ ${expression.replaceAll('.', '\\.')} \\}\\}`
@@ -60,32 +62,39 @@ function assertFinalContract(source) {
     }
     const normalizedFinal = normalized(final);
     for (const branch of [
-        'classification=BLOCKED_I9_CLEANUP_FAILURE\nfailed_step=cleanup',
-        'classification=BLOCKED_I9_MANIFEST_CONTRACT\nfailed_step=manifest',
-        'classification=BLOCKED_I9_REGISTRY_READ_CAPABILITY\nfailed_step=registry_identity',
-        'classification=BLOCKED_I9_ATTESTATION_VERIFICATION\nfailed_step=attestation_verification',
-        'classification=BLOCKED_I9_RUNTIME_IDENTITY_MISMATCH\nfailed_step=runtime_images',
-        'classification=BLOCKED_I9_HOST_OWNERSHIP_CAPABILITY\nfailed_step=runtime_setup',
-        'classification=BLOCKED_I9_CLEANUP_FAILURE\nfailed_step=runtime_cleanup',
-        'classification=BLOCKED_I9_ROLLBACK_FAILURE\nfailed_step=rollback',
-        'classification=BLOCKED_I9_REHEARSAL_GATE\nfailed_step=rehearsal',
-        'classification=BLOCKED_I9_EVIDENCE_FAILURE\nfailed_step=evidence'
+        'classification=BLOCKED_SIGNED_MAIN_CANDIDATE_CLEANUP_FAILURE\nfailed_step=cleanup',
+        'classification=BLOCKED_SIGNED_MAIN_CANDIDATE_ARTIFACT\nfailed_step=publication_artifact',
+        'classification=BLOCKED_SIGNED_MAIN_CANDIDATE_REHEARSAL_INPUT\nfailed_step=rehearsal_input',
+        'classification=BLOCKED_SIGNED_MAIN_CANDIDATE_REGISTRY_READ\nfailed_step=registry_identity',
+        'classification=BLOCKED_SIGNED_MAIN_CANDIDATE_ATTESTATION\nfailed_step=attestation_verification',
+        'classification=BLOCKED_SIGNED_MAIN_CANDIDATE_RUNTIME_IDENTITY\nfailed_step=runtime_images',
+        'classification=BLOCKED_SIGNED_MAIN_CANDIDATE_HOST_OWNERSHIP\nfailed_step=runtime_setup',
+        'classification=BLOCKED_SIGNED_MAIN_CANDIDATE_CLEANUP_FAILURE\nfailed_step=runtime_cleanup',
+        'classification=BLOCKED_SIGNED_MAIN_CANDIDATE_ROLLBACK\nfailed_step=rollback',
+        'classification=BLOCKED_SIGNED_MAIN_CANDIDATE_REHEARSAL\nfailed_step=rehearsal',
+        'classification=BLOCKED_SIGNED_MAIN_CANDIDATE_EVIDENCE\nfailed_step=evidence'
     ]) assert.ok(normalizedFinal.includes(branch), `missing final branch ${branch}`);
-    assert.ok(final.indexOf('BLOCKED_I9_CLEANUP_FAILURE')
-        < final.indexOf('BLOCKED_I9_REGISTRY_READ_CAPABILITY'),
+    assert.ok(final.indexOf('BLOCKED_SIGNED_MAIN_CANDIDATE_CLEANUP_FAILURE')
+        < final.indexOf('BLOCKED_SIGNED_MAIN_CANDIDATE_ARTIFACT'),
     'cleanup failure must remain independently fail-closed before primary classifications');
-    assert.match(final,
-        /if \[ \"\$classification\" != \"I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE\" \]; then[\s\S]*exit 1/);
+    assert.ok(final.indexOf('BLOCKED_SIGNED_MAIN_CANDIDATE_ARTIFACT')
+        < final.indexOf('BLOCKED_SIGNED_MAIN_CANDIDATE_REHEARSAL_INPUT')
+        && final.indexOf('BLOCKED_SIGNED_MAIN_CANDIDATE_REHEARSAL_INPUT')
+        < final.indexOf('BLOCKED_SIGNED_MAIN_CANDIDATE_REGISTRY_READ'),
+    'artifact and manifest failures must precede registry/runtime classifications');
+    assert.match(final, new RegExp(
+        `if \\[ "\\$classification" != "${COMPLETION}" \\]; then[\\s\\S]*exit 1`
+    ));
     assert.match(final, /Runtime cleanup:.*RUNTIME_CLEANUP_CLASSIFICATION/);
     assert.match(final, /Evidence cleanup:.*EVIDENCE_CLEANUP_OUTCOME/);
     assert.match(final, /hosted ephemeral Docker only; it did not deploy to a VPS or production/);
 }
 
-test('only final always-running aggregation may claim I9 rehearsal completion', () => {
+test('only the always-running I11 final aggregation may claim rehearsal completion', () => {
     assertFinalContract(WORKFLOW);
 });
 
-test('every final aggregation binding is mutation-sensitive', async (t) => {
+test('every I11 final aggregation binding is mutation-sensitive', async (t) => {
     const final = stepBlock(WORKFLOW, 'final_enforcement');
     for (const [name, expression] of INPUTS) await t.test(name, () => {
         const anchor = `${name}: \${{ ${expression} }}`;
@@ -95,7 +104,7 @@ test('every final aggregation binding is mutation-sensitive', async (t) => {
     });
 });
 
-test('every final aggregation decision input is mutation-sensitive', async (t) => {
+test('every I11 final aggregation decision input is mutation-sensitive', async (t) => {
     const final = stepBlock(WORKFLOW, 'final_enforcement');
     for (const [name] of INPUTS) await t.test(name, () => {
         const shellAnchor = `$${name}`;
@@ -105,4 +114,4 @@ test('every final aggregation decision input is mutation-sensitive', async (t) =
     });
 });
 
-module.exports = Object.freeze({ INPUTS, assertFinalContract, stepBlock });
+module.exports = Object.freeze({COMPLETION, INPUTS, assertFinalContract, stepBlock});

@@ -1,24 +1,89 @@
 # Verified project map
 
-## Current I10 mainline-governance checkpoint
+## Current I11 protected-main signed-candidate checkpoint
 
-- Baseline: exact I9 SHA
-  `200e4174766bed2562402661afb2bc9efa7834e3`.
-- Source and Image validation now cover PRs targeting `main`, merge-group
-  `checks_requested`, and exact `main` pushes while retaining manual/reusable
-  exact-SHA calls and read-only/no-deploy authority.
-- Exact main pushes validate the nonzero event `before..candidate` range;
-  other supported invocations retain remote-main merge-base validation.
-- Stable Source/Image job contexts and the main/merge-group trigger contract
-  are mutation-tested. PR integration, exact-main hosted results and final
-  required-check readback remain `PENDING` at commit time.
-- Repository governance bootstrap requires PRs, includes administrators and
-  forbids force-push/deletion. Merge commits alone preserve I1-I9 ancestry.
-- No deploy, VPS, production environment, registry publication or promotion is
-  part of I10.
+Commit-time status: `PENDING_LOCAL_AND_HOSTED_VALIDATION` from exact protected
+main baseline `8253160eef1c3e00c1e40826ec61fd97563ddd9b` on branch
+`codex/i11-release-productization`. Direct source map:
+
+```text
+manual workflow_dispatch on exact protected main HEAD
+  -> exact repository / actor / ref / remote-HEAD / ancestry preflight
+  -> publish_new OR recover_exact_digest mode contract
+  -> one linux/amd64 build and complete no-deploy image gate
+  -> candidate-publication environment (deployment: false)
+  -> registry authentication
+  -> absent-tag new push OR exact existing-digest adoption without write
+  -> digest round trip / runtime / Compose identity
+  -> SLSA + SPDX attestations and positive/negative verification
+  -> bounded mode-aware provenance
+  -> exact cleanup and fail-closed aggregation
+  -> successful Candidate Publication workflow_run on main
+  -> exact single publication artifact and dynamic digest-only pair manifest
+  -> previous/current per-image API + OCI attestation verification
+  -> I9 private-peer readiness / STORAGE_UNSAFE / automatic rollback runtime
+  -> bounded rehearsal evidence / exact cleanup / no deploy
+```
+
+- `publish_new` requires an empty existing-digest input, exact
+  `PUBLISH_SIGNED_MAIN_CANDIDATE` confirmation and a proven-absent
+  `candidate-<main SHA>` tag. It may push only the once-built fully gated image.
+- `recover_exact_digest` requires exact
+  `RECOVER_SIGNED_MAIN_CANDIDATE` confirmation and a lowercase
+  `sha256:<64 hex>` digest. The existing SHA-derived tag, digest and config ID
+  must match the once-built image; recovery cannot push, overwrite or delete.
+- Environment `candidate-publication` is `LIVE_CONFIG_VERIFIED` on 2026-08-23,
+  ID `20443404498`: protected branches true, custom branch policies false,
+  exactly one `branch_policy` protection rule (ID `63481958`), and no reviewer
+  or wait-timer rules, secrets, variables or deployments. Workflow
+  `deployment: false` prevents a deployment record.
+- A successful main Candidate Publication triggers only the completed/main
+  `workflow_run` rehearsal. The preflight re-proves workflow/run/repository/
+  branch/SHA identity and accepts exactly one bounded six-file publication
+  artifact with its GitHub artifact digest.
+- `.github/release-rehearsal-policy.json` pins the previous signed candidate;
+  the publication provenance supplies the current signed main candidate. The
+  generated manifest requires distinct digest/config/source identities, source
+  ancestry, unchanged `configs` and production Compose, digest-only runtime,
+  per-image SLSA/SPDX verification and no registry write/deploy.
+- The runtime reuses the hardened I9 private-peer path: shared dynamic non-root
+  identity, previous/candidate readiness and Orca proof, controlled
+  `STORAGE_UNSAFE`, automatic exact-previous rollback, bounded evidence and
+  exact cleanup. Its job has contents/actions/packages/attestations read only.
+- I11 code/test/workflow completion, local gates, exact-SHA Source/Image,
+  manual publication, digest, attestations, publication artifact and automatic
+  rehearsal evidence/cleanup are all `PENDING` at this commit-time boundary.
+- No mode authorizes deployment, VPS/SSH, promotion tag, release/Git tag,
+  mutable tag, overwrite or registry deletion. Hosted S4/S5/I9 evidence remains
+  ephemeral repository validation, not production proof.
 
 See
-[`evidence/i10-mainline-governance.md`](evidence/i10-mainline-governance.md).
+[`evidence/i11-mainline-signed-candidate.md`](evidence/i11-mainline-signed-candidate.md).
+
+## Verified I10 mainline-governance checkpoint
+
+- Final protected-main SHA:
+  `8253160eef1c3e00c1e40826ec61fd97563ddd9b`.
+- Exact-main Source run `32662043454` and Image run `32662043476` succeeded.
+- Source and Image validation cover PRs targeting `main`, merge-group
+  `checks_requested`, and exact `main` pushes while retaining read-only,
+  no-deploy exact-SHA calls.
+- Live branch policy protects exactly `main`, requires a PR, includes
+  administrators, forbids force-push/deletion, requires conversation
+  resolution, and strictly requires the two GitHub Actions contexts
+  `Validate exact source candidate (NO DEPLOY)` and
+  `Build once, inspect, scan, and discard (NO DEPLOY)`, both app ID `15368`.
+- Merge commits alone are enabled; squash and rebase are disabled. Required
+  approvals are zero because the sole collaborator cannot self-approve:
+  `HUMAN_REVIEWER_CAPABILITY_UNAVAILABLE`.
+- Rulesets are empty; Actions default permission is read and Actions cannot
+  approve pull requests. Required signatures are not enabled. No deploy,
+  publication, VPS or production workflow ran as part of I10.
+
+See the unchanged commit-time record in
+[`evidence/i10-mainline-governance.md`](evidence/i10-mainline-governance.md);
+the verified live exits above supersede only that file's intentionally pending
+fields.
 
 ## Current I9/S3b ephemeral staging and rollback foundation
 
@@ -42,10 +107,11 @@ cleanup.
   manifest/config/source identities. The previous C6 digest is a
   rehearsal-only fixture and must be freshly requalified under the same I8
   signer/source/predicate policy.
-- `.github/workflows/staging-rollback-rehearsal.yml` is serialized and
-  push-authorized only for the exact I9 branch/trailer. It has no registry,
-  attestation, deployment, OIDC, contents-write, SSH, release, or environment
-  authority.
+- At the I9 checkpoint, `.github/workflows/staging-rollback-rehearsal.yml` was
+  serialized and push-authorized only for the exact I9 branch/trailer. I11 now
+  productizes the same runtime as a successful protected-main Candidate
+  Publication `workflow_run`; the workflow is no longer I9 branch-triggered.
+  Both forms are registry-read-only/no-deploy.
 - `scripts/i9-staging-docker.js` and
   `scripts/i9-staging-rollback-rehearsal.js` use the unchanged digest-only
   production Compose file. They require exact config/image/kernel identity,
@@ -648,7 +714,7 @@ code order is authoritative.
 | Profiles/state | Immutable [`configs/prusa`](../../configs/prusa) and [`configs/orca`](../../configs/orca) profiles plus writable primary pricing state `configs/pricing-state/pricing.json`; legacy `configs/pricing.json` is migration/fallback input only. |
 | Integration runners | [`tests/testing-scripts`](../../tests/testing-scripts) with shared helpers in `common/`; reports are generated in ignored `results/`. |
 | Runtime/container | [`Dockerfile`](../../Dockerfile), [`docker-compose.yml`](../../docker-compose.yml), and [`docker-compose.dev.yml`](../../docker-compose.dev.yml). |
-| Automation | [`ci.yml`](../../.github/workflows/ci.yml) and [`image-validation.yml`](../../.github/workflows/image-validation.yml) validate an exact candidate without deployment; [`candidate-publication.yml`](../../.github/workflows/candidate-publication.yml) is the completed I8 exact-branch signed-candidate publisher; [`staging-rollback-rehearsal.yml`](../../.github/workflows/staging-rollback-rehearsal.yml) is the hosted-verified I9 registry-read-only rehearsal; [`deploy.yml`](../../.github/workflows/deploy.yml) remains a manual no-deploy preflight. |
+| Automation | [`ci.yml`](../../.github/workflows/ci.yml) and [`image-validation.yml`](../../.github/workflows/image-validation.yml) validate PR, merge-queue and exact-main candidates without deployment; [`candidate-publication.yml`](../../.github/workflows/candidate-publication.yml) is being productized in I11 as a protected-main, manual-only, mode-aware signed-candidate publisher with no-deploy authority; a successful main publication automatically triggers [`staging-rollback-rehearsal.yml`](../../.github/workflows/staging-rollback-rehearsal.yml), which validates the exact publication artifact, two digest-only signed images, hardened I9 failure/rollback and bounded cleanup with read-only permissions; [`deploy.yml`](../../.github/workflows/deploy.yml) remains a manual no-deploy preflight. |
 
 ## Runtime state and artifact lifecycle
 
@@ -803,8 +869,20 @@ delta above for present test and audit status.
 
 ## Open unknowns
 
-- `UNVERIFIED`: active GitHub secrets, required checks, branch protection,
-  environment approvals, and workflow token defaults.
+- `VERIFIED` at I10 SHA `8253160eef1c3e00c1e40826ec61fd97563ddd9b`:
+  strict protected-main Source/Image required checks, PR/admin/force-push/
+  deletion/conversation policy, merge-commit-only settings, empty rulesets,
+  disabled required signatures, read-default Actions permission, and disabled
+  Actions PR approval.
+- `HUMAN_REVIEWER_CAPABILITY_UNAVAILABLE`: the sole collaborator cannot
+  self-approve; required approvals are zero and are not represented as review.
+- `LIVE_CONFIG_VERIFIED`: `candidate-publication` environment ID `20443404498`,
+  protected branches true/custom false, with exactly one `branch_policy` rule
+  (ID `63481958`) and zero reviewer/wait-timer rules, secrets, variables and
+  deployments as of 2026-08-23.
+- `PENDING_I11`: first manual main publication/recovery and its automatic
+  signed-main ephemeral rehearsal. Production secret delivery remains
+  `UNVERIFIED`.
 - `UNVERIFIED`: deployed commit/image and digest, intended/denied callers, VPS
   checkout cleanliness, exact reverse-proxy CIDRs/hops/timeouts, actual host
   capacity, firewall/egress, quotas, backups, monitoring, and rollback readiness.

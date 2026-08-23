@@ -4,11 +4,24 @@ on:
   workflow_dispatch:
     inputs:
       candidate_sha:
-        description: Exact full lowercase commit SHA on the authorized candidate branch
+        description: Exact full lowercase commit SHA at the protected main HEAD
         required: true
         type: string
+      publication_mode:
+        description: Publish a new immutable candidate or recover its exact existing digest
+        required: true
+        default: publish_new
+        type: choice
+        options:
+          - publish_new
+          - recover_exact_digest
+      existing_registry_digest:
+        description: Exact sha256 digest; required only for recover_exact_digest
+        required: false
+        default: ''
+        type: string
       confirmation:
-        description: Type PUBLISH_I8_SIGNED_GHCR_CANDIDATE
+        description: Type the exact mode-bound publish or recovery confirmation
         required: true
         type: string
       registry_repository:
@@ -16,15 +29,12 @@ on:
         required: false
         default: ghcr.io/botond1/3d-printer-slicer-api
         type: string
-  push:
-    branches:
-      - codex/i8-s3a-ghcr-signed-candidate
 
 permissions:
   contents: none
 
 concurrency:
-  group: i8-candidate-publication-${{ github.sha }}
+  group: main-candidate-publication
   cancel-in-progress: false
 
 jobs:
@@ -39,8 +49,10 @@ jobs:
       image_ref: ${{ steps.candidate.outputs.image_ref }}
       discovery_tag: ${{ steps.candidate.outputs.discovery_tag }}
       registry_repository: ${{ steps.candidate.outputs.registry_repository }}
+      publication_mode: ${{ steps.candidate.outputs.publication_mode }}
+      existing_registry_digest: ${{ steps.candidate.outputs.existing_registry_digest }}
     steps:
-      - name: Adapt only the exact manual or authorized push event
+      - name: Accept only the exact protected-main manual authorization
         id: candidate
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -49,41 +61,43 @@ jobs:
           EVENT_REF: ${{ github.ref }}
           EVENT_REPOSITORY: ${{ github.repository }}
           REQUESTED_SHA: ${{ inputs.candidate_sha }}
+          REQUESTED_PUBLICATION_MODE: ${{ inputs.publication_mode }}
+          REQUESTED_EXISTING_DIGEST: ${{ inputs.existing_registry_digest }}
           REQUESTED_CONFIRMATION: ${{ inputs.confirmation }}
           REQUESTED_REGISTRY_REPOSITORY: ${{ inputs.registry_repository }}
         shell: bash
         run: |
           set -euo pipefail
-          baseline_sha="c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6"
-          exact_ref="refs/heads/codex/i8-s3a-ghcr-signed-candidate"
+          baseline_sha="8253160eef1c3e00c1e40826ec61fd97563ddd9b"
+          exact_ref="refs/heads/main"
           exact_repository="Botond1/3D-Printer-Slicer-API"
           exact_registry_repository="ghcr.io/botond1/3d-printer-slicer-api"
-          exact_confirmation="PUBLISH_I8_SIGNED_GHCR_CANDIDATE"
+          publish_confirmation="PUBLISH_SIGNED_MAIN_CANDIDATE"
+          recovery_confirmation="RECOVER_SIGNED_MAIN_CANDIDATE"
 
-          if [ "$EVENT_REPOSITORY" != "$exact_repository" ] || [ "$EVENT_REF" != "$exact_ref" ]; then
+          if [ "$EVENT_NAME" != "workflow_dispatch" ] || \
+             [ "$EVENT_ACTOR" != "Botond1" ] || \
+             [ "$EVENT_REPOSITORY" != "$exact_repository" ] || \
+             [ "$EVENT_REF" != "$exact_ref" ]; then
             echo "Candidate publication authorization does not match the exact contract." >&2
             exit 2
           fi
 
-          case "$EVENT_NAME" in
-            workflow_dispatch)
-              candidate_sha="$REQUESTED_SHA"
-              registry_repository="$REQUESTED_REGISTRY_REPOSITORY"
-              if [ "$REQUESTED_CONFIRMATION" != "$exact_confirmation" ]; then
-                echo "Manual confirmation does not match the exact contract." >&2
-                exit 2
-              fi
+          candidate_sha="$REQUESTED_SHA"
+          registry_repository="$REQUESTED_REGISTRY_REPOSITORY"
+          publication_mode="$REQUESTED_PUBLICATION_MODE"
+          existing_registry_digest="$REQUESTED_EXISTING_DIGEST"
+          case "$publication_mode" in
+            publish_new)
+              [ -z "$existing_registry_digest" ] && \
+                [ "$REQUESTED_CONFIRMATION" = "$publish_confirmation" ] || exit 2
               ;;
-            push)
-              if [ "$EVENT_ACTOR" != "Botond1" ]; then
-                echo "Candidate publication push actor is not authorized." >&2
-                exit 2
-              fi
-              candidate_sha="$EVENT_SHA"
-              registry_repository="$exact_registry_repository"
+            recover_exact_digest)
+              [[ "$existing_registry_digest" =~ ^sha256:[0-9a-f]{64}$ ]] && \
+                [ "$REQUESTED_CONFIRMATION" = "$recovery_confirmation" ] || exit 2
               ;;
             *)
-              echo "Unsupported Candidate Publication event: $EVENT_NAME" >&2
+              echo "Unsupported candidate publication mode." >&2
               exit 2
               ;;
           esac
@@ -94,7 +108,7 @@ jobs:
           fi
           if [[ ! "$candidate_sha" =~ ^[0-9a-f]{40}$ ]] || \
              [ "$candidate_sha" != "$EVENT_SHA" ] || [ "$candidate_sha" = "$baseline_sha" ]; then
-            echo "candidate_sha must be the selected branch's exact full lowercase post-baseline SHA." >&2
+            echo "candidate_sha must be the selected main HEAD's exact full lowercase post-baseline SHA." >&2
             exit 2
           fi
           {
@@ -102,6 +116,8 @@ jobs:
             echo "image_ref=local/slicer-api-publication:$candidate_sha"
             echo "discovery_tag=candidate-$candidate_sha"
             echo "registry_repository=$registry_repository"
+            echo "publication_mode=$publication_mode"
+            echo "existing_registry_digest=$existing_registry_digest"
           } >> "$GITHUB_OUTPUT"
 
       - name: Checkout the exact candidate without credentials
@@ -111,45 +127,28 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Prove branch head, baseline ancestry, and exact push trailer
+      - name: Prove protected main head and baseline ancestry
         id: authorization_proof
         env:
           CANDIDATE_SHA: ${{ steps.candidate.outputs.sha }}
-          EVENT_NAME: ${{ github.event_name }}
         shell: bash
         run: |
           set -euo pipefail
-          baseline_sha="c9ce6c5b3e8cf767563ab46a41b3c0e0e97ce2a6"
-          required_trailer="I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE"
+          baseline_sha="8253160eef1c3e00c1e40826ec61fd97563ddd9b"
           [ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]
           remote_sha="$(git ls-remote --exit-code origin \
-            refs/heads/codex/i8-s3a-ghcr-signed-candidate | awk '{print $1}')"
+            refs/heads/main | awk '{print $1}')"
           [ "$remote_sha" = "$CANDIDATE_SHA" ]
           git merge-base --is-ancestor "$baseline_sha" "$CANDIDATE_SHA"
-          case "$EVENT_NAME" in
-            workflow_dispatch)
-              ;;
-            push)
-              last_nonempty_line="$(
-                git show -s --format=%B "$CANDIDATE_SHA" |
-                  awk 'NF { last = $0 } END { if (last != "") print last }'
-              )"
-              if [ "$last_nonempty_line" != "$required_trailer" ]; then
-                echo "Candidate publication push lacks the exact final authorization trailer." >&2
-                exit 2
-              fi
-              ;;
-            *)
-              echo "Unsupported Candidate Publication event after checkout: $EVENT_NAME" >&2
-              exit 2
-              ;;
-          esac
 
   publication:
     name: Gate, publish, attest, verify, and retain immutable candidate
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    environment:
+      name: candidate-publication
+      deployment: false
     permissions:
       contents: read
       packages: write
@@ -160,6 +159,8 @@ jobs:
       CANDIDATE_SHA: ${{ needs.preflight.outputs.candidate_sha }}
       IMAGE_REF: ${{ needs.preflight.outputs.image_ref }}
       DISCOVERY_TAG: ${{ needs.preflight.outputs.discovery_tag }}
+      PUBLICATION_MODE: ${{ needs.preflight.outputs.publication_mode }}
+      EXISTING_REGISTRY_DIGEST: ${{ needs.preflight.outputs.existing_registry_digest }}
       EVIDENCE_SUBDIR: i8-candidate-evidence-${{ github.run_id }}-${{ github.run_attempt }}
       CONTAINER_NAME: s3a-publication-${{ github.run_id }}-${{ github.run_attempt }}
       I2_UID_PROBE_NAME: i8-uid-${{ github.run_id }}-${{ github.run_attempt }}
@@ -187,7 +188,7 @@ jobs:
         run: |
           set -euo pipefail
           [ "$GITHUB_REPOSITORY" = "Botond1/3D-Printer-Slicer-API" ]
-          [ "$GITHUB_REF" = "refs/heads/codex/i8-s3a-ghcr-signed-candidate" ]
+          [ "$GITHUB_REF" = "refs/heads/main" ]
           [ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]
           [ "$REGISTRY_REPOSITORY" = "ghcr.io/botond1/3d-printer-slicer-api" ]
           [ "$DISCOVERY_TAG" = "candidate-$CANDIDATE_SHA" ]
@@ -201,46 +202,108 @@ jobs:
           retain-image: 'true'
           publish-mode: 'true'
 
+      - name: Re-prove the exact protected main head at the registry-write boundary
+        id: registry_write_authorization
+        if: ${{ steps.exact_image_gate.outcome == 'success' }}
+        env:
+          EXPECTED_MAIN_SHA: ${{ needs.preflight.outputs.candidate_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_sha="$(git ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+          [ "$remote_sha" = "$EXPECTED_MAIN_SHA" ]
+          echo "classification=success" >> "$GITHUB_OUTPUT"
+
       - name: Authenticate to the fixed GHCR repository after the gate
         id: registry_login
-        if: ${{ steps.exact_image_gate.outcome == 'success' }}
+        if: ${{ steps.registry_write_authorization.outcome == 'success' }}
         uses: docker/login-action@abd2ef45e78c5afb21d64d4ca52ee8550d9572c7 # v4.5.1
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Prove the discovery tag is absent before publication
+      - name: Prove an absent new tag or the exact recovery digest
         id: registry_preflight
         if: ${{ steps.registry_login.outcome == 'success' }}
+        env:
+          EXPECTED_LOCAL_IMAGE_ID: ${{ steps.exact_image_gate.outputs.image-id }}
         shell: bash
         run: |
           set -euo pipefail
           tag_ref="$REGISTRY_REPOSITORY:$DISCOVERY_TAG"
-          if docker manifest inspect "$tag_ref" >"$RUNNER_TEMP/i8-existing-manifest.json" \
-              2>"$RUNNER_TEMP/i8-existing-manifest.err"; then
-            echo "Refusing to overwrite existing discovery tag $tag_ref." >&2
-            exit 2
-          fi
-          if ! grep -Eiq 'manifest unknown|name unknown|not found' \
-              "$RUNNER_TEMP/i8-existing-manifest.err"; then
-            echo "Registry absence could not be distinguished from an infrastructure failure." >&2
-            exit 2
-          fi
-          rm -f -- "$RUNNER_TEMP/i8-existing-manifest.json" "$RUNNER_TEMP/i8-existing-manifest.err"
-          echo "tag_ref=$tag_ref" >> "$GITHUB_OUTPUT"
+          raw_file="$RUNNER_TEMP/i8-existing-manifest.json"
+          error_file="$RUNNER_TEMP/i8-existing-manifest.err"
+          case "$PUBLICATION_MODE" in
+            publish_new)
+              if docker buildx imagetools inspect "$tag_ref" --raw >"$raw_file" \
+                  2>"$error_file"; then
+                echo "Refusing to overwrite existing discovery tag $tag_ref." >&2
+                exit 2
+              fi
+              if ! grep -Eiq 'manifest unknown|name unknown|not found' "$error_file"; then
+                echo "Registry absence could not be distinguished from an infrastructure failure." >&2
+                exit 2
+              fi
+              tag_state=absent
+              ;;
+            recover_exact_digest)
+              [[ "$EXISTING_REGISTRY_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+              docker buildx imagetools inspect "$tag_ref" --raw >"$raw_file" 2>"$error_file"
+              observed_digest="sha256:$(sha256sum "$raw_file" | awk '{print $1}')"
+              observed_config="$(RAW_FILE="$raw_file" node -e \
+                "const fs=require('node:fs');const m=JSON.parse(fs.readFileSync(process.env.RAW_FILE,'utf8'));process.stdout.write(typeof m?.config?.digest==='string'&&!String(m?.mediaType).includes('index')?m.config.digest:'invalid')")"
+              [ "$observed_digest" = "$EXISTING_REGISTRY_DIGEST" ]
+              [ "$observed_config" = "$EXPECTED_LOCAL_IMAGE_ID" ]
+              [ "$observed_digest" != "$EXPECTED_LOCAL_IMAGE_ID" ]
+              tag_state=matching_existing
+              ;;
+            *)
+              exit 2
+              ;;
+          esac
+          rm -f -- "$raw_file" "$error_file"
+          {
+            echo "tag_ref=$tag_ref"
+            echo "tag_state=$tag_state"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Push the same fully gated local image under one discovery tag
+      - name: Materialize a new tag or adopt its exact existing digest
         id: registry_push
         if: ${{ steps.registry_preflight.outcome == 'success' }}
         env:
           EXPECTED_LOCAL_IMAGE_ID: ${{ steps.exact_image_gate.outputs.image-id }}
           TAG_REF: ${{ steps.registry_preflight.outputs.tag_ref }}
+          TAG_STATE: ${{ steps.registry_preflight.outputs.tag_state }}
         shell: bash
         run: |
           set -euo pipefail
           [ "$(docker image inspect --format '{{.Id}}' "$IMAGE_REF")" = "$EXPECTED_LOCAL_IMAGE_ID" ]
+          if [ "$PUBLICATION_MODE" = "recover_exact_digest" ]; then
+            [ "$TAG_STATE" = "matching_existing" ]
+            [[ "$EXISTING_REGISTRY_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+            remote_raw="$RUNNER_TEMP/i8-recovery-manifest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
+            docker buildx imagetools inspect "$TAG_REF" --raw > "$remote_raw"
+            registry_digest="sha256:$(sha256sum "$remote_raw" | awk '{print $1}')"
+            remote_config_digest="$(REMOTE_RAW="$remote_raw" node -e \
+              "const fs=require('node:fs');const m=JSON.parse(fs.readFileSync(process.env.REMOTE_RAW,'utf8'));process.stdout.write(typeof m?.config?.digest==='string'&&!String(m?.mediaType).includes('index')?m.config.digest:'invalid')")"
+            [ "$registry_digest" = "$EXISTING_REGISTRY_DIGEST" ]
+            [ "$remote_config_digest" = "$EXPECTED_LOCAL_IMAGE_ID" ]
+            [ "$registry_digest" != "$EXPECTED_LOCAL_IMAGE_ID" ]
+            {
+              echo "remote_published=matching"
+              echo "registry_digest=$registry_digest"
+              echo "digest_ref=$REGISTRY_REPOSITORY@$registry_digest"
+              echo "registry_operation=recovered_existing"
+            } >> "$GITHUB_OUTPUT"
+            rm -f -- "$remote_raw"
+            exit 0
+          fi
+          [ "$PUBLICATION_MODE" = "publish_new" ]
+          [ "$TAG_STATE" = "absent" ]
+          [ -z "$EXISTING_REGISTRY_DIGEST" ]
           docker image tag "$IMAGE_REF" "$TAG_REF"
+          echo "local_tag_created=true" >> "$GITHUB_OUTPUT"
           push_log="$RUNNER_TEMP/i8-push-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
           remote_raw="$RUNNER_TEMP/i8-pushed-manifest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
           set +e
@@ -252,9 +315,8 @@ jobs:
           registry_digest=
           remote_publication_state=unknown
           for attempt in $(seq 1 6); do
-            if raw_manifest="$(docker buildx imagetools inspect "$TAG_REF" --raw 2>/dev/null)"; then
-              printf '%s' "$raw_manifest" > "$remote_raw"
-              registry_digest="sha256:$(printf '%s' "$raw_manifest" | sha256sum | awk '{print $1}')"
+            if docker buildx imagetools inspect "$TAG_REF" --raw > "$remote_raw" 2>/dev/null; then
+              registry_digest="sha256:$(sha256sum "$remote_raw" | awk '{print $1}')"
               remote_config_digest="$(REMOTE_RAW="$remote_raw" node -e \
                 "const fs=require('node:fs');const m=JSON.parse(fs.readFileSync(process.env.REMOTE_RAW,'utf8'));process.stdout.write(typeof m?.config?.digest==='string'&&!String(m?.mediaType).includes('index')?m.config.digest:'invalid')")"
               if [ "$remote_config_digest" = "$EXPECTED_LOCAL_IMAGE_ID" ]; then
@@ -272,6 +334,7 @@ jobs:
              [[ "$registry_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
             echo "registry_digest=$registry_digest" >> "$GITHUB_OUTPUT"
             echo "digest_ref=$REGISTRY_REPOSITORY@$registry_digest" >> "$GITHUB_OUTPUT"
+            echo "registry_operation=published_new" >> "$GITHUB_OUTPUT"
           fi
           rm -f -- "$push_log" "$remote_raw"
           if [ "$push_status" -ne 0 ]; then
@@ -302,14 +365,12 @@ jobs:
           digest_raw="$RUNNER_TEMP/i8-digest-raw-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
           tag_summary="$RUNNER_TEMP/i8-tag-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
           digest_summary="$RUNNER_TEMP/i8-digest-summary-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
-          tag_manifest="$(docker buildx imagetools inspect "$TAG_REF" --raw)"
-          digest_manifest="$(docker buildx imagetools inspect "$DIGEST_REF" --raw)"
-          printf '%s' "$tag_manifest" > "$tag_raw"
-          printf '%s' "$digest_manifest" > "$digest_raw"
-          tag_hash="sha256:$(printf '%s' "$tag_manifest" | sha256sum | awk '{print $1}')"
-          digest_hash="sha256:$(printf '%s' "$digest_manifest" | sha256sum | awk '{print $1}')"
+          docker buildx imagetools inspect "$TAG_REF" --raw > "$tag_raw"
+          docker buildx imagetools inspect "$DIGEST_REF" --raw > "$digest_raw"
+          tag_hash="sha256:$(sha256sum "$tag_raw" | awk '{print $1}')"
+          digest_hash="sha256:$(sha256sum "$digest_raw" | awk '{print $1}')"
           [ "$tag_hash" = "$REGISTRY_DIGEST" ] && [ "$digest_hash" = "$REGISTRY_DIGEST" ]
-          [ "$tag_manifest" = "$digest_manifest" ]
+          cmp -- "$tag_raw" "$digest_raw"
           docker buildx imagetools inspect "$TAG_REF" --format '{{json .}}' > "$tag_summary"
           docker buildx imagetools inspect "$DIGEST_REF" --format '{{json .}}' > "$digest_summary"
           TAG_RAW="$tag_raw" DIGEST_RAW="$digest_raw" \
@@ -362,7 +423,14 @@ jobs:
         run: |
           set -euo pipefail
           [ "$RUNTIME_IMAGE_REF" = "local/slicer-api-publication:$CANDIDATE_SHA" ]
-          docker image rm "$TAG_REF"
+          if docker image inspect "$TAG_REF" >/dev/null 2>&1; then
+            [ "$PUBLICATION_MODE" = "publish_new" ]
+            [ "$(docker image inspect --format '{{.Id}}' "$TAG_REF")" = "$EXPECTED_LOCAL_IMAGE_ID" ]
+            docker image rm "$TAG_REF"
+          elif [ "$PUBLICATION_MODE" = "publish_new" ]; then
+            echo "The run-owned fresh publication tag is missing before digest pull." >&2
+            exit 2
+          fi
           docker image rm "$RUNTIME_IMAGE_REF"
           if docker image inspect "$EXPECTED_LOCAL_IMAGE_ID" >/dev/null 2>&1; then
             docker image rm "$EXPECTED_LOCAL_IMAGE_ID"
@@ -639,9 +707,8 @@ jobs:
         run: |
           set -euo pipefail
           final_tag_raw="$RUNNER_TEMP/i8-final-tag-raw-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
-          raw_manifest="$(docker buildx imagetools inspect "$TAG_REF" --raw)"
-          printf '%s' "$raw_manifest" > "$final_tag_raw"
-          observed_digest="sha256:$(printf '%s' "$raw_manifest" | sha256sum | awk '{print $1}')"
+          docker buildx imagetools inspect "$TAG_REF" --raw > "$final_tag_raw"
+          observed_digest="sha256:$(sha256sum "$final_tag_raw" | awk '{print $1}')"
           [ "$observed_digest" = "$REGISTRY_DIGEST" ]
           FINAL_TAG_RAW="$final_tag_raw" node -e \
             "const fs=require('node:fs');const m=JSON.parse(fs.readFileSync(process.env.FINAL_TAG_RAW,'utf8'));if(String(m?.mediaType).includes('index')||m?.config?.digest!==process.env.EXPECTED_LOCAL_IMAGE_ID)process.exit(2)"
@@ -656,6 +723,7 @@ jobs:
           DIGEST_REF: ${{ steps.registry_identity.outputs.digest_ref }}
           RUNTIME_IMAGE_REF: ${{ needs.preflight.outputs.image_ref }}
           TAG_REF: ${{ steps.registry_preflight.outputs.tag_ref }}
+          LOCAL_TAG_CREATED: ${{ steps.registry_push.outputs.local_tag_created }}
           PROVENANCE_BUNDLE_PATH: ${{ steps.provenance_attestation.outputs.bundle-path }}
           SBOM_BUNDLE_PATH: ${{ steps.sbom_attestation.outputs.bundle-path }}
         shell: bash
@@ -727,7 +795,30 @@ jobs:
           exact_container_cleanup "$I2_UID_PROBE_NAME"
           exact_container_cleanup "$I2_GID_PROBE_NAME"
           exact_container_cleanup "$I2_ORCA_PROBE_NAME"
-          for exact_ref in "$TAG_REF" "$RUNTIME_IMAGE_REF" "$DIGEST_REF"; do
+          if [ "$PUBLICATION_MODE" = "publish_new" ]; then
+            [ "$LOCAL_TAG_CREATED" = "true" ] || cleanup_error local_tag_creation_proof_failure
+          elif [ "$PUBLICATION_MODE" = "recover_exact_digest" ]; then
+            [ -z "$LOCAL_TAG_CREATED" ] || cleanup_error local_tag_creation_proof_failure
+          else
+            cleanup_error local_tag_creation_proof_failure
+          fi
+          if [ -n "$TAG_REF" ]; then
+            if tag_actual_id="$(exact_image_id "$TAG_REF")"; then tag_image_state=0; else tag_image_state=$?; fi
+            if [ "$tag_image_state" -eq 0 ]; then
+              if [ "$PUBLICATION_MODE" = "publish_new" ] && \
+                 [ "$LOCAL_TAG_CREATED" = "true" ] && \
+                 [ "$tag_actual_id" = "$EXPECTED_LOCAL_IMAGE_ID" ]; then
+                docker image rm "$TAG_REF" >/dev/null 2>&1 || cleanup_error image_remove_failure
+                if exact_image_id "$TAG_REF" >/dev/null; then tag_image_state=0; else tag_image_state=$?; fi
+                [ "$tag_image_state" -eq 1 ] || cleanup_error image_cleanup_verification_failure
+              else
+                cleanup_error image_ownership_failure
+              fi
+            elif [ "$tag_image_state" -ne 1 ]; then
+              cleanup_error image_inspect_failure
+            fi
+          fi
+          for exact_ref in "$RUNTIME_IMAGE_REF" "$DIGEST_REF"; do
             [ -n "$exact_ref" ] || continue
             if actual_id="$(exact_image_id "$exact_ref")"; then image_state=0; else image_state=$?; fi
             if [ "$image_state" -eq 0 ]; then
@@ -763,6 +854,7 @@ jobs:
           exact_temp_files=(
             "$RUNNER_TEMP/i8-existing-manifest.json"
             "$RUNNER_TEMP/i8-existing-manifest.err"
+            "$RUNNER_TEMP/i8-recovery-manifest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
             "$RUNNER_TEMP/i8-push-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.log"
             "$RUNNER_TEMP/i8-pushed-manifest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
             "$RUNNER_TEMP/i8-tag-raw-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json"
@@ -849,12 +941,13 @@ jobs:
           fi
           echo "classification=success" >> "$GITHUB_OUTPUT"
 
-      - name: Generate and validate bounded I8 provenance correlation
+      - name: Generate and validate bounded I11 main-candidate provenance
         id: publication_evidence
         if: ${{ always() && steps.final_tag_identity.outcome == 'success' && steps.publication_cleanup.outcome == 'success' }}
         env:
           EXPECTED_LOCAL_IMAGE_ID: ${{ steps.exact_image_gate.outputs.image-id }}
           REGISTRY_DIGEST: ${{ steps.registry_push.outputs.registry_digest }}
+          REGISTRY_OPERATION: ${{ steps.registry_push.outputs.registry_operation }}
           PREPUBLICATION_GATE_OUTCOME: ${{ steps.exact_image_gate.outcome }}
           RUNTIME_IDENTITY_OUTCOME: ${{ steps.exact_image_gate.outcome }}
           ORCA_CLI_SMOKE_OUTCOME: ${{ steps.exact_image_gate.outcome }}
@@ -889,7 +982,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          draft="$EVIDENCE_DIR/i8-publication-draft.json"
+          draft="$EVIDENCE_DIR/i11-publication-draft.json"
           if [ -e "$draft" ] || [ -L "$draft" ]; then exit 2; fi
           node <<'NODE'
           const crypto = require('node:crypto');
@@ -908,13 +1001,19 @@ jobs:
           const grype = JSON.parse(fs.readFileSync(grypePath, 'utf8'));
           const scannerCounts = countScannerFindings(grype);
           const scanner = scannerIdentity(grype);
+          const recovering = process.env.PUBLICATION_MODE === 'recover_exact_digest';
+          if ((!recovering && (process.env.PUBLICATION_MODE !== 'publish_new'
+                || process.env.REGISTRY_OPERATION !== 'published_new'))
+              || (recovering && process.env.REGISTRY_OPERATION !== 'recovered_existing')) {
+            process.exit(2);
+          }
           const evidence = {
-            schema_version: 'i8-s3a-signed-candidate-provenance-v2',
+            schema_version: 'i11-main-signed-candidate-provenance-v1',
             source: {
               repository: 'https://github.com/Botond1/3D-Printer-Slicer-API',
               repository_slug: 'Botond1/3D-Printer-Slicer-API',
               sha: process.env.CANDIDATE_SHA,
-              ref: 'refs/heads/codex/i8-s3a-ghcr-signed-candidate'
+              ref: 'refs/heads/main'
             },
             workflow: {
               name: 'Candidate Publication - Signed GHCR (NO DEPLOY)',
@@ -1011,10 +1110,13 @@ jobs:
               wrong_repository_rejected: true, result: 'success'
             },
             publication: {
-              gate_completed_before_login: true, tag_absent_before_push: true,
-              same_image_pushed: true, second_build_absent: true, mutable_tag_absent: true,
+              gate_completed_before_login: true, tag_absent_before_push: !recovering,
+              same_image_pushed: !recovering, second_build_absent: true, mutable_tag_absent: true,
               overwrite_absent: true, remote_digest_preserved: true,
-              status: 'published_attested_verified'
+              status: recovering ? 'recovered_attested_verified' : 'published_attested_verified',
+              mode: process.env.PUBLICATION_MODE,
+              existing_exact_digest_verified: recovering,
+              candidate_manifest_write_performed: !recovering
             },
             cleanup: {
               containers_removed: true, networks_removed: true, local_tags_removed: true,
@@ -1023,14 +1125,14 @@ jobs:
             },
             aggregator: {
               evidence_boundary: 'bounded_allowlist_only',
-              result: 'I8_CANDIDATE_EVIDENCE_READY'
+              result: 'I11_MAIN_CANDIDATE_EVIDENCE_READY'
             },
             deployed_digest: 'not_applicable_no_deploy'
           };
-          fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, 'i8-publication-draft.json'),
+          fs.writeFileSync(path.join(process.env.EVIDENCE_DIR, 'i11-publication-draft.json'),
             `${JSON.stringify(evidence, null, 2)}\n`, {flag: 'wx', mode: 0o600});
           NODE
-          node scripts/i8-write-publication-evidence.js
+          node scripts/i11-write-publication-evidence.js
 
       - name: Require the exact bounded publication evidence set
         id: publication_evidence_boundary
@@ -1045,8 +1147,8 @@ jobs:
           if (process.env.EVIDENCE_DIR !== root || fs.realpathSync(root) !== root
               || fs.lstatSync(root).isSymbolicLink()) process.exit(2);
           const limits = new Map([
-            ['i8-publication-draft.json', 96 * 1024],
-            ['i8-candidate-provenance.json', 96 * 1024],
+            ['i11-publication-draft.json', 96 * 1024],
+            ['i11-main-candidate-provenance.json', 96 * 1024],
             ['image-identity.txt', 4 * 1024],
             ['runtime-diagnostics.json', 64 * 1024],
             ['topology-evidence.json', 16 * 1024],
@@ -1075,9 +1177,9 @@ jobs:
         if: ${{ steps.publication_evidence_boundary.outcome == 'success' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: i8-signed-candidate-${{ needs.preflight.outputs.candidate_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: i11-main-signed-candidate-${{ needs.preflight.outputs.candidate_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/i8-candidate-provenance.json
+            ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/i11-main-candidate-provenance.json
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/image-identity.txt
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/runtime-diagnostics.json
             ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/topology-evidence.json
@@ -1100,7 +1202,7 @@ jobs:
           if [ -L "$root" ]; then
             status=1
           elif [ -d "$root" ]; then
-            allowed=(i8-publication-draft.json i8-candidate-provenance.json image-identity.txt
+            allowed=(i11-publication-draft.json i11-main-candidate-provenance.json image-identity.txt
               runtime-diagnostics.json topology-evidence.json sbom.spdx.json grype.json
               syft.yaml grype.yaml)
             mapfile -t actual < <(find "$root" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
@@ -1136,6 +1238,7 @@ jobs:
         if: ${{ always() }}
         env:
           PREPUBLICATION_OUTCOME: ${{ steps.exact_image_gate.outcome }}
+          REGISTRY_WRITE_AUTHORIZATION_OUTCOME: ${{ steps.registry_write_authorization.outcome }}
           REGISTRY_LOGIN_OUTCOME: ${{ steps.registry_login.outcome }}
           REGISTRY_PREFLIGHT_OUTCOME: ${{ steps.registry_preflight.outcome }}
           PUSH_OUTCOME: ${{ steps.registry_push.outcome }}
@@ -1155,37 +1258,56 @@ jobs:
           PUBLICATION_CLEANUP_OUTCOME: ${{ steps.publication_cleanup.outcome }}
           EVIDENCE_CLEANUP_OUTCOME: ${{ steps.evidence_cleanup.outcome }}
           REGISTRY_DIGEST: ${{ steps.registry_push.outputs.registry_digest }}
+          REGISTRY_OPERATION: ${{ steps.registry_push.outputs.registry_operation }}
+          PUBLICATION_MODE: ${{ needs.preflight.outputs.publication_mode }}
         shell: bash
         run: |
           set -euo pipefail
-          classification=I8_SIGNED_CANDIDATE_COMPLETE
+          classification=I11_MAIN_SIGNED_CANDIDATE_COMPLETE
           failed_step=none
           if [ "$PREPUBLICATION_OUTCOME" != "success" ]; then
-            classification=BLOCKED_I8_PREPUBLICATION_GATE
+            classification=BLOCKED_I11_PREPUBLICATION_GATE
             failed_step=exact_image_gate
+          elif [ "$REGISTRY_WRITE_AUTHORIZATION_OUTCOME" != "success" ]; then
+            classification=BLOCKED_I11_PREPUBLICATION_GATE
+            failed_step=registry_write_authorization
+          elif [ "$PUBLICATION_MODE" != "publish_new" ] && \
+               [ "$PUBLICATION_MODE" != "recover_exact_digest" ]; then
+            classification=BLOCKED_I11_PREPUBLICATION_GATE
+            failed_step=publication_mode
+          elif [ "$REGISTRY_LOGIN_OUTCOME" != "success" ]; then
+            classification=BLOCKED_I11_PREPUBLICATION_GATE
+            failed_step=registry_login
+          elif [ "$PUBLICATION_MODE" = "recover_exact_digest" ] && { \
+              [ "$REGISTRY_PREFLIGHT_OUTCOME" != "success" ] || \
+              [ "$PUSH_OUTCOME" != "success" ] || \
+              [ "$REMOTE_PUBLISHED" != "matching" ] || \
+              [ "$REGISTRY_OPERATION" != "recovered_existing" ]; }; then
+            classification=BLOCKED_I11_RECOVERY_IDENTITY
+            failed_step=recovery_registry_identity
           elif [ "$REMOTE_PUBLISHED" = "matching" ] && \
                [ "$PUSH_OUTCOME" != "success" ]; then
-            classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
+            classification=I11_CANDIDATE_PUBLISHED_UNATTESTED
             failed_step=registry_push
           elif [ "$REMOTE_PUBLISHED" = "matching" ] && \
                [ "$REGISTRY_IDENTITY_OUTCOME" != "success" ]; then
-            classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
+            classification=I11_CANDIDATE_PUBLISHED_UNATTESTED
             failed_step=registry_identity
           elif [ "$REMOTE_PUBLISHED" = "matching" ] && \
                [ "$DIGEST_PULL_OUTCOME" != "success" ]; then
-            classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
+            classification=I11_CANDIDATE_PUBLISHED_UNATTESTED
             failed_step=digest_pull
           elif [ "$REMOTE_PUBLISHED" = "matching" ] && \
                [ "$DIGEST_RUNTIME_IDENTITY_OUTCOME" != "success" ]; then
-            classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
+            classification=I11_CANDIDATE_PUBLISHED_UNATTESTED
             failed_step=digest_runtime_identity
           elif [ "$REMOTE_PUBLISHED" = "matching" ] && \
                [ "$DIGEST_ROUNDTRIP_OUTCOME" != "success" ]; then
-            classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
+            classification=I11_CANDIDATE_PUBLISHED_UNATTESTED
             failed_step=digest_roundtrip
           elif [ "$REMOTE_PUBLISHED" = "matching" ] && { \
               [ "$PROVENANCE_OUTCOME" != "success" ] || [ "$SBOM_ATTESTATION_OUTCOME" != "success" ]; }; then
-            classification=I8_CANDIDATE_PUBLISHED_UNATTESTED
+            classification=I11_CANDIDATE_PUBLISHED_UNATTESTED
             if [ "$PROVENANCE_OUTCOME" != "success" ]; then
               failed_step=provenance_attestation
             else
@@ -1193,24 +1315,23 @@ jobs:
             fi
           elif [ "$REMOTE_PUBLISHED" = "matching" ] && { \
               [ "$VERIFICATION_OUTCOME" != "success" ] || [ "$NEGATIVE_OUTCOME" != "success" ]; }; then
-            classification=I8_CANDIDATE_ATTESTATION_UNVERIFIED
+            classification=I11_CANDIDATE_ATTESTATION_UNVERIFIED
             if [ "$VERIFICATION_OUTCOME" != "success" ]; then
               failed_step=verify_attestations
             else
               failed_step=negative_verification
             fi
-          elif [ "$REGISTRY_LOGIN_OUTCOME" != "success" ] || \
-               [ "$REGISTRY_PREFLIGHT_OUTCOME" != "success" ]; then
-            classification=BLOCKED_I8_PREPUBLICATION_GATE
-            if [ "$REGISTRY_LOGIN_OUTCOME" != "success" ]; then
-              failed_step=registry_login
-            else
-              failed_step=registry_preflight
-            fi
+          elif [ "$REGISTRY_PREFLIGHT_OUTCOME" != "success" ]; then
+            classification=BLOCKED_I11_PREPUBLICATION_GATE
+            failed_step=registry_preflight
           elif [ "$FINAL_TAG_IDENTITY_OUTCOME" != "success" ]; then
-            classification=I8_PUBLICATION_INFRASTRUCTURE_FAILURE
+            classification=I11_PUBLICATION_INFRASTRUCTURE_FAILURE
             failed_step=final_tag_identity
           elif [ "$REMOTE_PUBLISHED" != "matching" ] || [ "$PUSH_OUTCOME" != "success" ] || \
+               { [ "$PUBLICATION_MODE" = "publish_new" ] && \
+                 [ "$REGISTRY_OPERATION" != "published_new" ]; } || \
+               { [ "$PUBLICATION_MODE" = "recover_exact_digest" ] && \
+                 [ "$REGISTRY_OPERATION" != "recovered_existing" ]; } || \
                [ "$REGISTRY_IDENTITY_OUTCOME" != "success" ] || \
                [ "$DIGEST_PULL_OUTCOME" != "success" ] || \
                [ "$DIGEST_RUNTIME_IDENTITY_OUTCOME" != "success" ] || \
@@ -1222,13 +1343,14 @@ jobs:
                [ "$PUBLICATION_CLEANUP_OUTCOME" != "success" ] || \
                [ "$EVIDENCE_CLEANUP_OUTCOME" != "success" ] || \
                [[ ! "$REGISTRY_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            classification=I8_PUBLICATION_INFRASTRUCTURE_FAILURE
+            classification=I11_PUBLICATION_INFRASTRUCTURE_FAILURE
             failed_step=publication_or_evidence_boundary
           fi
           {
-            echo "### I8 signed candidate publication"
+            echo "### I11 protected-main signed candidate publication"
             echo
             echo "Classification: \`$classification\`."
+            echo "Publication mode: \`$PUBLICATION_MODE\`."
             echo "Failed step: \`$failed_step\`."
             echo "Publication cleanup outcome: \`$PUBLICATION_CLEANUP_OUTCOME\`."
             echo "Evidence cleanup outcome: \`$EVIDENCE_CLEANUP_OUTCOME\`."
@@ -1239,9 +1361,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$PUBLICATION_CLEANUP_OUTCOME" != "success" ] || \
              [ "$EVIDENCE_CLEANUP_OUTCOME" != "success" ]; then
-            echo "::error title=I8 cleanup::publication=$PUBLICATION_CLEANUP_OUTCOME,evidence=$EVIDENCE_CLEANUP_OUTCOME"
+            echo "::error title=I11 cleanup::publication=$PUBLICATION_CLEANUP_OUTCOME,evidence=$EVIDENCE_CLEANUP_OUTCOME"
           fi
-          if [ "$classification" != "I8_SIGNED_CANDIDATE_COMPLETE" ]; then
-            echo "::error title=I8 publication::$classification"
+          if [ "$classification" != "I11_MAIN_SIGNED_CANDIDATE_COMPLETE" ]; then
+            echo "::error title=I11 publication::$classification"
             exit 1
           fi
