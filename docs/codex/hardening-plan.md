@@ -1,28 +1,76 @@
 # Hardening plan
 
-## I10 mainline integration and governance checkpoint
+## I11 protected-main signed-candidate checkpoint
 
-Status: `PENDING_PR_AND_EXACT_MAIN_HOSTED_GATES` at commit time.
+Status: `PENDING_LOCAL_AND_HOSTED_VALIDATION` at commit time. Baseline is exact
+protected-main SHA `8253160eef1c3e00c1e40826ec61fd97563ddd9b`; branch is
+`codex/i11-release-productization`.
 
-I10 connects the already-green no-deploy Source/Image gates to protected-main
-integration without changing application or image behavior. Exit criteria:
+I11 productizes candidate publication without creating a deployment path. Exit
+criteria:
 
-1. exact I9 ancestry and conflict-free merge proof;
-2. PR-only main integration with merge-commit ancestry preservation;
-3. green Source and Image contexts on the PR merge candidate;
-4. strict branch protection bound to both GitHub Actions contexts;
-5. exact post-merge main SHA Source and Image success;
-6. final policy/settings/SHA readback and proof that no deploy or publication
-   workflow ran.
+1. manual `workflow_dispatch` only from exact current protected `main`, with
+   exact repository, actor, ref, requested/event/remote SHA and ancestry;
+2. mutually exclusive `publish_new` and `recover_exact_digest` inputs with
+   mode-bound confirmations and strict digest emptiness/format rules;
+3. one `linux/amd64` build and complete Source/Image-equivalent candidate gate
+   before registry login or any write;
+4. exact `candidate-publication` environment readback: ID `20443404498`,
+   protected branches true, custom branch policies false, exactly one
+   `branch_policy` protection rule (ID `63481958`), no reviewer/wait-timer rules,
+   secrets, variables or deployments, and workflow `deployment: false`; this
+   configuration is live-verified on 2026-08-23;
+5. new mode proves the SHA-derived tag absent and pushes only the gated image;
+   recovery proves the existing tag's exact manifest digest and config identity
+   match that image and performs no push, overwrite or delete;
+6. both modes complete digest round trip, runtime and production-Compose
+   identity, SLSA/SPDX attestations, positive/negative verification, bounded
+   mode-aware evidence, upload and exact cleanup;
+7. a successful protected-main Candidate Publication `workflow_run` re-proves
+   the upstream run and exact single artifact, builds a dynamic distinct
+   previous/current digest-only manifest, re-verifies both images' SLSA/SPDX
+   attestations, completes the hardened I9 failure/automatic-rollback path, and
+   uploads bounded evidence after exact cleanup with read-only permissions;
+8. exact implementation SHA local gates plus hosted Source, Image, one manual
+   Candidate Publication run and its automatic rehearsal are green;
+9. final repository/environment/SHA/digest/attestation readback proves that no
+   deploy, VPS/SSH, mutable tag, release/Git tag or production action occurred.
 
-The live bootstrap rule already requires a PR, includes administrators and
-forbids force-push/deletion. Required contexts remain pending until first
-observed on the I10 PR. A required human approval is not enabled because the
-repository has one collaborator who cannot self-approve; this is an explicit
-capability gap. I10 never authorizes deployment, VPS access or registry write.
+`Botond1` is the sole collaborator, so a required human reviewer cannot be
+configured without deadlocking the environment. The empty reviewer list is
+`HUMAN_REVIEWER_CAPABILITY_UNAVAILABLE`, not approval. Environment
+`candidate-publication` is `LIVE_CONFIG_VERIFIED`; every I11 implementation,
+local, hosted, publication and automatic-rehearsal result remains `PENDING`
+until observed. A partial new publication is preserved and may continue only
+through exact recovery; foreign/ambiguous identity fails closed.
 
-See
-[`evidence/i10-mainline-governance.md`](evidence/i10-mainline-governance.md).
+Hosted S4/S5 topology and I9 rollback rehearsal evidence remains ephemeral and
+does not prove production callers, proxy/firewall, secret delivery, deployed
+digest, Hostinger/VPS state, live readiness or rollback. See
+[`evidence/i11-mainline-signed-candidate.md`](evidence/i11-mainline-signed-candidate.md).
+
+## Verified I10 mainline integration and governance checkpoint
+
+Status: `VERIFIED` at exact main SHA
+`8253160eef1c3e00c1e40826ec61fd97563ddd9b`.
+
+I10 completed all planned exits: exact I9 ancestry, PR/merge-commit integration,
+Source run `32662043454`, Image run `32662043476`, and live strict policy
+readback. Exactly `main` is protected. The two required GitHub Actions contexts
+are `Validate exact source candidate (NO DEPLOY)` and
+`Build once, inspect, scan, and discard (NO DEPLOY)`, both app ID `15368`.
+Main requires a PR, includes administrators, forbids force-push/deletion,
+requires conversation resolution and allows merge commits only. Squash/rebase
+are disabled; rulesets are empty and required signatures are not enabled.
+Actions default permission is read and Actions cannot approve pull requests.
+
+Required approvals are zero because the sole collaborator cannot self-approve;
+this remains `HUMAN_REVIEWER_CAPABILITY_UNAVAILABLE`. I10 ran no publication or
+deployment workflow and never authorized registry write, deployment, VPS/SSH or
+production mutation. The unchanged
+[`evidence/i10-mainline-governance.md`](evidence/i10-mainline-governance.md)
+is the honest commit-time checkpoint; this canonical section records its later
+verified exits.
 
 ## I9/S3b ephemeral staging and rollback checkpoint
 
@@ -32,6 +80,12 @@ Exact code-bearing SHA `c632a75fcb83f2dbcde93d31ef0170de095c4abd`
 passed hosted Source `30623957952`, Image `30623957930`, and I9 rehearsal
 `30623957946`. This completes the repository/hosted-ephemeral foundation only;
 real staging/production promotion remains `UNVERIFIED_NOT_AUTHORIZED`.
+
+At this historical checkpoint the rehearsal workflow was exact-I9-branch
+push-triggered. I11 changes the current workflow to a successful protected-main
+Candidate Publication `workflow_run` and dynamically supplies the signed pair
+from one exact publication artifact plus the release policy. The new automatic
+path remains `PENDING`; it does not change the historical I9 result.
 
 Baseline is completed I8 SHA
 `1fffab87960c675a053ae814d374cab331fbb14d`; target branch is
@@ -325,9 +379,9 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1b - queue deadlines and abort contract | `VERIFIED` | S1a workspace ownership | integrated queue scheduling/deadline/counter/runtime lifecycle | Independent deadlines, request/shutdown AbortSignal propagation, typed `SLICE_QUEUE_SHUTDOWN`, single settlement, active-slot retention, and timer/listener/counter/workspace cleanup have deterministic local evidence. |
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `IN_PROGRESS` | artifact work waits for S1a; process limits integrate with S1b/S1c; container envelope waits for S3a image controls | I3 implements a bounded Node HTTP-server subset; resource/archive, artifact/pricing, and container-permission exits remain open | I3 locally implements and focuses tests on header/request/keep-alive timeouts, header/connection counts, and requests/socket with bounded fallback. Final aggregate and exact-SHA evidence are pending; measured VPS/proxy/CPU/RAM/PID/disk/archive/model/output caps, streaming limits, artifact retention/correlation, atomic pricing, and read-only state separation remain incomplete. |
-| S3a - repository build/provenance and automatic-deploy separation | `VERIFIED_SIGNED_CANDIDATE; POLICY_UNVERIFIED` | S0.1; exact hosted I7 baseline green | I8 provides the shared build-once gate, least-privilege digest-bound GHCR publication, SLSA/SPDX attestations, positive and negative verification, bounded v2 evidence, and no-deploy aggregation | Exact I8 SHA `1fffab87960c675a053ae814d374cab331fbb14d` passed Source `30592235730`, Image `30592235708`, and Candidate Publication `30592235740`. Immutable digest `sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5` is signed and attested. Branch protection, required checks, approval policy, deployed topology, and production promotion remain `UNVERIFIED` and are not inferred from the candidate checkpoint. |
+| S3a - repository build/provenance and automatic-deploy separation | `VERIFIED_SIGNED_CANDIDATE; MAIN_GOVERNANCE_VERIFIED; I11_PRODUCTIZATION_PENDING` | S0.1; exact hosted I7/I8 and protected-main I10 evidence green | I8 provides build-once digest-bound GHCR publication and attestations; I10 provides strict protected-main Source/Image governance; I11 separately productizes manual main publication/recovery with no deploy | Exact I8 SHA `1fffab87960c675a053ae814d374cab331fbb14d` passed Source `30592235730`, Image `30592235708`, and Candidate Publication `30592235740`. I10 main SHA `8253160eef1c3e00c1e40826ec61fd97563ddd9b` passed Source `32662043454` and Image `32662043476`; required checks/main protection and environment `candidate-publication` ID `20443404498` are live-verified. I11 implementation, hosted publication/recovery and automatic rehearsal evidence remain `PENDING`. Human review, deployed topology and production promotion are not inferred. |
 | S4 - service trust and topology | `IN_PROGRESS` | S1a/S1b/S1c/S2 security surfaces and S3a design evidence | I5 supplies scoped trust; I6 selects the internal private-peer/no-host-port topology | Repository validation requires authenticated peer ingress, auth rejection, no API external route, and calibrated API/native DNS/TCP/UDP denial. Deployed callers, proxy/firewall, secrets, digest, and egress remain `UNVERIFIED`. |
-| S3b - staging and promotion drill | `VERIFIED_EPHEMERAL_FOUNDATION; PRODUCTION_UNVERIFIED` | signed S3a candidate; repository S4/S5 topology controls; explicit I9 authorization | I9 read-only hosted rehearsal only; real promotion remains separate | Code-bearing SHA `c632a75fcb83f2dbcde93d31ef0170de095c4abd` passed Source, Image, and I9 exact-digest previous/candidate rehearsal gates with fresh attestation checks, private-peer readiness, controlled storage-readiness failure, exact previous rollback, bounded evidence, and cleanup. Real staging environment, approval window, deployed caller/proxy/firewall/secrets, VPS change, production promotion, and live rollback remain `UNVERIFIED_NOT_AUTHORIZED`. |
+| S3b - staging and promotion drill | `VERIFIED_EPHEMERAL_FOUNDATION; I11_AUTOMATION_PENDING; PRODUCTION_UNVERIFIED` | signed S3a candidate; repository S4/S5 topology controls; explicit I9 authorization | Historical I9 read-only hosted rehearsal is verified; I11 automatically applies it to each successful main publication artifact; real promotion remains separate | Code-bearing SHA `c632a75fcb83f2dbcde93d31ef0170de095c4abd` passed the I9 exact-digest rehearsal. The productized `workflow_run` path dynamically binds current/previous signed images, per-image attestations, failure/rollback and bounded cleanup, but its implementation and hosted result are `PENDING`. Real staging environment, approval window, deployed caller/proxy/firewall/secrets, VPS change, production promotion and live rollback remain `UNVERIFIED_NOT_AUTHORIZED`. |
 | S5 - topology/optional async worker decision | `IN_PROGRESS` | I5 trust controls and S4 topology evidence | private-peer topology selected; async API/worker deferred | `PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED`. Complete exact deployed caller, proxy, secret, digest, firewall, and egress evidence without changing current endpoints. |
 
 ## Current S0.1 verification checkpoint
@@ -725,7 +779,7 @@ the exception.
 | D-001 | S0 recorded upload residue and false deadlines; S1a fixed workspace ownership and I1 adds independent queue timers. | Multer still precedes queue admission, but the route awaits safe settlement and cleanup; queued timeout no longer waits for worker availability ([project map](project-map.md)). | S1b locally verified; S2 owns the wider HTTP/resource envelope |
 | D-002 | Do not characterize vulnerability outcomes as desired behavior. | Durable tests cover safe FIFO/caps/mappings, not delayed expiry, residue, collision, or zero-stat success. | All test owners |
 | D-003 | Local Python path divergence was real at S0. | I1 resolves allowlisted helpers absolutely from the application module while preserving flattened `/app` image behavior. | S1c locally verified |
-| D-004 | Validation CI does not protect `main` by itself. | Branch rules/required checks remain external `UNVERIFIED`; the former automatic `main` deploy is removed, but workflow text alone does not enforce repository settings. | repository admin required-check verification; S3b promotion gate |
+| D-004 | Validation CI does not protect `main` by itself. | I10 live readback now verifies strict Source/Image contexts, PR/admin/force-push/deletion/conversation policy and merge-commit-only settings on exact protected `main`. Human approval remains unavailable with one collaborator; production topology/promotion is still separate. | Keep final policy readback in release gates; add an independent reviewer only when repository membership permits; S3b production gate remains separate. |
 | D-005 | Do not invent Action SHAs, image digests, Python hashes, or versions. | Provenance must be verified upstream first. | S3a build lane |
 | D-006 | `/health` remains liveness in S0. | It returns status/uptime only; deploy uses it as smoke. | S3b readiness drill after S4 |
 | D-007 | Pricing CORS inconsistency is not an auth bypass but remains high-risk policy drift. | API key still applies; Origin classification covers only `/admin/**`. | S4 auth/policy lane |
@@ -736,7 +790,7 @@ the exception.
 | D-012 | Native children require both secret minimization and egress control. | I1 supplies a tested minimal environment excluding API secrets, but parser/slicer processes still share unrestricted container egress. | S1c environment verified; S4 topology/container egress gate before promotion |
 | D-013 | I3 established a separate slice credential; I5 supersedes the wider service-trust contract. | I5 tests four active/previous audiences, two-restart revocation, finite legacy migration, exact Origin/proxy/request identity, readiness, events, and metrics. I6 selects the private-peer repository topology; deployed topology and secret delivery remain `UNVERIFIED`. | Complete deployed S4/S5 caller, proxy, secret, digest, firewall, and egress evidence before S3b. |
 | D-014 | `fileSize` alone was not a complete multipart/HTTP resource envelope. | S1a verifies finite multipart limits. I3 adds bounded Node header/request/keep-alive timeouts, header count, connection count, and requests/socket with fallback, but actual VPS/proxy behavior, total streamed upload duration, and measured CPU/RAM/disk envelopes remain open. | Complete S2 measured server, proxy, and resource envelope. |
-| D-015 | A `main` push could historically deploy independently of validation CI. | S3a removed that path. Exact S3a-B2 source is green, but image liveness and HIGH scanning remain red; required checks and branch protection are external `UNVERIFIED`. | S3a image/runtime diagnosis plus repository policy verification; S3b only after S4 and separate authorization |
+| D-015 | A `main` push could historically deploy independently of validation CI. | S3a removed that path; I2 later closed image liveness/scanning, I8 produced a signed candidate, and I10 live-verified protected-main no-deploy Source/Image checks. These repository results still do not verify a production deployment. | I11 manual signed-candidate productization without deploy; S3b production only after S4/S5 operator evidence and separate authorization. |
 | D-016 | The manifest/lock freeze was limited to the S1a/S3a parallel wave. | The dependency patch is now integrated once by patch ID; duplicate `306b799` was not picked. | Future advisory work requires a new serialized owner and audit evidence |
 | D-017 | Parallel lanes return evidence; the integrator owns canonical reconciliation. | I1 reconciliation supersedes historical stage status without rewriting historical evidence files. | Integrator maintains `AGENTS.md` and `docs/codex/**` after integration |
 | D-018 | Graceful shutdown must drain both HTTP and queue work without early capacity release. | `SIGTERM`/`SIGINT` are single-flight; queue shutdown aborts queued/active work, closes HTTP, and awaits both drains while active slots remain owned until task settlement. | I1 runtime lifecycle locally verified |

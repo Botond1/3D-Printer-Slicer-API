@@ -4,7 +4,7 @@ applyTo: ".github/**"
 
 # GitHub Folder Instructions
 
-Last synchronized: 2026-07-30
+Last synchronized: 2026-08-23
 
 ## Scope
 - Keep Copilot instructions centralized in .github/copilot-instructions.md.
@@ -19,51 +19,50 @@ Last synchronized: 2026-07-30
   intended private ingress and API/native DNS-TCP-UDP egress denial. A Docker
   Desktop internal bridge without a host listener is a capability blocker, not
   a pass or authority to invent a sidecar.
-- Normal Source/Image Validation must remain read-only/no-push. Candidate
-  Publication retains exact-input `workflow_dispatch` and adds `push` only for
-  `codex/i8-s3a-ghcr-signed-candidate`. Only its publication job may use
-  packages/attestations/OIDC write permissions, and only after the complete
-  shared gate succeeds on the same once-built image.
-- The push adapter derives `github.sha` and requires repository
-  `Botond1/3D-Printer-Slicer-API`, ref
-  `refs/heads/codex/i8-s3a-ghcr-signed-candidate`, actor `Botond1`, hardcoded
-  `ghcr.io/botond1/3d-printer-slicer-api`, and exact final non-empty trailer
-  `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`. Every other event,
-  branch, actor, trailer, or registry fails closed.
-- Both paths emit canonical `candidate_sha`, `image_ref`, `discovery_tag`, and
-  `registry_repository` outputs.
-- Candidate publication is fixed to
-  `ghcr.io/botond1/3d-printer-slicer-api`; refuse existing discovery tags,
-  mutable tags, alternate repositories, and deploy. Downstream identity is
-  exact digest only.
-- Pre-C4 HEAD is `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`; Source
-  `30545194526` and Image `30545194494` are green, with Image artifact
-  `8760548898`. Candidate `30545194754` published the quarantined discovery
-  tag, then failed at `digest_roundtrip` when host `ps` reported `process ID
-  out of range` after detach/immediate PID handling. The exact inspected PID is
-  `UNVERIFIED`. Its digest
-  `sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
-  and config identity
-  `sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`
-  must remain unchanged. Attestations and candidate artifact are absent;
-  cleanup succeeded; classification is
-  `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
-- C4 applies one bounded exact-ID/image, allowlisted-state proof before both
-  shared and digest runtime consumers. It requires a stable repeated positive
-  PID before host `ps`, matching positive UID/GID, and post-`ps` same-state
-  confirmation. Exact `running` status and false paused/restarting/dead flags
-  are required; non-ready, malformed, timeout, and state-change paths fail
-  closed. Failed upload storage callbacks wait for output close before
-  workspace cleanup. Evidence may report `I8_CANDIDATE_EVIDENCE_READY`; only final
-  enforcement after upload and both cleanup steps may report
-  `I8_SIGNED_CANDIDATE_COMPLETE`, with both cleanup outcomes visible.
-- Exactly one C4 commit and one normal non-force corrective push to the
-  existing I8 branch are authorized. Replacement Source/Image/Publication
-  results remain `PENDING`. Post-correction evidence is 734/734 affected tests,
-  full JavaScript 1296/1296, and Python 42/43 pass with one expected Windows
-  POSIX-permission skip. Local Docker is `NOT_RUN_ENVIRONMENT`.
-- Preserve no-`main`, no-PR/merge/force-push, no-release/Git-tag, no-mutable-
-  tag, no-deploy, and no-repository-setting-change boundaries.
+- I10 live policy is verified at main SHA
+  `8253160eef1c3e00c1e40826ec61fd97563ddd9b`; Source `32662043454` and Image
+  `32662043476` succeeded. Strict main protection binds both no-deploy contexts,
+  requires a PR, includes administrators, forbids force-push/deletion, requires
+  conversation resolution, and permits merge commits only. Required approvals
+  are zero because the sole collaborator cannot self-approve; required
+  signatures are not enabled.
+- Normal Source/Image Validation remains read-only/no-push/no-deploy. I11
+  Candidate Publication is manual `workflow_dispatch` only from exact current
+  protected `main`; push/PR/merge-group/schedule/repository-dispatch paths fail.
+- Preflight requires exact repository `Botond1/3D-Printer-Slicer-API`, actor
+  `Botond1`, `refs/heads/main`, requested/event/checkout/remote SHA, post-I10
+  ancestry and fixed registry `ghcr.io/botond1/3d-printer-slicer-api`.
+- `publish_new` requires an empty digest input, exact
+  `PUBLISH_SIGNED_MAIN_CANDIDATE`, and a proven-absent SHA-derived tag before the
+  fully gated once-built image may be pushed.
+- `recover_exact_digest` requires exact
+  `RECOVER_SIGNED_MAIN_CANDIDATE` and one lowercase `sha256:<64 hex>` already
+  matching the tag manifest and once-built image config. Recovery must not push,
+  overwrite or delete registry content.
+- Only the publication job may use packages/attestations/OIDC write permissions.
+  Bind it to environment `candidate-publication` with `deployment: false`.
+  Environment ID `20443404498` is `LIVE_CONFIG_VERIFIED` on 2026-08-23:
+  protected branches true, custom branch policies false, exactly one
+  `branch_policy` protection rule (ID `63481958`), and no reviewer/wait-timer
+  rules, secrets, variables or deployments.
+- Candidate publication uses exact digest-only identity and never creates
+  mutable/release/staging/production tags. Evidence must distinguish
+  `published_new` from `recovered_existing`; recovery cannot claim tag absence,
+  image push or registry write.
+- `I11_MAIN_SIGNED_CANDIDATE_COMPLETE` is reserved for final enforcement after
+  digest identity, attestations, verification, bounded upload and exact
+  publication/evidence cleanup. I11 implementation and hosted results remain
+  `PENDING` until observed.
+- Successful protected-main publication automatically triggers only the
+  completed/main `workflow_run` rehearsal. It validates one exact bounded
+  publication artifact, creates the policy/provenance-derived previous/current
+  digest-only manifest, verifies per-image SLSA/SPDX through API and OCI, and
+  runs hardened I9 readiness, `STORAGE_UNSAFE`, automatic rollback, bounded
+  evidence and exact cleanup with read permissions only. Its result is
+  `PENDING` until observed.
+- Candidate publication is no-deploy. Hosted S4/S5/I9 evidence is ephemeral and
+  does not verify production proxy/firewall/secrets/digest/VPS/readiness/
+  rollback or grant production authority.
 
 ## Required Sync Targets
 When changing rules here, synchronize:

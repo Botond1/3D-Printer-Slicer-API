@@ -4,7 +4,7 @@ applyTo: "**"
 
 # Repository Wide Instructions
 
-Last synchronized: 2026-07-30
+Last synchronized: 2026-08-23
 
 ## Architecture
 - Backend stack is Node.js + Express + Python helper scripts.
@@ -53,46 +53,50 @@ Last synchronized: 2026-07-30
   egress. The separate production manifest uses an internal private bridge,
   no host port, and a digest-only image, but deployed proxy/firewall/egress
   topology remains `UNVERIFIED`.
-- Normal Source/Image Validation is read-only/no-push. Candidate Publication
-  retains exact-input `workflow_dispatch` and adds `push` only for
-  `codex/i8-s3a-ghcr-signed-candidate`. The push path derives `github.sha` and
-  requires repository `Botond1/3D-Printer-Slicer-API`, ref
-  `refs/heads/codex/i8-s3a-ghcr-signed-candidate`, actor `Botond1`, hardcoded
-  `ghcr.io/botond1/3d-printer-slicer-api`, and exact last non-empty commit line
-  `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
-- Both event paths fail closed and produce canonical `candidate_sha`,
-  `image_ref`, `discovery_tag`, and `registry_repository` outputs. Publication remains
-  build-once, full-gate-before-login/push, digest-only, signed/attested, and
-  no-deploy. Never overwrite a discovery tag or create mutable promotion tags.
-- Pre-C4 HEAD is `81872eda8d7c594ce3a12d79d4c02ecf9e26c6f3`. Source
-  `30545194526` and Image `30545194494` are green; Image artifact
-  `8760548898` exists. Candidate `30545194754` published the quarantined tag,
-  then failed at `digest_roundtrip` when host `ps` reported `process ID out of
-  range` after detach/immediate PID handling. The exact inspected PID is
-  `UNVERIFIED`. Preserve the tag unchanged at digest
-  `sha256:362149192fec548f546cd0a9744b7e9e3cb6d487fa4a825034c26c98aa1fc736`
-  and config
-  `sha256:b0217aaaf15bac65f2db565e306ded40fa611e26ea3535dfe52a1d2483ae0657`.
-  Attestations and candidate artifact are absent, cleanup succeeded, and the
-  classification is `I8_CANDIDATE_PUBLISHED_UNATTESTED`.
-- C4 uses one bounded exact-container/image state proof in both shared
-  prepublication and post-push digest paths. It requires allowlisted state,
-  the same positive PID in consecutive healthy observations before host `ps`,
-  matching positive UID/GID, and a post-`ps` same-state confirmation. Exact
-  `running` status and false paused/restarting/dead flags are required; exited,
-  unhealthy, missing-health, OOM, state-error, malformed, timeout, and changed
-  state fail closed. Failed upload storage callbacks wait for output close
-  before workspace cleanup without changing deadline or retry policy.
-- Uploaded evidence may report only `I8_CANDIDATE_EVIDENCE_READY`; only final
-  enforcement after evidence upload, publication cleanup, and evidence cleanup
-  may report `I8_SIGNED_CANDIDATE_COMPLETE`; both cleanup outcomes remain
-  visible in the final summary.
-- Post-correction C4 evidence is 734/734 affected tests, full JavaScript
-  1296/1296, and Python 42/43 pass with one expected Windows POSIX-permission
-  skip. Local Docker is `NOT_RUN_ENVIRONMENT`. One C4 commit and one normal non-force corrective push
-  remain authorized. Replacement hosted results are `PENDING`. `main`,
-  PR/merge/force-push, later correction, old-tag mutation, release/Git tag,
-  deploy, and repository settings remain outside authorization.
+- I10 live policy is verified at exact protected-main SHA
+  `8253160eef1c3e00c1e40826ec61fd97563ddd9b`; Source `32662043454` and Image
+  `32662043476` succeeded. Strict required checks bind both no-deploy GitHub
+  Actions contexts. Main requires a PR, includes administrators, forbids
+  force-push/deletion, requires conversation resolution and enables merge
+  commits only. Zero approvals reflect the sole-collaborator self-review limit,
+  not human approval; required signatures are not enabled.
+- Normal Source/Image Validation remains read-only/no-push. I11 Candidate
+  Publication is manual `workflow_dispatch` only from exact current protected
+  `main`. Repository, actor `Botond1`, main ref, requested/event/checkout/remote
+  SHA, post-I10 ancestry and fixed GHCR repository must match.
+- `publish_new` requires an empty existing digest, exact
+  `PUBLISH_SIGNED_MAIN_CANDIDATE`, and a proven-absent SHA-derived tag before the
+  once-built fully gated image may be pushed.
+- `recover_exact_digest` requires exact
+  `RECOVER_SIGNED_MAIN_CANDIDATE` plus one lowercase `sha256:<64 hex>` already
+  matching the SHA-derived tag manifest and once-built image config. It performs
+  no registry push, overwrite or delete.
+- Global permission is none, preflight is contents-read, and only publication
+  may use contents-read plus packages/attestations/OIDC write. The publication
+  job binds environment `candidate-publication` with `deployment: false`.
+  Environment ID `20443404498` is `LIVE_CONFIG_VERIFIED` on 2026-08-23:
+  protected branches true, custom branch policies false, exactly one
+  `branch_policy` protection rule (ID `63481958`), and no reviewer/wait-timer
+  rules, secrets, variables or deployments.
+- Both modes remain build-once, full-gate-before-login, digest-only,
+  signed/attested and no-deploy. Never create mutable/release/staging/production
+  tags. Recovery evidence must not claim tag absence, an image push or a
+  registry write.
+- Evidence may report only `I11_MAIN_CANDIDATE_EVIDENCE_READY`; final
+  enforcement may report `I11_MAIN_SIGNED_CANDIDATE_COMPLETE` only after exact
+  digest identity, attestations, verification, bounded upload and both cleanup
+  outcomes pass. I11 implementation and hosted results remain `PENDING` until
+  observed.
+- A successful protected-main publication automatically triggers only the
+  completed/main `workflow_run` rehearsal. One exact bounded publication
+  artifact plus the release policy generates distinct previous/current
+  digest-only identities; both images require SLSA/SPDX API+OCI verification
+  before hardened I9 readiness, `STORAGE_UNSAFE`, automatic rollback, bounded
+  evidence and exact cleanup. Rehearsal permissions are read-only and its
+  hosted result remains `PENDING`.
+- Hosted S4/S5 and I9 topology/rollback evidence is ephemeral repository proof,
+  not production. Deployed caller/proxy/firewall/secrets/digest/VPS/readiness/
+  rollback remain unverified and separately authorized.
 
 ## Testing
 - Use Python test runners under tests/testing-scripts/.

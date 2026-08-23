@@ -17,23 +17,73 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
-## Current I10 mainline-governance checkpoint
+## Current I11 protected-main signed-candidate checkpoint
 
-I10 starts from exact completed I9 SHA
-`200e4174766bed2562402661afb2bc9efa7834e3` on
-`codex/i10-mainline-governance`. It connects the existing read-only Source and
-Image workflows to pull requests targeting `main`, merge-queue
-`checks_requested`, and exact `main` pushes. The Source gate proves a nonzero
-exact `before..candidate` range for main pushes; stable Source/Image job names
-are mutation-guarded for required-check policy.
+I11 starts from exact protected-main baseline
+`8253160eef1c3e00c1e40826ec61fd97563ddd9b` on
+`codex/i11-release-productization`. At this documentation boundary the I11
+workflow, contract tests, local gates, implementation commit, hosted Source and
+Image runs, manual publication run, registry digest, attestations and evidence
+artifact are `PENDING`; do not pre-claim them.
 
-Before integration, repository `main` was protected with a PR-required,
-admin-enforced bootstrap rule that forbids force-push and deletion. Merge
-commits are the sole enabled strategy so the exact I1-I9 lineage remains
-intact. Required-context binding, PR merge, exact-main hosted gates and final
-policy readback remain `PENDING` at commit time. This checkpoint adds no image
-publication, deployment, SSH/VPS, environment or production authority. See
-[`docs/codex/evidence/i10-mainline-governance.md`](docs/codex/evidence/i10-mainline-governance.md).
+The intended publication entry point is manual `workflow_dispatch` only from
+the exact current protected `main` SHA. It has two explicit, mutually exclusive
+modes: `publish_new` requires an empty existing-digest input, the exact
+`PUBLISH_SIGNED_MAIN_CANDIDATE` confirmation and a proven-absent discovery tag;
+`recover_exact_digest` requires the exact
+`RECOVER_SIGNED_MAIN_CANDIDATE` confirmation plus one lowercase
+`sha256:<64 hex>` digest already bound to the SHA-derived tag and to the
+once-built image config. Recovery performs no registry push, overwrite or
+delete. Both modes continue only through exact-digest identity, attestation,
+verification, bounded evidence and exact cleanup.
+
+Only the publication job may receive registry/attestation/OIDC write
+permissions and it binds `candidate-publication` with `deployment: false`.
+Environment `candidate-publication` is `LIVE_CONFIG_VERIFIED` as of 2026-08-23,
+ID `20443404498`: protected branches true, custom branch policies false, with no
+reviewer or wait-timer rules, secrets, variables or deployments. It has exactly
+one `branch_policy` protection rule, ID `63481958`, representing that branch
+policy. The empty reviewer set reflects the sole-collaborator capability limit,
+not human approval.
+
+A successful protected-main Candidate Publication automatically invokes
+`Signed Main Candidate Ephemeral Rehearsal (NO DEPLOY)` through `workflow_run`.
+It re-proves the upstream run, accepts exactly one bounded publication artifact,
+and dynamically creates a digest-only previous/current manifest from the fixed
+release-rehearsal policy plus the current I11 provenance. It re-verifies each
+image's SLSA and SPDX attestations through API and OCI, runs the hardened I9
+private-peer readiness, controlled `STORAGE_UNSAFE` failure and automatic exact-
+previous rollback path, then emits bounded evidence and performs exact cleanup.
+The rehearsal has only contents/actions/packages/attestations read permission;
+it cannot write the registry, deploy, use OIDC or contact the VPS. Its
+implementation/local/hosted/publication/rehearsal results remain `PENDING` until
+observed.
+
+Publication and rehearsal never grant VPS/SSH, production, release, Git-tag,
+mutable image-tag, overwrite or deletion authority. See
+[`docs/codex/evidence/i11-mainline-signed-candidate.md`](docs/codex/evidence/i11-mainline-signed-candidate.md).
+
+## Verified I10 mainline-governance checkpoint
+
+I10 integrated exact I9 ancestry into `main` at
+`8253160eef1c3e00c1e40826ec61fd97563ddd9b`. Exact-main Source run
+`32662043454` and Image run `32662043476` succeeded. The live protected-branch
+readback contains exactly `main`; strict required status checks bind the GitHub
+Actions contexts `Validate exact source candidate (NO DEPLOY)` and
+`Build once, inspect, scan, and discard (NO DEPLOY)` with app ID `15368`.
+
+Main requires a pull request, includes administrators, forbids force-push and
+deletion, requires conversation resolution, and permits merge commits only;
+squash and rebase are disabled. Required approvals remain zero because
+`Botond1` is the sole collaborator and cannot self-approve. This is
+`HUMAN_REVIEWER_CAPABILITY_UNAVAILABLE`, not a human-review pass. Rulesets are
+empty, required signatures are not enabled, Actions default permission is read,
+and Actions cannot approve PRs.
+I10 added no image publication, deployment, SSH/VPS, environment or production
+authority. See
+[`docs/codex/evidence/i10-mainline-governance.md`](docs/codex/evidence/i10-mainline-governance.md);
+that historical commit-time evidence remains unchanged, while this section
+records the later live exit proof.
 
 ## Current I9/S3b ephemeral staging and rollback foundation
 
@@ -59,12 +109,12 @@ C6 is accepted only after fresh I9 verification of both SLSA provenance and
 SPDX attestations; this does not retroactively classify it as a
 production-approved release.
 
-`.github/workflows/staging-rollback-rehearsal.yml` is an exact-branch push
-workflow with global non-cancelling concurrency. Preflight is `contents: read`;
-the rehearsal job adds only `packages: read` and `attestations: read`. It
-requires actor/repository/ref/remote-HEAD/baseline/trailer identity and never
-requests a write, OIDC, deployment environment, registry push, SSH, or release
-permission.
+At the exact I9 checkpoint, `.github/workflows/staging-rollback-rehearsal.yml`
+was an exact-branch push workflow with global non-cancelling concurrency and
+read-only permissions. I11 productizes that same runtime proof as a successful
+protected-main Candidate Publication `workflow_run`; it is no longer an I9
+branch-triggered workflow. The historical I9 run IDs and evidence remain valid
+for their commit, while the new automatic rehearsal result is `PENDING`.
 
 The runtime pulls both immutable digests, dynamically proves the same positive
 non-root service UID/GID, prepares only run-owned `0700` state and inert scoped

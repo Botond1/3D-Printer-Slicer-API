@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Instructions
 
-Last synchronized: 2026-07-26
+Last synchronized: 2026-08-23
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -18,32 +18,46 @@ Keep slicing behavior safe, deterministic, and production-friendly while preserv
 ## Candidate image publication boundary
 
 - Normal Image Validation remains read-only/no-push/no-deploy.
-- Candidate Publication retains exact-input `workflow_dispatch` for later
-  default-branch integration and accepts `push` only on
-  `codex/i8-s3a-ghcr-signed-candidate`.
-- Push authorization derives `github.sha` and requires repository
-  `Botond1/3D-Printer-Slicer-API`, ref
-  `refs/heads/codex/i8-s3a-ghcr-signed-candidate`, actor `Botond1`, hardcoded
-  `ghcr.io/botond1/3d-printer-slicer-api`, and exact last non-empty commit line
-  `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
-- Both event adapters fail closed and emit canonical `candidate_sha`,
-  `image_ref`, `discovery_tag`, and `registry_repository` outputs.
+- I10 is live-verified at protected-main SHA
+  `8253160eef1c3e00c1e40826ec61fd97563ddd9b`; Source `32662043454` and Image
+  `32662043476` passed. Strict main policy requires both no-deploy contexts, a
+  PR, administrator enforcement, no force-push/deletion, conversation
+  resolution, and merge-commit-only integration. Zero approvals are the
+  sole-collaborator self-review limitation, not human approval; required
+  signatures are not enabled.
+- I11 Candidate Publication accepts manual `workflow_dispatch` only from exact
+  current protected `main`. Repository, actor `Botond1`, main ref,
+  requested/event/checkout/remote SHA, post-I10 ancestry and fixed GHCR
+  repository must agree.
+- `publish_new` requires an empty digest input, exact
+  `PUBLISH_SIGNED_MAIN_CANDIDATE`, and a proven-absent SHA-derived discovery tag.
+- `recover_exact_digest` requires exact
+  `RECOVER_SIGNED_MAIN_CANDIDATE` plus one lowercase `sha256:<64 hex>` already
+  matching the SHA-derived tag and once-built image config. It performs no
+  registry push, overwrite or delete.
 - Registry, attestation, and OIDC write permissions belong only to the
   publication job, after the shared complete gate passes on the same once-built
   `linux/amd64` image.
-- Refuse an existing discovery tag. Never create mutable/release/staging/
-  production tags. Consumers use only
+- The job uses environment `candidate-publication` with `deployment: false`.
+  Environment ID `20443404498` is `LIVE_CONFIG_VERIFIED` on 2026-08-23:
+  protected branches true, custom branch policies false, exactly one
+  `branch_policy` protection rule (ID `63481958`), and no reviewer/wait-timer
+  rules, secrets, variables or deployments.
+- Never overwrite/delete an existing discovery tag or create mutable/release/
+  staging/production tags. Consumers use only
   `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`.
+- A successful protected-main publication automatically triggers the no-deploy
+  `workflow_run` rehearsal. It validates one exact publication artifact,
+  dynamically binds policy-pinned previous and artifact-derived current
+  digests, verifies each image's SLSA/SPDX attestations through API and OCI,
+  and runs hardened I9 readiness, `STORAGE_UNSAFE`, automatic rollback,
+  bounded evidence and exact cleanup with read permissions only.
 - Publication never authorizes deploy. Preserve and classify partial remote
-  candidates; never overwrite or delete them.
-- Before the one authorized corrective push, local and remote HEAD are
-  `c49bfc698d4d41041e6216c76a11144ffb386183`; Source run
-  `30163991878` and Image run `30163991870` are green. Corrective
-  Source/Image/Publication runs remain pending. No registry, signature, or
-  attestation side effect exists.
-- The authorization permits one normal non-force push to the existing I8
-  branch only. It does not permit `main`, PR, merge, force-push, release/Git
-  tag, mutable image tag, deployment, or repository-setting changes.
+  candidates; exact recovery may continue only a matching digest without
+  remote mutation. I11 implementation, hosted runs, digest, attestations,
+  evidence and automatic rehearsal remain `PENDING` until observed.
+- Hosted S4/S5 and I9 evidence is ephemeral and does not verify production
+  callers, proxy/firewall, secrets, deployed digest, VPS, readiness or rollback.
 
 ## Technology Baseline
 - Node.js + Express API
