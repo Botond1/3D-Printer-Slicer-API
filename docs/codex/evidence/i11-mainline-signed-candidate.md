@@ -2,16 +2,22 @@
 
 ## Checkpoint boundary
 
-- Exact baseline and current protected-main SHA:
-  `8253160eef1c3e00c1e40826ec61fd97563ddd9b`.
-- Implementation branch: `codex/i11-release-productization`.
-- Commit-time status: `PENDING_LOCAL_AND_HOSTED_VALIDATION`.
-- This document records the intended I11 contract before its implementation
-  commit and hosted publication exist. It does not pre-claim a final I11 SHA,
-  local test count, Source/Image success, Candidate Publication success,
-  registry digest, attestation, publication/rehearsal evidence artifact or
-  cleanup result. The GitHub environment is the sole live-verified I11 setup
-  exception described below.
+- Exact initial baseline: `8253160eef1c3e00c1e40826ec61fd97563ddd9b`.
+- Protected PR `#2` merge SHA:
+  `48afd39b26a6c6ca18ec7bbd18a719c846751e26`.
+- Observed status:
+  `SIGNED_MAIN_CANDIDATE_VERIFIED; AUTOMATIC_REHEARSAL_CORRECTIVE_PENDING`.
+- Exact-main Source run `32666929393` and Image run `32666929394`: `SUCCESS`.
+- Candidate Publication run `32667219964`: `SUCCESS`; immutable digest
+  `sha256:3cea88b5009e5bd65b634865608681fccbb9fb721308ada2f6e8844e172541ea`,
+  config digest
+  `sha256:84dc110ef1d48282df7ef243445d64c519e39fe218c7c55e68182e07d64bcdec`,
+  SLSA/SPDX attestation IDs `42460061`/`42460068`, artifact `9500456840`.
+- Automatic rehearsal run `32667607266`: fail-closed before registry read or
+  runtime. The full checkout was changed to shallow by `git fetch --depth=1`,
+  so the valid `1fffab8… -> 48afd39…` ancestry was hidden. The always-run
+  cleanup independently expanded unset image refs, masking the primary reason.
+  Corrective hosted proof remains `PENDING` at this commit boundary.
 - I11 authorizes candidate publication only. It does not authorize deployment,
   VPS/SSH access, production mutation, a release or Git tag, a mutable image
   tag, registry overwrite/deletion, or repository-policy weakening.
@@ -283,24 +289,24 @@ attestations, verification, evidence upload, publication cleanup and evidence
 cleanup all succeed. A published but incomplete subject remains preserved and
 is classified truthfully for exact recovery; it is never deleted or overwritten.
 
-## Commit-time gate ledger
+## Observed gate ledger and corrective boundary
 
 | Gate | Status at this document boundary |
 | --- | --- |
-| I11 implementation commit and exact SHA | `PENDING` |
-| Focused contract/mutation tests | `PENDING` |
-| Full JavaScript/Python tests | `PENDING` |
-| Syntax, safety, mirror, diff and actionlint gates | `PENDING` |
-| Exact-SHA Source Validation | `PENDING` |
-| Exact-SHA Image Validation, SBOM and Grype | `PENDING` |
+| I11 protected merge SHA | `48afd39b26a6c6ca18ec7bbd18a719c846751e26`, PR `#2` |
+| Focused corrective rehearsal tests | `302/302` `PASS` |
+| Full JavaScript/Python tests | `1813/1813` JS; Python `42` pass + one Windows/POSIX skip |
+| Syntax, safety, mirror, diff and actionlint gates | `PASS`; 206 JS, 32 Python, 346 tracked safety files, mirrors `2/2`, actionlint `1.7.12` |
+| Exact-SHA Source Validation | `SUCCESS` — `32666929393` |
+| Exact-SHA Image Validation, SBOM and Grype | `SUCCESS` — `32666929394` |
 | `candidate-publication` environment creation/readback | `LIVE_CONFIG_VERIFIED` — ID `20443404498`, 2026-08-23 |
-| Manual Candidate Publication | `PENDING` |
-| Registry manifest/config digest | `PENDING` |
-| SLSA/SPDX attestation IDs and verification | `PENDING` |
-| Bounded I11 evidence artifact and exact cleanup | `PENDING` |
-| Automatic signed-main ephemeral rehearsal and artifact | `PENDING` |
+| Manual Candidate Publication | `SUCCESS` — `32667219964` |
+| Registry manifest/config digest | `sha256:3cea88b5009e5bd65b634865608681fccbb9fb721308ada2f6e8844e172541ea` / `sha256:84dc110ef1d48282df7ef243445d64c519e39fe218c7c55e68182e07d64bcdec` |
+| SLSA/SPDX attestation IDs and verification | `42460061` / `42460068`; API, OCI and local-bundle verification passed |
+| Bounded I11 evidence artifact and exact cleanup | `SUCCESS` — artifact `9500456840` |
+| Automatic signed-main ephemeral rehearsal and artifact | `BLOCKED_CORRECTIVE_PENDING` — run `32667607266`, no rehearsal artifact |
 | Deployment/VPS/production topology | `NOT_RUN_NOT_AUTHORIZED` |
 
-This documentation lane performs no commit, push, registry action, environment
-or repository-setting mutation, workflow dispatch, deploy, VPS/SSH operation,
-tag, release or cleanup outside its own files.
+The corrective may change only the no-deploy rehearsal workflow, its tests and
+this canonical knowledge. It grants no deploy, VPS/SSH, release/Git-tag,
+mutable-tag, registry-overwrite/delete or production authority.

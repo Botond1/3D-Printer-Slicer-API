@@ -111,11 +111,17 @@ lane: private-peer readiness, controlled `STORAGE_UNSAFE` failure, automatic
 exact-previous rollback, bounded evidence and exact cleanup. The rehearsal is
 registry-read-only/no-deploy and has no OIDC, environment or VPS authority.
 
-I11 implementation/local gates, hosted Source/Image, publication, digest,
-attestations, publication artifact and automatic rehearsal results remain
-`PENDING` until observed. Historical hosted S4/S5 topology and I9 rollback
-results are ephemeral validation only; they do not prove the production proxy,
-firewall, secrets, deployed digest, Hostinger/VPS readiness or live rollback.
+I11 merged through protected PR `#2` at main SHA `48afd39b…`; Source run
+`32666929393`, Image run `32666929394`, and signed Candidate Publication run
+`32667219964` succeeded. The immutable digest is `sha256:3cea88b5…2541ea` and
+the bounded publication artifact is `9500456840`. Automatic rehearsal run
+`32667607266` failed closed before registry read because a depth-limited main
+refresh made the full checkout shallow; its cleanup also dereferenced unset
+runtime identity variables. The corrective workflow preserves full history and
+uses an all-empty/all-valid cleanup tuple, with final hosted proof still
+`PENDING`. Historical S4/S5/I9 results remain ephemeral validation only and do
+not prove production proxy, firewall, secrets, deployed digest, VPS readiness
+or live rollback.
 
 ---
 
