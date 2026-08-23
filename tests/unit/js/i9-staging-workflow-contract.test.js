@@ -99,7 +99,8 @@ function validateWorkflowSource(source) {
     requireFragments(preflight, [
         'ref: ${{ steps.upstream.outputs.candidate_sha }}',
         'fetch-depth: 0',
-        'git fetch --no-tags --depth=1 origin refs/heads/main',
+        'git fetch --no-tags origin refs/heads/main',
+        '[ "$(git rev-parse --is-shallow-repository)" = "false" ]',
         'git merge-base --is-ancestor "$CANDIDATE_SHA" "$main_sha"',
         'gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PUBLICATION_RUN_ID"',
         '(.workflow_id | tostring) == $workflow',
@@ -111,6 +112,14 @@ function validateWorkflowSource(source) {
     assert.equal(occurrences(source,
         'git merge-base --is-ancestor "$CANDIDATE_SHA" "$main_sha"'), 2,
     'both preflight and rehearsal jobs must independently re-prove candidate ancestry');
+    assert.equal(occurrences(source,
+        'git fetch --no-tags origin refs/heads/main'), 2,
+    'both jobs must refresh main without truncating the full checkout history');
+    assert.equal(occurrences(source,
+        '[ "$(git rev-parse --is-shallow-repository)" = "false" ]'), 2,
+    'both jobs must fail closed if main refresh unexpectedly makes history shallow');
+    assert.doesNotMatch(source, /git fetch[^\n]*--depth(?:=|\s)/,
+        'a depth-limited refresh destroys the ancestry proof after fetch-depth zero checkout');
 
     const artifact = stepBlock(source, 'artifact');
     requireFragments(artifact, [
@@ -255,17 +264,30 @@ function validateWorkflowSource(source) {
     const runtimeCleanup = stepBlock(source, 'runtime_post_cleanup');
     requireFragments(runtimeCleanup, [
         'if: ${{ always() }}',
+        'current_image_ref="${CURRENT_IMAGE_REF-}"',
+        'previous_image_ref="${PREVIOUS_IMAGE_REF-}"',
+        'current_config_digest="${CURRENT_CONFIG_DIGEST-}"',
+        'previous_config_digest="${PREVIOUS_CONFIG_DIGEST-}"',
+        'runtime_identity_count=0', 'runtime_identity_ready=0',
+        '[ "$runtime_identity_count" -eq 4 ]',
+        '[ "$runtime_identity_count" -ne 0 ]',
+        '[ "$runtime_identity_ready" -ne 1 ]',
+        '^ghcr\\.io/botond1/3d-printer-slicer-api@sha256:[0-9a-f]{64}$',
         'io.s3b.rehearsal', 'io.s3b.run-id', 'com.docker.compose.project',
         '[ "$run_label" = "$GITHUB_RUN_ID" ]',
         'docker container rm --force "$container_id"',
         '[ "$network_project" != "i9-s3b-rehearsal" ]',
         '[ "$network_role" != "slicer-api-private" ]',
         'docker network rm "$network_id"',
-        'for image_ref in "$CURRENT_IMAGE_REF" "$PREVIOUS_IMAGE_REF"',
+        'if [ "$runtime_identity_ready" -eq 1 ]; then',
+        'for image_ref in "$current_image_ref" "$previous_image_ref"',
         'docker image rm "$image_ref"',
         'rm --recursive --force --one-file-system -- "$stage_root"'
     ], 'exact runtime cleanup');
     assert.doesNotMatch(runtimeCleanup, /docker container rm --force "\$reference"/);
+    assert.doesNotMatch(runtimeCleanup,
+        /for image_ref in "\$CURRENT_IMAGE_REF" "\$PREVIOUS_IMAGE_REF"/,
+        'cleanup must remain safe when rehearsal input failed before exporting image refs');
 
     requireFragments(source, [
         'node scripts/i9-staging-rollback-rehearsal.js',

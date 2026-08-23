@@ -97,7 +97,8 @@ jobs:
         run: |
           set -euo pipefail
           [ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]
-          git fetch --no-tags --depth=1 origin refs/heads/main
+          git fetch --no-tags origin refs/heads/main
+          [ "$(git rev-parse --is-shallow-repository)" = "false" ]
           main_sha="$(git rev-parse FETCH_HEAD)"
           [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]]
           git merge-base --is-ancestor "$CANDIDATE_SHA" "$main_sha"
@@ -222,7 +223,8 @@ jobs:
           [ "$GITHUB_REF" = "refs/heads/main" ]
           [ "$(git rev-parse HEAD)" = "$CANDIDATE_SHA" ]
           [ "$REGISTRY_REPOSITORY" = "ghcr.io/botond1/3d-printer-slicer-api" ]
-          git fetch --no-tags --depth=1 origin refs/heads/main
+          git fetch --no-tags origin refs/heads/main
+          [ "$(git rev-parse --is-shallow-repository)" = "false" ]
           main_sha="$(git rev-parse FETCH_HEAD)"
           git merge-base --is-ancestor "$CANDIDATE_SHA" "$main_sha"
 
@@ -678,6 +680,31 @@ jobs:
         run: |
           set -u
           status=0
+          current_image_ref="${CURRENT_IMAGE_REF-}"
+          previous_image_ref="${PREVIOUS_IMAGE_REF-}"
+          current_config_digest="${CURRENT_CONFIG_DIGEST-}"
+          previous_config_digest="${PREVIOUS_CONFIG_DIGEST-}"
+          runtime_identity_count=0
+          runtime_identity_ready=0
+          for runtime_identity_value in \
+            "$current_image_ref" "$previous_image_ref" \
+            "$current_config_digest" "$previous_config_digest"; do
+            if [ -n "$runtime_identity_value" ]; then
+              runtime_identity_count=$((runtime_identity_count + 1))
+            fi
+          done
+          if [ "$runtime_identity_count" -eq 4 ]; then
+            if [[ "$current_image_ref" =~ ^ghcr\.io/botond1/3d-printer-slicer-api@sha256:[0-9a-f]{64}$ ]] && \
+               [[ "$previous_image_ref" =~ ^ghcr\.io/botond1/3d-printer-slicer-api@sha256:[0-9a-f]{64}$ ]] && \
+               [[ "$current_config_digest" =~ ^sha256:[0-9a-f]{64}$ ]] && \
+               [[ "$previous_config_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              runtime_identity_ready=1
+            else
+              status=1
+            fi
+          elif [ "$runtime_identity_count" -ne 0 ]; then
+            status=1
+          fi
           remove_owned_container() {
             local reference="$1" expected_kind="$2"
             local record inspect_status
@@ -691,12 +718,13 @@ jobs:
             fi
             if [ "$inspect_status" -eq 1 ] && [ -z "$record" ]; then return 0; fi
             if [ "$inspect_status" -ne 0 ]; then return 1; fi
+            if [ "$runtime_identity_ready" -ne 1 ]; then return 1; fi
             IFS='|' read -r container_id image_id rehearsal_label run_label \
               compose_project compose_service <<EOF
           $record
           EOF
             case "$image_id" in
-              "$CURRENT_CONFIG_DIGEST"|"$PREVIOUS_CONFIG_DIGEST") ;;
+              "$current_config_digest"|"$previous_config_digest") ;;
               *) return 1 ;;
             esac
             if [ "$expected_kind" = "compose" ]; then
@@ -743,12 +771,14 @@ jobs:
             status=1
           fi
 
-          for image_ref in "$CURRENT_IMAGE_REF" "$PREVIOUS_IMAGE_REF"; do
-            if docker image inspect "$image_ref" >/dev/null 2>&1; then
-              docker image rm "$image_ref" >/dev/null || status=1
-            fi
-            if docker image inspect "$image_ref" >/dev/null 2>&1; then status=1; fi
-          done
+          if [ "$runtime_identity_ready" -eq 1 ]; then
+            for image_ref in "$current_image_ref" "$previous_image_ref"; do
+              if docker image inspect "$image_ref" >/dev/null 2>&1; then
+                docker image rm "$image_ref" >/dev/null || status=1
+              fi
+              if docker image inspect "$image_ref" >/dev/null 2>&1; then status=1; fi
+            done
+          fi
 
           stage_root="$RUNNER_TEMP/i9-stage-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           if [ -L "$stage_root" ]; then

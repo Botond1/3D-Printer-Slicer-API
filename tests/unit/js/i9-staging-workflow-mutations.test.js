@@ -40,6 +40,22 @@ const MUTATIONS = Object.freeze([
             + '          run_file="$RUNNER_TEMP/publication-run-$PUBLICATION_RUN_ID.json"',
         '          true # ancestry omitted\n'
             + '          run_file="$RUNNER_TEMP/publication-run-$PUBLICATION_RUN_ID.json"'],
+    ['main refresh truncates ancestry history',
+        '          git fetch --no-tags origin refs/heads/main\n'
+            + '          [ "$(git rev-parse --is-shallow-repository)" = "false" ]\n'
+            + '          main_sha="$(git rev-parse FETCH_HEAD)"\n'
+            + '          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]]',
+        '          git fetch --no-tags --depth=1 origin refs/heads/main\n'
+            + '          [ "$(git rev-parse --is-shallow-repository)" = "false" ]\n'
+            + '          main_sha="$(git rev-parse FETCH_HEAD)"\n'
+            + '          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]]'],
+    ['non-shallow history proof removed',
+        '          [ "$(git rev-parse --is-shallow-repository)" = "false" ]\n'
+            + '          main_sha="$(git rev-parse FETCH_HEAD)"\n'
+            + '          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]]',
+        '          true # non-shallow proof omitted\n'
+            + '          main_sha="$(git rev-parse FETCH_HEAD)"\n'
+            + '          [[ "$main_sha" =~ ^[0-9a-f]{40}$ ]]'],
     ['artifact uniqueness weakened', '.total_count == 1 and (.artifacts | length) == 1',
         '.total_count >= 1 and (.artifacts | length) >= 1'],
     ['artifact size cap removed',
@@ -113,6 +129,20 @@ const MUTATIONS = Object.freeze([
     ['runtime cleanup loses always',
         '        id: runtime_post_cleanup\n        if: ${{ always() }}',
         '        id: runtime_post_cleanup\n        if: ${{ success() }}'],
+    ['runtime cleanup reads an unset candidate ref',
+        '          current_image_ref="${CURRENT_IMAGE_REF-}"',
+        '          current_image_ref="$CURRENT_IMAGE_REF"'],
+    ['runtime cleanup accepts a partial identity tuple',
+        '          elif [ "$runtime_identity_count" -ne 0 ]; then',
+        '          elif [ "$runtime_identity_count" -lt 0 ]; then'],
+    ['runtime cleanup removes images without a complete valid identity tuple',
+        '          if [ "$runtime_identity_ready" -eq 1 ]; then\n'
+            + '            for image_ref in "$current_image_ref" "$previous_image_ref"; do',
+        '          if true; then\n'
+            + '            for image_ref in "$current_image_ref" "$previous_image_ref"; do'],
+    ['runtime cleanup accepts an owned container without digest identities',
+        '            if [ "$runtime_identity_ready" -ne 1 ]; then return 1; fi',
+        '            true # missing identity accepted'],
     ['runtime cleanup loses run ownership',
         '                [ "$run_label" = "$GITHUB_RUN_ID" ] || return 1',
         '                true # ownership omitted'],

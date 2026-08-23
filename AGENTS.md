@@ -19,12 +19,15 @@ Canonical Codex knowledge:
 
 ## Current I11 protected-main signed-candidate checkpoint
 
-I11 starts from exact protected-main baseline
-`8253160eef1c3e00c1e40826ec61fd97563ddd9b` on
-`codex/i11-release-productization`. At this documentation boundary the I11
-workflow, contract tests, local gates, implementation commit, hosted Source and
-Image runs, manual publication run, registry digest, attestations and evidence
-artifact are `PENDING`; do not pre-claim them.
+I11 started from exact protected-main baseline
+`8253160eef1c3e00c1e40826ec61fd97563ddd9b` and merged PR `#2` at main SHA
+`48afd39b26a6c6ca18ec7bbd18a719c846751e26`. Exact-main Source run
+`32666929393`, Image run `32666929394`, and Candidate Publication run
+`32667219964` succeeded. The immutable candidate digest is
+`sha256:3cea88b5009e5bd65b634865608681fccbb9fb721308ada2f6e8844e172541ea`;
+SLSA/SPDX attestation IDs are `42460061` and `42460068`, and bounded evidence
+artifact `9500456840` was uploaded with exact cleanup. This is signed candidate
+evidence only, not deployment or production readiness.
 
 The intended publication entry point is manual `workflow_dispatch` only from
 the exact current protected `main` SHA. It has two explicit, mutually exclusive
@@ -55,9 +58,14 @@ image's SLSA and SPDX attestations through API and OCI, runs the hardened I9
 private-peer readiness, controlled `STORAGE_UNSAFE` failure and automatic exact-
 previous rollback path, then emits bounded evidence and performs exact cleanup.
 The rehearsal has only contents/actions/packages/attestations read permission;
-it cannot write the registry, deploy, use OIDC or contact the VPS. Its
-implementation/local/hosted/publication/rehearsal results remain `PENDING` until
-observed.
+it cannot write the registry, deploy, use OIDC or contact the VPS. First
+automatic run `32667607266` failed closed before registry read/runtime because a
+depth-limited main refresh made the otherwise-full checkout shallow and hid the
+valid previous-candidate ancestry. Its always-run cleanup then independently
+read unset runtime identity variables and masked the primary reason as cleanup
+failure. The corrective contract preserves full history and accepts only an
+all-empty or fully valid four-field cleanup identity tuple; final corrective
+hosted rehearsal evidence remains `PENDING` at this commit boundary.
 
 Publication and rehearsal never grant VPS/SSH, production, release, Git-tag,
 mutable image-tag, overwrite or deletion authority. See

@@ -2,9 +2,10 @@
 
 ## Current I11 protected-main signed-candidate checkpoint
 
-Commit-time status: `PENDING_LOCAL_AND_HOSTED_VALIDATION` from exact protected
-main baseline `8253160eef1c3e00c1e40826ec61fd97563ddd9b` on branch
-`codex/i11-release-productization`. Direct source map:
+Observed status: `SIGNED_MAIN_CANDIDATE_VERIFIED; AUTOMATIC_REHEARSAL_CORRECTIVE_PENDING`.
+I11 merged from baseline `8253160eef1c3e00c1e40826ec61fd97563ddd9b`
+through PR `#2` at main SHA
+`48afd39b26a6c6ca18ec7bbd18a719c846751e26`. Direct source map:
 
 ```text
 manual workflow_dispatch on exact protected main HEAD
@@ -50,9 +51,17 @@ manual workflow_dispatch on exact protected main HEAD
   identity, previous/candidate readiness and Orca proof, controlled
   `STORAGE_UNSAFE`, automatic exact-previous rollback, bounded evidence and
   exact cleanup. Its job has contents/actions/packages/attestations read only.
-- I11 code/test/workflow completion, local gates, exact-SHA Source/Image,
-  manual publication, digest, attestations, publication artifact and automatic
-  rehearsal evidence/cleanup are all `PENDING` at this commit-time boundary.
+- Exact-main Source `32666929393`, Image `32666929394`, and Candidate
+  Publication `32667219964` succeeded. Candidate digest
+  `sha256:3cea88b5009e5bd65b634865608681fccbb9fb721308ada2f6e8844e172541ea`,
+  SLSA/SPDX attestations `42460061`/`42460068`, and artifact `9500456840` are
+  verified with publication cleanup.
+- Automatic rehearsal `32667607266` failed before registry read/runtime. The
+  full checkout was made shallow by `git fetch --depth=1`, invalidating the
+  otherwise-true `1fffab8… -> 48afd39…` ancestry proof; the always-run cleanup
+  independently dereferenced unset image refs. The corrective workflow removes
+  the shallow fetch and validates an all-empty/all-valid cleanup identity tuple.
+  Corrective exact-SHA hosted evidence is `PENDING` at this commit boundary.
 - No mode authorizes deployment, VPS/SSH, promotion tag, release/Git tag,
   mutable tag, overwrite or registry deletion. Hosted S4/S5/I9 evidence remains
   ephemeral repository validation, not production proof.
@@ -880,9 +889,13 @@ delta above for present test and audit status.
   protected branches true/custom false, with exactly one `branch_policy` rule
   (ID `63481958`) and zero reviewer/wait-timer rules, secrets, variables and
   deployments as of 2026-08-23.
-- `PENDING_I11`: first manual main publication/recovery and its automatic
-  signed-main ephemeral rehearsal. Production secret delivery remains
-  `UNVERIFIED`.
+- `VERIFIED_I11_SIGNED_MAIN_CANDIDATE`: Candidate Publication `32667219964`
+  produced digest `sha256:3cea88b5…2541ea`, attestations `42460061`/`42460068`
+  and bounded artifact `9500456840` with exact cleanup.
+- `PENDING_I11_REHEARSAL_CORRECTIVE`: automatic run `32667607266` failed before
+  registry read/runtime on shallow-history ancestry plus an independent unset-
+  identity cleanup bug. Corrective exact-SHA hosted success is required.
+- Production secret delivery remains `UNVERIFIED`.
 - `UNVERIFIED`: deployed commit/image and digest, intended/denied callers, VPS
   checkout cleanliness, exact reverse-proxy CIDRs/hops/timeouts, actual host
   capacity, firewall/egress, quotas, backups, monitoring, and rollback readiness.
