@@ -1,14 +1,14 @@
 'use strict';
 
-const contract = require('./i8-publication-evidence');
+const contract = require('./i11-publication-evidence');
 const {createPublicationEvidenceWriter} = require('./publication-evidence-writer');
 
 const writer = createPublicationEvidenceWriter(Object.freeze({
     contract,
-    inputFile: 'i8-publication-draft.json',
-    outputFile: 'i8-candidate-provenance.json',
-    errorPrefix: 'i8',
-    successMarker: 'i8_candidate_provenance=PASS'
+    inputFile: 'i11-publication-draft.json',
+    outputFile: 'i11-main-candidate-provenance.json',
+    errorPrefix: 'i11',
+    successMarker: 'i11_main_candidate_provenance=PASS'
 }));
 
 if (require.main === module) writer.main();
