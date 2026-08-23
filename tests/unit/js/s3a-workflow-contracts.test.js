@@ -303,12 +303,26 @@ function validateTriggerSet(document, expectedEvents, errors) {
         `${document.name}: unexpected trigger set (${actual.join(', ')})`);
 }
 
-function validateNonMainPush(document, errors) {
+function validateMainlineAndMergeQueueTriggers(document, errors) {
     const on = topLevelBlock(document, 'on');
+    const pullRequest = on && directKey(on, 'pull_request');
     const push = on && directKey(on, 'push');
-    const ignored = push && directKey(push, 'branches-ignore');
-    addError(errors, Boolean(ignored) && directListValues(ignored).includes('main'),
-        `${document.name}: push must ignore main`);
+    const mergeGroup = on && directKey(on, 'merge_group');
+    const exactList = (block, key, value) => {
+        const nested = block && directKey(block, key);
+        return Boolean(nested) && JSON.stringify(directListValues(nested)) === JSON.stringify([value]);
+    };
+    addError(errors, exactList(pullRequest, 'branches', 'main')
+        && JSON.stringify(directKeys(pullRequest)) === JSON.stringify(['branches']),
+    `${document.name}: pull_request must target only main`);
+    addError(errors, Boolean(push), `${document.name}: push trigger is required`);
+    addError(errors, Boolean(mergeGroup), `${document.name}: merge_group trigger is required`);
+    addError(errors, exactList(push, 'branches', 'main')
+        && JSON.stringify(directKeys(push)) === JSON.stringify(['branches']),
+    `${document.name}: push must target only main`);
+    addError(errors, exactList(mergeGroup, 'types', 'checks_requested')
+        && JSON.stringify(directKeys(mergeGroup)) === JSON.stringify(['types']),
+    `${document.name}: merge_group must allow only checks_requested`);
 }
 
 function validatePermissions(document, errors) {
@@ -418,12 +432,12 @@ function validateExactCandidate(document, errors, companionSource = '') {
     `${document.name}: requested and event candidates must enter shell only through env`);
     addError(errors, /if \[ "\$HAS_REQUESTED_CANDIDATE" = "true" \]; then[\s\S]{0,200}?candidate_sha="\$REQUESTED_CANDIDATE_SHA"/.test(source),
         `${document.name}: present candidate input, including empty input, must remain authoritative`);
-    addError(errors, /elif \[ "\$EVENT_NAME" = "pull_request" \] \|\| \[ "\$EVENT_NAME" = "push" \]; then[\s\S]{0,120}?candidate_sha="\$EVENT_CANDIDATE_SHA"/.test(source),
-        `${document.name}: event SHA fallback is allowed only for direct PR/push triggers`);
+    addError(errors, /elif \[ "\$EVENT_NAME" = "pull_request" \] \|\| \[ "\$EVENT_NAME" = "push" \] \|\| \[ "\$EVENT_NAME" = "merge_group" \]; then[\s\S]{0,120}?candidate_sha="\$EVENT_CANDIDATE_SHA"/.test(source),
+        `${document.name}: event SHA fallback is allowed only for direct PR/push/merge_group triggers`);
     addError(errors, source.includes('echo "sha=$candidate_sha" >> "$GITHUB_OUTPUT"')
         && source.includes('echo "CANDIDATE_SHA=$candidate_sha" >> "$GITHUB_ENV"'),
     `${document.name}: validated candidate must be recorded as an output and environment value`);
-    addError(errors, source.includes('^[0-9a-f]{40}$'),
+    addError(errors, source.includes('if [[ ! "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]'),
         `${document.name}: candidate must be validated as exactly 40 lowercase hex characters`);
 
     const checkouts = actionSteps(document, 'actions/checkout@');
@@ -444,13 +458,17 @@ function validateExactCandidate(document, errors, companionSource = '') {
 function validateCi(source) {
     const document = parseWorkflow(source, 'ci');
     const errors = [];
-    validateTriggerSet(document, ['pull_request', 'push', 'workflow_dispatch', 'workflow_call'], errors);
-    validateNonMainPush(document, errors);
+    validateTriggerSet(document, ['pull_request', 'push', 'merge_group', 'workflow_dispatch', 'workflow_call'], errors);
+    validateMainlineAndMergeQueueTriggers(document, errors);
     validateInputContract(document, 'workflow_dispatch', errors);
     validateInputContract(document, 'workflow_call', errors);
     validateExactCandidate(document, errors);
     validateCandidateRangeWhitespaceGate(document, errors);
     addError(errors, /^name:\s*.*NO DEPLOY.*$/mi.test(source), 'ci: workflow name must state NO DEPLOY');
+    const validateJob = findJob(document, 'validate');
+    addError(errors, validateJob
+        && directScalar(validateJob, 'name') === 'Validate exact source candidate (NO DEPLOY)',
+    'ci: required-check job name must remain stable');
 
     const nodeSetups = actionSteps(document, 'actions/setup-node@');
     addError(errors, nodeSetups.length === 1, 'ci: exactly one setup-node action is required');
@@ -503,6 +521,22 @@ function validateCandidateRangeWhitespaceGate(document, errors) {
             'ci: candidate-range whitespace gate must run under Bash');
         addError(errors, gateText.includes('set -euo pipefail'),
             'ci: candidate-range whitespace gate must enable set -euo pipefail');
+        const env = directKey(gateSteps[0], 'env');
+        addError(errors, env
+            && directScalar(env, 'EVENT_NAME') === '${{ github.event_name }}'
+            && directScalar(env, 'EVENT_REF') === '${{ github.ref }}'
+            && directScalar(env, 'EVENT_BEFORE') === '${{ github.event.before }}',
+        'ci: candidate-range gate must receive exact event name, ref, and before SHA through env');
+        addError(errors, gateText.includes('[ "$EVENT_NAME" = "push" ]')
+            && gateText.includes('[ "$EVENT_REF" != "refs/heads/main" ]'),
+        'ci: main push range must require the exact main ref');
+        addError(errors, gateText.includes('[[ ! "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ ]]')
+            && gateText.includes('[ "$EVENT_BEFORE" = "0000000000000000000000000000000000000000" ]'),
+        'ci: main push range must reject malformed and zero before SHAs');
+        addError(errors, gateText.includes('git cat-file -e "$EVENT_BEFORE^{commit}"')
+            && gateText.includes('git merge-base --is-ancestor "$EVENT_BEFORE" "$CANDIDATE_SHA"')
+            && gateText.includes('base_sha="$EVENT_BEFORE"'),
+        'ci: main push range must prove and use the exact before commit');
         addError(errors, gateText.includes("git rev-parse 'refs/remotes/origin/main^{commit}'"),
             'ci: candidate-range whitespace gate must resolve origin/main as a commit');
         addError(errors, gateText.includes('git cat-file -e "$remote_main_sha^{commit}"'),
@@ -523,7 +557,7 @@ function validateCandidateRangeWhitespaceGate(document, errors) {
     addError(errors, !commands.includes('git diff --check'),
         'ci: bare clean-worktree git diff --check is forbidden');
     addError(errors, !/\bgit\s+diff\s+--check\s+(?:HEAD\^|[0-9a-f]{40})/i.test(document.source)
-        && !document.source.includes('github.event.before')
+        && !/git diff --check[^\n]*\$\{\{\s*github\.event\./.test(document.source)
         && !document.source.includes('github.event.pull_request.base'),
         'ci: candidate-range whitespace gate must not use HEAD^, event bases, or a hard-coded baseline');
     addError(errors, !/4b825dc642cb6eb9a060e54bf8d69288fbee4904|--root/.test(document.source),
@@ -665,8 +699,9 @@ function validateImage(gateSource, wrapperSource = WORKFLOWS.image) {
     addError(errors, JSON.stringify(usesLines(document).map(actionReference).sort())
         === JSON.stringify([...AUDITED_IMAGE_GATE_USES].sort()),
     'image: shared gate uses multiset differs from the audited action allowlist');
-    validateTriggerSet(wrapperDocument, ['pull_request', 'push', 'workflow_dispatch', 'workflow_call'], errors);
-    validateNonMainPush(wrapperDocument, errors);
+    validateTriggerSet(wrapperDocument,
+        ['pull_request', 'push', 'merge_group', 'workflow_dispatch', 'workflow_call'], errors);
+    validateMainlineAndMergeQueueTriggers(wrapperDocument, errors);
     validateInputContract(wrapperDocument, 'workflow_dispatch', errors);
     validateInputContract(wrapperDocument, 'workflow_call', errors);
     validateExactCandidate(wrapperDocument, errors, gateSource);
@@ -675,6 +710,10 @@ function validateImage(gateSource, wrapperSource = WORKFLOWS.image) {
 
     const jobs = topLevelBlock(wrapperDocument, 'jobs');
     addError(errors, jobs && directKeys(jobs).length === 1, 'image: exactly one image-validation job is required');
+    const validationJob = findJob(wrapperDocument, 'validate-image');
+    addError(errors, validationJob
+        && directScalar(validationJob, 'name') === 'Build once, inspect, scan, and discard (NO DEPLOY)',
+    'image: required-check job name must remain stable');
 
     const setupSteps = actionSteps(document, 'docker/setup-buildx-action@');
     addError(errors, setupSteps.length === 1, 'image: exactly one setup-buildx action is required');
@@ -1247,6 +1286,107 @@ test('image validation builds once and reuses one local image for smoke, SBOM, s
     assertValid(validateImage(IMAGE_GATE));
 });
 
+test('mainline and merge-queue trigger weakening is rejected in memory', async (t) => {
+    const cases = [
+        {
+            name: 'source excludes main pushes',
+            validate: (source) => validateCi(source),
+            source: WORKFLOWS.ci,
+            mutate: (source) => mutateOnce(source, '  push:\n',
+                '  push:\n    branches-ignore:\n      - main\n', 'branches-ignore:'),
+            expected: /push must target only main/
+        },
+        {
+            name: 'image excludes main pushes',
+            validate: (source) => validateImage(IMAGE_GATE, source),
+            source: WORKFLOWS.image,
+            mutate: (source) => mutateOnce(source, '  push:\n',
+                '  push:\n    branches-ignore:\n      - main\n', 'branches-ignore:'),
+            expected: /push must target only main/
+        },
+        {
+            name: 'source loses merge queue validation',
+            validate: (source) => validateCi(source),
+            source: WORKFLOWS.ci,
+            mutate: (source) => mutateOnce(source, '  merge_group:\n', '', '  push:\n'),
+            expected: /unexpected trigger set|merge_group trigger is required/
+        },
+        {
+            name: 'image loses merge queue validation',
+            validate: (source) => validateImage(IMAGE_GATE, source),
+            source: WORKFLOWS.image,
+            mutate: (source) => mutateOnce(source, '  merge_group:\n', '', '  push:\n'),
+            expected: /unexpected trigger set|merge_group trigger is required/
+        },
+        {
+            name: 'source no longer resolves merge queue SHA',
+            validate: (source) => validateCi(source),
+            source: WORKFLOWS.ci,
+            mutate: (source) => mutateOnce(source,
+                ' || [ "$EVENT_NAME" = "merge_group" ]', '', 'elif [ "$EVENT_NAME" = "pull_request" ]'),
+            expected: /PR\/push\/merge_group/
+        },
+        {
+            name: 'image no longer resolves merge queue SHA',
+            validate: (source) => validateImage(IMAGE_GATE, source),
+            source: WORKFLOWS.image,
+            mutate: (source) => mutateOnce(source,
+                ' || [ "$EVENT_NAME" = "merge_group" ]', '', 'elif [ "$EVENT_NAME" = "pull_request" ]'),
+            expected: /PR\/push\/merge_group/
+        },
+        {
+            name: 'source broadens push branches',
+            validate: (source) => validateCi(source),
+            source: WORKFLOWS.ci,
+            mutate: (source) => mutateOnce(source,
+                '  push:\n    branches:\n      - main\n',
+                '  push:\n    branches:\n      - main\n      - synthetic\n', '- synthetic'),
+            expected: /push must target only main/
+        },
+        {
+            name: 'image broadens pull request branches',
+            validate: (source) => validateImage(IMAGE_GATE, source),
+            source: WORKFLOWS.image,
+            mutate: (source) => mutateOnce(source,
+                '  pull_request:\n    branches:\n      - main\n',
+                '  pull_request:\n    branches:\n      - main\n      - synthetic\n', '- synthetic'),
+            expected: /pull_request must target only main/
+        },
+        {
+            name: 'source broadens merge queue events',
+            validate: (source) => validateCi(source),
+            source: WORKFLOWS.ci,
+            mutate: (source) => mutateOnce(source, '      - checks_requested\n',
+                '      - checks_requested\n      - synthetic\n', '- synthetic'),
+            expected: /merge_group must allow only checks_requested/
+        },
+        {
+            name: 'source required-check name drifts',
+            validate: (source) => validateCi(source),
+            source: WORKFLOWS.ci,
+            mutate: (source) => mutateOnce(source,
+                'Validate exact source candidate (NO DEPLOY)',
+                'Validate source candidate (NO DEPLOY)', 'Validate source candidate'),
+            expected: /required-check job name must remain stable/
+        },
+        {
+            name: 'image required-check name drifts',
+            validate: (source) => validateImage(IMAGE_GATE, source),
+            source: WORKFLOWS.image,
+            mutate: (source) => mutateOnce(source,
+                'Build once, inspect, scan, and discard (NO DEPLOY)',
+                'Build and scan (NO DEPLOY)', 'Build and scan'),
+            expected: /required-check job name must remain stable/
+        }
+    ];
+
+    for (const mutation of cases) {
+        await t.test(mutation.name, () => {
+            assertRejected(mutation.validate(mutation.mutate(mutation.source)), mutation.expected);
+        });
+    }
+});
+
 test('global workflow safety mutations are rejected in memory', async (t) => {
     const cases = [
         {
@@ -1506,6 +1646,45 @@ test('source validation candidate and gate omissions are rejected in memory', as
                 'base_sha="$(git merge-base "$remote_main_sha" "$CANDIDATE_SHA")"',
                 'base_sha="$(git merge-base "$remote_main_sha" "$CANDIDATE_SHA" || true)"', '|| true'),
             expected: /must not use an empty-range fallback/
+        },
+        {
+            name: 'main push before SHA accepts abbreviations',
+            mutate: (source) => mutateOnce(source,
+                '[[ ! "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ ]]',
+                '[[ ! "$EVENT_BEFORE" =~ ^[0-9a-f]{7,40}$ ]]', '^[0-9a-f]{7,40}$'),
+            expected: /reject malformed and zero before SHAs/
+        },
+        {
+            name: 'main push permits a zero before SHA',
+            mutate: (source) => mutateOnce(source,
+                '               [ "$EVENT_BEFORE" = "0000000000000000000000000000000000000000" ]; then',
+                '               false; then', 'false; then'),
+            expected: /reject malformed and zero before SHAs/
+        },
+        {
+            name: 'main push before commit proof is removed',
+            mutate: (source) => mutateOnce(source,
+                'git cat-file -e "$EVENT_BEFORE^{commit}"', ':', '            :'),
+            expected: /prove and use the exact before commit/
+        },
+        {
+            name: 'main push ancestry proof is removed',
+            mutate: (source) => mutateOnce(source,
+                'git merge-base --is-ancestor "$EVENT_BEFORE" "$CANDIDATE_SHA"', ':', '            :'),
+            expected: /prove and use the exact before commit/
+        },
+        {
+            name: 'main push diff falls back to current origin main',
+            mutate: (source) => mutateOnce(source,
+                'base_sha="$EVENT_BEFORE"', 'base_sha="$remote_main_sha"', 'base_sha="$remote_main_sha"'),
+            expected: /prove and use the exact before commit/
+        },
+        {
+            name: 'main push ref restriction is broadened',
+            mutate: (source) => mutateOnce(source,
+                '[ "$EVENT_REF" != "refs/heads/main" ]',
+                '[ -z "$EVENT_REF" ]', '[ -z "$EVENT_REF" ]'),
+            expected: /require the exact main ref/
         },
         ...[
             ['exact npm selector', 'npm install --global npm@10.9.8 --ignore-scripts --no-audit --no-fund',

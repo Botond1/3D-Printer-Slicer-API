@@ -2,9 +2,14 @@ name: Image Validation - Build Once (NO PUSH / NO DEPLOY)
 
 on:
   pull_request:
-  push:
-    branches-ignore:
+    branches:
       - main
+  push:
+    branches:
+      - main
+  merge_group:
+    types:
+      - checks_requested
   workflow_dispatch:
     inputs:
       candidate_sha:
@@ -58,7 +63,7 @@ jobs:
           set -euo pipefail
           if [ "$HAS_REQUESTED_CANDIDATE" = "true" ]; then
             candidate_sha="$REQUESTED_CANDIDATE_SHA"
-          elif [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "push" ]; then
+          elif [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "push" ] || [ "$EVENT_NAME" = "merge_group" ]; then
             candidate_sha="$EVENT_CANDIDATE_SHA"
           else
             echo "An explicit candidate_sha input is required for this invocation." >&2

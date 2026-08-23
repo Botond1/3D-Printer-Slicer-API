@@ -2,9 +2,14 @@ name: Source Validation (NO DEPLOY)
 
 on:
   pull_request:
-  push:
-    branches-ignore:
+    branches:
       - main
+  push:
+    branches:
+      - main
+  merge_group:
+    types:
+      - checks_requested
   workflow_dispatch:
     inputs:
       candidate_sha:
@@ -45,7 +50,7 @@ jobs:
           set -euo pipefail
           if [ "$HAS_REQUESTED_CANDIDATE" = "true" ]; then
             candidate_sha="$REQUESTED_CANDIDATE_SHA"
-          elif [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "push" ]; then
+          elif [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "push" ] || [ "$EVENT_NAME" = "merge_group" ]; then
             candidate_sha="$EVENT_CANDIDATE_SHA"
           else
             echo "An explicit candidate_sha input is required for this invocation." >&2
@@ -128,15 +133,34 @@ jobs:
         run: npm run check:repository-safety
 
       - name: Reject whitespace errors in the exact candidate range
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
         shell: bash
         run: |
           set -euo pipefail
-          remote_main_sha="$(git rev-parse 'refs/remotes/origin/main^{commit}')"
-          git cat-file -e "$remote_main_sha^{commit}"
-          base_sha="$(git merge-base "$remote_main_sha" "$CANDIDATE_SHA")"
-          if [ -z "$base_sha" ]; then
-            echo "No merge-base exists between origin/main and $CANDIDATE_SHA." >&2
-            exit 1
+          if [ "$EVENT_NAME" = "push" ]; then
+            if [ "$EVENT_REF" != "refs/heads/main" ]; then
+              echo "Push validation is restricted to refs/heads/main." >&2
+              exit 1
+            fi
+            if [[ ! "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ ]] || \
+               [ "$EVENT_BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              echo "A nonzero full lowercase before SHA is required for main pushes." >&2
+              exit 1
+            fi
+            git cat-file -e "$EVENT_BEFORE^{commit}"
+            git merge-base --is-ancestor "$EVENT_BEFORE" "$CANDIDATE_SHA"
+            base_sha="$EVENT_BEFORE"
+          else
+            remote_main_sha="$(git rev-parse 'refs/remotes/origin/main^{commit}')"
+            git cat-file -e "$remote_main_sha^{commit}"
+            base_sha="$(git merge-base "$remote_main_sha" "$CANDIDATE_SHA")"
+            if [ -z "$base_sha" ]; then
+              echo "No merge-base exists between origin/main and $CANDIDATE_SHA." >&2
+              exit 1
+            fi
+            git merge-base --is-ancestor "$base_sha" "$CANDIDATE_SHA"
           fi
-          git merge-base --is-ancestor "$base_sha" "$CANDIDATE_SHA"
           git diff --check "$base_sha" "$CANDIDATE_SHA" --
