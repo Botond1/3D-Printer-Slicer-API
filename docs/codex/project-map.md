@@ -1,5 +1,25 @@
 # Verified project map
 
+## Current I10 mainline-governance checkpoint
+
+- Baseline: exact I9 SHA
+  `200e4174766bed2562402661afb2bc9efa7834e3`.
+- Source and Image validation now cover PRs targeting `main`, merge-group
+  `checks_requested`, and exact `main` pushes while retaining manual/reusable
+  exact-SHA calls and read-only/no-deploy authority.
+- Exact main pushes validate the nonzero event `before..candidate` range;
+  other supported invocations retain remote-main merge-base validation.
+- Stable Source/Image job contexts and the main/merge-group trigger contract
+  are mutation-tested. PR integration, exact-main hosted results and final
+  required-check readback remain `PENDING` at commit time.
+- Repository governance bootstrap requires PRs, includes administrators and
+  forbids force-push/deletion. Merge commits alone preserve I1-I9 ancestry.
+- No deploy, VPS, production environment, registry publication or promotion is
+  part of I10.
+
+See
+[`evidence/i10-mainline-governance.md`](evidence/i10-mainline-governance.md).
+
 ## Current I9/S3b ephemeral staging and rollback foundation
 
 Status: `I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE` for code-bearing SHA

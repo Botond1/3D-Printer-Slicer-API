@@ -1,5 +1,22 @@
 # Security model
 
+## I10 mainline-governance control delta
+
+| Control | Commit-time classification | Remaining boundary |
+| --- | --- | --- |
+| Mainline validation triggers | `IMPLEMENTED_AND_MUTATION_TESTED` | Source and Image target PRs to main, merge-group checks and main pushes. Exact hosted PR/main results remain pending. |
+| Main-push whitespace range | `IMPLEMENTED_AND_MUTATION_TESTED` | A nonzero exact event-before commit must exist and be an ancestor of the candidate; no current-main empty range is accepted. |
+| Branch governance bootstrap | `LIVE_BOOTSTRAP_VERIFIED` | PR required, admins enforced, force-push/deletion denied and conversation resolution required. Exact Source/Image required contexts are added only after their first I10 PR observations. |
+| Human approval | `HUMAN_REVIEWER_CAPABILITY_UNAVAILABLE` | The sole collaborator cannot approve their own PR. Zero-review bootstrap is explicit and must not be represented as human review. |
+| Deployment/publication | `OUT_OF_SCOPE_NO_AUTHORITY` | I10 has no registry, attestation, environment, SSH/VPS, deploy or production capability. |
+
+The pre-integration remote `main` still held a historical auto-deploy workflow,
+so protection was installed before any integration push. The I9 descendant
+replaces that workflow with the manual no-deploy preflight. Final Source/Image
+required-context binding, merge and exact-main hosted proof remain pending at
+commit time. See
+[`evidence/i10-mainline-governance.md`](evidence/i10-mainline-governance.md).
+
 ## I9/S3b ephemeral staging and rollback control delta
 
 Hosted classification:

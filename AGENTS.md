@@ -17,6 +17,24 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
+## Current I10 mainline-governance checkpoint
+
+I10 starts from exact completed I9 SHA
+`200e4174766bed2562402661afb2bc9efa7834e3` on
+`codex/i10-mainline-governance`. It connects the existing read-only Source and
+Image workflows to pull requests targeting `main`, merge-queue
+`checks_requested`, and exact `main` pushes. The Source gate proves a nonzero
+exact `before..candidate` range for main pushes; stable Source/Image job names
+are mutation-guarded for required-check policy.
+
+Before integration, repository `main` was protected with a PR-required,
+admin-enforced bootstrap rule that forbids force-push and deletion. Merge
+commits are the sole enabled strategy so the exact I1-I9 lineage remains
+intact. Required-context binding, PR merge, exact-main hosted gates and final
+policy readback remain `PENDING` at commit time. This checkpoint adds no image
+publication, deployment, SSH/VPS, environment or production authority. See
+[`docs/codex/evidence/i10-mainline-governance.md`](docs/codex/evidence/i10-mainline-governance.md).
+
 ## Current I9/S3b ephemeral staging and rollback foundation
 
 Repository checkpoint status:

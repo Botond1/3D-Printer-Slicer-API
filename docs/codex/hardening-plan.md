@@ -1,5 +1,29 @@
 # Hardening plan
 
+## I10 mainline integration and governance checkpoint
+
+Status: `PENDING_PR_AND_EXACT_MAIN_HOSTED_GATES` at commit time.
+
+I10 connects the already-green no-deploy Source/Image gates to protected-main
+integration without changing application or image behavior. Exit criteria:
+
+1. exact I9 ancestry and conflict-free merge proof;
+2. PR-only main integration with merge-commit ancestry preservation;
+3. green Source and Image contexts on the PR merge candidate;
+4. strict branch protection bound to both GitHub Actions contexts;
+5. exact post-merge main SHA Source and Image success;
+6. final policy/settings/SHA readback and proof that no deploy or publication
+   workflow ran.
+
+The live bootstrap rule already requires a PR, includes administrators and
+forbids force-push/deletion. Required contexts remain pending until first
+observed on the I10 PR. A required human approval is not enabled because the
+repository has one collaborator who cannot self-approve; this is an explicit
+capability gap. I10 never authorizes deployment, VPS access or registry write.
+
+See
+[`evidence/i10-mainline-governance.md`](evidence/i10-mainline-governance.md).
+
 ## I9/S3b ephemeral staging and rollback checkpoint
 
 Status: `I9_EPHEMERAL_STAGING_ROLLBACK_COMPLETE`.
