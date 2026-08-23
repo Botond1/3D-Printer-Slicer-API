@@ -4,7 +4,7 @@ applyTo: "configs/**"
 
 # Configs Folder Instructions
 
-Last synchronized: 2026-05-14
+Last synchronized: 2026-07-23
 
 ## Scope
 - pricing.json is runtime pricing source of truth.
@@ -23,4 +23,3 @@ Last synchronized: 2026-05-14
 - ORCA_PROCESS_PROFILE_0_3
 - PYTHON_EXECUTABLE
 - VIRTUAL_ENV
-- DEBUG_COMMAND_LOGS

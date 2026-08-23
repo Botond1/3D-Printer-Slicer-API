@@ -1,18 +1,27 @@
 {
   "name": "3d-printer-slicer-api",
   "version": "3.1.4",
+  "packageManager": "npm@10.9.8",
   "main": "app/server.js",
   "scripts": {
     "start": "node app/server.js",
-    "dev": "node --watch app/server.js"
+    "dev": "node --watch app/server.js",
+    "test": "npm run test:js && npm run test:python",
+    "test:js": "node scripts/run-js-tests.js",
+    "test:python": "node scripts/run-python.js scripts/run-python-tests.py",
+    "check:syntax": "npm run check:syntax:js && npm run check:syntax:python",
+    "check:syntax:js": "node scripts/validate-js-syntax.js",
+    "check:syntax:python": "node scripts/run-python.js scripts/validate-python-syntax.py",
+    "check:repository-safety": "node scripts/run-python.js scripts/validate-repository-safety.py --scope tracked --require-nonempty",
+    "check:repository-safety:staged": "node scripts/run-python.js scripts/validate-repository-safety.py --scope staged --require-nonempty"
   },
   "dependencies": {
-    "archiver": "^7.0.1",
+    "archiver": "^8.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.3.1",
-    "express": "^4.18.2",
+    "express": "^4.22.2",
     "helmet": "^8.1.0",
-    "multer": "^2.0.2",
+    "multer": "^2.2.0",
     "swagger-ui-express": "^5.0.0",
     "yauzl": "^3.2.0"
   }

@@ -1,0 +1,27 @@
+{
+  "schema_version": "i9-s3b-ephemeral-staging-rehearsal-manifest-v1",
+  "repository": "ghcr.io/botond1/3d-printer-slicer-api",
+  "previous": {
+    "role": "ephemeral_previous_fixture_requalification_required",
+    "source_sha": "71e3a7df1972b78a7c8cc2cc03508558186027ce",
+    "digest": "sha256:26df5afe5ad48062c8e1d5213b305282d9386688e1666e2ef0a56487de5e8b6c",
+    "config_digest": "sha256:8d4de3647161d5688688191c9eb7af301d43216ab22ce0142d0a244e00c72c82",
+    "discovery_tag": "candidate-71e3a7df1972b78a7c8cc2cc03508558186027ce"
+  },
+  "candidate": {
+    "role": "signed_candidate",
+    "source_sha": "1fffab87960c675a053ae814d374cab331fbb14d",
+    "digest": "sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5",
+    "config_digest": "sha256:b16f951a9701335b35b4ef248c2b1764d06c17f5e90ee6c2c2245bedc3026d42",
+    "discovery_tag": "candidate-1fffab87960c675a053ae814d374cab331fbb14d"
+  },
+  "policy": {
+    "platform": "linux/amd64",
+    "distinct_digests_required": true,
+    "previous_fresh_attestation_verification_required": true,
+    "candidate_fresh_attestation_verification_required": true,
+    "mutable_tags_forbidden": true,
+    "registry_writes_forbidden": true,
+    "deploy_forbidden": true
+  }
+}

@@ -8,7 +8,7 @@ Runs a full lifecycle for both FDM and SLA pricing materials:
 - verify deletion via GET /pricing
 
 Auth:
-- Reads ADMIN_API_KEY from environment first
+- Reads PRICING_API_KEY from environment first
 - Falls back to parsing project .env file
 """
 
@@ -31,7 +31,7 @@ LEGACY_REPORT_FILES = (
     RESULTS_DIR / "pricing_cycle_test_report.json",
     RESULTS_DIR / "pricing_cycle_test_report.md",
 )
-from common.env_utils import resolve_admin_key_candidates, resolve_base_url
+from common.env_utils import resolve_base_url, resolve_pricing_api_key_candidates
 from common.http_utils import curl_json
 
 
@@ -49,10 +49,10 @@ class StepResult:
     body: dict | str | None
 
 
-def _read_admin_api_key_candidates() -> list[str]:
-    candidates = resolve_admin_key_candidates(PROJECT_ROOT)
+def _read_pricing_api_key_candidates() -> list[str]:
+    candidates = resolve_pricing_api_key_candidates(PROJECT_ROOT)
     if not candidates:
-        raise RuntimeError("ADMIN_API_KEY not found in .env or process environment.")
+        raise RuntimeError("PRICING_API_KEY not found in .env or process environment.")
     return candidates
 
 
@@ -314,7 +314,7 @@ def main() -> int:
     base_url = resolve_base_url(PROJECT_ROOT)
 
     try:
-        api_keys = _read_admin_api_key_candidates()
+        api_keys = _read_pricing_api_key_candidates()
     except Exception as exc:
         print(f"[PRICING TEST] ERROR: {exc}")
         return 1

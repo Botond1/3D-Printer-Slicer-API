@@ -63,6 +63,7 @@ def curl_multipart_slice(
     file_path: Path,
     layer_height: float,
     material: str,
+    slice_service_api_key: str,
     extra_fields: Mapping[str, str | int | float | bool] | None = None,
 ) -> tuple[int, dict | str | None, float]:
     cmd = [
@@ -71,6 +72,8 @@ def curl_multipart_slice(
         "-X",
         "POST",
         f"{base_url}{endpoint}",
+        "-H",
+        f"x-slicer-api-key: {slice_service_api_key}",
         "-F",
         f"choosenFile=@{file_path}",
         "-F",

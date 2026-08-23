@@ -5,30 +5,95 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const { randomUUID } = require('node:crypto');
 const swaggerUi = require('swagger-ui-express');
 require('dotenv').config();
-const createSwaggerDocument = require('./docs/swagger-docs');
-const pricingRoutes = require('./routes/pricing.routes');
-const sliceRoutes = require('./routes/slice.routes');
-const systemRoutes = require('./routes/system.routes');
-const errorHandler = require('./middleware/errorHandler');
-const { PORT, DEFAULTS } = require('./config/constants');
-const { ensureRequiredDirectories } = require('./config/paths');
-const { loadPricingFromDisk, getPricing } = require('./services/pricing.service');
+const { resolveServiceKeyRing } = require('./config/service-auth');
 
-// Security check for critical environment variables
-if (!process.env.ADMIN_API_KEY) {
-    console.error('[SECURITY] ADMIN_API_KEY is missing. Refusing to start server.');
+let serviceKeyRing;
+try {
+    serviceKeyRing = resolveServiceKeyRing(process.env);
+} catch {
+    console.error('[SECURITY] Service authentication configuration is invalid. Refusing to start server.');
     process.exit(1);
 }
 
+const createSwaggerDocument = require('./docs/swagger-docs');
+const { createPricingRouter } = require('./routes/pricing.routes');
+const { createSliceRouter } = require('./routes/slice.routes');
+const { createSystemRouter } = require('./routes/system.routes');
+const errorHandler = require('./middleware/errorHandler');
+const { createCorsOptionsResolver, parseAllowedOrigins } = require('./middleware/corsPolicy');
+const { createRequireSliceService } = require('./middleware/requireSliceService');
+const { createRequireAdminAudience } = require('./middleware/requireAdmin');
+const { createRequestIdMiddleware } = require('./middleware/requestId');
+const { createRequestObservabilityMiddleware } = require('./middleware/requestObservability');
+const { PORT } = require('./config/constants');
+const { ensureRequiredDirectories, JOB_SCRATCH_DIR } = require('./config/paths');
+const { resolveTrustProxySetting } = require('./config/trust-proxy');
+const { resolveResourcePolicy } = require('./config/resource-policy');
+const { loadPricingFromDisk, getPricing } = require('./services/pricing.service');
+const { createBoundedHttpServer } = require('./services/http-server');
+const { auditStaleWorkspaces, auditWorkspacesThenListen } = require('./services/slice/workspace');
+const { cleanupManagedArtifacts } = require('./services/artifact-store');
+const { beginSliceQueueShutdown } = require('./services/slice/queue');
+const { createRuntimeLifecycle } = require('./services/runtime-lifecycle');
+const { createReadinessService } = require('./services/readiness.service');
+const { emitEvent, setEventWriter } = require('./services/observability/events');
+const {
+    recordArtifactCleanup,
+    setArtifactStatus
+} = require('./services/observability/metrics');
+
+setEventWriter((entry) => console.info(JSON.stringify(entry)));
+
 // Initialize required directories and load pricing data
+let resourcePolicy;
+try {
+    resourcePolicy = resolveResourcePolicy(process.env);
+} catch {
+    console.error('[SECURITY] Resource policy configuration is invalid. Refusing to start server.');
+    process.exit(1);
+}
 ensureRequiredDirectories();
 loadPricingFromDisk();
 
 /** @type {import('express').Express} */
 const app = express();
+let runtimeLifecycle;
+const readinessService = createReadinessService({
+    isShuttingDown: () => runtimeLifecycle?.isShuttingDown() === true,
+    legacyMigration: serviceKeyRing.legacyMigration
+});
+runtimeLifecycle = createRuntimeLifecycle({
+    beginQueueShutdown: beginSliceQueueShutdown,
+    onShutdownStart() {
+        readinessService.closeAdmission('shutdown');
+        emitEvent('shutdown.started', { outcome: 'started' });
+    }
+});
+const authLogger = Object.freeze({
+    warn(message, metadata = {}) {
+        void message;
+        emitEvent('auth.rejected', {
+            request_id: metadata.requestId,
+            audience: metadata.audience,
+            outcome: 'rejected',
+            error_code: 'AUTH_REQUIRED'
+        });
+    }
+});
+const sliceRoutes = createSliceRouter({
+    authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger }),
+    resourcePolicy
+});
+const pricingRoutes = createPricingRouter({
+    authenticate: createRequireAdminAudience('pricing', serviceKeyRing, { logger: authLogger })
+});
+const systemRoutes = createSystemRouter({
+    authenticateArtifact: createRequireAdminAudience('artifact', serviceKeyRing, { logger: authLogger }),
+    authenticateOperations: createRequireAdminAudience('operations', serviceKeyRing, { logger: authLogger }),
+    readinessService
+});
 
 const standardHelmet = helmet();
 const docsHelmet = helmet({
@@ -45,73 +110,28 @@ const docsHelmet = helmet({
     }
 });
 
-/**
- * Parse comma-separated origin list from environment.
- * @param {string | undefined} value Raw environment value.
- * @returns {string[]} Normalized origins.
- */
-function parseCsvValues(value) {
-    return String(value || '')
-        .split(',')
-        .map((origin) => origin.trim())
-        .filter(Boolean);
+const resolveCorsOptions = createCorsOptionsResolver({
+    adminAllowedOrigins: parseAllowedOrigins(process.env.ADMIN_CORS_ALLOWED_ORIGINS),
+    legacyAdminAudience: serviceKeyRing.legacyMigration.enabled
+        ? serviceKeyRing.legacyMigration.audience
+        : null,
+    sliceAllowedOrigins: parseAllowedOrigins(process.env.SLICE_CORS_ALLOWED_ORIGINS),
+    pricingAllowedOrigins: parseAllowedOrigins(process.env.PRICING_CORS_ALLOWED_ORIGINS),
+    artifactAllowedOrigins: parseAllowedOrigins(process.env.ARTIFACT_CORS_ALLOWED_ORIGINS),
+    operationsAllowedOrigins: parseAllowedOrigins(process.env.OPERATIONS_CORS_ALLOWED_ORIGINS)
+});
+
+let trustProxySetting;
+try {
+    trustProxySetting = resolveTrustProxySetting(process.env);
+} catch {
+    console.error('[SECURITY] Trust proxy configuration is invalid. Refusing to start server.');
+    process.exit(1);
 }
-
-const adminAllowedOrigins = parseCsvValues(process.env.ADMIN_CORS_ALLOWED_ORIGINS);
-
-/**
- * Resolve Express trust proxy setting from environment.
- * TRUST_PROXY must be explicitly set to `true` to trust forwarded headers.
- * @returns {false | string[]}
- */
-function resolveTrustProxySetting() {
-    if (process.env.TRUST_PROXY !== 'true') {
-        return false;
-    }
-
-    const trustedCidrs = parseCsvValues(process.env.TRUST_PROXY_CIDRS);
-    if (trustedCidrs.length > 0) {
-        return trustedCidrs;
-    }
-
-    console.warn('[SECURITY] TRUST_PROXY=true but TRUST_PROXY_CIDRS is empty; disabling proxy trust.');
-    return false;
-}
-
-const trustProxySetting = resolveTrustProxySetting();
 app.set('trust proxy', trustProxySetting);
 
-/**
- * Resolve dynamic CORS options for public and admin endpoints.
- * Public routes allow all origins. Admin routes require explicit allowlist for browser-origin requests.
- * @param {import('express').Request} req Express request instance.
- * @param {(err: Error | null, options?: import('cors').CorsOptions) => void} callback CORS callback.
- * @returns {void}
- */
-function resolveCorsOptions(req, callback) {
-    const requestOrigin = req.header('Origin');
-    const isAdminRoute = req.path === '/admin' || req.path.startsWith('/admin/');
-
-    if (!isAdminRoute) {
-        callback(null, { origin: true });
-        return;
-    }
-
-    if (!requestOrigin) {
-        callback(null, { origin: true });
-        return;
-    }
-
-    if (adminAllowedOrigins.includes(requestOrigin)) {
-        callback(null, { origin: true });
-        return;
-    }
-
-    const corsError = new Error('Admin CORS origin is not allowed.');
-    corsError.code = 'ADMIN_CORS_ORIGIN_NOT_ALLOWED';
-    corsError.status = 403;
-    callback(corsError);
-}
+app.use(createRequestIdMiddleware());
+app.use(createRequestObservabilityMiddleware());
 
 app.use((req, res, next) => {
     const isDocsRoute = req.path === '/openapi.json' || req.path.startsWith('/docs');
@@ -124,15 +144,8 @@ app.use((req, res, next) => {
 
 app.use(cors(resolveCorsOptions));
 
-app.use((req, res, next) => {
-    const requestId = String(req.header('x-request-id') || randomUUID());
-    req.requestId = requestId;
-    res.setHeader('X-Request-Id', requestId);
-    next();
-});
-
-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || DEFAULTS.JSON_BODY_LIMIT }));
-app.use(express.urlencoded({ extended: false, limit: process.env.FORM_BODY_LIMIT || DEFAULTS.FORM_BODY_LIMIT }));
+app.use(express.json({ limit: resourcePolicy.JSON_BODY_LIMIT }));
+app.use(express.urlencoded({ extended: false, limit: resourcePolicy.FORM_BODY_LIMIT }));
 
 // Swagger UI setup
 const swaggerUiOptions = {
@@ -180,7 +193,6 @@ app.use(systemRoutes);
 
 // Catch-all for unknown routes
 app.all('*', (req, res) => {
-    console.warn(`[ROUTING] Unknown or invalid request: ${req.method} ${req.originalUrl}`);
     return res.status(404).json({
         success: false,
         error: 'Route not found.',
@@ -191,7 +203,71 @@ app.all('*', (req, res) => {
 // Global error handler
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-    console.log(`FDM and SLA Slicer Engine running on port ${PORT}`);
-    console.log(`Swagger Docs available at http://localhost:${PORT}/docs`);
+const httpServer = createBoundedHttpServer(app);
+
+/**
+ * Audit positively identified stale workspaces before accepting traffic.
+ * S1a intentionally keeps production startup audit-only because total request lifetime is not bounded yet.
+ */
+async function startServer() {
+    const scratchCleanup = await auditStaleWorkspaces({
+        jobsRoot: JOB_SCRATCH_DIR,
+        delete: true,
+        deleteMarkedRegardlessAge: true,
+        boundedLifetimeMs: resourcePolicy.UPLOAD_TOTAL_TIMEOUT_MS,
+        verifyExclusiveLease: async () => true,
+        resourcePolicy
+    });
+    emitEvent('artifact.cleanup', {
+        outcome: scratchCleanup.failed ? 'failure' : 'success',
+        extra: { count: scratchCleanup.removed || 0 }
+    });
+    const artifactCleanup = await cleanupManagedArtifacts({
+        resourcePolicy
+    });
+    readinessService.recordRetentionResult(artifactCleanup);
+    recordArtifactCleanup(
+        artifactCleanup.failed === 0 ? 'success' : 'failure',
+        artifactCleanup.removedArtifacts,
+        artifactCleanup.removedBytes
+    );
+    setArtifactStatus(artifactCleanup.retainedCount, artifactCleanup.retainedBytes);
+    const startupReadiness = readinessService.getStatus();
+    emitEvent('readiness.changed', {
+        outcome: startupReadiness.ready ? 'ready' : 'unavailable',
+        error_code: startupReadiness.reasonCodes[0]
+    });
+    emitEvent('artifact.cleanup', {
+        outcome: artifactCleanup.failed ? 'failure' : 'success',
+        extra: {
+            count: artifactCleanup.removedArtifacts || 0,
+            bytes: artifactCleanup.removedBytes || 0
+        }
+    });
+    return auditWorkspacesThenListen({
+        auditOptions: {
+            staleAgeMs: process.env.JOB_WORKSPACE_STALE_AGE_MS
+        },
+        onAudit(audit) {
+            emitEvent('artifact.cleanup', {
+                outcome: audit?.failed ? 'failure' : 'success',
+                extra: { count: audit?.removed || 0 }
+            });
+        },
+        listen() {
+            if (runtimeLifecycle.isShuttingDown()) return null;
+            httpServer.listen(PORT, () => {
+                emitEvent('startup.completed', { outcome: 'success' });
+            });
+            return httpServer;
+        }
+    });
+}
+
+runtimeLifecycle.run(startServer).catch(() => {
+    emitEvent('startup.completed', {
+        outcome: 'failure',
+        error_code: 'STARTUP_AUDIT_FAILED'
+    });
+    process.exitCode = 1;
 });

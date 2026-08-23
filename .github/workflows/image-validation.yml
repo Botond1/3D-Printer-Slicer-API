@@ -1,0 +1,93 @@
+name: Image Validation - Build Once (NO PUSH / NO DEPLOY)
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  merge_group:
+    types:
+      - checks_requested
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Full 40-character commit SHA to validate
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      candidate_sha:
+        description: Full 40-character commit SHA to validate
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-validation-${{ github.workflow }}-${{ github.ref }}-${{ inputs.candidate_sha }}
+  cancel-in-progress: true
+
+jobs:
+  validate-image:
+    name: Build once, inspect, scan, and discard (NO DEPLOY)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CONTAINER_NAME: s3a-validation-${{ github.run_id }}-${{ github.run_attempt }}
+      I2_UID_PROBE_NAME: i2-uid-${{ github.run_id }}-${{ github.run_attempt }}
+      I2_GID_PROBE_NAME: i2-gid-${{ github.run_id }}-${{ github.run_attempt }}
+      I2_ORCA_PROBE_NAME: i2-orca-${{ github.run_id }}-${{ github.run_attempt }}
+      I6_TOPOLOGY_API_NAME: i6-api-${{ github.run_id }}-${{ github.run_attempt }}
+      I6_PRIVATE_PEER_NAME: i6-peer-${{ github.run_id }}-${{ github.run_attempt }}
+      I6_PRIVATE_NETWORK_NAME: i6-private-${{ github.run_id }}-${{ github.run_attempt }}
+      I6_EGRESS_SENTINEL_NAME: i6-sentinel-${{ github.run_id }}-${{ github.run_attempt }}
+      I6_SENTINEL_NETWORK_NAME: i6-sentinel-net-${{ github.run_id }}-${{ github.run_attempt }}
+      EVIDENCE_SUBDIR: s3a-image-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+      DOCKER_BUILD_RECORD_UPLOAD: 'false'
+      DOCKER_BUILD_SUMMARY: 'false'
+    steps:
+      - name: Resolve and require a full lowercase commit SHA
+        id: candidate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_CANDIDATE_SHA: ${{ github.sha }}
+          REQUESTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          HAS_REQUESTED_CANDIDATE: ${{ contains(toJSON(inputs), '"candidate_sha"') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$HAS_REQUESTED_CANDIDATE" = "true" ]; then
+            candidate_sha="$REQUESTED_CANDIDATE_SHA"
+          elif [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "push" ] || [ "$EVENT_NAME" = "merge_group" ]; then
+            candidate_sha="$EVENT_CANDIDATE_SHA"
+          else
+            echo "An explicit candidate_sha input is required for this invocation." >&2
+            exit 1
+          fi
+          if [[ ! "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "candidate_sha must be a full 40-character lowercase commit SHA." >&2
+            exit 1
+          fi
+          echo "sha=$candidate_sha" >> "$GITHUB_OUTPUT"
+          echo "image_ref=local/slicer-api-validation:$candidate_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout the exact candidate
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ steps.candidate.outputs.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run the shared exact build-once image gate
+        id: exact_image_gate
+        uses: ./.github/actions/exact-image-gate
+        with:
+          candidate-sha: ${{ steps.candidate.outputs.sha }}
+          image-ref: ${{ steps.candidate.outputs.image_ref }}
+          retain-image: 'false'
+          publish-mode: 'false'

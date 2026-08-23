@@ -1,0 +1,166 @@
+name: Source Validation (NO DEPLOY)
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  merge_group:
+    types:
+      - checks_requested
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Full 40-character commit SHA to validate
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      candidate_sha:
+        description: Full 40-character commit SHA to validate
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-validation-${{ github.workflow }}-${{ github.ref }}-${{ inputs.candidate_sha }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate exact source candidate (NO DEPLOY)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve and require a full lowercase commit SHA
+        id: candidate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_CANDIDATE_SHA: ${{ github.sha }}
+          REQUESTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          HAS_REQUESTED_CANDIDATE: ${{ contains(toJSON(inputs), '"candidate_sha"') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$HAS_REQUESTED_CANDIDATE" = "true" ]; then
+            candidate_sha="$REQUESTED_CANDIDATE_SHA"
+          elif [ "$EVENT_NAME" = "pull_request" ] || [ "$EVENT_NAME" = "push" ] || [ "$EVENT_NAME" = "merge_group" ]; then
+            candidate_sha="$EVENT_CANDIDATE_SHA"
+          else
+            echo "An explicit candidate_sha input is required for this invocation." >&2
+            exit 1
+          fi
+
+          if [[ ! "$candidate_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "candidate_sha must be a full 40-character lowercase commit SHA." >&2
+            exit 1
+          fi
+          echo "sha=$candidate_sha" >> "$GITHUB_OUTPUT"
+          echo "CANDIDATE_SHA=$candidate_sha" >> "$GITHUB_ENV"
+
+      - name: Checkout the exact candidate
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ steps.candidate.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove the checked-out candidate identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          if [ "$actual_sha" != "$CANDIDATE_SHA" ]; then
+            echo "Expected $CANDIDATE_SHA, checked out $actual_sha." >&2
+            exit 1
+          fi
+          git cat-file -e "$CANDIDATE_SHA^{commit}"
+          {
+            echo "### Exact source candidate"
+            echo
+            echo "Validated checkout: \`$actual_sha\`"
+            echo
+            echo "This workflow performs validation only; it cannot deploy or publish an image."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '20'
+          package-manager-cache: false
+
+      - name: Select exact npm 10.9.8
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --global npm@10.9.8 --ignore-scripts --no-audit --no-fund
+          actual_npm_version="$(npm --version)"
+          if [ "$actual_npm_version" != "10.9.8" ]; then
+            echo "Expected npm 10.9.8, got $actual_npm_version." >&2
+            exit 1
+          fi
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install Node.js dependencies from lockfile
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Validate tracked source syntax
+        run: npm run check:syntax
+
+      - name: Enforce S3a workflow contracts fail-closed
+        run: node --test tests/unit/js/s3a-workflow-contracts.test.js
+
+      - name: Enforce immutable-candidate contracts fail-closed
+        run: node --test tests/unit/js/i7-production-compose-contract.test.js tests/unit/js/i7-provenance-evidence-contract.test.js tests/unit/js/i7-provenance-writer-contract.test.js
+
+      - name: Run deterministic unit tests
+        run: npm test
+
+      - name: Audit production dependencies at moderate threshold
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Guard tracked repository content
+        run: npm run check:repository-safety
+
+      - name: Reject whitespace errors in the exact candidate range
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "push" ]; then
+            if [ "$EVENT_REF" != "refs/heads/main" ]; then
+              echo "Push validation is restricted to refs/heads/main." >&2
+              exit 1
+            fi
+            if [[ ! "$EVENT_BEFORE" =~ ^[0-9a-f]{40}$ ]] || \
+               [ "$EVENT_BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              echo "A nonzero full lowercase before SHA is required for main pushes." >&2
+              exit 1
+            fi
+            git cat-file -e "$EVENT_BEFORE^{commit}"
+            git merge-base --is-ancestor "$EVENT_BEFORE" "$CANDIDATE_SHA"
+            base_sha="$EVENT_BEFORE"
+          else
+            remote_main_sha="$(git rev-parse 'refs/remotes/origin/main^{commit}')"
+            git cat-file -e "$remote_main_sha^{commit}"
+            base_sha="$(git merge-base "$remote_main_sha" "$CANDIDATE_SHA")"
+            if [ -z "$base_sha" ]; then
+              echo "No merge-base exists between origin/main and $CANDIDATE_SHA." >&2
+              exit 1
+            fi
+            git merge-base --is-ancestor "$base_sha" "$CANDIDATE_SHA"
+          fi
+          git diff --check "$base_sha" "$CANDIDATE_SHA" --

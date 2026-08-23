@@ -4,7 +4,7 @@ applyTo: "tests/testing-scripts/**"
 
 # Testing Scripts Instructions
 
-Last synchronized: 2026-05-14
+Last synchronized: 2026-07-23
 
 ## Test Entry Points
 - slicing/full_api_test_runner.py
@@ -16,6 +16,7 @@ Last synchronized: 2026-05-14
 - pricing/pricing_cycle_test_runner.py
 - rate_limit/rate_limit_regression_test_runner.py
 - queue/queue_concurrency_test_runner.py
+- operations/operations_readiness_metrics_test_runner.py
 
 ## Reporting Rules
 - Write reports to tests/testing-scripts/results/.
@@ -31,4 +32,17 @@ Last synchronized: 2026-05-14
 
 ## Environment Inputs
 - SLICER_BASE_URL
-- ADMIN_API_KEY for admin endpoint tests
+- SLICE_SERVICE_API_KEY (then optional previous slot) for matrix, queue, and
+  unsupported-upload requests; send it only in x-slicer-api-key. The rate-limit
+  regression intentionally omits it to prove exact pre-limit HTTP 401 before 429.
+- PRICING_API_KEY for pricing lifecycle tests.
+- ARTIFACT_API_KEY for output listing/download tests.
+- OPERATIONS_API_KEY for detailed health/readiness/metrics tests.
+- Never print any credential value in output or reports.
+
+Service-auth negative cases must assert exact HTTP 401
+`{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
+
+Operations checks must prove public /ready is minimal, protected diagnostics
+return OPERATIONS_AUTH_REQUIRED without a key, and all outputs stay bounded and
+secret/path/filename-safe.

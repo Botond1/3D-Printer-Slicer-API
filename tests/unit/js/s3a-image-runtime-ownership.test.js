@@ -1,0 +1,263 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const ROOT = path.resolve(__dirname, '../../..');
+const HELPER_PATH = path.join(ROOT, 'scripts/i2-image-runtime-diagnostics.js');
+const WORKFLOW_PATH = path.join(ROOT, '.github/actions/exact-image-gate/action.yml');
+const DOCKERFILE_PATH = path.join(ROOT, 'Dockerfile');
+const SOURCE = fs.readFileSync(HELPER_PATH, 'utf8').replace(/\r\n?/g, '\n');
+const WORKFLOW = fs.readFileSync(WORKFLOW_PATH, 'utf8').replace(/\r\n?/g, '\n');
+const DOCKERFILE = fs.readFileSync(DOCKERFILE_PATH, 'utf8').replace(/\r\n?/g, '\n');
+const identity = require(HELPER_PATH);
+
+const VALIDATION_REF = `local/slicer-api-validation:${'a'.repeat(40)}`;
+const PUBLICATION_REF = `local/slicer-api-publication:${'a'.repeat(40)}`;
+const ID = `sha256:${'b'.repeat(64)}`;
+
+function step(id, source = WORKFLOW) {
+    const start = source.indexOf(`        id: ${id}`);
+    assert.notEqual(start, -1, `missing ${id}`);
+    const end = source.indexOf('\n      - name:', start);
+    return source.slice(start, end < 0 ? source.length : end);
+}
+
+function helperContract(source) {
+    for (const anchor of [
+        "spawnSync('docker', args,", 'shell: false', 'maxBuffer: MAX_COMMAND_BYTES',
+        "new Set(['image inspect', 'run --rm', 'container inspect'])",
+        "configuredUser !== 'slicer'", '!Number.isSafeInteger(value) || value <= 0',
+        "--entrypoint', '/usr/bin/id'", "'--pull', 'never'", "'--network', 'none'",
+        "'--cap-drop', 'ALL'", "'--security-opt', 'no-new-privileges'",
+        'io.s3a.validation-only=true', 'io.s3a.expected-image-id=${exactImageId}',
+        'configured_user=${identity.configuredUser}', 'classification=success',
+        '/^local\\/slicer-api-(?:validation|publication):[0-9a-f]{40}$/'
+    ]) assert.ok(source.includes(anchor), `missing ${anchor}`);
+    assert.doesNotMatch(source, /(?:^|[^\w.])exec(?:Sync)?\s*\(|\bshell\s*:\s*true|\beval\s*\(|\/bin\/(?:ba)?sh|\$\(/);
+    assert.doesNotMatch(source, /\b999\b|\/etc\/passwd/);
+    assert.match(source, /::error title=I2 runtime identity::runtime_identity_failure:/);
+}
+
+function workflowContract(source) {
+    const resolver = step('runtime_identity', source);
+    const orca = step('orca_cli_smoke', source);
+    const start = step('container_start', source);
+    const smoke = step('smoke_gate', source);
+    const cleanup = step('exact_cleanup', source);
+    const final = step('final_enforcement', source);
+    const boundary = step('artifact_boundary', source);
+    const upload = step('evidence_upload', source);
+    assert.match(resolver, /if: \$\{\{ always\(\) && steps\.build\.outcome == 'success' \}\}[\s\S]*continue-on-error: true[\s\S]*node scripts\/i2-image-runtime-diagnostics\.js/);
+    assert.match(orca, /if: \$\{\{ steps\.runtime_identity\.outcome == 'success' \}\}[\s\S]*continue-on-error: true[\s\S]*node scripts\/i2-orca-runtime-smoke\.js/);
+    assert.match(start, /if: \$\{\{ steps\.runtime_identity\.outcome == 'success' \}\}/);
+    for (const anchor of [
+        'CONFIGURED_USER: ${{ steps.runtime_identity.outputs.configured_user }}',
+        'SERVICE_UID: ${{ steps.runtime_identity.outputs.uid }}',
+        'SERVICE_GID: ${{ steps.runtime_identity.outputs.gid }}',
+        '[[ ! "$SERVICE_UID" =~ ^[0-9]+$ ]]', '[[ ! "$SERVICE_GID" =~ ^[0-9]+$ ]]',
+        '[ "$SERVICE_UID" = "0" ]', '[ "$SERVICE_GID" = "0" ]',
+        '--pull never', '--network none', '--cap-drop ALL', '--security-opt no-new-privileges',
+        '--label "io.s3a.expected-image-id=$EXPECTED_IMAGE_ID"',
+        'container_id="$(', 'echo "container_id=$container_id" >> "$GITHUB_OUTPUT"'
+    ]) assert.ok(start.includes(anchor), `start missing ${anchor}`);
+    const mounts = [...start.matchAll(/--tmpfs "([^"]+)"/g)].map((match) => match[1]);
+    assert.deepEqual(mounts.map((mount) => mount.split(':')[0]), ['/app/input', '/app/output']);
+    for (const mount of mounts) {
+        for (const option of ['rw', 'nosuid', 'nodev', 'noexec', 'size=64m',
+            'uid=${SERVICE_UID}', 'gid=${SERVICE_GID}', 'mode=0700']) {
+            assert.ok(mount.split(':')[1].split(',').includes(option), `mount missing ${option}`);
+        }
+    }
+    assert.match(smoke, /node scripts\/i8-runtime-state-proof\.js/);
+    assert.ok(smoke.indexOf('node scripts/i8-runtime-state-proof.js')
+        < smoke.indexOf('node scripts/i4-image-runtime-envelope.js'));
+    assert.doesNotMatch(source, /\b999\b|mode=0777|I2_PROBE_[ABC]_NAME|runtime-ownership\.json|ownership_(?:characterization|finalization)/);
+    for (const file of ['image-identity.txt', 'runtime-diagnostics.json',
+        'topology-evidence.json', 'sbom.spdx.json', 'grype.json']) {
+        assert.ok(boundary.includes(file) && upload.includes(file), `missing ${file}`);
+    }
+    assert.match(boundary, /'configured_user', 'service_uid', 'service_gid', 'kernel_uid', 'kernel_gid'/);
+    assert.match(boundary, /!\/\^\[1-9\]\[0-9\]\*\$\/\.test\(identity\.service_uid\)/);
+    assert.match(boundary, /identity\.kernel_uid !== identity\.service_uid/);
+    assert.match(cleanup, /if: \$\{\{ always\(\) \}\}[\s\S]*continue-on-error: true/);
+    for (const name of ['I2_UID_PROBE_NAME', 'I2_GID_PROBE_NAME',
+        'I2_ORCA_PROBE_NAME', 'I6_TOPOLOGY_API_NAME', 'I6_PRIVATE_PEER_NAME',
+        'CONTAINER_NAME', 'I6_EGRESS_SENTINEL_NAME']) assert.ok(cleanup.includes(name));
+    assert.match(cleanup, /::error title=I2 exact cleanup::\$1/);
+    assert.match(cleanup, /container_ownership_failure/);
+    assert.match(cleanup, /"\$exact_reference" 2>\/dev\/null\)/);
+    assert.match(cleanup, /inspect_error="\$\(docker container inspect "\$exact_reference" 2>&1 >\/dev\/null\)"/);
+    assert.equal((cleanup.match(/\[ "\$validation_label" != "true" \]/g) || []).length, 2);
+    assert.match(cleanup, /\[ "\$expected_label" != "\$EXPECTED_IMAGE_ID" \]/);
+    assert.match(cleanup, /docker container rm --force "\$container_id"/);
+    assert.doesNotMatch(cleanup, /docker container rm --force "\$exact_container"/);
+    assert.equal((cleanup.match(/classification=cleanup_failure/g) || []).length, 1);
+    assert.equal((cleanup.match(/classification=success/g) || []).length, 1);
+    assert.ok(cleanup.indexOf('classification=cleanup_failure') > cleanup.indexOf('if [ "$cleanup_status" -ne 0 ]; then'));
+    assert.ok(source.indexOf('id: exact_cleanup') < source.indexOf('id: final_enforcement'));
+    for (const anchor of ['RUNTIME_IDENTITY_OUTCOME', 'RUNTIME_IDENTITY_CLASSIFICATION',
+        "failures.push('runtime_identity_failure');", 'CLEANUP_OUTCOME', "failures.push('cleanup_failure');",
+        'ORCA_CLI_SMOKE_OUTCOME', 'ORCA_CLI_SMOKE_CLASSIFICATION',
+        "failures.push('orca_cli_smoke_failure');",
+        "if (process.env.CLEANUP_OUTCOME !== 'success'",
+        "process.env.SMOKE_OUTCOME !== 'success'", "process.env.SMOKE_CLASSIFICATION !== 'success'",
+        'process.exit(1);']) assert.ok(final.includes(anchor), `final missing ${anchor}`);
+    assert.match(DOCKERFILE, /^USER slicer$/m);
+    assert.ok(source.includes(
+        '[[ ! "$INPUT_IMAGE_REF" =~ ^local/slicer-api-(validation|publication):[0-9a-f]{40}$ ]]'
+    ), 'shared action must allow exactly the validation and publication namespaces');
+    assert.ok(source.includes(
+        '[ "${INPUT_IMAGE_REF##*:}" != "$candidate_sha" ]'
+    ), 'shared action must bind the image-ref suffix to candidate_sha');
+}
+
+test('identity lookup accepts both exact run-local namespaces and preserves inspect arguments', () => {
+    const prefix = ['image', 'inspect', '--format', '{{json .Id}}|{{json .Config.User}}'];
+    assert.equal(identity.validateImageRef(VALIDATION_REF), VALIDATION_REF);
+    assert.equal(identity.validateImageRef(PUBLICATION_REF), PUBLICATION_REF);
+    assert.deepEqual(identity.buildInspectArgs(VALIDATION_REF), [...prefix, VALIDATION_REF]);
+    assert.deepEqual(identity.buildInspectArgs(PUBLICATION_REF), [...prefix, PUBLICATION_REF]);
+});
+
+test('identity lookup rejects every non-exact local namespace, digest, registry, and injection ref', () => {
+    const sha = 'a'.repeat(40);
+    for (const nonString of [undefined, null, 0, {}, []]) {
+        assert.throws(() => identity.validateImageRef(nonString), { message: 'image_ref_invalid' });
+    }
+    for (const bad of [
+        `local/slicer-api-production:${sha}`,
+        `local/slicer-api-publish:${sha}`,
+        `local/slicer-api-anything:${sha}`,
+        'local/slicer-api-validation:latest',
+        'local/slicer-api-publication:latest',
+        `local/slicer-api-validation:${'a'.repeat(39)}`,
+        `local/slicer-api-publication:${'a'.repeat(41)}`,
+        `local/slicer-api-validation:${'A'.repeat(40)}`,
+        `local/slicer-api-publication:sha256:${'b'.repeat(64)}`,
+        `ghcr.io/botond1/3d-printer-slicer-api:candidate-${sha}`,
+        `ghcr.io/botond1/3d-printer-slicer-api@sha256:${'b'.repeat(64)}`,
+        `${VALIDATION_REF}/extra`,
+        `${PUBLICATION_REF}:extra`,
+        ` ${VALIDATION_REF}`,
+        `${PUBLICATION_REF} `,
+        `${VALIDATION_REF}\n`,
+        `${PUBLICATION_REF};docker image rm victim`,
+        `${VALIDATION_REF}$(docker image rm victim)`
+    ]) assert.throws(() => identity.validateImageRef(bad), { message: 'image_ref_invalid' });
+});
+
+test('identity lookup accepts only the exact immutable slicer image and positive single-line IDs', () => {
+    assert.deepEqual(identity.parseInspectOutput(`${JSON.stringify(ID)}|"slicer"\n`, ID),
+        { id: ID, configuredUser: 'slicer' });
+    for (const bad of ['', '0\n', '-1\n', '1001\n1002\n', 'slicer\n', ' 1001\n']) {
+        assert.throws(() => identity.parsePositiveId(bad, 'uid'));
+    }
+    assert.throws(() => identity.parseInspectOutput(`${JSON.stringify(ID)}|"root"\n`, ID));
+    assert.throws(() => identity.parseInspectOutput(`${JSON.stringify(`sha256:${'c'.repeat(64)}`)}|"slicer"\n`, ID));
+    for (const floating of ['ubuntu:latest', 'local/slicer-api-validation:latest',
+        `${VALIDATION_REF}\n--privileged`]) {
+        assert.throws(() => identity.validateImageRef(floating));
+    }
+});
+
+test('resolver command is non-shell, exact-image-bound, isolated, bounded, and dynamically selected', async (t) => {
+    for (const [selector, name] of [['-u', 'uid-probe'], ['-g', 'gid-probe']]) {
+        const args = identity.buildResolverArgs(name, ID, selector);
+        assert.equal(args[0], 'run');
+        assert.deepEqual(args.slice(-3), ['/usr/bin/id', ID, selector]);
+        for (const token of ['--rm', '--pull', 'never', '--network', 'none', '--cap-drop', 'ALL',
+            '--security-opt', 'no-new-privileges', '--pids-limit', '64',
+            'io.s3a.validation-only=true', `io.s3a.expected-image-id=${ID}`]) {
+            assert.ok(args.includes(token));
+        }
+        assert.equal(args.filter((item) => item === '--entrypoint').length, 1);
+    }
+    assert.throws(() => identity.buildResolverArgs('uid-probe', VALIDATION_REF, '-u'));
+    assert.throws(() => identity.buildResolverArgs('uid-probe', ID, '--help'));
+    helperContract(SOURCE);
+    const mutations = [
+        ['shell: false', 'shell: true'], ['maxBuffer: MAX_COMMAND_BYTES', 'maxBuffer: Infinity'],
+        ["new Set(['image inspect', 'run --rm', 'container inspect'])", "new Set(['*'])"],
+        ['!Number.isSafeInteger(value) || value <= 0', 'value <= 0'],
+        ["spawnSync('docker', args,", "eval(args.join(' ')); spawnSync('docker', args,"],
+        ['(?:validation|publication)', 'validation'],
+        ['(?:validation|publication)', '(?:validation|publication|production)'],
+        ['(?:validation|publication)', '[a-z]+'],
+        ['(?:validation|publication)', '[^:]+'],
+        ['(?:validation|publication)', '.*'],
+        ['(?:validation|publication)', '(?:validation|publication)?'],
+        [
+            '/^local\\/slicer-api-(?:validation|publication):[0-9a-f]{40}$/',
+            '/^(?:local\\/slicer-api-(?:validation|publication):[0-9a-f]{40}'
+                + '|ghcr\\.io\\/botond1\\/3d-printer-slicer-api@sha256:[0-9a-f]{64})$/'
+        ]
+    ];
+    for (const [from, to] of mutations) await t.test(from, () => {
+        assert.ok(SOURCE.includes(from));
+        assert.throws(() => helperContract(SOURCE.replace(from, to)));
+    });
+});
+
+test('container absence parsing is strict but accepts the Docker empty-template newline', () => {
+    assert.equal(identity.parsePresenceResult({ status: 0, stdout: `"${'c'.repeat(64)}"\n`, stderr: '' }, 'probe'), true);
+    for (const stdout of ['', '\n', '[]\n']) assert.equal(identity.parsePresenceResult({ status: 1, stdout,
+        stderr: 'Error: No such object: probe\n' }, 'probe'), false);
+    for (const malformed of [
+        { status: 1, stdout: '[{}]\n', stderr: 'Error: No such object: probe\n' },
+        { status: 1, stdout: '[]\n', stderr: 'permission denied\n' },
+        { status: 0, stdout: '[]\n', stderr: '' }
+    ]) assert.throws(() => identity.parsePresenceResult(malformed, 'probe'));
+});
+
+test('final workflow preserves dynamic restrictive tmpfs, exact cleanup, and fail-closed aggregation', () => {
+    workflowContract(WORKFLOW);
+});
+
+test('required workflow mutations are rejected', async (t) => {
+    const mutations = [
+        ['hard-coded uid', 'uid=${SERVICE_UID}', 'uid=999'],
+        ['root uid accepted', '[ "$SERVICE_UID" = "0" ]', '[ "$SERVICE_UID" = "never" ]'],
+        ['root gid accepted', '[ "$SERVICE_GID" = "0" ]', '[ "$SERVICE_GID" = "never" ]'],
+        ['uid validation removed', '[[ ! "$SERVICE_UID" =~ ^[0-9]+$ ]]', 'false'],
+        ['gid validation removed', '[[ ! "$SERVICE_GID" =~ ^[0-9]+$ ]]', 'false'],
+        ['runtime state proof removed', '          node scripts/i8-runtime-state-proof.js\n', ''],
+        ['input uid missing', 'size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700', 'size=64m,gid=${SERVICE_GID},mode=0700'],
+        ['output gid missing', 'size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700', 'size=64m,uid=${SERVICE_UID},mode=0700', 2],
+        ['world writable', 'mode=0700', 'mode=0777'], ['noexec missing', 'nodev,noexec,size=64m', 'nodev,size=64m'],
+        ['nosuid missing', 'rw,nosuid,nodev', 'rw,nodev'], ['nodev missing', 'nosuid,nodev,noexec', 'nosuid,noexec'],
+        ['unbounded tmpfs', 'size=64m,uid=', 'uid='], ['only one mount', '            --tmpfs "/app/output:rw,nosuid,nodev,noexec,size=64m,uid=${SERVICE_UID},gid=${SERVICE_GID},mode=0700" \\\n', ''],
+        ['identity step bypassed', "        id: runtime_identity\n        if: ${{ always() && steps.build.outcome == 'success' }}", "        id: runtime_identity\n        if: ${{ false }}"],
+        ['container identity output removed', '          echo "container_id=$container_id" >> "$GITHUB_OUTPUT"\n', ''],
+        ['health weakened', "process.env.SMOKE_OUTCOME !== 'success'", 'false'],
+        ['final identity ignored', "failures.push('runtime_identity_failure');", ''],
+        ['final Orca smoke ignored', "failures.push('orca_cli_smoke_failure');", ''],
+        ['cleanup outcome ignored', "if (process.env.CLEANUP_OUTCOME !== 'success'", 'if (false'],
+        ['cleanup skipped', '        id: exact_cleanup\n        if: ${{ always() }}', '        id: exact_cleanup\n        if: ${{ success() }}'],
+        ['cleanup probe omitted',
+            '              "$I2_ORCA_PROBE_NAME" "$I6_TOPOLOGY_API_NAME" "$I6_PRIVATE_PEER_NAME" \\\n'
+                + '              "$CONTAINER_NAME" "$I6_EGRESS_SENTINEL_NAME"',
+            '              "$I2_ORCA_PROBE_NAME" "$I6_TOPOLOGY_API_NAME" \\\n'
+                + '              "$CONTAINER_NAME" "$I6_EGRESS_SENTINEL_NAME"'],
+        ['cleanup ownership removed', '[ "$validation_label" != "true" ]', 'false'],
+        ['cleanup absence streams merged', '"$exact_reference" 2>/dev/null)', '"$exact_reference" 2>&1)'],
+        ['cleanup switches to name', 'docker container rm --force "$container_id"', 'docker container rm --force "$exact_container"'],
+        ['shared action loses publication namespace',
+            '(validation|publication):[0-9a-f]{40}', 'validation:[0-9a-f]{40}'],
+        ['shared action admits a third namespace',
+            '(validation|publication):[0-9a-f]{40}', '(validation|publication|production):[0-9a-f]{40}'],
+        ['shared action loses candidate SHA binding',
+            '[ "${INPUT_IMAGE_REF##*:}" != "$candidate_sha" ]', 'false']
+    ];
+    for (const [name, from, to, occurrence = 1] of mutations) await t.test(name, () => {
+        let mutated = WORKFLOW;
+        for (let index = 0; index < occurrence; index += 1) {
+            const at = mutated.indexOf(from, index === 0 ? 0 : mutated.indexOf(to) + to.length);
+            assert.notEqual(at, -1, `missing mutation anchor ${name}`);
+            mutated = `${mutated.slice(0, at)}${to}${mutated.slice(at + from.length)}`;
+        }
+        assert.throws(() => workflowContract(mutated));
+    });
+});

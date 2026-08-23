@@ -26,7 +26,7 @@ LEGACY_REPORT_FILES = (
     RESULTS_DIR / "admin_output_files_test_report.json",
     RESULTS_DIR / "admin_output_files_test_report.md",
 )
-from common.env_utils import read_dotenv, resolve_admin_key_candidates, resolve_base_url
+from common.env_utils import read_dotenv, resolve_artifact_api_key_candidates, resolve_base_url
 from common.http_utils import curl_json
 
 OUTPUT_FILES_ENDPOINT = "/admin/output-files"
@@ -59,10 +59,10 @@ def resolve_bulk_download_limits(project_root: Path) -> tuple[int, int]:
     return max_entries, max_bytes
 
 
-def read_admin_api_key_candidates() -> list[str]:
-    candidates = resolve_admin_key_candidates(PROJECT_ROOT)
+def read_artifact_api_key_candidates() -> list[str]:
+    candidates = resolve_artifact_api_key_candidates(PROJECT_ROOT)
     if not candidates:
-        raise RuntimeError("ADMIN_API_KEY not found in .env or process environment.")
+        raise RuntimeError("ARTIFACT_API_KEY not found in .env or process environment.")
     return candidates
 
 
@@ -282,7 +282,7 @@ def main() -> int:
     max_bulk_entries, max_bulk_bytes = resolve_bulk_download_limits(PROJECT_ROOT)
 
     try:
-        api_keys = read_admin_api_key_candidates()
+        api_keys = read_artifact_api_key_candidates()
     except Exception as exc:
         print(f"[ADMIN OUTPUT TEST] ERROR: {exc}")
         return 1

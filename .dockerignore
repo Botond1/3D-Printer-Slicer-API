@@ -28,9 +28,16 @@ input/archive/
 input/cad/
 input/direct/
 logs/
+configs/pricing.json
+configs/pricing-state/*
+!configs/pricing-state/.gitkeep
 
 # Documentation and non-runtime assets
 README.md
 LICENSE.md
-tests/
+tests/*
+!tests/s3a-v2c/
+tests/s3a-v2c/*
+!tests/s3a-v2c/browser-harness.html
+!tests/s3a-v2c/browser-harness.js
 ops/

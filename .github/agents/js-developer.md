@@ -26,8 +26,14 @@ You own all Node.js + Express code inside `app/`:
 1. **Root-scoped runtime dirs only.** Use `input/`, `output/`, `configs/` at repo root. NEVER introduce `app/input`, `app/output`, or `app/configs`.
 2. **Fail-fast geometry.** Invalid geometry must return `INVALID_SOURCE_GEOMETRY`. Never auto-heal or mutate user models.
 3. **Queue and rate-limit protections must stay active** for slicing endpoints.
-4. **ADMIN_API_KEY is mandatory** — server must refuse to start without it.
-5. **Admin endpoints require `x-api-key` header** matching `ADMIN_API_KEY`.
+4. **Scoped active keys are mandatory.** Server startup must fail closed unless
+   distinct valid `SLICE_SERVICE_API_KEY`, `PRICING_API_KEY`,
+   `ARTIFACT_API_KEY`, and `OPERATIONS_API_KEY` values exist. Optional
+   `_PREVIOUS` slots are audience-local.
+5. **Legacy admin migration is finite.** `ADMIN_API_KEY` may temporarily fill
+   exactly one named non-slice audience for no more than 90 days; it is never
+   the normal default or a slice credential. Slice uses `x-slicer-api-key`;
+   pricing, artifact, and operations use audience-scoped `x-api-key`.
 6. **Upload field name must remain `choosenFile`.**
 7. **Keep error code vocabulary stable** — clients depend on exact error code strings.
 
@@ -36,9 +42,11 @@ You own all Node.js + Express code inside `app/`:
 - Orca: FDM only, layer heights 0.1, 0.2, 0.3, requires machine+process profile compatibility
 
 ## Existing Endpoints (keep stable unless explicitly changing)
-Public: GET /health, GET /pricing, POST /prusa/slice, POST /orca/slice, GET /openapi.json, GET /docs, GET /
-Admin: GET /health/detailed, POST /pricing/FDM, POST /pricing/SLA, PATCH /pricing/:technology/:material, DELETE /pricing/:technology/:material, GET /admin/output-files
-Admin: GET /admin/download/:fileName
+Public: GET /health, GET /ready, GET /pricing, GET /openapi.json, GET /docs, GET /
+Slice: POST /prusa/slice, POST /orca/slice
+Pricing: POST /pricing/FDM, POST /pricing/SLA, PATCH /pricing/:technology/:material, DELETE /pricing/:technology/:material
+Artifact: GET /admin/output-files, GET /admin/download/:fileName
+Operations: GET /health/detailed, GET /operations/readiness, GET /operations/metrics
 
 ## What You Must NOT Do
 - Touch Python files (`app/*.py`) — that's the Python Developer's scope.

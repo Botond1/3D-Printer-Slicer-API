@@ -2,19 +2,38 @@
  * Pricing service facade for loading, persisting, and querying material hourly rates.
  */
 
-const { PRICING_FILE, LEGACY_PRICING_FILE } = require('../config/paths');
+const { PRICING_FILE, PRICING_STATE_DIR, LEGACY_PRICING_FILE } = require('../config/paths');
 const { DEFAULT_PRICING } = require('../config/constants');
 const { PricingRepository } = require('./pricing/repository');
 const { PricingCatalog } = require('./pricing/catalog');
+const { emitEvent } = require('./observability/events');
 
 const pricingRepository = new PricingRepository({
     primaryFile: PRICING_FILE,
+    pricingStateRoot: PRICING_STATE_DIR,
     legacyFile: LEGACY_PRICING_FILE,
     defaultPricing: DEFAULT_PRICING
 });
 
 const pricingCatalog = new PricingCatalog(DEFAULT_PRICING);
 let activePricingFile = PRICING_FILE;
+function createPricingMutationCoordinator(repository, catalog) {
+    let tail = Promise.resolve();
+    return function commit(mutator) {
+        if (typeof mutator !== 'function') return Promise.reject(new Error('Pricing mutator is required.'));
+        const operation = tail.then(() => {
+            const candidate = catalog.getPricing();
+            const result = mutator(candidate);
+            repository.saveToPrimary(candidate);
+            catalog.replacePricing(candidate);
+            return result;
+        });
+        tail = operation.catch(() => {});
+        return operation;
+    };
+}
+
+const commitDefaultMutation = createPricingMutationCoordinator(pricingRepository, pricingCatalog);
 
 /**
  * Persist current in-memory pricing to disk.
@@ -24,8 +43,13 @@ function savePricingToDisk() {
     try {
         activePricingFile = pricingRepository.saveToPrimary(pricingCatalog.getPricing());
         return true;
-    } catch (err) {
-        console.error(`[PRICING UPDATE] Failed to save pricing file (${pricingRepository.primaryFile}): ${err.message}`);
+    } catch {
+        emitEvent('pricing.mutated', {
+            audience: 'pricing',
+            outcome: 'failure',
+            error_code: 'PRICING_PERSISTENCE_FAILED',
+            extra: { action: 'persist' }
+        });
         return false;
     }
 }
@@ -41,9 +65,11 @@ function loadPricingFromDisk() {
     if (existingCandidates.length === 0) {
         pricingCatalog.resetToDefault();
         if (savePricingToDisk()) {
-            console.log(`[PRICING UPDATE] Pricing file was missing. Default pricing created at ${activePricingFile}.`);
-        } else {
-            console.error('[PRICING UPDATE] Could not persist default pricing to any storage target.');
+            emitEvent('pricing.mutated', {
+                audience: 'pricing',
+                outcome: 'success',
+                extra: { action: 'initialize' }
+            });
         }
         return;
     }
@@ -57,12 +83,16 @@ function loadPricingFromDisk() {
                 savePricingToDisk();
             }
             return;
-        } catch (err) {
-            console.warn(`[PRICING UPDATE] Failed to read ${candidateFile}. Reason: ${err.message}`);
+        } catch {
+            emitEvent('pricing.mutated', {
+                audience: 'pricing',
+                outcome: 'failure',
+                error_code: 'PRICING_LOAD_FAILED',
+                extra: { action: 'load' }
+            });
         }
     }
 
-    console.warn('[PRICING UPDATE] All pricing files were unreadable, using defaults.');
     pricingCatalog.resetToDefault();
     savePricingToDisk();
 }
@@ -163,6 +193,14 @@ function getRate(technology, material) {
     return pricingCatalog.getRate(technology, material);
 }
 
+function commitPricingMutation(mutator) {
+    return commitDefaultMutation((candidate) => {
+        const result = mutator(candidate);
+        activePricingFile = pricingRepository.primaryFile;
+        return result;
+    });
+}
+
 module.exports = {
     DEFAULT_PRICING,
     loadPricingFromDisk,
@@ -176,5 +214,7 @@ module.exports = {
     getAllowedMaterialsForTechnology,
     updateMaterialPrice,
     removeMaterial,
-    getRate
+    getRate,
+    commitPricingMutation,
+    createPricingMutationCoordinator
 };

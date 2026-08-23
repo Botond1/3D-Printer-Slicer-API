@@ -22,7 +22,7 @@ from typing import Iterable
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common.env_utils import resolve_admin_keys, resolve_base_url
+from common.env_utils import resolve_base_url, resolve_slice_service_api_key
 from common.http_utils import curl_multipart_slice
 
 SCRIPTS_ROOT = Path(__file__).resolve().parent
@@ -43,9 +43,7 @@ SUPPORTED_EXTENSIONS = {
 
 def resolve_runtime_env() -> tuple[str, str | None]:
     base_url = resolve_base_url(PROJECT_ROOT)
-    env_key, dotenv_key = resolve_admin_keys(PROJECT_ROOT)
-    admin_api_key = dotenv_key or env_key
-    return base_url, admin_api_key
+    return base_url, resolve_slice_service_api_key(PROJECT_ROOT)
 
 
 def resolve_engine_name(endpoint: str) -> str:
@@ -170,6 +168,7 @@ def run_one_request(
     layer_height: float,
     material: str,
     base_url: str,
+    slice_service_api_key: str,
     retry_on_429: int,
     extra_fields: dict[str, str],
 ) -> QueueRequestResult:
@@ -186,6 +185,7 @@ def run_one_request(
             file_path=file_path,
             layer_height=layer_height,
             material=material,
+            slice_service_api_key=slice_service_api_key,
             extra_fields=extra_fields,
         )
 
@@ -310,7 +310,17 @@ def main() -> int:
         if legacy_path.exists():
             legacy_path.unlink()
 
-    base_url, admin_api_key = resolve_runtime_env()
+    base_url, slice_service_api_key = resolve_runtime_env()
+    print(
+        "[QUEUE TEST] "
+        f"slice_service_api_key_found={bool(slice_service_api_key)}"
+    )
+    if not slice_service_api_key:
+        print(
+            "[QUEUE TEST] ERROR: "
+            "SLICE_SERVICE_API_KEY not found in .env or process environment."
+        )
+        return 1
 
     try:
         input_files = choose_input_files(args.file, args.count)
@@ -320,7 +330,6 @@ def main() -> int:
 
     print(f"[QUEUE TEST] endpoint={args.endpoint} count={args.count} files={len(input_files)}")
     print(f"[QUEUE TEST] engine={resolve_engine_name(args.endpoint)}")
-    print(f"[QUEUE TEST] admin_api_key_found={bool(admin_api_key)}")
 
     extra_fields = build_extra_fields(args.endpoint, args.layer_height)
 
@@ -336,6 +345,7 @@ def main() -> int:
                 args.layer_height,
                 args.material,
                 base_url,
+                slice_service_api_key,
                 args.retry_on_429,
                 extra_fields,
             )

@@ -5,6 +5,7 @@
 /**
  * @typedef {{FDM: Record<string, number>, SLA: Record<string, number>}} PricingMap
  */
+const { isSafeMaterialName } = require('./validation');
 
 class PricingCatalog {
     /**
@@ -28,6 +29,10 @@ class PricingCatalog {
             FDM: { ...this.defaultPricing.FDM, ...fdmSource },
             SLA: { ...this.defaultPricing.SLA, ...slaSource }
         };
+    }
+
+    replacePricing(pricingPayload) {
+        this.pricing = structuredClone(pricingPayload);
     }
 
     /**
@@ -62,15 +67,10 @@ class PricingCatalog {
      * @returns {string} Canonical normalized token.
      */
     normalizeMaterialToken(value) {
-        if (typeof value === 'string') {
-            return value.trim().toUpperCase();
-        }
-
-        if (typeof value === 'number' || typeof value === 'boolean') {
-            return `${value}`.trim().toUpperCase();
-        }
-
-        return '';
+        const material = typeof value === 'string'
+            ? value.trim()
+            : ((typeof value === 'number' || typeof value === 'boolean') ? `${value}`.trim() : '');
+        return isSafeMaterialName(material) ? material.toUpperCase() : '';
     }
 
     /**
@@ -126,6 +126,7 @@ class PricingCatalog {
      * @returns {string} Final material key that was updated.
      */
     updateMaterialPrice(technology, materialParam, price) {
+        if (!isSafeMaterialName(String(materialParam))) throw new Error('Invalid material name.');
         const existingMaterialKey = this.findMaterialKey(technology, materialParam);
         const materialKey = existingMaterialKey || this.normalizeMaterialToken(materialParam);
         this.pricing[technology][materialKey] = price;

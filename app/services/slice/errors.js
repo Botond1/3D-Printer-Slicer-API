@@ -3,8 +3,6 @@
  */
 
 const { DEFAULTS } = require('../../config/constants');
-const { logError } = require('../../utils/logger');
-const { cleanupFiles } = require('./common');
 
 /**
  * Detect converter-level geometry failures from command output.
@@ -41,7 +39,7 @@ function isSourceGeometryError(err) {
  */
 function isZipInputError(err) {
     const combined = `${err?.message || ''}\n${err?.stderr || ''}`.toLowerCase();
-    return (
+    return err?.code === 'INVALID_SOURCE_ARCHIVE' || (
         combined.includes('zip_guard|') ||
         combined.includes('zip does not contain a supported') ||
         combined.includes('encrypted zip files are not supported') ||
@@ -93,14 +91,36 @@ function isOrcaPresetCompatibilityError(err) {
  * Convert processing exceptions into stable API error responses.
  * @param {Error & {stderr?: string, killed?: boolean}} err Processing error.
  * @param {import('express').Response} res Express response.
- * @param {string[]} filesCleanupList Temporary files scheduled for cleanup.
- * @param {string} inputFile Uploaded input path.
+ * @param {unknown} _legacyCleanupList Retained compatibility placeholder; route lifecycle owns cleanup.
+ * @param {unknown} _legacyInputFile Retained compatibility placeholder; request paths are not logged.
  * @param {() => string} getSupportedInputExtensionsText Supported extension formatter callback.
  * @returns {import('express').Response} Serialized error response.
  */
-function handleProcessingError(err, res, filesCleanupList, inputFile, getSupportedInputExtensionsText) {
-    console.error('[CRITICAL ERROR]', err.message);
-    cleanupFiles(filesCleanupList);
+function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, getSupportedInputExtensionsText) {
+
+    if (err?.code === 'SLICE_RESOURCE_LIMIT_EXCEEDED') {
+        return res.status(413).json({
+            success: false,
+            error: 'Slice processing exceeded a configured resource limit.',
+            errorCode: 'SLICE_RESOURCE_LIMIT_EXCEEDED'
+        });
+    }
+
+    if (err?.code === 'INVALID_SLICE_OUTPUT') {
+        return res.status(422).json({
+            success: false,
+            error: 'Slicer output failed artifact validation.',
+            errorCode: 'INVALID_SLICE_OUTPUT'
+        });
+    }
+
+    if (err?.code === 'INVALID_SLICE_STATS') {
+        return res.status(422).json({
+            success: false,
+            error: 'Slicer output statistics failed validation.',
+            errorCode: 'INVALID_SLICE_STATS'
+        });
+    }
 
     if (isProcessingTimeoutError(err)) {
         return res.status(422).json({
@@ -140,17 +160,6 @@ function handleProcessingError(err, res, filesCleanupList, inputFile, getSupport
             error: 'Orca profile preset combination is incompatible. Please check machine/process profile pairing.',
             errorCode: 'ORCA_PROFILE_INCOMPATIBLE'
         });
-    }
-
-    try {
-        logError({
-            message: err.message,
-            stderr: err.stderr,
-            stack: err.stack,
-            path: inputFile
-        });
-    } catch (error_) {
-        console.error(`[LOGGER ERROR] ${error_.message}`);
     }
 
     return res.status(500).json({

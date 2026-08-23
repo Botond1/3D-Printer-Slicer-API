@@ -17,7 +17,7 @@ from urllib import error, request
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common.env_utils import read_dotenv, resolve_admin_key_candidates, resolve_base_url
+from common.env_utils import read_dotenv, resolve_artifact_api_key_candidates, resolve_base_url
 
 SCRIPT_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_ROOT.parent.parent.parent
@@ -38,6 +38,11 @@ DEFAULTS = {
 
 ADMIN_ENDPOINT = "/admin/download/ALL"
 SLICE_ENDPOINT = "/prusa/slice"
+SLICE_AUTH_REQUIRED_RESPONSE = {
+    "success": False,
+    "error": "Slice service authentication is required.",
+    "errorCode": "SLICE_SERVICE_AUTH_REQUIRED",
+}
 
 
 @dataclass
@@ -53,6 +58,8 @@ class ProbeResult:
     retry_after_seconds: int | None
     success: bool
     failure_reason: str | None
+    pre_limit_responses_checked: int = 0
+    pre_limit_contract_verified: bool | None = None
 
 
 def parse_positive_int(value: str | int | float | None, fallback: int) -> int:
@@ -249,8 +256,17 @@ def probe_until_rate_limited(
     max_attempts: int,
     expected_upper_bound: int,
     expected_error_code: str,
+    expected_pre_limit_status: int | None = None,
+    expected_pre_limit_body: dict | None = None,
 ) -> ProbeResult:
+    if (expected_pre_limit_status is None) != (expected_pre_limit_body is None):
+        raise ValueError(
+            "expected_pre_limit_status and expected_pre_limit_body must be configured together"
+        )
+
     observed_statuses: list[int] = []
+    pre_limit_responses_checked = 0
+    pre_limit_contract_required = expected_pre_limit_status is not None
 
     for attempt in range(1, max_attempts + 1):
         status, response_headers, body = send_http_request(
@@ -262,7 +278,7 @@ def probe_until_rate_limited(
         observed_statuses.append(status)
 
         if status == 429:
-            return evaluate_rate_limit_hit(
+            result = evaluate_rate_limit_hit(
                 label=label,
                 endpoint=endpoint,
                 attempt=attempt,
@@ -272,6 +288,23 @@ def probe_until_rate_limited(
                 response_headers=response_headers,
                 body=body,
             )
+            result.pre_limit_responses_checked = pre_limit_responses_checked
+            result.pre_limit_contract_verified = (
+                pre_limit_responses_checked > 0
+                if pre_limit_contract_required
+                else None
+            )
+            if (
+                pre_limit_contract_required
+                and pre_limit_responses_checked == 0
+                and result.success
+            ):
+                result.success = False
+                result.failure_reason = (
+                    "rate limit was reached before any exact pre-limit "
+                    "authentication rejection was observed"
+                )
+            return result
 
         if status == 0:
             return ProbeResult(
@@ -286,7 +319,34 @@ def probe_until_rate_limited(
                 retry_after_seconds=None,
                 success=False,
                 failure_reason=f"request failure while probing rate limit: {body}",
+                pre_limit_responses_checked=pre_limit_responses_checked,
+                pre_limit_contract_verified=(
+                    False if pre_limit_contract_required else None
+                ),
             )
+
+        if pre_limit_contract_required:
+            if status != expected_pre_limit_status or body != expected_pre_limit_body:
+                return ProbeResult(
+                    label=label,
+                    endpoint=endpoint,
+                    attempts_sent=attempt,
+                    first_429_attempt=None,
+                    expected_upper_bound=expected_upper_bound,
+                    observed_statuses=observed_statuses,
+                    error_code=parse_error_code(body),
+                    retry_after_header=None,
+                    retry_after_seconds=None,
+                    success=False,
+                    failure_reason=(
+                        "pre-limit response did not exactly match "
+                        f"HTTP {expected_pre_limit_status} "
+                        f"{expected_pre_limit_body['errorCode']}"
+                    ),
+                    pre_limit_responses_checked=pre_limit_responses_checked,
+                    pre_limit_contract_verified=False,
+                )
+            pre_limit_responses_checked += 1
 
     return ProbeResult(
         label=label,
@@ -302,6 +362,12 @@ def probe_until_rate_limited(
         failure_reason=(
             "did not observe HTTP 429 within expected attempt budget "
             f"(max_attempts={max_attempts})"
+        ),
+        pre_limit_responses_checked=pre_limit_responses_checked,
+        pre_limit_contract_verified=(
+            pre_limit_responses_checked > 0
+            if pre_limit_contract_required
+            else None
         ),
     )
 
@@ -354,6 +420,14 @@ def write_report(
                 f"- errorCode on 429: `{probe.error_code}`",
                 f"- Retry-After header: `{probe.retry_after_header}`",
                 f"- retryAfterSeconds body field: `{probe.retry_after_seconds}`",
+                (
+                    "- Exact pre-limit authentication responses verified: "
+                    f"`{probe.pre_limit_responses_checked}`"
+                ),
+                (
+                    "- Pre-limit authentication contract verified: "
+                    f"`{probe.pre_limit_contract_verified}`"
+                ),
                 f"- Failure reason: `{probe.failure_reason}`",
                 "",
             ]
@@ -366,12 +440,12 @@ def main() -> int:
     base_url = resolve_base_url(PROJECT_ROOT)
     config = resolve_rate_limit_config()
 
-    admin_keys = resolve_admin_key_candidates(PROJECT_ROOT)
-    if not admin_keys:
-        print("[RATE LIMIT TEST] ERROR: ADMIN_API_KEY not found in .env or process environment.")
+    artifact_keys = resolve_artifact_api_key_candidates(PROJECT_ROOT)
+    if not artifact_keys:
+        print("[RATE LIMIT TEST] ERROR: ARTIFACT_API_KEY not found in .env or process environment.")
         return 1
 
-    admin_headers = {"x-api-key": admin_keys[0]}
+    admin_headers = {"x-api-key": artifact_keys[0]}
 
     admin_probe = probe_until_rate_limited(
         label="Admin limiter on /admin/download/ALL",
@@ -385,7 +459,7 @@ def main() -> int:
     )
 
     slice_probe = probe_until_rate_limited(
-        label="Slice limiter on /prusa/slice",
+        label="Slice limiter before service auth on /prusa/slice",
         base_url=base_url,
         endpoint=SLICE_ENDPOINT,
         method="POST",
@@ -393,6 +467,8 @@ def main() -> int:
         max_attempts=config["SLICE_RATE_LIMIT_BURST_CAPACITY"] + 5,
         expected_upper_bound=config["SLICE_RATE_LIMIT_BURST_CAPACITY"] + 2,
         expected_error_code="RATE_LIMIT_EXCEEDED",
+        expected_pre_limit_status=401,
+        expected_pre_limit_body=SLICE_AUTH_REQUIRED_RESPONSE,
     )
 
     write_report(

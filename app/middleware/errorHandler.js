@@ -18,11 +18,27 @@ function buildErrorResponse(message, errorCode) {
 }
 
 const KNOWN_ERROR_RULES = Object.freeze([
+    ...[
+        ['PRICING_CORS_ORIGIN_NOT_ALLOWED', 'Origin is not allowed for pricing endpoints.'],
+        ['ARTIFACT_CORS_ORIGIN_NOT_ALLOWED', 'Origin is not allowed for artifact endpoints.'],
+        ['OPERATIONS_CORS_ORIGIN_NOT_ALLOWED', 'Origin is not allowed for operations endpoints.']
+    ].map(([errorCode, message]) => ({
+        match: (err) => err?.code === errorCode,
+        status: 403,
+        message,
+        errorCode
+    })),
     {
         match: (err) => err?.code === 'ADMIN_CORS_ORIGIN_NOT_ALLOWED',
         status: 403,
         message: 'Origin is not allowed for admin endpoints.',
         errorCode: 'ADMIN_CORS_ORIGIN_NOT_ALLOWED'
+    },
+    {
+        match: (err) => err?.code === 'SLICE_CORS_ORIGIN_NOT_ALLOWED',
+        status: 403,
+        message: 'Origin is not allowed for slicing endpoints.',
+        errorCode: 'SLICE_CORS_ORIGIN_NOT_ALLOWED'
     },
     {
         match: (err) => err?.type === 'entity.parse.failed',
@@ -43,6 +59,30 @@ const KNOWN_ERROR_RULES = Object.freeze([
         errorCode: 'UPLOADED_FILE_TOO_LARGE'
     },
     {
+        match: (err) => err?.code === 'LIMIT_FIELD_NESTING', status: 400,
+        message: 'Nested upload field names are not allowed.', errorCode: 'UPLOAD_FIELD_NESTING_TOO_DEEP'
+    },
+    {
+        match: (err) => err?.code === 'LIMIT_FIELD_KEY', status: 400,
+        message: 'Upload field name is too long.', errorCode: 'UPLOAD_FIELD_NAME_TOO_LONG'
+    },
+    {
+        match: (err) => err?.code === 'LIMIT_FIELD_COUNT', status: 413,
+        message: 'Too many upload fields.', errorCode: 'TOO_MANY_UPLOAD_FIELDS'
+    },
+    {
+        match: (err) => err?.code === 'LIMIT_FIELD_VALUE', status: 413,
+        message: 'Upload field value is too large.', errorCode: 'UPLOAD_FIELD_TOO_LARGE'
+    },
+    {
+        match: (err) => err?.code === 'LIMIT_PART_COUNT', status: 413,
+        message: 'Too many multipart parts.', errorCode: 'TOO_MANY_MULTIPART_PARTS'
+    },
+    {
+        match: (err) => err?.code === 'LIMIT_FILE_COUNT', status: 400,
+        message: 'Too many upload files.', errorCode: 'TOO_MANY_UPLOAD_FILES'
+    },
+    {
         match: (err) => err?.code === 'LIMIT_UNEXPECTED_FILE',
         status: 400,
         message: 'Unexpected file field. Use "choosenFile" for uploads.',
@@ -53,6 +93,37 @@ const KNOWN_ERROR_RULES = Object.freeze([
         status: 400,
         message: 'Unsupported file format.',
         errorCode: 'UNSUPPORTED_FILE_FORMAT'
+    },
+    {
+        match: (err) => err?.code === 'MALFORMED_MULTIPART_REQUEST', status: 400,
+        message: 'Invalid multipart request.', errorCode: 'INVALID_MULTIPART_REQUEST'
+    },
+    {
+        match: (err) => err?.code === 'UPLOAD_REQUEST_ABORTED', status: 400,
+        message: 'Upload request was aborted.', errorCode: 'UPLOAD_REQUEST_ABORTED'
+    },
+    {
+        match: (err) => err?.code === 'UPLOAD_TOTAL_TIMEOUT', status: 408,
+        message: 'Multipart upload exceeded its total lifetime.',
+        errorCode: 'UPLOAD_TOTAL_TIMEOUT',
+        closeConnection: true
+    },
+    {
+        match: (err) => err?.code === 'UPLOAD_RESOURCE_LIMIT_EXCEEDED', status: 413,
+        message: 'Uploaded bytes exceeded the configured resource limit.',
+        errorCode: 'UPLOAD_RESOURCE_LIMIT_EXCEEDED'
+    },
+    {
+        match: (err) => err?.code === 'UPLOAD_STORAGE_ERROR', status: 500,
+        message: 'File upload could not be stored.', errorCode: 'UPLOAD_STORAGE_ERROR'
+    },
+    {
+        match: (err) => err?.code === 'WORKSPACE_CLEANUP_FAILED', status: 500,
+        message: 'Request cleanup failed.', errorCode: 'INTERNAL_SERVER_ERROR'
+    },
+    {
+        match: (err) => err?.code === 'WORKSPACE_ALLOCATION_FAILED', status: 500,
+        message: 'Request workspace is unavailable.', errorCode: 'INTERNAL_SERVER_ERROR'
     },
     {
         match: (err) => err?.name === 'MulterError',
@@ -73,7 +144,8 @@ function resolveKnownErrorRule(err) {
             return {
                 status: rule.status,
                 message: rule.message,
-                errorCode: rule.errorCode
+                errorCode: rule.errorCode,
+                closeConnection: rule.closeConnection === true
             };
         }
     }
@@ -96,15 +168,20 @@ function errorHandler(err, req, res, next) {
 
     const knownError = resolveKnownErrorRule(err);
     if (knownError) {
+        const { incrementResourceFailure } = require('../services/observability/metrics');
+        if (knownError.errorCode.includes('RESOURCE_LIMIT') || knownError.errorCode.includes('TOO_LARGE')) {
+            incrementResourceFailure('limit');
+        } else if (knownError.errorCode === 'INVALID_SLICE_OUTPUT') {
+            incrementResourceFailure('invalid_output');
+        } else if (knownError.errorCode === 'INVALID_SLICE_STATS') {
+            incrementResourceFailure('invalid_stats');
+        }
+        if (knownError.closeConnection) res.setHeader('Connection', 'close');
         return res.status(knownError.status).json(buildErrorResponse(knownError.message, knownError.errorCode));
     }
 
     const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
     const isServerError = status >= 500;
-
-    if (isServerError) {
-        console.error(`[ERROR] Unhandled request failure (${req.method} ${req.originalUrl}):`, err);
-    }
 
     const payload = isServerError
         ? buildErrorResponse('Internal server error.', 'INTERNAL_SERVER_ERROR')

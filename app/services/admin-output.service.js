@@ -4,20 +4,46 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { DEFAULTS } = require('../config/constants');
+const { resolveResourcePolicy } = require('../config/resource-policy');
 const { OUTPUT_DIR } = require('../config/paths');
-const { parsePositiveInt } = require('./slice/number-utils');
+const { readFileSyncBounded } = require('../utils/bounded-file');
+const { emitEvent } = require('./observability/events');
 
 const ALLOWED_OUTPUT_EXTENSIONS = new Set(['.gcode', '.sl1']);
 const BULK_DOWNLOAD_ALL_TOKEN = 'ALL';
-const MAX_BULK_DOWNLOAD_ENTRIES = parsePositiveInt(
-    process.env.MAX_ZIP_ENTRIES || `${DEFAULTS.MAX_ZIP_ENTRIES}`,
-    DEFAULTS.MAX_ZIP_ENTRIES
-);
-const MAX_BULK_DOWNLOAD_BYTES = parsePositiveInt(
-    process.env.MAX_ZIP_UNCOMPRESSED_BYTES || `${DEFAULTS.MAX_ZIP_UNCOMPRESSED_BYTES}`,
-    DEFAULTS.MAX_ZIP_UNCOMPRESSED_BYTES
-);
+const RESOURCE_POLICY = resolveResourcePolicy(process.env);
+const MAX_BULK_DOWNLOAD_ENTRIES = RESOURCE_POLICY.MAX_ZIP_ENTRIES;
+const MAX_BULK_DOWNLOAD_BYTES = RESOURCE_POLICY.MAX_ZIP_UNCOMPRESSED_BYTES;
+const MANAGED_FILE_PATTERN = /-output-(artifact-[a-f0-9]{32})\.(?:gcode|sl1)$/;
+const PRIVATE_METADATA_PATTERN = /^\.artifact-[a-f0-9]{32}\.json$/;
+
+function readManagedCorrelation(fileName, resolvedOutputDir, sizeBytes) {
+    const match = MANAGED_FILE_PATTERN.exec(fileName);
+    if (!match) return {};
+    const artifactId = match[1];
+    const metadataPath = path.join(resolvedOutputDir, `.${artifactId}.json`);
+    try {
+        const stat = fs.lstatSync(metadataPath);
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 64 * 1024) return {};
+        const metadata = JSON.parse(readFileSyncBounded(metadataPath, 64 * 1024));
+        const artifactStat = fs.lstatSync(path.join(resolvedOutputDir, fileName), { bigint: true });
+        const identity = `${String(artifactStat.dev)}:${String(artifactStat.ino)}:${String(
+            artifactStat.birthtimeNs ?? artifactStat.birthtimeMs
+        )}`;
+        if (
+            metadata?.version !== 1
+            || metadata.state !== 'complete'
+            || metadata.artifactId !== artifactId
+            || metadata.fileName !== fileName
+            || metadata.sizeBytes !== sizeBytes
+            || metadata.fileIdentity !== identity
+            || !/^job-[a-f0-9]{32}$/.test(metadata.jobId)
+        ) return {};
+        return { artifactId, jobId: metadata.jobId };
+    } catch {
+        return {};
+    }
+}
 
 function createFailure(status, error, errorCode) {
     return {
@@ -77,6 +103,9 @@ function resolveValidatedOutputFile(fileName, resolvedOutputDir, resolvedOutputD
     if (!requestedFileStats.isFile() || requestedFileStats.isSymbolicLink()) {
         return createFailure(400, 'Invalid output file target.', 'INVALID_OUTPUT_FILE_TARGET');
     }
+    if (requestedFileStats.size <= 0 || requestedFileStats.size > RESOURCE_POLICY.MAX_OUTPUT_BYTES) {
+        return createFailure(413, 'Output file is outside the allowed size range.', 'OUTPUT_FILE_SIZE_INVALID');
+    }
 
     let resolvedFileRealPath;
     try {
@@ -89,13 +118,18 @@ function resolveValidatedOutputFile(fileName, resolvedOutputDir, resolvedOutputD
         return createFailure(400, 'Invalid output file path.', 'INVALID_OUTPUT_FILE_PATH');
     }
 
+    const correlation = readManagedCorrelation(fileName, resolvedOutputDir, requestedFileStats.size);
+    if (MANAGED_FILE_PATTERN.test(fileName) && !correlation.artifactId) {
+        return createFailure(400, 'Invalid output file target.', 'INVALID_OUTPUT_FILE_TARGET');
+    }
     return {
         success: true,
         fileName,
         realPath: resolvedFileRealPath,
         sizeBytes: requestedFileStats.size,
         createdAt: requestedFileStats.birthtime.toISOString(),
-        modifiedAt: requestedFileStats.mtime.toISOString()
+        modifiedAt: requestedFileStats.mtime.toISOString(),
+        ...correlation
     };
 }
 
@@ -119,12 +153,16 @@ function listValidatedOutputFiles(resolvedOutputDir, resolvedOutputDirRealPath) 
     const files = [];
     for (const entry of entries) {
         if (!entry.isFile()) continue;
+        if (PRIVATE_METADATA_PATTERN.test(entry.name) || entry.name.startsWith('.artifact-')) continue;
 
         const validated = resolveValidatedOutputFile(entry.name, resolvedOutputDir, resolvedOutputDirRealPath);
         if (!validated.success) {
             if (shouldSkipUnsafeOutputEntry(validated) && validated.errorCode !== 'OUTPUT_FILE_NOT_FOUND') {
-                const logToken = entry.name || 'n/a';
-                console.warn(`[ADMIN OUTPUT] Skipping unsafe output entry: ${logToken}`);
+                emitEvent('resource.rejected', {
+                    audience: 'artifact',
+                    outcome: 'rejected',
+                    error_code: validated.errorCode
+                });
             }
 
             if (shouldSkipUnsafeOutputEntry(validated)) continue;
@@ -171,6 +209,8 @@ function listOutputFileSummaries() {
             sizeBytes: file.sizeBytes,
             createdAt: file.createdAt,
             modifiedAt: file.modifiedAt
+            ,
+            ...(file.artifactId ? { artifact_id: file.artifactId, job_id: file.jobId } : {})
         }))
         .sort((left, right) => new Date(right.modifiedAt).getTime() - new Date(left.modifiedAt).getTime());
 
@@ -209,6 +249,7 @@ function validateBulkDownloadLimits(files) {
 
 module.exports = {
     BULK_DOWNLOAD_ALL_TOKEN,
+    resolveValidatedOutputFile,
     getValidatedOutputFile,
     getValidatedOutputFiles,
     listOutputFileSummaries,

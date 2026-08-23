@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Instructions
 
-Last synchronized: 2026-05-14
+Last synchronized: 2026-07-26
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -15,6 +15,36 @@ If rules are changed here, synchronize with:
 ## Goal
 Keep slicing behavior safe, deterministic, and production-friendly while preserving strict domain constraints.
 
+## Candidate image publication boundary
+
+- Normal Image Validation remains read-only/no-push/no-deploy.
+- Candidate Publication retains exact-input `workflow_dispatch` for later
+  default-branch integration and accepts `push` only on
+  `codex/i8-s3a-ghcr-signed-candidate`.
+- Push authorization derives `github.sha` and requires repository
+  `Botond1/3D-Printer-Slicer-API`, ref
+  `refs/heads/codex/i8-s3a-ghcr-signed-candidate`, actor `Botond1`, hardcoded
+  `ghcr.io/botond1/3d-printer-slicer-api`, and exact last non-empty commit line
+  `I8-Publication: PUBLISH_I8_SIGNED_GHCR_CANDIDATE`.
+- Both event adapters fail closed and emit canonical `candidate_sha`,
+  `image_ref`, `discovery_tag`, and `registry_repository` outputs.
+- Registry, attestation, and OIDC write permissions belong only to the
+  publication job, after the shared complete gate passes on the same once-built
+  `linux/amd64` image.
+- Refuse an existing discovery tag. Never create mutable/release/staging/
+  production tags. Consumers use only
+  `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`.
+- Publication never authorizes deploy. Preserve and classify partial remote
+  candidates; never overwrite or delete them.
+- Before the one authorized corrective push, local and remote HEAD are
+  `c49bfc698d4d41041e6216c76a11144ffb386183`; Source run
+  `30163991878` and Image run `30163991870` are green. Corrective
+  Source/Image/Publication runs remain pending. No registry, signature, or
+  attestation side effect exists.
+- The authorization permits one normal non-force push to the existing I8
+  branch only. It does not permit `main`, PR, merge, force-push, release/Git
+  tag, mutable image tag, deployment, or repository-setting changes.
+
 ## Technology Baseline
 - Node.js + Express API
 - Python 3.12 preprocessing/orientation scripts
@@ -23,26 +53,35 @@ Keep slicing behavior safe, deterministic, and production-friendly while preserv
 - Docker Compose runtime
 
 ## Data Flow
-Request upload -> option validation -> IP rate limit -> FIFO queue -> converter/orientation -> transform/bounds check -> slicer execution -> output parsing -> pricing response.
+IP rate limit -> x-slicer-api-key authentication -> root-scoped workspace/Multer upload -> FIFO queue -> option validation -> converter/orientation -> transform/bounds check -> native slicer execution -> output parsing -> pricing response.
 
 ## Endpoint Reference
 Public endpoints:
 - GET /health
+- GET /ready
 - GET /pricing
-- POST /prusa/slice
-- POST /orca/slice
 - GET /openapi.json
 - GET /docs
 - GET /
 
-Admin endpoints (x-api-key required):
-- GET /health/detailed
+Slice-service endpoints (x-slicer-api-key required):
+- POST /prusa/slice
+- POST /orca/slice
+
+Pricing endpoints (pricing x-api-key):
 - POST /pricing/FDM
 - POST /pricing/SLA
 - PATCH /pricing/:technology/:material
 - DELETE /pricing/:technology/:material
+
+Artifact endpoints (artifact x-api-key):
 - GET /admin/output-files
 - GET /admin/download/:fileName
+
+Operations endpoints (operations x-api-key):
+- GET /health/detailed
+- GET /operations/readiness
+- GET /operations/metrics
 
 ## Hard Rules
 - Use only root-scoped runtime directories: input/, output/, configs/.
@@ -52,16 +91,50 @@ Admin endpoints (x-api-key required):
 - Keep queue and rate-limiting active for slicing.
 
 ## Security
-- ADMIN_API_KEY must be configured to start API.
-- Admin operations require matching x-api-key header.
-- Admin API key comparison uses crypto.timingSafeEqual (constant-time).
-- Admin auth failures are rate-limited and logged with requestId + resolved client IP.
-- X-Forwarded-For is only trusted when TRUST_PROXY=true and TRUST_PROXY_CIDRS is configured.
-- Browser-origin requests to /admin/* are restricted by ADMIN_CORS_ALLOWED_ORIGINS.
+- Normal startup requires distinct active SLICE_SERVICE_API_KEY,
+  PRICING_API_KEY, ARTIFACT_API_KEY, and OPERATIONS_API_KEY values. Each
+  optional `_PREVIOUS` slot is audience-local. All material must be unique,
+  non-placeholder, and 32-256 printable-ASCII bytes or startup fails generically.
+- Slice endpoints require x-slicer-api-key matching SLICE_SERVICE_API_KEY. Missing or wrong credentials return HTTP 401 with `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
+- Pricing, artifact, and operations endpoints require x-api-key matching their
+  own active or previous slot; cross-audience keys are rejected.
+- Fixed-length digest comparisons cover both slots. Structured auth events are
+  bounded/redacted and contain no credential, URL, path, filename, or customer data.
+- Rotate in two restarts: new active + old previous, migrate caller, remove
+  previous, restart again. Removal revokes the old key.
+- ADMIN_API_KEY is legacy migration material only: one non-slice audience,
+  explicitly named and expiring within 90 days through
+  LEGACY_ADMIN_API_KEY_AUDIENCE + LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL.
+- Preserve slice route order: rate limiter -> service authentication -> root-scoped workspace -> Multer -> queue -> native processing.
+- Forwarded identity defaults off. TRUST_PROXY=true requires unique validated
+  explicit IP/CIDR peers or loopback; invalid, broad, wildcard, duplicate, or
+  unknown entries refuse startup. Nearest-untrusted-hop semantics resist spoofed XFF.
+- Valid inbound X-Request-Id is bounded safe ASCII; invalid input is replaced
+  and the resolved value is returned in X-Request-Id.
+- No-Origin requests are allowed. Browser-origin protected calls must match only
+  their SLICE_, PRICING_, ARTIFACT_, or OPERATIONS_CORS_ALLOWED_ORIGINS list.
+  ADMIN_CORS_ALLOWED_ORIGINS is legacy-only for the migrated audience.
 - Shell commands use execFile with argument arrays (no shell interpolation).
 - Upload accepts only a single file on choosenFile field with extension validation at upload time.
 - /admin/download/:fileName enforces extension checks, path containment checks, non-symlink target checks, and realpath containment checks.
 - /admin/download/ALL returns a ZIP stream of all valid output files while preserving the same containment/symlink safety checks plus MAX_ZIP_ENTRIES and MAX_ZIP_UNCOMPRESSED_BYTES limits.
+
+## Readiness and Observability
+- Public /health is liveness; public /ready exposes only READY/NOT_READY.
+- /health/detailed uses fresh readiness probes; /ready and
+  /operations/readiness use the bounded readiness cache.
+- Operations readiness reasons are SHUTDOWN, ADMISSION_CLOSED,
+  QUEUE_UNAVAILABLE, NATIVE_RUNTIME_QUARANTINED, STORAGE_UNSAFE,
+  RETENTION_UNSAFE, PRICING_UNAVAILABLE, and CONFIG_UNSAFE.
+- Versioned structured events use fixed names, bounded request/job/artifact
+  correlation, and allowlisted/redacted fields. Metrics use fixed-cardinality
+  audience/outcome/reason/duration labels only.
+- I6 selects an internal-only API with no host port/default route and one
+  authenticated reverse-proxy peer; repository validation requires calibrated
+  API/native DNS/TCP/UDP denial. The proxy must not provide generic forwarding,
+  NAT, or DNS tunnelling for the API. Decision:
+  PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED. Deployed
+  caller/proxy/firewall facts remain UNVERIFIED.
 
 ## Engine Constraints
 Prusa:
@@ -81,6 +154,12 @@ Orca:
 - MAX_SLICE_QUEUE_PER_IP: 5
 - MAX_SLICE_QUEUE_WAIT_MS: 300000
 - Slice timeout: 600000 ms
+- HTTP_HEADERS_TIMEOUT_MS: 60000, bounded 1000..60000
+- HTTP_REQUEST_TIMEOUT_MS: 600000, bounded 60000..600000
+- HTTP_KEEP_ALIVE_TIMEOUT_MS: 5000, bounded 1000..60000
+- HTTP_MAX_HEADERS_COUNT: 2000, bounded 16..2000
+- HTTP_MAX_CONNECTIONS: 128, bounded 1..1024
+- HTTP_MAX_REQUESTS_PER_SOCKET: 100, bounded 1..1000
 - MAX_ZIP_ENTRIES: 500
 - MAX_ZIP_UNCOMPRESSED_BYTES: 524288000
 
@@ -90,18 +169,39 @@ Queue and rate behavior:
 - SLICE_QUEUE_FULL returns HTTP 503.
 - SLICE_QUEUE_CLIENT_LIMIT returns HTTP 429.
 - SLICE_QUEUE_TIMEOUT returns HTTP 503.
+- Invalid, empty, non-decimal, unsafe, or out-of-range HTTP envelope values fall back to their defaults; headers timeout is capped at request timeout.
+- Actual VPS capacity and reverse-proxy timeouts are UNVERIFIED.
 
 ## Python Runtime Resolution
 - PYTHON_EXECUTABLE is optional but must be an existing absolute path when set.
 - Without PYTHON_EXECUTABLE, runtime resolver checks VIRTUAL_ENV/bin/python3 and VIRTUAL_ENV/Scripts/python.exe.
 - Additional absolute fallbacks: /opt/venv/bin/python3, /usr/local/bin/python3, /usr/bin/python3.
 - Server startup fails if no valid absolute Python executable can be resolved.
-- DEBUG_COMMAND_LOGS=true enables verbose subprocess command logs.
 
 ## Environment Keys
+- SLICE_SERVICE_API_KEY
+- SLICE_SERVICE_API_KEY_PREVIOUS
+- PRICING_API_KEY
+- PRICING_API_KEY_PREVIOUS
+- ARTIFACT_API_KEY
+- ARTIFACT_API_KEY_PREVIOUS
+- OPERATIONS_API_KEY
+- OPERATIONS_API_KEY_PREVIOUS
 - ADMIN_API_KEY
+- LEGACY_ADMIN_API_KEY_AUDIENCE
+- LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL
 - PORT
+- SLICE_CORS_ALLOWED_ORIGINS
+- PRICING_CORS_ALLOWED_ORIGINS
+- ARTIFACT_CORS_ALLOWED_ORIGINS
+- OPERATIONS_CORS_ALLOWED_ORIGINS
 - ADMIN_CORS_ALLOWED_ORIGINS
+- HTTP_HEADERS_TIMEOUT_MS
+- HTTP_REQUEST_TIMEOUT_MS
+- HTTP_KEEP_ALIVE_TIMEOUT_MS
+- HTTP_MAX_HEADERS_COUNT
+- HTTP_MAX_CONNECTIONS
+- HTTP_MAX_REQUESTS_PER_SOCKET
 - JSON_BODY_LIMIT
 - FORM_BODY_LIMIT
 - MAX_UPLOAD_BYTES
@@ -117,7 +217,6 @@ Queue and rate behavior:
 - MAX_ZIP_ENTRIES
 - MAX_ZIP_UNCOMPRESSED_BYTES
 - SLICE_COMMAND_TIMEOUT_MS
-- DEBUG_COMMAND_LOGS
 - PYTHON_EXECUTABLE
 - VIRTUAL_ENV
 - ORCA_MACHINE_PROFILE
@@ -165,6 +264,7 @@ Focused test runners:
 - tests/testing-scripts/slicing/unsupported_upload_test_runner.py
 - tests/testing-scripts/admin/admin_output_files_test_runner.py
 - tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
+- tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py
 
 Test organization:
 - Keep focused runners small and behavior-oriented.

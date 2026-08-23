@@ -1,18 +1,17 @@
-/**
- * Structured error logger (console-only).
- */
+'use strict';
+
+const { emitEvent } = require('../services/observability/events');
 
 function logError(errorData) {
-    const entry = {
-        timestamp: new Date().toISOString(),
-        error: errorData?.message || 'Unknown Error',
-        details: errorData?.stderr || errorData?.stack || 'No details',
-        path: errorData?.path || 'N/A'
-    };
-
-    console.error('[ERROR LOG]', JSON.stringify(entry));
+    return emitEvent('request.rejected', {
+        request_id: errorData?.requestId,
+        job_id: errorData?.jobId,
+        outcome: 'rejected',
+        error_code: errorData?.errorCode || 'INTERNAL_PROCESSING_ERROR'
+    });
 }
 
 module.exports = {
+    emitEvent,
     logError
 };

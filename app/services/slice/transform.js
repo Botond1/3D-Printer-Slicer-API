@@ -2,8 +2,11 @@
  * Model transformation planning (scale/rotate) and post-transform bounds validation.
  */
 
+const { randomBytes } = require('node:crypto');
+const fs = require('node:fs/promises');
 const { PYTHON_EXECUTABLE } = require('../../config/python');
-const { runCommand } = require('./command');
+const { runCommand, throwIfAborted } = require('./command');
+const { resolvePythonHelper } = require('./helper-paths');
 const { getModelInfo } = require('./model-stats');
 const { validateModelDimensionsAgainstLimits } = require('./profiles');
 const { roundDimensions } = require('./common');
@@ -14,7 +17,7 @@ const { roundDimensions } = require('./common');
  * @returns {boolean} True when all axes are strictly positive.
  */
 function hasPositiveDimensions(dimensions) {
-    return dimensions.x > 0 && dimensions.y > 0 && dimensions.z > 0;
+    return Object.values(dimensions).every((value) => Number.isFinite(value) && value > 0);
 }
 
 /**
@@ -114,9 +117,9 @@ function resolveScaleFromOptions(baseDimensions, transformOptions) {
  */
 function buildModelTransformPlan(modelInfo, transformOptions) {
     const baseDimensions = {
-        x: Number.parseFloat(modelInfo.x) || 0,
-        y: Number.parseFloat(modelInfo.y) || 0,
-        z: Number.parseFloat(modelInfo.z) || 0
+        x: Number(modelInfo.x),
+        y: Number(modelInfo.y),
+        z: Number(modelInfo.z)
     };
 
     const isSizingRequested = hasTargetSizing(transformOptions.targetSizeMm) || transformOptions.scalePercent !== null;
@@ -158,25 +161,43 @@ function buildModelTransformPlan(modelInfo, transformOptions) {
  * Execute Python-based scale/rotation transform for STL model.
  * @param {string} inputPath Input STL path.
  * @param {{scale: {x: number, y: number, z: number}, rotationDeg: {x: number, y: number, z: number}}} transformPlan Transform plan.
- * @param {string[]} filesCleanupList Cleanup collector.
+ * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {() => string} [suffixFactory] Server-generated suffix factory.
  * @returns {Promise<string>} Transformed STL path.
  */
-async function applyModelTransform(inputPath, transformPlan, filesCleanupList) {
-    const transformedPath = inputPath.replace(/\.stl$/i, `_scaled_${Date.now()}.stl`);
-    filesCleanupList.push(transformedPath);
+async function applyModelTransform(inputPath, transformPlan, workspace, suffixFactory, signal) {
+    throwIfAborted(signal);
+    const transformedPath = resolveTransformedPath(inputPath, workspace, suffixFactory);
 
-    const args = [
-        transformPlan.scale.x,
-        transformPlan.scale.y,
-        transformPlan.scale.z,
-        transformPlan.rotationDeg.x,
-        transformPlan.rotationDeg.y,
-        transformPlan.rotationDeg.z
-    ].map((value) => Number.parseFloat(value).toString());
+    const args = [transformPlan.scale.x, transformPlan.scale.y, transformPlan.scale.z,
+        transformPlan.rotationDeg.x, transformPlan.rotationDeg.y, transformPlan.rotationDeg.z]
+        .map((value) => Number.parseFloat(value).toString());
 
-    await runCommand(PYTHON_EXECUTABLE, ['scale_model.py', inputPath, transformedPath, ...args]);
-
+    await runCommand(PYTHON_EXECUTABLE, [
+        resolvePythonHelper('scale_model.py'), inputPath, transformedPath, ...args
+    ], { signal });
+    throwIfAborted(signal);
+    const transformedStat = await fs.lstat(transformedPath);
+    if (!transformedStat.isFile() || transformedStat.isSymbolicLink()) {
+        throw new Error('Model transform did not produce a safe STL file.');
+    }
     return transformedPath;
+}
+
+/**
+ * Resolve a collision-resistant contained transform output path.
+ * @param {string} inputPath Contained STL input path.
+ * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {() => string} [suffixFactory] Server-generated suffix factory.
+ * @returns {string} Contained transform output path.
+ */
+function resolveTransformedPath(inputPath, workspace, suffixFactory = () => randomBytes(8).toString('hex')) {
+    workspace.assertContainedPath(inputPath);
+    const suffix = String(suffixFactory());
+    if (!/^[a-f0-9]{16}$/i.test(suffix)) {
+        throw new Error('Invalid server-generated transform suffix.');
+    }
+    return workspace.assertContainedPath(inputPath.replace(/\.stl$/i, `_scaled_${suffix}.stl`));
 }
 
 /**
@@ -185,7 +206,7 @@ async function applyModelTransform(inputPath, transformPlan, filesCleanupList) {
  * @param {{x: number|string, y: number|string, z: number|string, height_mm?: number}} originalModelInfo Original model metadata.
  * @param {{unit: 'mm'|'inch', keepProportions: boolean, requestedTargetSize: {x: number | null, y: number | null, z: number | null}, targetSizeMm: {x: number | null, y: number | null, z: number | null}, scalePercent: number | null, rotationDeg: {x: number, y: number, z: number}}} transformOptions Parsed transform options.
  * @param {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string}} buildVolumeLimits Printer limits.
- * @param {string[]} filesCleanupList Cleanup collector.
+ * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
  * @returns {Promise<
  *   {isValid: true, processableFile: string, transformPlan: {requiresTransform: boolean, scale: {x: number, y: number, z: number}, rotationDeg: {x: number, y: number, z: number}, requestedUnit: 'mm'|'inch', keepProportions: boolean, requestedTargetSize: {x: number | null, y: number | null, z: number | null}, predictedSizeMm: {x: number, y: number, z: number}}, effectiveModelInfo: {x: number, y: number, z: number, height_mm: number}, modelBoundsValidation: {isValid: true, dimensions: {x: number, y: number, z: number}}}
  *   | {isValid: false, status: number, response: {success: false, error: string, errorCode: string, model_dimensions_mm?: {x: number, y: number, z: number}, build_volume_limits_mm?: {min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, source_profile: string}}}
@@ -196,8 +217,9 @@ async function applyTransformAndValidateModel(
     originalModelInfo,
     transformOptions,
     buildVolumeLimits,
-    filesCleanupList
+    workspace, signal
 ) {
+    throwIfAborted(signal);
     const transformPlanResult = buildModelTransformPlan(originalModelInfo, transformOptions);
     if (!transformPlanResult.isValid) {
         return {
@@ -214,15 +236,16 @@ async function applyTransformAndValidateModel(
 
     let transformedFilePath = processableFile;
     if (transformPlan.requiresTransform) {
-        transformedFilePath = await applyModelTransform(processableFile, transformPlan, filesCleanupList);
+        transformedFilePath = await applyModelTransform(processableFile, transformPlan, workspace, undefined, signal);
     }
 
+    throwIfAborted(signal);
     const effectiveModelInfo = transformPlan.requiresTransform
-        ? await getModelInfo(transformedFilePath)
-        : originalModelInfo;
+        ? await getModelInfo(transformedFilePath, signal) : originalModelInfo;
+    throwIfAborted(signal);
 
     const hasKnownFinalDimensions = [effectiveModelInfo.x, effectiveModelInfo.y, effectiveModelInfo.z]
-        .every((value) => Number.parseFloat(value) > 0);
+        .every((value) => Number.isFinite(Number(value)) && Number(value) > 0);
     if (!hasKnownFinalDimensions) {
         return {
             isValid: false,
@@ -269,5 +292,6 @@ async function applyTransformAndValidateModel(
 }
 
 module.exports = {
-    applyTransformAndValidateModel
+    applyTransformAndValidateModel,
+    resolveTransformedPath
 };
