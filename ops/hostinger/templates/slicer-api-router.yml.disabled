@@ -1,0 +1,21 @@
+# The committed .disabled template is outside the mounted dynamic directory.
+# Replace only the exact .invalid hostname during the bounded activation step.
+http:
+  routers:
+    slicer-api:
+      entryPoints:
+        - websecure
+      rule: "Host(`slicer-api.invalid`)"
+      service: slicer-api
+      tls:
+        certResolver: letsencrypt
+  services:
+    slicer-api:
+      loadBalancer:
+        passHostHeader: true
+        healthCheck:
+          path: /ready
+          interval: 10s
+          timeout: 3s
+        servers:
+          - url: "http://3d-psa-backend-server:3000"
