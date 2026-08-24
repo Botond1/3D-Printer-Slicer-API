@@ -192,8 +192,14 @@ test('public readiness is minimal while reasons and metrics require operations s
 
 test('warm cached readiness cannot mask a later native-runtime quarantine', async () => {
     const fixture = createService();
-    assert.equal(fixture.service.getStatus().ready, true);
+    const warm = fixture.service.getStatus();
+    assert.equal(warm.ready, true);
     fixture.setNative({ available: false, quarantined: true });
+    const quarantined = fixture.service.getStatus();
+    assert.equal(quarantined.ready, false);
+    assert.deepEqual(quarantined.reasonCodes, ['NATIVE_RUNTIME_QUARANTINED']);
+    assert.equal(quarantined.queue, warm.queue);
+    assert.equal(fixture.queueCalls(), 1);
 
     await withSystemServer(fixture.service, async (baseUrl) => {
         const publicResponse = await fetch(`${baseUrl}/ready`);
@@ -212,7 +218,7 @@ test('warm cached readiness cannot mask a later native-runtime quarantine', asyn
     });
 });
 
-test('detailed health evaluates fresh readiness only after operations authentication', async () => {
+test('only detailed health uses fresh readiness after operations authentication', async () => {
     let cachedCalls = 0;
     let freshCalls = 0;
     const cachedStatus = Object.freeze({
@@ -255,11 +261,32 @@ test('detailed health evaluates fresh readiness only after operations authentica
             assert.equal((await fetch(`${baseUrl}/ready`)).status, 200);
             assert.equal((await fetch(`${baseUrl}/operations/readiness`, { headers })).status, 200);
             assert.equal((await fetch(`${baseUrl}/operations/metrics`, { headers })).status, 200);
-            assert.equal(cachedCalls, 0);
-            assert.equal(freshCalls, 4);
+            assert.equal(cachedCalls, 3);
+            assert.equal(freshCalls, 1);
         });
     } finally {
         if (pythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;
         else process.env.PYTHON_EXECUTABLE = pythonExecutable;
     }
+});
+
+test('ordinary active queue remains cached on public and operations surfaces', async () => {
+    const fixture = createService();
+    const cached = fixture.service.getStatus();
+    fixture.setQueue(healthyQueue({ activeJobs: 1 }));
+    await withSystemServer(fixture.service, async (baseUrl) => {
+        const headers = { 'x-api-key': 'i5-operations-client' };
+        assert.equal((await fetch(`${baseUrl}/ready`)).status, 200);
+        const operations = await fetch(`${baseUrl}/operations/readiness`, { headers });
+        assert.equal(operations.status, 200);
+        assert.equal((await operations.json()).queue.activeJobs, 0);
+        assert.equal((await fetch(`${baseUrl}/operations/metrics`, { headers })).status, 200);
+        assert.equal(fixture.queueCalls(), 1);
+
+        const detailed = await fetch(`${baseUrl}/health/detailed`, { headers });
+        assert.equal(detailed.status, 200);
+        assert.equal((await detailed.json()).subsystems.queue.activeJobs, 1);
+        assert.equal(fixture.queueCalls(), 2);
+        assert.equal(fixture.service.getStatus(), cached);
+    });
 });

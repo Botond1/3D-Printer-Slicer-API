@@ -59,7 +59,7 @@ function createSystemRouter(options = {}) {
     });
 
     router.get('/ready', (req, res) => {
-        const status = readiness.getFreshStatus();
+        const status = readiness.getStatus();
         return res.status(status.ready ? 200 : 503).json({
             status: status.ready ? 'READY' : 'NOT_READY'
         });
@@ -82,12 +82,12 @@ function createSystemRouter(options = {}) {
     });
 
     router.get('/operations/readiness', adminRateLimiter, authenticateOperations, (req, res) => {
-        const status = readiness.getFreshStatus();
+        const status = readiness.getStatus();
         return res.status(status.ready ? 200 : 503).json(status);
     });
 
     router.get('/operations/metrics', adminRateLimiter, authenticateOperations, (req, res) => {
-        readiness.getFreshStatus();
+        readiness.getStatus();
         res.type('text/plain; version=0.0.4; charset=utf-8');
         return res.status(200).send(renderMetrics());
     });

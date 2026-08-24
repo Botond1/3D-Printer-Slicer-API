@@ -37,15 +37,15 @@ function validateMetricsAuthorization(source) {
     assert.match(source, /router\.get\('\/ready', \(req, res\) =>/);
 }
 
-function validateLiveDetailedReadiness(source) {
+function validateReadinessRouting(source) {
     assert.match(source,
         /router\.get\('\/health\/detailed', adminRateLimiter, authenticateOperations, async \(req, res\) => \{\s*const readinessStatus = readiness\.getFreshStatus\(\);/);
     assert.match(source,
-        /router\.get\('\/ready', \(req, res\) => \{\s*const status = readiness\.getFreshStatus\(\);/);
+        /router\.get\('\/ready', \(req, res\) => \{\s*const status = readiness\.getStatus\(\);/);
     assert.match(source,
-        /router\.get\('\/operations\/readiness', adminRateLimiter, authenticateOperations, \(req, res\) => \{\s*const status = readiness\.getFreshStatus\(\);/);
+        /router\.get\('\/operations\/readiness', adminRateLimiter, authenticateOperations, \(req, res\) => \{\s*const status = readiness\.getStatus\(\);/);
     assert.match(source,
-        /router\.get\('\/operations\/metrics', adminRateLimiter, authenticateOperations, \(req, res\) => \{\s*readiness\.getFreshStatus\(\);/);
+        /router\.get\('\/operations\/metrics', adminRateLimiter, authenticateOperations, \(req, res\) => \{\s*readiness\.getStatus\(\);/);
 }
 
 function validateMetrics(module) {
@@ -121,6 +121,38 @@ function validateFreshReadiness(module) {
     assert.equal(queueCalls, 2);
 }
 
+function validateWarmCacheNativeSafety(module) {
+    let native = { available: true, quarantined: false };
+    let queueCalls = 0;
+    const service = module.createReadinessService({
+        clock: () => 0,
+        cacheMs: 5000,
+        getQueueStatus: () => {
+            queueCalls += 1;
+            return {
+                queueLength: 0, activeJobs: 0, maxConcurrent: 1,
+                maxQueueLength: 1, acceptingJobs: true
+            };
+        },
+        getNativeRuntimeStatus: () => native,
+        probes: {
+            queue: () => true,
+            storage: () => true,
+            retention: () => true,
+            pricing: () => true,
+            config: () => true
+        }
+    });
+    const cached = service.getStatus();
+    native = { available: false, quarantined: true };
+    const failedClosed = service.getStatus();
+    assert.equal(cached.ready, true);
+    assert.equal(failedClosed.ready, false);
+    assert.deepEqual(failedClosed.reasonCodes, ['NATIVE_RUNTIME_QUARANTINED']);
+    assert.equal(failedClosed.queue, cached.queue);
+    assert.equal(queueCalls, 1);
+}
+
 function mutate(name, from, to) {
     const original = read(name);
     assert.ok(original.includes(from), `missing I5 runtime mutation anchor: ${from}`);
@@ -156,7 +188,7 @@ test('job and artifact correlation mutations fail the cross-surface contract', a
 test('metrics authentication and cardinality mutations fail', async (t) => {
     const system = read('system');
     validateMetricsAuthorization(system);
-    validateLiveDetailedReadiness(system);
+    validateReadinessRouting(system);
     await t.test('metrics route loses operations authentication', () => {
         assert.throws(() => validateMetricsAuthorization(mutate('system',
             "router.get('/operations/metrics', adminRateLimiter, authenticateOperations,",
@@ -173,11 +205,12 @@ test('metrics authentication and cardinality mutations fail', async (t) => {
     });
 });
 
-test('fresh readiness surfaces and independent cache semantics resist mutations', async (t) => {
+test('fresh detailed readiness and cached route semantics resist mutations', async (t) => {
     const live = require(PATHS.readiness);
     const system = read('system');
     validateFreshReadiness(live);
-    validateLiveDetailedReadiness(system);
+    validateWarmCacheNativeSafety(live);
+    validateReadinessRouting(system);
     const routeCases = [
         ['detailed health falls back to cached readiness',
             'const readinessStatus = readiness.getFreshStatus();',
@@ -188,18 +221,18 @@ test('fresh readiness surfaces and independent cache semantics resist mutations'
         ['detailed health operations authentication removed',
             "router.get('/health/detailed', adminRateLimiter, authenticateOperations,",
             "router.get('/health/detailed', adminRateLimiter,"],
-        ['public readiness falls back to cached state',
-            "router.get('/ready', (req, res) => {\n        const status = readiness.getFreshStatus();",
-            "router.get('/ready', (req, res) => {\n        const status = readiness.getStatus();"],
-        ['operations readiness falls back to cached state',
-            "router.get('/operations/readiness', adminRateLimiter, authenticateOperations, (req, res) => {\n        const status = readiness.getFreshStatus();",
-            "router.get('/operations/readiness', adminRateLimiter, authenticateOperations, (req, res) => {\n        const status = readiness.getStatus();"],
-        ['operations metrics falls back to cached state',
-            "router.get('/operations/metrics', adminRateLimiter, authenticateOperations, (req, res) => {\n        readiness.getFreshStatus();",
-            "router.get('/operations/metrics', adminRateLimiter, authenticateOperations, (req, res) => {\n        readiness.getStatus();"]
+        ['public readiness bypasses the normal cache',
+            "router.get('/ready', (req, res) => {\n        const status = readiness.getStatus();",
+            "router.get('/ready', (req, res) => {\n        const status = readiness.getFreshStatus();"],
+        ['operations readiness bypasses the normal cache',
+            "router.get('/operations/readiness', adminRateLimiter, authenticateOperations, (req, res) => {\n        const status = readiness.getStatus();",
+            "router.get('/operations/readiness', adminRateLimiter, authenticateOperations, (req, res) => {\n        const status = readiness.getFreshStatus();"],
+        ['operations metrics bypasses the normal cache',
+            "router.get('/operations/metrics', adminRateLimiter, authenticateOperations, (req, res) => {\n        readiness.getStatus();",
+            "router.get('/operations/metrics', adminRateLimiter, authenticateOperations, (req, res) => {\n        readiness.getFreshStatus();"]
     ];
     for (const [name, from, to] of routeCases) await t.test(name, () => {
-        assert.throws(() => validateLiveDetailedReadiness(
+        assert.throws(() => validateReadinessRouting(
             mutate('system', from, to)
         ), assert.AssertionError);
     });
@@ -221,6 +254,13 @@ test('fresh readiness surfaces and independent cache semantics resist mutations'
                     + '        return cache.value;\n'
                     + '    }'));
         assert.throws(() => validateFreshReadiness(module), assert.AssertionError);
+    });
+    await t.test('cached readiness skips the live native safety precheck', () => {
+        const module = loadCommonJsFromSource(PATHS.readiness,
+            mutate('readiness',
+                'if (nativeRuntimeHealthy(nativeStatus())) {',
+                'if (true) {'));
+        assert.throws(() => validateWarmCacheNativeSafety(module), assert.AssertionError);
     });
 });
 

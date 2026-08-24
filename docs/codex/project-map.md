@@ -3,13 +3,19 @@
 ## Current I12 Wave 3 Hostinger qualification map
 
 Observed status:
-`I12_LOCAL_IMPLEMENTATION_VERIFIED; VPS_DARK_BASELINE_N1_VERIFIED; HOSTED_AND_N2_N3_PENDING`.
+`I12_CORRECTIVE_LOCALLY_VERIFIED; VPS_DARK_BASELINE_N1_VERIFIED; CORRECTIVE_HOSTED_AND_N2_N3_PENDING`.
 Exact baseline is protected main
 `65706e381b907c6ba09a8eba504af3adaacac86b`; its Source `32668796239`, Image
 `32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
 `32669484893` are green. The immutable baseline candidate is
 `ghcr.io/botond1/3d-printer-slicer-api@sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`.
 This corrected I11 state supersedes the older corrective-pending prose below.
+The first I12 exact-SHA Source run `32746427481` passed. Image run
+`32746430314` failed closed at the active-abort contract because public and
+operations readiness had bypassed the normal cache. The corrective direct
+source below restores those cached routes, preserves fresh detailed health and
+adds a live native-quarantine overlay on cache hits. Corrective exact-SHA hosted
+evidence is pending.
 
 Direct executable-source map:
 
@@ -20,7 +26,8 @@ MAX_CONCURRENT_SLICES canonical policy (default 1, allowed 1..3)
   -> synchronous admission close / queued rejection / active abort
   -> active settlement retains slot -> terminal unsubscribe
   -> serialized post-promotion artifact-retention passes
-  -> fresh readiness/metrics and operations detailed queue samples
+  -> fresh detailed health + cached public/operations readiness
+  -> cache-hit live native-quarantine fail-closed overlay
   -> authenticated empty artifact inventory
   -> root0600 credential files -> no-follow credential-exec -> exact four-entry env
   -> full privilege drop -> absolute Python producer, with no secret argv

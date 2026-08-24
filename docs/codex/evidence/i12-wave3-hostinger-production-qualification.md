@@ -3,7 +3,7 @@
 ## Checkpoint boundary
 
 - Status at this commit boundary:
-  `I12_LOCAL_IMPLEMENTATION_VERIFIED; VPS_DARK_BASELINE_N1_VERIFIED; HOSTED_AND_N2_N3_PENDING`.
+  `I12_CORRECTIVE_LOCALLY_VERIFIED; VPS_DARK_BASELINE_N1_VERIFIED; CORRECTIVE_HOSTED_AND_N2_N3_PENDING`.
 - Exact baseline and protected main:
   `65706e381b907c6ba09a8eba504af3adaacac86b`.
 - Branch: `codex/i12-wave3-hostinger-production-qualification`.
@@ -32,8 +32,8 @@ resource-policy.js / constants.js
   -> native-runtime-status.js quarantine subscription
   -> artifact-store.js serialized post-promotion retention
   -> readiness.service.js queue invariant
-  -> fresh /ready and operations readiness/metrics
-  -> operations-authenticated /health/detailed samples
+  -> fresh detailed health without normal-cache replacement
+  -> cached public/operations surfaces with live native-quarantine overlay
   -> queue_concurrency_test_runner.py
   -> exact-empty and postflight /admin/output-files inventory
   -> create-new queue report + cleanup manifest
@@ -112,8 +112,10 @@ mechanics for small synthetic geometry.
   case.
 - Readiness requires nonnegative queue counters, max concurrency 1..3 and
   active jobs not above the configured maximum.
-- Public readiness and authenticated operations readiness/metrics use fresh
-  probes, so a warm five-second cache cannot mask native quarantine.
+- Protected detailed health uses fresh probes without replacing the normal
+  readiness cache. Public and authenticated operations surfaces retain the
+  bounded cache but check live native status on every hit; quarantine overlays
+  fail closed while an ordinary active job remains cached.
 - Post-promotion retention requests execute as an ordered promise chain rather
   than sharing one stale single-flight result. Every concurrent promotion gets
   a later scan that includes it, and a rejected pass cannot poison the lane.
@@ -201,13 +203,14 @@ the dark cutover.
 
 At the final implementation boundary before hosted execution:
 
-- focused queue/retention/capacity/cleanup/operator suites: `340/340 PASS`;
-- full JavaScript suite: `2064/2064 PASS`;
+- focused queue/readiness/retention/capacity/cleanup/operator suites:
+  `342/342 PASS` (`300` JavaScript and `42` Python);
+- full JavaScript suite: `2066/2066 PASS`;
 - full Python suite: `85` run, `84` pass and one expected Windows/POSIX
   permission skip;
 - syntax: `216` JavaScript and `39` Python tracked files;
 - repository safety: `368` final tracked indexed files, with staged batches of
-  `15`, `10`, `9`, and `17` files;
+  `15`, `10`, `9`, and `17` implementation files plus the `9`-file corrective;
 - instruction mirrors: `2/2 PASS`; exact npm `10.9.8`; production dependency
   audit: `0` vulnerabilities; production and Traefik Compose normalization,
   operator CLI, and working-tree whitespace: `PASS`.
@@ -223,12 +226,38 @@ single-purpose and mutation-locked, while another pre-hosted decomposition
 would change evidence anchors without reducing an observed runtime risk. No
 new responsibility may be added to them before that split decision is revisited.
 
+## First hosted diagnostic and corrective boundary
+
+The first target-branch checkpoint was exact SHA
+`47253e4d90797049dc6be322d9525fbcbe1a1ecf`:
+
+- Source run `32746427481`: `SUCCESS`;
+- Image run `32746430314`: fail-closed with exact root classification
+  `runtime_resource_contract_failure:abort_readiness_cache_replaced`;
+- runtime identity, Orca smoke, private topology, SPDX SBOM, Grype, known Swiper
+  advisory, bounded diagnostics and exact cleanup all passed;
+- final liveness/evidence aggregation failed, so provenance and evidence upload
+  were correctly skipped rather than reported as successful.
+
+The failure was deterministic source behavior, not a runner retry condition.
+The active-abort gate deliberately warms the normal readiness cache while idle,
+observes active work through fresh detailed health, and requires the cached
+public/operations state not to be replaced by that observation. I12 had routed
+all readiness surfaces through fresh probes, violating that established
+contract. The minimal corrective restores `getStatus()` on `/ready`,
+`/operations/readiness`, and `/operations/metrics`; `/health/detailed` remains
+fresh and cache-independent. Each cache hit still checks live native state and
+returns a fail-closed quarantine overlay without replacing the cached ordinary
+queue snapshot. Focused mutation/regression and full local suites are green;
+the corrective exact-SHA hosted rerun is pending.
+
 ## Pending hosted and production exits
 
 The following remain pending and must not be inferred from this checkpoint:
 
-1. atomic local commits and target-branch non-force push;
-2. exact-SHA hosted Source and Image validation, SBOM, Grype HIGH=0/CRITICAL=0,
+1. one atomic corrective commit and target-branch non-force push;
+2. corrective exact-SHA hosted Source and Image validation, SBOM, Grype
+   HIGH=0/CRITICAL=0,
    Swiper advisory zero, bounded evidence and cleanup;
 3. protected PR/merge, new signed candidate publication, attestations,
    verification and automatic no-deploy rehearsal;

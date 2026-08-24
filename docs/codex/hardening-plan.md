@@ -3,7 +3,7 @@
 ## I12 Wave 3 Hostinger production-qualification checkpoint
 
 Status:
-`LOCAL_IMPLEMENTATION_VERIFIED; DARK_BASELINE_N1_VERIFIED; HOSTED_PUBLICATION_CAPACITY_AND_CUTOVER_PENDING`.
+`CORRECTIVE_LOCALLY_VERIFIED; DARK_BASELINE_N1_VERIFIED; CORRECTIVE_HOSTED_PUBLICATION_CAPACITY_AND_CUTOVER_PENDING`.
 Baseline is exact protected main
 `65706e381b907c6ba09a8eba504af3adaacac86b`, whose Source `32668796239`, Image
 `32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
@@ -16,7 +16,8 @@ I12 exit order:
 1. preserve default N=1 and enforce canonical positive decimal concurrency in
    the inclusive application range 1..3;
 2. close admission and settle all queue ownership after native quarantine,
-   including exactly-once subscription teardown and fresh readiness surfaces;
+   including exactly-once subscription teardown, independent fresh detailed
+   readiness, and a live native-safety check on cached readiness surfaces;
 3. produce bounded, create-new capacity evidence from fresh authenticated queue
    and artifact inventory observations, using the root0600 no-follow
    credential-exec boundary and explicit curl/subprocess/batch deadlines;
@@ -48,9 +49,12 @@ I12 exit order:
 Completed at this checkpoint: dark N=1 baseline identity/topology/egress and
 synthetic Prusa/Orca proof; local queue, capacity-runner, exact-cleanup and
 socketless Traefik implementation; exact Traefik runtime smoke; focused and
-full local regressions. Pending: final post-documentation gates, commits/push,
-hosted new-candidate chain, N=2/N=3 measurements, retained capacity, dark proxy
-cutover, firewall/hostname/caller evidence and route activation.
+full local regressions. I12 Source run `32746427481` passed, while Image run
+`32746430314` failed closed at the abort/readiness-cache contract. The narrow
+cache-semantics corrective is locally green. Pending: corrective commit/push and
+exact-SHA hosted revalidation, the hosted new-candidate chain, N=2/N=3
+measurements, retained capacity, dark proxy cutover, firewall/hostname/caller
+evidence and route activation.
 
 See
 [`evidence/i12-wave3-hostinger-production-qualification.md`](evidence/i12-wave3-hostinger-production-qualification.md).

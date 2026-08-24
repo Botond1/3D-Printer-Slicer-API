@@ -19,6 +19,20 @@ const { emitEvent } = require('./observability/events');
 const metrics = require('./observability/metrics');
 
 const DEFAULT_CACHE_MS = 5000;
+const READINESS_REASON_ORDER = Object.freeze([
+    'SHUTDOWN',
+    'ADMISSION_CLOSED',
+    'QUEUE_UNAVAILABLE',
+    'NATIVE_RUNTIME_QUARANTINED',
+    'STORAGE_UNSAFE',
+    'RETENTION_UNSAFE',
+    'PRICING_UNAVAILABLE',
+    'CONFIG_UNSAFE'
+]);
+
+function nativeRuntimeHealthy(native) {
+    return native?.available === true && native?.quarantined === false;
+}
 
 function directoryHealthy(directory) {
     try {
@@ -113,9 +127,7 @@ function createReadinessService(options = {}) {
                 && queue.acceptingJobs === true
                 && queue.queueLength <= queue.maxQueueLength
             ),
-            native: probesOverride.native?.() ?? (
-                native?.available === true && native?.quarantined === false
-            ),
+            native: nativeRuntimeHealthy(native) && (probesOverride.native?.() ?? true),
             storage: probesOverride.storage?.() ?? (
                 directoryWritable(OUTPUT_DIR) && directoryWritable(PRICING_STATE_DIR)
             ),
@@ -157,8 +169,25 @@ function createReadinessService(options = {}) {
         const now = clock();
         if (!cache || now - cache.cachedAt >= cacheMs) {
             cache = { cachedAt: now, value: runProbes() };
+            return cache.value;
         }
-        return cache.value;
+        if (nativeRuntimeHealthy(nativeStatus())) {
+            metrics.setReadiness(cache.value.ready);
+            return cache.value;
+        }
+        const probes = Object.freeze({ ...cache.value.probes, native: false });
+        const reasonCodes = Object.freeze([
+            ...new Set([...cache.value.reasonCodes, 'NATIVE_RUNTIME_QUARANTINED'])
+        ].sort((left, right) => (
+            READINESS_REASON_ORDER.indexOf(left) - READINESS_REASON_ORDER.indexOf(right)
+        )));
+        metrics.setReadiness(false);
+        return Object.freeze({
+            ...cache.value,
+            ready: false,
+            probes,
+            reasonCodes
+        });
     }
 
     function getFreshStatus() {

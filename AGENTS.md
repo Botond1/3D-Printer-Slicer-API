@@ -33,8 +33,10 @@ canonical decimal `MAX_CONCURRENT_SLICES=1..3`. Runtime quarantine now closes
 admission, rejects queued/new work, aborts active native work, holds capacity
 until settlement, and releases its quarantine subscription only after terminal
 drain. Readiness fails when configured/active concurrency leaves the same
-bounded range, and all readiness/metrics HTTP surfaces use fresh state so a
-warm cache cannot mask quarantine. Concurrent artifact promotions receive
+bounded range. Detailed health stays fresh; public and operations surfaces
+retain the bounded cache but perform a live native-safety check on every cache
+hit, so a warm cache cannot mask quarantine or be replaced by an ordinary
+active job. Concurrent artifact promotions receive
 serialized post-promotion retention passes instead of sharing stale cleanup
 results.
 
@@ -60,10 +62,15 @@ The existing signed I11 candidate is dark-deployed on the authorized Hostinger
 KVM 4 VPS at concurrency one. Exact digest, non-root UID/GID, health/readiness,
 private-peer access, API/native egress denial, and synthetic Prusa/Orca slices
 have been observed over SSH; no API host port or public router is active. The
-new I12 code is locally tested but its hosted exact-SHA gates, new signed image,
-N=2/N=3 measurements, retained production concurrency, proxy cutover, firewall,
-approved hostname/DNS and real caller identity remain `PENDING` or
-`UNVERIFIED`. Do not infer a public service or production-complete state. See
+first I12 exact-SHA Source run `32746427481` passed. Image run `32746430314`
+failed closed because fresh public/operations readiness replaced the warmed idle
+cache during the abort gate. The narrow corrective restores bounded caching on
+those surfaces while retaining fresh detailed health and live native quarantine
+checks; its local regressions pass and exact-SHA hosted revalidation is pending.
+The new signed image, N=2/N=3 measurements, retained production concurrency,
+proxy cutover, firewall, approved hostname/DNS and real caller identity remain
+`PENDING` or `UNVERIFIED`. Do not infer a public service or
+production-complete state. See
 `docs/codex/evidence/i12-wave3-hostinger-production-qualification.md`.
 
 ## Current I11 protected-main signed-candidate checkpoint
