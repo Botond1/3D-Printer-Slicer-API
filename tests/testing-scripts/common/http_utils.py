@@ -2,8 +2,49 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from pathlib import Path
 from typing import Mapping
+
+
+CURL_CONNECT_TIMEOUT_SECONDS = 5
+CURL_JSON_TOTAL_TIMEOUT_SECONDS = 30
+CURL_SLICE_TOTAL_TIMEOUT_SECONDS = 180
+SUBPROCESS_SETTLEMENT_GRACE_SECONDS = 5
+CURL_JSON_SUBPROCESS_TIMEOUT_SECONDS = (
+    CURL_JSON_TOTAL_TIMEOUT_SECONDS + SUBPROCESS_SETTLEMENT_GRACE_SECONDS
+)
+CURL_SLICE_SUBPROCESS_TIMEOUT_SECONDS = (
+    CURL_SLICE_TOTAL_TIMEOUT_SECONDS + SUBPROCESS_SETTLEMENT_GRACE_SECONDS
+)
+
+
+def _bounded_curl_command(command: list[str], total_timeout_seconds: int) -> list[str]:
+    return [
+        *command[:2],
+        "--connect-timeout",
+        str(CURL_CONNECT_TIMEOUT_SECONDS),
+        "--max-time",
+        str(total_timeout_seconds),
+        *command[2:],
+    ]
+
+
+def _run_bounded_curl(
+    command: list[str], *, subprocess_timeout_seconds: int,
+) -> subprocess.CompletedProcess[str] | None:
+    try:
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=subprocess_timeout_seconds,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        # subprocess.run kills and waits for the child before raising. Do not
+        # expose the exception, command, partial output, or credential headers.
+        return None
 
 
 def parse_curl_output(output: str) -> tuple[int, dict | str | None]:
@@ -48,10 +89,14 @@ def curl_json(
     if api_key:
         cmd.extend(["-H", f"x-api-key: {api_key}"])
 
-    completed = subprocess.run(cmd, capture_output=True, text=True)
+    cmd = _bounded_curl_command(cmd, CURL_JSON_TOTAL_TIMEOUT_SECONDS)
+    completed = _run_bounded_curl(
+        cmd, subprocess_timeout_seconds=CURL_JSON_SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    if completed is None:
+        return 0, {"errorCode": "REQUEST_TOTAL_TIMEOUT"}
     if completed.returncode != 0:
-        stderr = (completed.stderr or "").strip() or "curl request failed"
-        return 0, {"error": stderr}
+        return 0, {"errorCode": "REQUEST_TRANSPORT_FAILURE"}
 
     return parse_curl_output(completed.stdout.strip())
 
@@ -95,11 +140,17 @@ def curl_multipart_slice(
         "\nHTTP_STATUS:%{http_code}\n",
     ])
 
-    import time
-
+    cmd = _bounded_curl_command(cmd, CURL_SLICE_TOTAL_TIMEOUT_SECONDS)
     started = time.perf_counter()
-    completed = subprocess.run(cmd, capture_output=True, text=True)
+    completed = _run_bounded_curl(
+        cmd, subprocess_timeout_seconds=CURL_SLICE_SUBPROCESS_TIMEOUT_SECONDS,
+    )
     duration = time.perf_counter() - started
+
+    if completed is None:
+        return 0, {"errorCode": "REQUEST_TOTAL_TIMEOUT"}, duration
+    if completed.returncode != 0:
+        return 0, {"errorCode": "REQUEST_TRANSPORT_FAILURE"}, duration
 
     status, body = parse_curl_output(completed.stdout.strip())
     return status, body, duration

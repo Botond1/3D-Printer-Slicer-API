@@ -1,386 +1,280 @@
-"""Concurrent queue behavior test runner for slicing endpoints.
-
-Goal:
-- Fire multiple POST requests at the same time.
-- Observe whether responses are completed in staggered order (expected when MAX_CONCURRENT_SLICES=1).
-- Produce JSON/Markdown reports under tests/testing scripts/results/.
-
-Notes:
-- This is a black-box runtime test; exact CPU core usage cannot be guaranteed from API responses alone.
-"""
+"""Bounded black-box queue concurrency qualification with exact cleanup evidence."""
 
 from __future__ import annotations
 
 import argparse
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Iterable
-
 import sys as _sys
+import time
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError, as_completed
+from pathlib import Path
+from typing import NamedTuple
+
 _sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common.env_utils import resolve_base_url, resolve_slice_service_api_key
-from common.http_utils import curl_multipart_slice
-
-SCRIPTS_ROOT = Path(__file__).resolve().parent
-TESTS_ROOT = SCRIPTS_ROOT.parent.parent / "testing-files"
-PROJECT_ROOT = SCRIPTS_ROOT.parent.parent.parent
-RESULTS_DIR = SCRIPTS_ROOT.parent / "results"
-REPORT_PATH = RESULTS_DIR / "queue_concurrency_test_result.md"
-LEGACY_REPORT_FILES = (
-    RESULTS_DIR / "queue_concurrency_test_report.json",
-    RESULTS_DIR / "queue_concurrency_test_report.md",
+from common.env_utils import (  # noqa: E402
+    resolve_artifact_api_key_candidates,
+    resolve_base_url,
+    resolve_operations_api_key_candidates,
+    resolve_slice_service_api_key,
 )
+from common.queue_cleanup_manifest import (  # noqa: E402
+    CleanupManifestError,
+    CleanupManifestWriter,
+    CreateNewFileWriter,
+    authenticate_artifact_inventory,
+    request_managed_output_inventory,
+    serialize_cleanup_manifest,
+)
+from common.queue_concurrency_reporting import (  # noqa: E402
+    QualificationOutcome,
+    build_postflight_outcome,
+    failed_preflight_outcome,
+    publish_evidence,
+    render_preflight_failure,
+)
+from common.queue_concurrency_utils import (  # noqa: E402
+    MAX_QUEUE_REQUESTS,
+    MAX_REPORT_BYTES,
+    QueueObservation,
+    QueueRequestResult,
+    authenticate_operations_observer,
+    bounded_failed_request_result,
+    bounded_timeout_request_result,
+    future_drain_timeout_seconds,
+    observe_queue_while_pending,
+    preflight_allows_load,
+    request_fresh_queue_state,
+    run_one_request,
+    synthetic_queue_fixture,
+)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 PRUSA_SLICE_ENDPOINT = "/prusa/slice"
 ORCA_SLICE_ENDPOINT = "/orca/slice"
-SUPPORTED_EXTENSIONS = {
-    ".zip", ".stl", ".obj", ".3mf", ".ply",
-    ".stp", ".step", ".igs", ".iges",
-}
-
-def resolve_runtime_env() -> tuple[str, str | None]:
-    base_url = resolve_base_url(PROJECT_ROOT)
-    return base_url, resolve_slice_service_api_key(PROJECT_ROOT)
 
 
-def resolve_engine_name(endpoint: str) -> str:
-    return "Orca" if endpoint == ORCA_SLICE_ENDPOINT else "Prusa"
+class LoadExecutionOutcome(NamedTuple):
+    during: list[QueueObservation]
+    queue_postflight: QueueObservation | None
+    workers_settled: bool
 
 
-def format_layer_height_token(layer_height: float) -> str:
-    return f"{layer_height:.3f}".rstrip("0").rstrip(".")
-
-
-def build_extra_fields(endpoint: str, layer_height: float) -> dict[str, str]:
-    layer_token = format_layer_height_token(layer_height)
-    technology = "FDM" if endpoint == ORCA_SLICE_ENDPOINT or layer_height > 0.05 else "SLA"
-
-    fields: dict[str, str] = {
-        "sizeUnit": "mm",
-        "keepProportions": "true",
-        "scalePercent": "100",
-        "rotationX": "0",
-        "rotationY": "0",
-        "rotationZ": "0",
-    }
-
-    if endpoint == ORCA_SLICE_ENDPOINT:
-        fields["printerProfile"] = "Bambu_P1S_0.4_nozzle.json"
-        fields["processProfile"] = f"FDM_{layer_token}mm.json"
-    else:
-        fields["printerProfile"] = f"{technology}_{layer_token}mm.ini"
-
-    return fields
-
-
-@dataclass
-class QueueRequestResult:
-    index: int
-    file: str
-    attempts: int
-    started_at: float
-    ended_at: float
-    duration_sec: float
-    http_status: int
-    success: bool
-    error_code: str | None
-    error_message: str | None
-    raw_body: dict | str | None
-
-
-def discover_supported_files(root: Path) -> list[Path]:
-    files = []
-    for path in root.rglob("*"):
-        if not path.is_file() or "results" in path.parts:
-            continue
-        if path.suffix.lower() in SUPPORTED_EXTENSIONS:
-            files.append(path)
-    return sorted(files)
-
-
-def discover_queue_candidate_files(root: Path) -> list[Path]:
-    """Prefer files that are historically stable for slicing queue tests."""
-    all_files = discover_supported_files(root)
-
-    deny_names = {
-        "Screw.igs",
-        "Thrower.stp",
-    }
-
-    preferred_paths = [
-        root / "archive" / "Test.zip",
-        root / "cad" / "L4G.iges",
-        root / "cad" / "Mythics.step",
-        root / "direct" / "Jaagub.stl",
-        root / "direct" / "SocConv.obj",
-        root / "direct" / "Stampo.stl",
-        root / "direct" / "Valentin.3mf",
-    ]
-
-    chosen: list[Path] = []
-    seen: set[Path] = set()
-    for candidate in preferred_paths:
-        if candidate.exists() and candidate.is_file() and candidate not in seen:
-            chosen.append(candidate)
-            seen.add(candidate)
-
-    for path in all_files:
-        if path in seen:
-            continue
-        if path.name in deny_names:
-            continue
-        chosen.append(path)
-        seen.add(path)
-
-    return chosen
-
-
-def choose_input_files(explicit_file: str | None, count: int) -> list[Path]:
-    if explicit_file:
-        path = Path(explicit_file).resolve()
-        if not path.exists() or not path.is_file():
-            raise FileNotFoundError(f"Input file does not exist: {path}")
-        return [path for _ in range(count)]
-
-    all_files = discover_queue_candidate_files(TESTS_ROOT)
-    if not all_files:
-        raise FileNotFoundError("No supported input files found under tests/.")
-
-    if count <= len(all_files):
-        return all_files[:count]
-
-    # If count is larger than available unique files, cycle deterministically.
-    result: list[Path] = []
-    index = 0
-    while len(result) < count:
-        result.append(all_files[index % len(all_files)])
-        index += 1
-    return result
-
-
-def run_one_request(
-    index: int,
-    endpoint: str,
-    file_path: Path,
-    layer_height: float,
-    material: str,
-    base_url: str,
-    slice_service_api_key: str,
-    retry_on_429: int,
-    extra_fields: dict[str, str],
-) -> QueueRequestResult:
-    attempts = 0
-    started = time.perf_counter()
-    status = 0
-    body: dict | str | None = None
-
-    while attempts < max(1, retry_on_429):
-        attempts += 1
-        status, body, _ = curl_multipart_slice(
-            base_url=base_url,
-            endpoint=endpoint,
-            file_path=file_path,
-            layer_height=layer_height,
-            material=material,
-            slice_service_api_key=slice_service_api_key,
-            extra_fields=extra_fields,
-        )
-
-        if status != 429:
-            break
-
-        retry_after = 2
-        if isinstance(body, dict):
-            retry_after = int(body.get("retryAfterSeconds") or 2)
-        time.sleep(max(1, retry_after))
-
-    ended = time.perf_counter()
-
-    if isinstance(body, dict):
-        success = bool(body.get("success")) and (200 <= status < 300)
-        error_code = body.get("errorCode")
-        error_message = body.get("error")
-    else:
-        success = 200 <= status < 300
-        error_code = None
-        error_message = str(body) if body else None
-
-    return QueueRequestResult(
-        index=index,
-        file=str(file_path.relative_to(TESTS_ROOT)).replace("\\", "/") if TESTS_ROOT in file_path.parents else str(file_path),
-        attempts=attempts,
-        started_at=started,
-        ended_at=ended,
-        duration_sec=round(ended - started, 3),
-        http_status=status,
-        success=success,
-        error_code=error_code,
-        error_message=error_message,
-        raw_body=body,
+def resolve_runtime_env() -> tuple[str, str | None, list[str], list[str]]:
+    return (
+        resolve_base_url(PROJECT_ROOT),
+        resolve_slice_service_api_key(PROJECT_ROOT),
+        resolve_operations_api_key_candidates(PROJECT_ROOT),
+        resolve_artifact_api_key_candidates(PROJECT_ROOT),
     )
 
 
-def evaluate_order(results: list[QueueRequestResult]) -> dict:
-    if len(results) < 2:
-        return {"client_start_order_kept": None, "reason": "at least 2 requests required"}
-
-    if any(r.attempts > 1 for r in results):
-        return {
-            "client_start_order_kept": None,
-            "reason": "one or more requests were rate-limited and retried; completion order is inconclusive",
-        }
-
-    ordered_start = sorted(results, key=lambda r: r.started_at)
-    ordered_end = sorted(results, key=lambda r: r.ended_at)
-    completion_order = [r.index for r in ordered_end]
-    client_start_order = [r.index for r in ordered_start]
-    client_start_order_kept = completion_order == client_start_order
-
-    first_end = ordered_end[0].ended_at
-    last_end = ordered_end[-1].ended_at
-    spread = last_end - first_end
-    min_duration = min(r.duration_sec for r in results)
-    expected_min_spread = max(0.0, min_duration * (len(results) - 1) * 0.35)
-    staggered = spread >= expected_min_spread
-
-    return {
-        "client_start_order_kept": client_start_order_kept,
-        "completion_order": completion_order,
-        "client_start_order": client_start_order,
-        "staggered": staggered,
-        "spread_sec": round(spread, 3),
-        "min_single_duration_sec": round(min_duration, 3),
-        "expected_min_spread_sec": round(expected_min_spread, 3),
-        "note": "Heuristic black-box check. Staggered completion is the actionable signal for serialized queue processing; exact client start order can vary under concurrent scheduling.",
-    }
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--endpoint", default=PRUSA_SLICE_ENDPOINT,
+        choices=[PRUSA_SLICE_ENDPOINT, ORCA_SLICE_ENDPOINT],
+    )
+    parser.add_argument("--count", type=int, default=3, help="number of synthetic requests")
+    parser.add_argument(
+        "--expected-max-concurrent", type=int, required=True, choices=[1, 2, 3],
+        help="expected fresh queue maxConcurrent value",
+    )
+    parser.add_argument(
+        "--retry-on-429", type=int, default=1,
+        help="bounded maximum request attempts; any retry makes qualification fail",
+    )
+    parser.add_argument("--cleanup-manifest", required=True, help="create-new cleanup manifest path")
+    parser.add_argument("--report", required=True, help="create-new bounded Markdown report path")
+    return parser
 
 
-def markdown_summary(results: Iterable[QueueRequestResult], generated_at: str, endpoint: str, order_check: dict, base_url: str) -> str:
-    rows = list(results)
-    total = len(rows)
-    ok = sum(1 for r in rows if r.success)
-    bad = total - ok
-    engine = resolve_engine_name(endpoint)
+def validate_arguments(args: argparse.Namespace) -> str | None:
+    if args.count < args.expected_max_concurrent or args.count > MAX_QUEUE_REQUESTS:
+        return "count must be between expected-max-concurrent and 3"
+    if args.retry_on_429 < 1 or args.retry_on_429 > 3:
+        return "retry-on-429 must be between 1 and 3"
+    return None
 
-    lines = [
-        "# Queue Concurrency Test Report",
-        "",
-        f"Generated at (UTC): **{generated_at}**",
-        f"Base URL: **{base_url}**",
-        f"Endpoint: **{endpoint}**",
-        f"Slicer engine: **{engine}**",
-        f"Total concurrent requests: **{total}**",
-        f"Success: **{ok}**",
-        f"Failed: **{bad}**",
-        f"Completion matched client start order: **{order_check.get('client_start_order_kept')}**",
-        f"Staggered completion: **{order_check.get('staggered')}**",
-        f"Queue heuristic note: **{order_check.get('note') or order_check.get('reason')}**",
-        "",
-        "| # | Engine | File | Attempts | Status | Success | Duration(s) | ErrorCode |",
-        "|---:|:------:|:-----|---------:|------:|:-------:|-----------:|:---------|",
-    ]
 
-    for r in rows:
-        lines.append(
-            f"| {r.index} | {engine} | `{r.file}` | {r.attempts} | {r.http_status} | {'✅' if r.success else '❌'} | {r.duration_sec} | {r.error_code or '-'} |"
+def execute_load(
+    args: argparse.Namespace,
+    base_url: str,
+    slice_key: str,
+    operations_key: str,
+    results: list[QueueRequestResult],
+) -> LoadExecutionOutcome:
+    with synthetic_queue_fixture() as fixture:
+        executor = ThreadPoolExecutor(max_workers=args.count)
+        all_workers_settled = False
+        try:
+            submitted_at = time.monotonic()
+            future_indexes = {
+                executor.submit(
+                    run_one_request, index, args.endpoint, fixture, base_url,
+                    slice_key, args.retry_on_429,
+                ): index
+                for index in range(1, args.count + 1)
+            }
+            during = observe_queue_while_pending(base_url, operations_key, list(future_indexes))
+            drain_timeout = max(
+                0.001,
+                future_drain_timeout_seconds(args.retry_on_429)
+                - (time.monotonic() - submitted_at),
+            )
+            completed = set()
+            try:
+                completed_iterator = as_completed(future_indexes, timeout=drain_timeout)
+                for future in completed_iterator:
+                    completed.add(future)
+                    index = future_indexes[future]
+                    try:
+                        result = future.result()
+                    except Exception:
+                        result = bounded_failed_request_result(index)
+                    results.append(result)
+                    print(
+                        f"[QUEUE TEST] req#{result.index} status={result.http_status} "
+                        f"success={result.success} duration={result.duration_sec}s"
+                    )
+            except FuturesTimeoutError:
+                pass
+            for future, index in future_indexes.items():
+                if future in completed:
+                    continue
+                if future.done():
+                    try:
+                        result = future.result()
+                    except Exception:
+                        result = bounded_failed_request_result(index)
+                else:
+                    future.cancel()
+                    result = bounded_timeout_request_result(index)
+                results.append(result)
+                print(
+                    f"[QUEUE TEST] req#{result.index} status={result.http_status} "
+                    f"success={result.success} duration={result.duration_sec}s"
+                )
+            all_workers_settled = all(future.done() for future in future_indexes)
+        finally:
+            executor.shutdown(wait=all_workers_settled, cancel_futures=True)
+    if not all_workers_settled:
+        return LoadExecutionOutcome(during, None, False)
+    return LoadExecutionOutcome(
+        during, request_fresh_queue_state(base_url, operations_key), True,
+    )
+
+
+def run_qualification(args: argparse.Namespace, results: list[QueueRequestResult]) -> QualificationOutcome:
+    base_url, slice_key, operations_candidates, artifact_candidates = resolve_runtime_env()
+    print(
+        "[QUEUE TEST] "
+        f"slice_key_found={bool(slice_key)} operations_key_found={bool(operations_candidates)} "
+        f"artifact_key_found={bool(artifact_candidates)}"
+    )
+    if not slice_key or not operations_candidates or not artifact_candidates:
+        return failed_preflight_outcome(
+            args.endpoint, base_url, args.expected_max_concurrent,
+            "required_audience_credential_missing",
         )
-
-    return "\n".join(lines) + "\n"
+    try:
+        artifact_key, inventory_preflight = authenticate_artifact_inventory(
+            base_url, artifact_candidates,
+        )
+    except RuntimeError:
+        return failed_preflight_outcome(
+            args.endpoint, base_url, args.expected_max_concurrent,
+            "artifact_inventory_authentication_failure",
+        )
+    if not inventory_preflight.valid or inventory_preflight.total != 0 or inventory_preflight.pairs:
+        return failed_preflight_outcome(
+            args.endpoint, base_url, args.expected_max_concurrent,
+            "managed_output_preflight_not_exact_empty",
+        )
+    try:
+        operations_key, queue_preflight = authenticate_operations_observer(
+            base_url, operations_candidates,
+        )
+    except RuntimeError:
+        return failed_preflight_outcome(
+            args.endpoint, base_url, args.expected_max_concurrent,
+            "operations_observer_authentication_failure",
+        )
+    if not preflight_allows_load(queue_preflight, args.expected_max_concurrent):
+        payload = render_preflight_failure(
+            args.endpoint, base_url, queue_preflight, args.expected_max_concurrent,
+        )
+        return QualificationOutcome(1, payload, None)
+    print(
+        f"[QUEUE TEST] endpoint={args.endpoint} synthetic_count={args.count} "
+        f"expected_max_concurrent={args.expected_max_concurrent}"
+    )
+    load_outcome = execute_load(
+        args, base_url, slice_key, operations_key, results,
+    )
+    results.sort(key=lambda result: result.index)
+    if not load_outcome.workers_settled or load_outcome.queue_postflight is None:
+        print("[QUEUE TEST] workers_settled=false postflight_inventory=not_requested")
+        return QualificationOutcome(1, None, None)
+    inventory_postflight = request_managed_output_inventory(base_url, artifact_key)
+    return build_postflight_outcome(
+        results=results, endpoint=args.endpoint, base_url=base_url,
+        expected_max_concurrent=args.expected_max_concurrent, expected_count=args.count,
+        queue_preflight=queue_preflight, queue_during=load_outcome.during,
+        queue_postflight=load_outcome.queue_postflight,
+        inventory_preflight=inventory_preflight, inventory_postflight=inventory_postflight,
+    )
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--endpoint", default=PRUSA_SLICE_ENDPOINT, choices=[PRUSA_SLICE_ENDPOINT, ORCA_SLICE_ENDPOINT])
-    parser.add_argument("--count", type=int, default=3, help="number of concurrent requests")
-    parser.add_argument("--layer-height", type=float, default=0.2)
-    parser.add_argument("--material", default="PLA")
-    parser.add_argument("--file", default=None, help="optional explicit input file path")
-    parser.add_argument("--retry-on-429", type=int, default=3, help="max attempts per request when 429 is returned")
-    args = parser.parse_args()
-
-    if args.count <= 0:
-        print("[QUEUE TEST] count must be > 0")
+    args = build_parser().parse_args()
+    argument_error = validate_arguments(args)
+    if argument_error:
+        print(f"[QUEUE TEST] ERROR: {argument_error}")
         return 1
-
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    for legacy_path in LEGACY_REPORT_FILES:
-        if legacy_path.exists():
-            legacy_path.unlink()
-
-    base_url, slice_service_api_key = resolve_runtime_env()
-    print(
-        "[QUEUE TEST] "
-        f"slice_service_api_key_found={bool(slice_service_api_key)}"
-    )
-    if not slice_service_api_key:
-        print(
-            "[QUEUE TEST] ERROR: "
-            "SLICE_SERVICE_API_KEY not found in .env or process environment."
-        )
-        return 1
-
+    manifest_writer: CleanupManifestWriter | None = None
+    report_writer: CreateNewFileWriter | None = None
     try:
-        input_files = choose_input_files(args.file, args.count)
-    except Exception as exc:
-        print(f"[QUEUE TEST] ERROR: {exc}")
+        manifest_writer = CleanupManifestWriter.prepare(args.cleanup_manifest)
+        report_writer = CreateNewFileWriter.prepare(args.report, MAX_REPORT_BYTES)
+        if manifest_writer.target == report_writer.target:
+            raise CleanupManifestError("evidence_targets_must_differ")
+    except Exception:
+        if manifest_writer is not None:
+            manifest_writer.abort()
+        if report_writer is not None:
+            report_writer.abort()
+        print("[QUEUE TEST] ERROR: evidence path preflight failed")
         return 1
-
-    print(f"[QUEUE TEST] endpoint={args.endpoint} count={args.count} files={len(input_files)}")
-    print(f"[QUEUE TEST] engine={resolve_engine_name(args.endpoint)}")
-
-    extra_fields = build_extra_fields(args.endpoint, args.layer_height)
-
     results: list[QueueRequestResult] = []
-
-    with ThreadPoolExecutor(max_workers=args.count) as executor:
-        futures = [
-            executor.submit(
-                run_one_request,
-                index,
-                args.endpoint,
-                input_files[index - 1],
-                args.layer_height,
-                args.material,
-                base_url,
-                slice_service_api_key,
-                args.retry_on_429,
-                extra_fields,
-            )
-            for index in range(1, args.count + 1)
-        ]
-
-        for future in as_completed(futures):
-            result = future.result()
-            results.append(result)
-            print(
-                f"[QUEUE TEST] req#{result.index} status={result.http_status} success={result.success} duration={result.duration_sec}s"
-            )
-
-    results_sorted = sorted(results, key=lambda r: r.index)
-    success_count = sum(1 for r in results_sorted if r.success)
-    fail_count = len(results_sorted) - success_count
-
-    order_check = evaluate_order(results_sorted)
-
-    generated_at = datetime.now(timezone.utc).isoformat()
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text(
-        markdown_summary(results_sorted, generated_at, args.endpoint, order_check, base_url),
-        encoding="utf-8",
-    )
-
-    print(f"[QUEUE TEST] Report: {REPORT_PATH}")
-    print(f"[QUEUE TEST] Success={success_count} Fail={fail_count}")
-    if order_check.get("client_start_order_kept") is not None:
-        print(
-            f"[QUEUE TEST] Completion matched client start order: {order_check['client_start_order_kept']} "
-            f"| staggered={order_check.get('staggered')} | spread={order_check.get('spread_sec')}s"
-        )
-
-    return 0 if fail_count == 0 else 1
+    try:
+        outcome = run_qualification(args, results)
+    except Exception:
+        print("[QUEUE TEST] ERROR: qualification execution failed")
+        outcome = QualificationOutcome(1, None, None)
+    publication_ok = True
+    if outcome.report_payload is None:
+        report_writer.abort()
+        publication_ok = False
+    else:
+        publication_ok = publish_evidence("report", report_writer, outcome.report_payload)
+    if outcome.cleanup_pairs is None:
+        manifest_writer.abort()
+        print("[QUEUE TEST] cleanup_manifest_state=not_published_post_inventory_unverified")
+        publication_ok = False
+    else:
+        try:
+            payload = serialize_cleanup_manifest(outcome.cleanup_pairs)
+        except Exception:
+            manifest_writer.abort()
+            print("[QUEUE TEST] ERROR: cleanup manifest serialization failed")
+            publication_ok = False
+        else:
+            publication_ok = publish_evidence(
+                "cleanup_manifest", manifest_writer.writer, payload,
+            ) and publication_ok
+            if manifest_writer.state in {"committed", "committed_uncertain"}:
+                print(f"[QUEUE TEST] cleanup_pairs={len(outcome.cleanup_pairs)}")
+    return outcome.exit_code if publication_ok else 1
 
 
 if __name__ == "__main__":
