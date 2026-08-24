@@ -43,6 +43,9 @@ const DEFAULTS = {
     ORCA_DEFAULT_MACHINE_PROFILE: 'Bambu_P1S_0.4_nozzle.json'
 };
 
+/** Inclusive application safety range for parallel native slicer processes. */
+const MAX_CONCURRENT_SLICES_RANGE = Object.freeze({ min: 1, max: 3 });
+
 /**
  * Layer-height presets by engine/technology.
  */
@@ -120,6 +123,7 @@ const PORT = resolvePort();
 
 module.exports = {
     DEFAULTS,
+    MAX_CONCURRENT_SLICES_RANGE,
     LAYER_HEIGHTS,
     ORCA_PROCESS_PROFILE_BY_LAYER,
     DEFAULT_PRICING,

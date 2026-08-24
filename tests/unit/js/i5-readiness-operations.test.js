@@ -24,6 +24,7 @@ function healthyQueue(overrides = {}) {
     return {
         queueLength: 0,
         activeJobs: 0,
+        maxConcurrent: 1,
         maxQueueLength: 100,
         acceptingJobs: true,
         ...overrides
@@ -189,6 +190,28 @@ test('public readiness is minimal while reasons and metrics require operations s
     });
 });
 
+test('warm cached readiness cannot mask a later native-runtime quarantine', async () => {
+    const fixture = createService();
+    assert.equal(fixture.service.getStatus().ready, true);
+    fixture.setNative({ available: false, quarantined: true });
+
+    await withSystemServer(fixture.service, async (baseUrl) => {
+        const publicResponse = await fetch(`${baseUrl}/ready`);
+        assert.equal(publicResponse.status, 503);
+        assert.deepEqual(await publicResponse.json(), { status: 'NOT_READY' });
+
+        const headers = { 'x-api-key': 'i5-operations-client' };
+        const operationsResponse = await fetch(`${baseUrl}/operations/readiness`, { headers });
+        assert.equal(operationsResponse.status, 503);
+        const operationsBody = await operationsResponse.json();
+        assert.deepEqual(operationsBody.reasonCodes, ['NATIVE_RUNTIME_QUARANTINED']);
+
+        const metricsResponse = await fetch(`${baseUrl}/operations/metrics`, { headers });
+        assert.equal(metricsResponse.status, 200);
+        assert.match(await metricsResponse.text(), /slicer_readiness 0/);
+    });
+});
+
 test('detailed health evaluates fresh readiness only after operations authentication', async () => {
     let cachedCalls = 0;
     let freshCalls = 0;
@@ -232,8 +255,8 @@ test('detailed health evaluates fresh readiness only after operations authentica
             assert.equal((await fetch(`${baseUrl}/ready`)).status, 200);
             assert.equal((await fetch(`${baseUrl}/operations/readiness`, { headers })).status, 200);
             assert.equal((await fetch(`${baseUrl}/operations/metrics`, { headers })).status, 200);
-            assert.equal(cachedCalls, 3);
-            assert.equal(freshCalls, 1);
+            assert.equal(cachedCalls, 0);
+            assert.equal(freshCalls, 4);
         });
     } finally {
         if (pythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;

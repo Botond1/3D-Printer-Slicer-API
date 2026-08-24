@@ -41,11 +41,11 @@ function validateLiveDetailedReadiness(source) {
     assert.match(source,
         /router\.get\('\/health\/detailed', adminRateLimiter, authenticateOperations, async \(req, res\) => \{\s*const readinessStatus = readiness\.getFreshStatus\(\);/);
     assert.match(source,
-        /router\.get\('\/ready', \(req, res\) => \{\s*const status = readiness\.getStatus\(\);/);
+        /router\.get\('\/ready', \(req, res\) => \{\s*const status = readiness\.getFreshStatus\(\);/);
     assert.match(source,
-        /router\.get\('\/operations\/readiness', adminRateLimiter, authenticateOperations, \(req, res\) => \{\s*const status = readiness\.getStatus\(\);/);
+        /router\.get\('\/operations\/readiness', adminRateLimiter, authenticateOperations, \(req, res\) => \{\s*const status = readiness\.getFreshStatus\(\);/);
     assert.match(source,
-        /router\.get\('\/operations\/metrics', adminRateLimiter, authenticateOperations, \(req, res\) => \{\s*readiness\.getStatus\(\);/);
+        /router\.get\('\/operations\/metrics', adminRateLimiter, authenticateOperations, \(req, res\) => \{\s*readiness\.getFreshStatus\(\);/);
 }
 
 function validateMetrics(module) {
@@ -67,7 +67,8 @@ function createReadiness(module, { shuttingDown = false, quarantined = false } =
         cacheMs: 1,
         isShuttingDown: () => shuttingDown,
         getQueueStatus: () => ({
-            queueLength: 0, activeJobs: 0, maxQueueLength: 1, acceptingJobs: true
+            queueLength: 0, activeJobs: 0, maxConcurrent: 1,
+            maxQueueLength: 1, acceptingJobs: true
         }),
         getNativeRuntimeStatus: () => ({ available: true, quarantined }),
         probes: {
@@ -91,7 +92,8 @@ function validateReadiness(module) {
 
 function validateFreshReadiness(module) {
     let queue = {
-        queueLength: 0, activeJobs: 0, maxQueueLength: 1, acceptingJobs: true
+        queueLength: 0, activeJobs: 0, maxConcurrent: 1,
+        maxQueueLength: 1, acceptingJobs: true
     };
     let queueCalls = 0;
     const service = module.createReadinessService({
@@ -171,7 +173,7 @@ test('metrics authentication and cardinality mutations fail', async (t) => {
     });
 });
 
-test('fresh detailed readiness and cached operational surfaces resist mutations', async (t) => {
+test('fresh readiness surfaces and independent cache semantics resist mutations', async (t) => {
     const live = require(PATHS.readiness);
     const system = read('system');
     validateFreshReadiness(live);
@@ -186,9 +188,15 @@ test('fresh detailed readiness and cached operational surfaces resist mutations'
         ['detailed health operations authentication removed',
             "router.get('/health/detailed', adminRateLimiter, authenticateOperations,",
             "router.get('/health/detailed', adminRateLimiter,"],
-        ['public readiness bypasses the normal cache',
-            'const status = readiness.getStatus();',
-            'const status = readiness.getFreshStatus();']
+        ['public readiness falls back to cached state',
+            "router.get('/ready', (req, res) => {\n        const status = readiness.getFreshStatus();",
+            "router.get('/ready', (req, res) => {\n        const status = readiness.getStatus();"],
+        ['operations readiness falls back to cached state',
+            "router.get('/operations/readiness', adminRateLimiter, authenticateOperations, (req, res) => {\n        const status = readiness.getFreshStatus();",
+            "router.get('/operations/readiness', adminRateLimiter, authenticateOperations, (req, res) => {\n        const status = readiness.getStatus();"],
+        ['operations metrics falls back to cached state',
+            "router.get('/operations/metrics', adminRateLimiter, authenticateOperations, (req, res) => {\n        readiness.getFreshStatus();",
+            "router.get('/operations/metrics', adminRateLimiter, authenticateOperations, (req, res) => {\n        readiness.getStatus();"]
     ];
     for (const [name, from, to] of routeCases) await t.test(name, () => {
         assert.throws(() => validateLiveDetailedReadiness(

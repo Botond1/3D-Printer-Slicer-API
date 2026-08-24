@@ -3,6 +3,7 @@
 /** Cached, admission-aware readiness state and required probes. */
 
 const fs = require('node:fs');
+const { MAX_CONCURRENT_SLICES_RANGE } = require('../config/constants');
 const {
     APP_ROOT,
     CONFIGS_DIR,
@@ -100,7 +101,15 @@ function createReadinessService(options = {}) {
             queue: probesOverride.queue?.() ?? Boolean(
                 queue
                 && Number.isSafeInteger(queue.queueLength)
+                && queue.queueLength >= 0
                 && Number.isSafeInteger(queue.activeJobs)
+                && queue.activeJobs >= 0
+                && Number.isSafeInteger(queue.maxConcurrent)
+                && queue.maxConcurrent >= MAX_CONCURRENT_SLICES_RANGE.min
+                && queue.maxConcurrent <= MAX_CONCURRENT_SLICES_RANGE.max
+                && queue.activeJobs <= queue.maxConcurrent
+                && Number.isSafeInteger(queue.maxQueueLength)
+                && queue.maxQueueLength > 0
                 && queue.acceptingJobs === true
                 && queue.queueLength <= queue.maxQueueLength
             ),

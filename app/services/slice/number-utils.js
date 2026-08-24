@@ -13,6 +13,25 @@ function parsePositiveInt(value, fallback) {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/**
+ * Parse a canonical positive decimal integer inside an inclusive range.
+ * Runtime startup separately rejects invalid explicit resource settings; this
+ * helper keeps module construction bounded before that startup gate executes.
+ * @param {string | number | undefined} value Source value.
+ * @param {number} fallback Safe fallback integer.
+ * @param {{min: number, max: number}} range Inclusive accepted range.
+ * @returns {number} Parsed bounded integer or fallback value.
+ */
+function parseBoundedPositiveInt(value, fallback, range) {
+    const text = String(value);
+    if (!/^[1-9]\d*$/.test(text)) return fallback;
+    const parsed = Number(text);
+    return Number.isSafeInteger(parsed) && parsed >= range.min && parsed <= range.max
+        ? parsed
+        : fallback;
+}
+
 module.exports = {
-    parsePositiveInt
+    parsePositiveInt,
+    parseBoundedPositiveInt
 };

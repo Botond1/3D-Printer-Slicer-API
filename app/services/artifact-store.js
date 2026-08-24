@@ -23,7 +23,7 @@ const {
     inspectMarker
 } = require('./artifact-metadata');
 
-let cleanupPromise;
+let cleanupTail = Promise.resolve();
 
 function emitArtifactLifecycle(eventName, record, outcome, errorCode, reason) {
     emitEvent(eventName, {
@@ -162,11 +162,9 @@ async function runCleanup(options = {}) {
 }
 
 function cleanupManagedArtifacts(options = {}) {
-    if (cleanupPromise) return cleanupPromise;
-    cleanupPromise = runCleanup(options).finally(() => {
-        cleanupPromise = null;
-    });
-    return cleanupPromise;
+    const cleanup = cleanupTail.then(() => runCleanup(options));
+    cleanupTail = cleanup.catch(() => {});
+    return cleanup;
 }
 
 module.exports = {
