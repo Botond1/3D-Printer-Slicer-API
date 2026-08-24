@@ -24,6 +24,7 @@ function healthyQueue(overrides = {}) {
     return {
         queueLength: 0,
         activeJobs: 0,
+        maxConcurrent: 1,
         maxQueueLength: 100,
         acceptingJobs: true,
         ...overrides
@@ -189,7 +190,35 @@ test('public readiness is minimal while reasons and metrics require operations s
     });
 });
 
-test('detailed health evaluates fresh readiness only after operations authentication', async () => {
+test('warm cached readiness cannot mask a later native-runtime quarantine', async () => {
+    const fixture = createService();
+    const warm = fixture.service.getStatus();
+    assert.equal(warm.ready, true);
+    fixture.setNative({ available: false, quarantined: true });
+    const quarantined = fixture.service.getStatus();
+    assert.equal(quarantined.ready, false);
+    assert.deepEqual(quarantined.reasonCodes, ['NATIVE_RUNTIME_QUARANTINED']);
+    assert.equal(quarantined.queue, warm.queue);
+    assert.equal(fixture.queueCalls(), 1);
+
+    await withSystemServer(fixture.service, async (baseUrl) => {
+        const publicResponse = await fetch(`${baseUrl}/ready`);
+        assert.equal(publicResponse.status, 503);
+        assert.deepEqual(await publicResponse.json(), { status: 'NOT_READY' });
+
+        const headers = { 'x-api-key': 'i5-operations-client' };
+        const operationsResponse = await fetch(`${baseUrl}/operations/readiness`, { headers });
+        assert.equal(operationsResponse.status, 503);
+        const operationsBody = await operationsResponse.json();
+        assert.deepEqual(operationsBody.reasonCodes, ['NATIVE_RUNTIME_QUARANTINED']);
+
+        const metricsResponse = await fetch(`${baseUrl}/operations/metrics`, { headers });
+        assert.equal(metricsResponse.status, 200);
+        assert.match(await metricsResponse.text(), /slicer_readiness 0/);
+    });
+});
+
+test('only detailed health uses fresh readiness after operations authentication', async () => {
     let cachedCalls = 0;
     let freshCalls = 0;
     const cachedStatus = Object.freeze({
@@ -239,4 +268,25 @@ test('detailed health evaluates fresh readiness only after operations authentica
         if (pythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;
         else process.env.PYTHON_EXECUTABLE = pythonExecutable;
     }
+});
+
+test('ordinary active queue remains cached on public and operations surfaces', async () => {
+    const fixture = createService();
+    const cached = fixture.service.getStatus();
+    fixture.setQueue(healthyQueue({ activeJobs: 1 }));
+    await withSystemServer(fixture.service, async (baseUrl) => {
+        const headers = { 'x-api-key': 'i5-operations-client' };
+        assert.equal((await fetch(`${baseUrl}/ready`)).status, 200);
+        const operations = await fetch(`${baseUrl}/operations/readiness`, { headers });
+        assert.equal(operations.status, 200);
+        assert.equal((await operations.json()).queue.activeJobs, 0);
+        assert.equal((await fetch(`${baseUrl}/operations/metrics`, { headers })).status, 200);
+        assert.equal(fixture.queueCalls(), 1);
+
+        const detailed = await fetch(`${baseUrl}/health/detailed`, { headers });
+        assert.equal(detailed.status, 200);
+        assert.equal((await detailed.json()).subsystems.queue.activeJobs, 1);
+        assert.equal(fixture.queueCalls(), 2);
+        assert.equal(fixture.service.getStatus(), cached);
+    });
 });

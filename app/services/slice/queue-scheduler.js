@@ -31,6 +31,27 @@ function createQueueScheduler(config) {
     let shuttingDown = false;
     let shutdownPromise;
     let resolveShutdown;
+    let unsubscribeRuntimeQuarantine;
+    let runtimeSubscriptionClosed = false;
+
+    function closeRuntimeSubscription() {
+        if (runtimeSubscriptionClosed) return;
+        runtimeSubscriptionClosed = true;
+        try {
+            unsubscribeRuntimeQuarantine?.();
+        } catch {
+            // Queue settlement cannot depend on observer teardown.
+        }
+    }
+
+    function runtimeAvailable() {
+        if (typeof config.isRuntimeAvailable !== 'function') return true;
+        try {
+            return config.isRuntimeAvailable() === true;
+        } catch {
+            return false;
+        }
+    }
 
     function emitQueueEvent(eventName, data, correlation) {
         try {
@@ -130,6 +151,7 @@ function createQueueScheduler(config) {
         if (!shuttingDown || activeJobs.size > 0 || !resolveShutdown) return;
         const resolve = resolveShutdown;
         resolveShutdown = undefined;
+        closeRuntimeSubscription();
         resolve();
     }
 
@@ -174,6 +196,10 @@ function createQueueScheduler(config) {
     }
 
     function runNextSliceJob() {
+        if (!runtimeAvailable()) {
+            void beginSliceQueueShutdown();
+            return;
+        }
         while (!shuttingDown && activeJobs.size < config.maxConcurrent && queuedJobs.length > 0) {
             const job = queuedJobs[0];
             if (expireJobAtDequeue(job)) continue;
@@ -220,6 +246,11 @@ function createQueueScheduler(config) {
         const signal = options.signal;
         const correlation = config.captureContext?.() || {};
         if (shuttingDown) return rejectAdmission(config.createShutdownError(), correlation);
+        const available = runtimeAvailable();
+        if (shuttingDown || !available) {
+            void beginSliceQueueShutdown();
+            return rejectAdmission(config.createShutdownError(), correlation);
+        }
         if (signal?.aborted) return Promise.reject(abortReason(signal));
         if (queuedJobs.length >= config.maxQueueLength) {
             return rejectAdmission(config.createFullError(), correlation);
@@ -247,6 +278,7 @@ function createQueueScheduler(config) {
     }
 
     function getQueueStatus() {
+        const available = runtimeAvailable();
         const status = {
             queueLength: queuedJobs.length,
             activeJobs: activeJobs.size,
@@ -255,11 +287,23 @@ function createQueueScheduler(config) {
             maxQueuePerClient: config.maxQueuePerClient
         };
         Object.defineProperty(status, 'acceptingJobs', {
-            value: !shuttingDown,
+            value: !shuttingDown && available,
             enumerable: false
         });
         return status;
     }
+
+    const unsubscribe = config.subscribeToRuntimeQuarantine?.(() => {
+        void beginSliceQueueShutdown();
+    });
+    if (typeof unsubscribe === 'function') {
+        if (runtimeSubscriptionClosed) {
+            try { unsubscribe(); } catch { /* Queue is already settled closed. */ }
+        } else {
+            unsubscribeRuntimeQuarantine = unsubscribe;
+        }
+    }
+    if (!runtimeAvailable()) void beginSliceQueueShutdown();
 
     return {
         enqueueSliceJob,

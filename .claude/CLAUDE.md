@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Instructions
 
-Last synchronized: 2026-08-23
+Last synchronized: 2026-08-24
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -14,6 +14,34 @@ If rules are changed here, synchronize with:
 
 ## Goal
 Keep slicing behavior safe, deterministic, and production-friendly while preserving strict domain constraints.
+
+## I12 Hostinger production-qualification boundary
+
+- Current protected main is
+  `65706e381b907c6ba09a8eba504af3adaacac86b`. Source `32668796239`, Image
+  `32668796232`, Candidate Publication `32669087688`, and automatic no-deploy
+  rehearsal `32669484893` are all `SUCCESS`. The immutable digest is
+  `sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`;
+  SLSA/SPDX attestation IDs are `42462498`/`42462513`.
+- That exact pre-I12 candidate is verified dark on the authorized Hostinger VPS
+  at N=1. `MAX_CONCURRENT_SLICES` still defaults to `1`; explicit values must be
+  canonical decimal `1..3`. N=2/N=3 are not yet qualified or deployed.
+- Capacity qualification requires `--expected-max-concurrent`,
+  `--cleanup-manifest`, and `--report`, fresh operations state, and an exact
+  empty managed-artifact preflight. The host producer uses the dynamically
+  resolved non-root service identity through the verified root0600
+  credential-exec helper; secret values are never process arguments.
+- Cleanup occurs only after exact stopped/exit-zero/non-OOM API proof. The same
+  exact image runs as a network-none non-root consumer and may remove only the
+  manifest-correlated artifact/marker pairs. Cleanup cannot change a failed
+  qualification into a pass.
+- The Hostinger Traefik pack is file-provider-only with no Docker provider or
+  Engine socket; the route stays disabled while dark. Public hostname/DNS,
+  caller, firewall, certificate continuity, route activation, retained
+  capacity, and new-candidate deployment remain pending.
+- I12 currently has local implementation gates only. Hosted validation,
+  protected-main integration, signed publication/rehearsal, N=2/N=3 capacity
+  evidence, proxy cutover, and deployment have not completed.
 
 ## Candidate image publication boundary
 
@@ -54,8 +82,10 @@ Keep slicing behavior safe, deterministic, and production-friendly while preserv
   bounded evidence and exact cleanup with read permissions only.
 - Publication never authorizes deploy. Preserve and classify partial remote
   candidates; exact recovery may continue only a matching digest without
-  remote mutation. I11 implementation, hosted runs, digest, attestations,
-  evidence and automatic rehearsal remain `PENDING` until observed.
+  remote mutation. I11 is complete at protected-main SHA
+  `65706e381b907c6ba09a8eba504af3adaacac86b`: Source `32668796239`, Image
+  `32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
+  `32669484893` succeeded with the exact digest/attestations above.
 - Hosted S4/S5 and I9 evidence is ephemeral and does not verify production
   callers, proxy/firewall, secrets, deployed digest, VPS, readiness or rollback.
 
@@ -163,7 +193,8 @@ Orca:
 ## Queue and Rate Defaults
 - Slice rate limit: 3 requests per minute per IP
 - Admin rate limit: 30 requests per minute per IP
-- MAX_CONCURRENT_SLICES: 1
+- MAX_CONCURRENT_SLICES: default 1; explicit canonical decimal 1..3 only.
+  N=2/N=3 remain unqualified and undeployed.
 - MAX_SLICE_QUEUE_LENGTH: 100
 - MAX_SLICE_QUEUE_PER_IP: 5
 - MAX_SLICE_QUEUE_WAIT_MS: 300000
@@ -279,6 +310,12 @@ Focused test runners:
 - tests/testing-scripts/admin/admin_output_files_test_runner.py
 - tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
 - tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py
+- `python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --expected-max-concurrent N --retry-on-429 1 --cleanup-manifest NEW_MANIFEST_PATH --report NEW_REPORT_PATH`
+
+The capacity runner requires an exactly empty artifact inventory before load
+and writes create-new evidence. Host execution uses the dynamic non-root
+service identity; cleanup follows only after the API is stopped and uses the
+same exact image consumer described in `ops/hostinger/RUNBOOK.md`.
 
 Test organization:
 - Keep focused runners small and behavior-oriented.

@@ -1,0 +1,83 @@
+services:
+  traefik:
+    image: traefik:v3.7.11@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144
+    container_name: 3d-psa-traefik
+    command:
+      - --global.checkNewVersion=false
+      - --global.sendAnonymousUsage=false
+      - --entryPoints.web.address=:8080
+      - --entryPoints.web.http.redirections.entryPoint.to=websecure
+      - --entryPoints.web.http.redirections.entryPoint.scheme=https
+      - --entryPoints.web.http.redirections.entryPoint.permanent=true
+      - --entryPoints.websecure.address=:8443
+      - --entryPoints.health.address=127.0.0.1:8082
+      - --providers.file=true
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --api.dashboard=false
+      - --api.insecure=false
+      - --ping=true
+      - --ping.entryPoint=health
+      - --log.level=INFO
+      - --log.format=json
+      - --accessLog=true
+      - --accessLog.format=json
+      - --certificatesResolvers.letsencrypt.acme.email=${ACME_EMAIL:?Set ACME_EMAIL to the existing ACME account contact address}
+      - --certificatesResolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesResolvers.letsencrypt.acme.httpChallenge=true
+      - --certificatesResolvers.letsencrypt.acme.httpChallenge.entryPoint=web
+    ports:
+      - "80:8080/tcp"
+      - "443:8443/tcp"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    pids_limit: 128
+    mem_limit: 268435456
+    memswap_limit: 268435456
+    cpus: 0.50
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m,mode=0700
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping=true", "--ping.entryPoint=health", "--entryPoints.health.address=127.0.0.1:8082"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - type: bind
+        source: ./dynamic
+        target: /etc/traefik/dynamic
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: volume
+        source: traefik-acme
+        target: /letsencrypt
+    labels:
+      traefik.enable: "false"
+    networks:
+      - traefik-ingress
+      - slicer-api-private
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+networks:
+  traefik-ingress:
+    name: 3d-psa-traefik-ingress
+    driver: bridge
+  slicer-api-private:
+    name: slicer-api-private
+    external: true
+
+volumes:
+  traefik-acme:
+    name: "${TRAEFIK_ACME_VOLUME:?Set TRAEFIK_ACME_VOLUME to the existing Traefik ACME volume name}"
+    external: true

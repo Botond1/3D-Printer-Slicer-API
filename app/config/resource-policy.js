@@ -1,5 +1,7 @@
 'use strict';
 
+const { DEFAULTS, MAX_CONCURRENT_SLICES_RANGE } = require('./constants');
+
 const MiB = 1024 * 1024;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -38,7 +40,12 @@ const RESOURCE_DEFINITIONS = Object.freeze({
     MAX_MANAGED_ARTIFACT_BYTES: { default: 500 * MiB, min: 1, max: 10 * 500 * MiB },
     PARTIAL_ARTIFACT_STALE_MS: { default: 60 * 60 * 1000, min: 60_000, max: DAY_MS },
     STARTUP_CLEANUP_MAX_ENTRIES: { default: 500, min: 1, max: 5_000 },
-    STARTUP_CLEANUP_MAX_MS: { default: 1_000, min: 100, max: 10_000 }
+    STARTUP_CLEANUP_MAX_MS: { default: 1_000, min: 100, max: 10_000 },
+    MAX_CONCURRENT_SLICES: {
+        default: DEFAULTS.MAX_CONCURRENT_SLICES,
+        min: MAX_CONCURRENT_SLICES_RANGE.min,
+        max: MAX_CONCURRENT_SLICES_RANGE.max
+    }
 });
 
 function parseCanonicalPositiveInteger(name, value, definition) {

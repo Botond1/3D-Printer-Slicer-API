@@ -17,6 +17,62 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
+## Current I12 Wave 3 Hostinger qualification checkpoint
+
+I12 starts from exact protected-main SHA
+`65706e381b907c6ba09a8eba504af3adaacac86b` on
+`codex/i12-wave3-hostinger-production-qualification`. That baseline includes
+the completed I11 corrective: Source `32668796239`, Image `32668796232`,
+Candidate Publication `32669087688`, and automatic rehearsal `32669484893`
+all succeeded. Its current immutable signed candidate is
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`
+with SLSA/SPDX attestation IDs `42462498` and `42462513`.
+
+The I12 implementation keeps concurrency defaulted to one and accepts only
+canonical decimal `MAX_CONCURRENT_SLICES=1..3`. Runtime quarantine now closes
+admission, rejects queued/new work, aborts active native work, holds capacity
+until settlement, and releases its quarantine subscription only after terminal
+drain. Readiness fails when configured/active concurrency leaves the same
+bounded range. Detailed health stays fresh; public and operations surfaces
+retain the bounded cache but perform a live native-safety check on every cache
+hit, so a warm cache cannot mask quarantine or be replaced by an ordinary
+active job. Concurrent artifact promotions receive
+serialized post-promotion retention passes instead of sharing stale cleanup
+results.
+
+The capacity runner requires an exactly empty authenticated artifact inventory,
+fresh operations queue samples, three or fewer synthetic requests, create-new
+bounded report and cleanup-manifest paths, and postflight identity
+reconciliation even after response loss. Curl, subprocess and whole-batch
+deadlines are explicit and timeout results remain bounded and nondisclosing.
+Its exact-image cleanup consumer is
+non-root, argumentless, networkless and limited to the fixed manifest/output
+paths; cleanup is allowed only after a graceful API stop and exact stopped-state
+proof. A root-started credential-exec helper reads only four root:root 0600
+single-link files, drops to the dynamic service UID/GID, and directly execs
+absolute Python with exactly four environment entries; secret values never
+enter argv or helper output. The Hostinger operator pack pins Traefik 3.7.11 by digest, uses only the
+file provider, mounts no Docker socket, starts with an empty dynamic directory,
+and keeps route activation separate and no-clobber. Post-link activation
+failure must either restore and fsync exact dark state or report bounded
+rollback uncertainty; capacity and cleanup exit codes must both be exact zero
+before proxy startup.
+
+The existing signed I11 candidate is dark-deployed on the authorized Hostinger
+KVM 4 VPS at concurrency one. Exact digest, non-root UID/GID, health/readiness,
+private-peer access, API/native egress denial, and synthetic Prusa/Orca slices
+have been observed over SSH; no API host port or public router is active. The
+first I12 exact-SHA Source run `32746427481` passed. Image run `32746430314`
+failed closed because fresh public/operations readiness replaced the warmed idle
+cache during the abort gate. The narrow corrective restores bounded caching on
+those surfaces while retaining fresh detailed health and live native quarantine
+checks; its local regressions pass and exact-SHA hosted revalidation is pending.
+The new signed image, N=2/N=3 measurements, retained production concurrency,
+proxy cutover, firewall, approved hostname/DNS and real caller identity remain
+`PENDING` or `UNVERIFIED`. Do not infer a public service or
+production-complete state. See
+`docs/codex/evidence/i12-wave3-hostinger-production-qualification.md`.
+
 ## Current I11 protected-main signed-candidate checkpoint
 
 I11 started from exact protected-main baseline

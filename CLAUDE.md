@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Operating Guide
 
-Last synchronized: 2026-08-23
+Last synchronized: 2026-08-24
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -14,6 +14,35 @@ When architecture rules or domain constraints change in this file, keep these fi
 
 ## Goal
 Provide a reliable slicing and pricing API for 3D printing workflows with strict safety and predictable behavior.
+
+## I12 Hostinger production-qualification boundary
+
+- Current protected-main baseline is
+  `65706e381b907c6ba09a8eba504af3adaacac86b`. Source `32668796239`, Image
+  `32668796232`, Candidate Publication `32669087688`, and automatic no-deploy
+  rehearsal `32669484893` all succeeded. The signed digest is
+  `sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`;
+  SLSA/SPDX attestation IDs are `42462498`/`42462513`.
+- That exact pre-I12 digest is verified dark on the authorized Hostinger VPS at
+  N=1. The I12 source change keeps the concurrency default at one and accepts
+  only exact canonical decimal `MAX_CONCURRENT_SLICES=1..3`; N=2 and N=3 are
+  not yet qualified or deployed.
+- Capacity qualification requires explicit `--expected-max-concurrent`,
+  `--cleanup-manifest`, and `--report` inputs, fresh authenticated operations
+  observations, and an exactly empty managed-artifact preflight. The producer
+  runs as the dynamically resolved non-root service user through the verified
+  root0600 credential-exec helper; secret values are never process arguments.
+- Cleanup is a separate fail-closed boundary: stop the API cleanly, prove its
+  exact stopped state, then run the same exact image as a non-root,
+  network-none consumer against only the manifest-correlated artifact/marker
+  pairs. Cleanup success never converts failed qualification into a pass.
+- The Hostinger Traefik pack uses the file provider with no Docker provider or
+  Engine socket and keeps the route disabled during dark qualification. Public
+  hostname/DNS, intended caller, firewall, certificate continuity, route
+  activation, retained capacity, and new-candidate deployment remain pending.
+- The I12 implementation checkpoint has local gate evidence only. Hosted
+  Source/Image validation, protected-main integration, signed publication,
+  automatic rehearsal, and deployment of the I12 change have not run yet.
 
 ## Candidate image publication boundary
 
@@ -59,8 +88,11 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   The rehearsal has read permissions only and cannot write GHCR or deploy.
 - Publication is not deployment. Preserve and classify partial candidates;
   exact recovery may continue only a matching digest without remote mutation.
-  I11 implementation, hosted Source/Image/Publication, digest, attestations,
-  evidence and automatic rehearsal remain `PENDING` until observed.
+  I11 is complete at protected-main SHA
+  `65706e381b907c6ba09a8eba504af3adaacac86b`: Source `32668796239`, Image
+  `32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
+  `32669484893` are `SUCCESS`; digest and SLSA/SPDX identities are the exact
+  values recorded in the I12 boundary above.
 - Hosted S4/S5 and I9 results are ephemeral repository evidence, not production
   proof. Deployed callers, proxy/firewall, secrets, digest, Hostinger/VPS,
   readiness and rollback remain unverified and separately authorized.
@@ -177,7 +209,8 @@ Operations-protected endpoints (x-api-key with operations audience):
 Defaults:
 - Slicing rate limit: 3 requests per 60 seconds per IP
 - Admin rate limit: 30 requests per 60 seconds per IP
-- Max concurrent slice jobs: 1
+- Max concurrent slice jobs: default 1; explicit values must be exact canonical
+  decimal 1..3. N=2/N=3 remain unqualified and undeployed.
 - Max queue length: 100
 - Max queued+active slice jobs per client IP: 5
 - Max queue wait: 300000 ms
@@ -291,7 +324,7 @@ Focused suites:
 - python tests/testing-scripts/admin/admin_output_files_test_runner.py
 - python tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
 - python tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py
-- python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count <N> --retry-on-429 3
+- python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --expected-max-concurrent N --retry-on-429 1 --cleanup-manifest NEW_MANIFEST_PATH --report NEW_REPORT_PATH
 
 Test organization:
 - Keep focused runners small and domain-specific (admin output, rate-limit, queue, pricing).

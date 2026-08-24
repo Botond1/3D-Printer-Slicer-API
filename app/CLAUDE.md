@@ -1,6 +1,6 @@
 # App Folder - Local Claude Guide
 
-Last synchronized: 2026-07-25
+Last synchronized: 2026-08-24
 
 ## Scope
 
@@ -32,7 +32,14 @@ This document describes the application runtime inside app/.
 
 - app/config/constants.js
   - Defines DEFAULTS for rate limits, queue limits, upload limits, command/HTTP timeouts, HTTP connection/header/socket limits, layer heights, and default materials.
+  - Defines the inclusive application concurrency range `1..3`; the default
+    remains `MAX_CONCURRENT_SLICES=1`.
   - Defines extension groups, Orca process-profile defaults, and default pricing matrix.
+- app/config/resource-policy.js
+  - Treats an omitted `MAX_CONCURRENT_SLICES` as default `1` and accepts an
+    explicit value only as a canonical positive decimal integer in `1..3`.
+  - Rejects malformed, non-canonical, unsafe, or out-of-range explicit values
+    during startup validation.
 - app/config/service-auth.js
   - Requires distinct 32-256 printable-ASCII active keys for slice, pricing,
     artifact, and operations; optional previous slots enable bounded rotation.
@@ -146,8 +153,11 @@ This document describes the application runtime inside app/.
 - app/services/slice/model-stats.js
   - Reads model dimensions and parses slicer outputs for print-time/material stats.
   - Builds SLA print-time estimates when metadata is absent.
+- app/services/slice/native-runtime-status.js
+  - Owns the process-local fail-closed native-runtime quarantine and publishes
+    its bounded subscription/unsubscription seam.
 - app/services/slice/number-utils.js
-  - Shared positive-integer parsing helper for queue/zip settings.
+  - Shared positive-integer parsing plus bounded canonical concurrency parsing.
 - app/services/slice/options.js
   - Validates request fields: layerHeight, material, infill, size/scale/rotation, unit, and profile overrides.
   - Enforces engine/technology layer constraints and material-technology compatibility.
@@ -159,9 +169,15 @@ This document describes the application runtime inside app/.
   - Composes successful slice response payloads.
   - Encapsulates pricing and profile payload mapper strategies for engine/technology-specific response shaping.
 - app/services/slice/queue.js
-  - Implements bounded FIFO queue with MAX_CONCURRENT_SLICES, MAX_SLICE_QUEUE_LENGTH, MAX_SLICE_QUEUE_PER_IP, and MAX_SLICE_QUEUE_WAIT_MS.
+  - Implements the bounded FIFO queue with canonical
+    `MAX_CONCURRENT_SLICES=1..3`, `MAX_SLICE_QUEUE_LENGTH`,
+    `MAX_SLICE_QUEUE_PER_IP`, and `MAX_SLICE_QUEUE_WAIT_MS`.
   - Applies per-client fairness and timeout rejection semantics.
   - Emits typed queue-domain errors and centralized queue-to-API error mapping metadata.
+- app/services/slice/queue-scheduler.js
+  - Closes admission synchronously on native-runtime quarantine, drains queued
+    and active ownership, and releases the quarantine subscriber exactly once
+    after drain.
 - app/services/slice/transform.js
   - Builds transform plan (scale/rotation), applies model transform via Python script, and validates final bounds against build-volume limits.
 - app/services/slice/value-parsers.js
@@ -242,6 +258,8 @@ Operations-protected endpoints:
 
 Queue and rate status semantics:
 
+- MAX_CONCURRENT_SLICES defaults to 1; explicit values must be canonical
+  decimal 1..3. N=2/N=3 are not yet host-qualified or deployed.
 - RATE_LIMIT_EXCEEDED -> HTTP 429
 - ADMIN_RATE_LIMIT_EXCEEDED -> HTTP 429
 - SLICE_QUEUE_FULL -> HTTP 503

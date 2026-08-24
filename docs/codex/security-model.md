@@ -1,5 +1,43 @@
 # Security model
 
+## I12 Wave 3 Hostinger capacity and ingress control delta
+
+Current classification:
+`CORRECTIVE_LOCALLY_VERIFIED; DARK_BASELINE_N1_HOST_VERIFIED; CORRECTIVE_HOSTED_NEW_CANDIDATE_AND_CAPACITY_PENDING`.
+Baseline `65706e381b907c6ba09a8eba504af3adaacac86b` has green Source/Image,
+signed publication and automatic no-deploy rehearsal. Its exact signed digest
+is dark-running on the authorized VPS. I12 Source run `32746427481` passed;
+Image run `32746430314` failed closed at the abort/readiness-cache contract.
+The narrow cache-semantics corrective is locally green, but has not yet passed
+exact-SHA hosted revalidation and is not published or deployed.
+
+| Control | Current classification | Boundary |
+| --- | --- | --- |
+| Concurrency policy | `IMPLEMENTED_AND_LOCALLY_TESTED` | Default remains one; only canonical decimal 1..3 is accepted. Startup rejects invalid explicit values. Host capacity still determines the retained value. |
+| Native-runtime quarantine | `IMPLEMENTED_AND_LOCALLY_TESTED` | Admission closes synchronously, queued/new work receives shutdown, active work retains ownership until settlement, and the subscriber is released exactly once after drain. |
+| Readiness freshness and cache safety | `IMPLEMENTED_AND_LOCALLY_TESTED` | Protected detailed health runs fresh bounded probes without replacing the normal cache. Public readiness and authenticated operations readiness/metrics retain the bounded cache, but every cache hit checks live native state and overlays fail-closed quarantine without refreshing for an ordinary active job. |
+| Retention serialization | `IMPLEMENTED_AND_LOCALLY_TESTED` | Every concurrent post-promotion cleanup is serialized and receives its own later scan; a failed scan cannot poison the lane or let another promotion rely on a stale quota result. |
+| Capacity evidence | `IMPLEMENTED_AND_LOCALLY_TESTED` | Fresh operations samples plus exact empty/post artifact inventories are authoritative. Curl connect/total, subprocess and retry-derived batch deadlines fail closed without exposing credentials. Timing is informational. Maximum three synthetic requests characterize mechanics, not arbitrary-model safety. |
+| Producer credential handoff | `IMPLEMENTED_AND_LOCALLY_TESTED` | A root-started helper opens exactly four canonical root:root 0600 single-link files with no-follow/close-on-exec and race checks, sets no-new-privileges, drops all UID/GID forms and supplementary groups, then directly execs absolute Python with exactly four environment entries. Secret values are absent from argv and helper output. |
+| Synthetic artifact cleanup | `IMPLEMENTED_AND_LOCALLY_TESTED` | Producer and manifest are dynamic-service-owned; API must be cleanly stopped. The exact-image helper is non-root/network-none and can delete only fully correlated regular artifact/marker pairs. |
+| Traefik control plane | `IMPLEMENTED_AND_LOCALLY_TESTED; VPS_SMOKE_VERIFIED` | Exact Traefik digest, CLI static config, file provider only, no Docker socket/provider, empty dynamic directory, no-clobber activation and retained-old rollback. Post-link failure proves exact dark rollback or bounded uncertainty; exact-zero qualification/cleanup gates precede startup. Actual dark cutover is pending. |
+| Public ingress | `DISABLED_PENDING_EXTERNAL_PROOF` | No route may activate without hostname/DNS, intended caller, proxy CIDR, firewall, ACME continuity and authenticated synthetic route evidence. |
+| Host runtime | `DARK_BASELINE_N1_VERIFIED` | Exact old signed digest, 999:999, internal-only bridge, no default route, denied API/native egress, health/readiness and Prusa/Orca synthetic slices passed. N=2/N=3 and arbitrary workloads remain unverified. |
+
+The capacity cleanup sequence is intentionally stop-the-world for synthetic
+evidence deletion: runner/postflight observation, graceful API stop, exact
+exited/exit-zero/non-OOM proof, non-root exact-image cleanup, absence proof,
+same-digest restart and two repeated dark gates. Cleanup success cannot convert
+a failed capacity run into a pass.
+
+Secrets stay in root-owned external files and are never emitted. The SSH key,
+API keys, ACME state and full container environment/inspect/logs are outside
+repository evidence. Existing Traefik and ACME state are retained for rollback;
+engine-wide prune, broad cleanup and public fallback are forbidden.
+
+See
+[`evidence/i12-wave3-hostinger-production-qualification.md`](evidence/i12-wave3-hostinger-production-qualification.md).
+
 ## I11 protected-main signed-candidate control delta
 
 Status at this documentation boundary:

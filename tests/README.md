@@ -107,14 +107,32 @@ What it does:
 
 ### Queue Concurrency
 
-```bash
-python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count 3 --retry-on-429 3
+```text
+python tests/testing-scripts/queue/queue_concurrency_test_runner.py \
+  --count 3 \
+  --expected-max-concurrent 1 \
+  --retry-on-429 1 \
+  --cleanup-manifest NEW_PRIVATE_RUN_DIR/queue-cleanup.json \
+  --report NEW_PRIVATE_RUN_DIR/queue-report.md
 ```
 
 What it does:
 
-- Sends concurrent slice requests and checks queue serialization behavior.
-- Uses staggered completion as the primary black-box queue signal.
+- Requires fresh operations-authenticated queue observations to match the
+  explicit expected concurrency and requires an exactly empty managed-artifact
+  inventory before load.
+- Sends at most three synthetic slice requests, correlates the postflight
+  artifact inventory, and writes bounded create-new report and cleanup-manifest
+  files. Timing is informational except for the N=1 serialization diagnostic.
+- For Hostinger capacity evidence, replace `NEW_PRIVATE_RUN_DIR` with a new
+  private directory owned by the dynamically resolved non-root service UID/GID.
+  Launch through `scripts/i12-capacity-producer-exec.py` using four root:root
+  0600 credential files so no secret value enters argv. Follow
+  `ops/hostinger/RUNBOOK.md`: after the runner, stop and verify the API before
+  invoking the same exact image as the network-none cleanup consumer. Do not
+  treat cleanup success as qualification success.
+- `MAX_CONCURRENT_SLICES` defaults to `1` and accepts only canonical decimal
+  `1..3`; N=2 and N=3 are not yet qualified or deployed.
 
 ### Rate Limit Regression
 

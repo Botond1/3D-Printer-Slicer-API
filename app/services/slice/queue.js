@@ -2,9 +2,13 @@
  * In-memory FIFO queue for bounded concurrent slicing jobs.
  */
 
-const { DEFAULTS } = require('../../config/constants');
-const { parsePositiveInt } = require('./number-utils');
+const { DEFAULTS, MAX_CONCURRENT_SLICES_RANGE } = require('../../config/constants');
+const { parsePositiveInt, parseBoundedPositiveInt } = require('./number-utils');
 const { createQueueScheduler } = require('./queue-scheduler');
+const {
+    getNativeRuntimeStatus,
+    subscribeToNativeRuntimeQuarantine
+} = require('./native-runtime-status');
 const { recordQueueRejection } = require('../observability/metrics');
 const { emitEvent } = require('../observability/events');
 const {
@@ -24,9 +28,10 @@ const MAX_SLICE_QUEUE_WAIT_MS = parsePositiveInt(
     process.env.MAX_SLICE_QUEUE_WAIT_MS || `${DEFAULTS.MAX_SLICE_QUEUE_WAIT_MS}`,
     DEFAULTS.MAX_SLICE_QUEUE_WAIT_MS
 );
-const MAX_CONCURRENT_SLICES = parsePositiveInt(
-    process.env.MAX_CONCURRENT_SLICES || `${DEFAULTS.MAX_CONCURRENT_SLICES}`,
-    DEFAULTS.MAX_CONCURRENT_SLICES
+const MAX_CONCURRENT_SLICES = parseBoundedPositiveInt(
+    process.env.MAX_CONCURRENT_SLICES,
+    DEFAULTS.MAX_CONCURRENT_SLICES,
+    MAX_CONCURRENT_SLICES_RANGE
 );
 
 /**
@@ -147,6 +152,15 @@ function finiteLimit(value, fallback) {
     return Number.isSafeInteger(value) && value > 0 ? value : fallback;
 }
 
+/** Resolve a factory concurrency value inside the application safety range. */
+function finiteConcurrency(value, fallback) {
+    return Number.isSafeInteger(value)
+        && value >= MAX_CONCURRENT_SLICES_RANGE.min
+        && value <= MAX_CONCURRENT_SLICES_RANGE.max
+        ? value
+        : fallback;
+}
+
 /**
  * Create an isolated deterministic slice queue.
  * @param {object} [options] Limits and clock/timer dependencies.
@@ -157,7 +171,7 @@ function createSliceQueue(options = {}) {
     const rejectionRecorder = options.recordQueueRejection || recordQueueRejection;
     const readContext = options.captureContext || captureCorrelationContext;
     return createQueueScheduler({
-        maxConcurrent: finiteLimit(options.maxConcurrent, MAX_CONCURRENT_SLICES),
+        maxConcurrent: finiteConcurrency(options.maxConcurrent, MAX_CONCURRENT_SLICES),
         maxQueueLength: finiteLimit(options.maxQueueLength, MAX_SLICE_QUEUE_LENGTH),
         maxQueuePerClient: finiteLimit(options.maxQueuePerClient, MAX_SLICE_QUEUE_PER_IP),
         maxWaitMs: finiteLimit(options.maxWaitMs, MAX_SLICE_QUEUE_WAIT_MS),
@@ -171,11 +185,16 @@ function createSliceQueue(options = {}) {
         emitEvent: eventEmitter,
         recordQueueRejection: rejectionRecorder,
         captureContext: readContext,
-        runWithContext: options.runWithContext || runWithCorrelationContext
+        runWithContext: options.runWithContext || runWithCorrelationContext,
+        isRuntimeAvailable: options.isRuntimeAvailable,
+        subscribeToRuntimeQuarantine: options.subscribeToRuntimeQuarantine
     });
 }
 
-const defaultQueue = createSliceQueue();
+const defaultQueue = createSliceQueue({
+    isRuntimeAvailable: () => getNativeRuntimeStatus().available,
+    subscribeToRuntimeQuarantine: subscribeToNativeRuntimeQuarantine
+});
 const enqueueSliceJob = defaultQueue.enqueueSliceJob;
 const getQueueStatus = defaultQueue.getQueueStatus;
 const beginSliceQueueShutdown = defaultQueue.beginSliceQueueShutdown;
