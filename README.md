@@ -59,9 +59,42 @@ not claim deployed proxy, firewall, secret, digest, VPS, or readiness proof.
 - **Resource/state envelope:** actual-byte limits, validated final artifacts,
   stable job/artifact correlation, leased retention, and atomic pricing state.
 
+### I12 Hostinger production-qualification checkpoint
+
+I12 starts from current protected `main`
+`65706e381b907c6ba09a8eba504af3adaacac86b`. Source run `32668796239`, Image
+run `32668796232`, Candidate Publication run `32669087688`, and automatic
+no-deploy rehearsal run `32669484893` all succeeded. The immutable signed
+candidate digest is
+`sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`;
+its SLSA and SPDX attestation IDs are `42462498` and `42462513`. That exact
+pre-I12 candidate is verified dark on the authorized Hostinger VPS at N=1.
+
+The I12 repository change keeps `MAX_CONCURRENT_SLICES` at default `1` and
+accepts an explicit value only as the exact canonical decimal `1`, `2`, or `3`.
+N=2 and N=3 are not yet qualified or deployed. Capacity qualification requires
+fresh operations observations, an exactly empty managed-artifact preflight,
+create-new `--cleanup-manifest` and `--report` targets, and an explicit
+`--expected-max-concurrent`. On the host, the producer runs as the dynamically
+resolved non-root service identity through the fail-closed
+`scripts/i12-capacity-producer-exec.py` handoff. It reads only four root:root
+0600 credential files and directly execs Python with four allowlisted
+environment entries, without putting secret values in process arguments or
+output. Cleanup runs only after the API is cleanly
+stopped, using the same exact image as a network-none non-root consumer.
+
+The Hostinger Traefik operator pack is socketless: it uses only the file
+provider, mounts no Docker Engine socket, and keeps the slicer router disabled
+through dark qualification. Public hostname/DNS, intended caller, firewall,
+certificate continuity, route activation, N=2/N=3 measurement, retained
+capacity, and deployment of a new I12 candidate remain pending. At this
+checkpoint the I12 implementation has local gate evidence only; it has not yet
+passed hosted Source/Image validation, publication, rehearsal, or deployment.
+See [`ops/hostinger/RUNBOOK.md`](ops/hostinger/RUNBOOK.md).
+
 ### Immutable candidate image contract
 
-Protected `main` is verified at
+The I10 protected-main governance checkpoint was verified at
 `8253160eef1c3e00c1e40826ec61fd97563ddd9b`. Source run `32662043454` and
 Image run `32662043476` succeeded. Main strictly requires the two no-deploy
 GitHub Actions checks, a pull request, administrator enforcement and resolved
@@ -111,17 +144,14 @@ lane: private-peer readiness, controlled `STORAGE_UNSAFE` failure, automatic
 exact-previous rollback, bounded evidence and exact cleanup. The rehearsal is
 registry-read-only/no-deploy and has no OIDC, environment or VPS authority.
 
-I11 merged through protected PR `#2` at main SHA `48afd39b…`; Source run
-`32666929393`, Image run `32666929394`, and signed Candidate Publication run
-`32667219964` succeeded. The immutable digest is `sha256:3cea88b5…2541ea` and
-the bounded publication artifact is `9500456840`. Automatic rehearsal run
-`32667607266` failed closed before registry read because a depth-limited main
-refresh made the full checkout shallow; its cleanup also dereferenced unset
-runtime identity variables. The corrective workflow preserves full history and
-uses an all-empty/all-valid cleanup tuple, with final hosted proof still
-`PENDING`. Historical S4/S5/I9 results remain ephemeral validation only and do
-not prove production proxy, firewall, secrets, deployed digest, VPS readiness
-or live rollback.
+I11 is complete on current protected-main SHA
+`65706e381b907c6ba09a8eba504af3adaacac86b`. Source run `32668796239`, Image
+run `32668796232`, signed Candidate Publication run `32669087688`, and automatic
+rehearsal run `32669484893` all succeeded. The immutable digest is
+`sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`;
+SLSA/SPDX attestation IDs are `42462498`/`42462513`. Publication and rehearsal
+remain no-deploy evidence: they do not prove production proxy, firewall,
+secrets, deployed state, caller authorization, capacity, or live rollback.
 
 ---
 
@@ -692,7 +722,7 @@ You can customize pricing, security, and slicing behavior without changing endpo
   wildcard, overbroad, malformed, or unknown trust refuses startup. Express
   stops at the nearest untrusted hop, so an untrusted direct peer cannot select
   a spoofed `X-Forwarded-For` prefix.
-- **Slicing Queue:** CPU-heavy slice jobs are queued in arrival order and processed FIFO (`MAX_CONCURRENT_SLICES`, default `1`).
+- **Slicing Queue:** CPU-heavy slice jobs are queued in arrival order and processed FIFO. `MAX_CONCURRENT_SLICES` defaults to `1`; explicit values must be exact canonical decimal `1..3`, and N=2/N=3 remain unqualified and undeployed.
 - **Queue Fairness:** Per-client queue ownership is bounded (`MAX_SLICE_QUEUE_PER_IP`) so one client cannot monopolize all pending capacity.
 - **Queue Safety Limits:** Queue length and wait timeout are bounded (`MAX_SLICE_QUEUE_LENGTH`, `MAX_SLICE_QUEUE_WAIT_MS`).
 - **Upload Body Limit:** Multipart upload size is capped (`MAX_UPLOAD_BYTES`, default `500MB`).

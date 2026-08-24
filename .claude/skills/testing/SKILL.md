@@ -29,7 +29,10 @@ Read that file for complete context when writing new tests or extending existing
    - Rate-limit regression: `python tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py`
 
 4. Queue and concurrency test
-   - Command: `python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count <N> --retry-on-429 3`
+   - Command: `python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --expected-max-concurrent N --retry-on-429 1 --cleanup-manifest NEW_MANIFEST_PATH --report NEW_REPORT_PATH`
+   - N must be 1..3. The manifest and report are mandatory create-new targets;
+     the runner requires fresh queue state and an exactly empty artifact
+     inventory before load.
 
 ## Execution Workflow
 
@@ -39,9 +42,18 @@ Read that file for complete context when writing new tests or extending existing
 4. Immediately read the generated report in `tests/testing-scripts/results/`.
 5. Summarize pass/fail details and notable findings.
 
+For I12 Hostinger capacity qualification, read the explicit `--report` path
+instead of the normal results directory. The producer must run as the dynamic
+non-root service identity through `scripts/i12-capacity-producer-exec.py` and
+four root:root 0600 credential files; secret values must never enter argv.
+Preserve the cleanup manifest, stop and verify the API, then use the same exact
+image's network-none cleanup consumer according to `ops/hostinger/RUNBOOK.md`;
+cleanup success never changes a failed result.
+
 ## Troubleshooting
 
-- If admin tests fail with 401/403, verify `ADMIN_API_KEY` in .env matches the running server.
+- If capacity preflight fails, verify the slice, operations, and artifact
+  audience keys and confirm the managed-artifact inventory is exactly empty.
 - If slice tests fail with connection errors, verify API health endpoint before rerun.
 - If a slice matrix row returns non-2xx but is marked successful, verify the report's `Expected`, `Status`, and `ErrorCode` columns match an explicitly declared fail-fast outcome.
 
@@ -49,4 +61,6 @@ Read that file for complete context when writing new tests or extending existing
 
 - [ ] Chosen runner matches requested behavior scope.
 - [ ] Corresponding markdown report was read after execution.
+- [ ] Capacity evidence used explicit expected concurrency plus create-new
+      manifest/report targets and preserved the post-run cleanup boundary.
 - [ ] Summary includes failures, retries, and key diagnostics.

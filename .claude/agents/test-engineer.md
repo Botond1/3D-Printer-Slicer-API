@@ -21,7 +21,8 @@ You own all test infrastructure in `tests/testing-scripts/`:
 - `slicing/unsupported_upload_test_runner.py` — Unsupported upload rejection checks
 - `pricing/pricing_cycle_test_runner.py` — Pricing CRUD lifecycle
 - `admin/admin_output_files_test_runner.py` — Admin output listing and download checks
-- `queue/queue_concurrency_test_runner.py` — Queue/concurrency stress test
+- `queue/queue_concurrency_test_runner.py` — Bounded queue/capacity
+  qualification with fresh operations state and exact artifact inventory
 - `rate_limit/rate_limit_regression_test_runner.py` — Slice/admin rate-limit regression checks
 - `tests/testing-scripts/results/` — Generated markdown reports (runtime artifacts)
 
@@ -54,21 +55,44 @@ python tests/testing-scripts/slicing/unsupported_upload_test_runner.py
 python tests/testing-scripts/pricing/pricing_cycle_test_runner.py
 python tests/testing-scripts/admin/admin_output_files_test_runner.py
 python tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
-python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count <N> --retry-on-429 3
+python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --expected-max-concurrent N --retry-on-429 1 --cleanup-manifest NEW_MANIFEST_PATH --report NEW_REPORT_PATH
 ```
 
 ## Environment Inputs
 - `SLICER_BASE_URL` — API base URL (from .env, fallback to `http://localhost:3000`)
-- `ADMIN_API_KEY` — Required for admin endpoint tests
+- `SLICE_SERVICE_API_KEY` — Slice requests, including capacity qualification
+- `PRICING_API_KEY` — Pricing lifecycle tests
+- `ARTIFACT_API_KEY` — Admin output tests and exact capacity inventories
+- `OPERATIONS_API_KEY` — Fresh queue/readiness observations
+
+## I12 Capacity Evidence Boundary
+
+- `MAX_CONCURRENT_SLICES` defaults to 1; explicit values must be canonical
+  decimal 1..3. N=2/N=3 are not yet qualified or deployed.
+- `--expected-max-concurrent`, `--cleanup-manifest`, and `--report` are
+  mandatory. The runner refuses load unless the fresh queue state matches and
+  the managed-artifact inventory is exactly empty.
+- On the host, run the producer as the dynamically resolved non-root service
+  UID/GID through `scripts/i12-capacity-producer-exec.py` and four root:root
+  0600 credential files, never secret argv, in a new private run-owned
+  directory. Evidence files are bounded and create-new; the runner never
+  deletes artifacts.
+- Preserve the manifest regardless of qualification status. Stop the API and
+  prove exact exit-zero/non-OOM settlement before using the same exact image as
+  the network-none non-root cleanup consumer in `ops/hostinger/RUNBOOK.md`.
+  Cleanup success cannot turn a failed qualification into a pass.
 
 ## Hard Rules
 1. **ALWAYS read the markdown report** after running any test suite. Never conclude without reading it.
 2. **Never use pytest or npm test** for integration tests — always use the Python test runners.
-3. **Reports go to `tests/testing-scripts/results/`** — never change this output location.
+3. **Normal reports go to `tests/testing-scripts/results/`**. The I12 capacity
+   runner is the explicit exception: read its required create-new `--report`
+   path and preserve its separate cleanup manifest.
 4. **Follow existing runner patterns** — use `common/http_utils.py` for requests, `common/env_utils.py` for config.
 
 ## Troubleshooting
-- If admin tests fail with 401/403, verify `ADMIN_API_KEY` in .env matches the running server.
+- If capacity preflight fails, verify the scoped slice, artifact, and operations
+  credentials and prove the artifact inventory is exactly empty.
 - If slice tests fail with connection errors, verify API health endpoint (`curl http://localhost:3000/health`) before rerun.
 
 ## What You Must NOT Do

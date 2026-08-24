@@ -1,6 +1,6 @@
 # Testing Scripts - Local Claude Guide
 
-Last synchronized: 2026-07-23
+Last synchronized: 2026-08-24
 
 ## Scope
 
@@ -36,6 +36,9 @@ Located in tests/testing-scripts/common/:
 
 - env_utils.py
 - http_utils.py
+- queue_cleanup_manifest.py
+- queue_concurrency_reporting.py
+- queue_concurrency_utils.py
 - slice_matrix_runner.py
 
 Helpers resolve active then previous credentials for the matching audience.
@@ -46,6 +49,11 @@ Slice uses `x-slicer-api-key`; pricing, artifact, and operations use
 
 All test outputs must be written to tests/testing-scripts/results/.
 After execution, always read the generated markdown report file.
+
+The I12 queue capacity runner is an operator-evidence exception: it requires
+explicit create-new `--report` and `--cleanup-manifest` paths in a private
+run-owned directory. Read the supplied report path after execution and preserve
+the manifest for the exact cleanup-consumer step.
 
 ## Execution Policy
 
@@ -64,6 +72,28 @@ After execution, always read the generated markdown report file.
 - OPERATIONS_API_KEY is required for detailed health/readiness/metrics tests.
 - Never print credential values in reports.
 
+## Queue Capacity Qualification Contract
+
+Use:
+
+```text
+python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --expected-max-concurrent N --retry-on-429 1 --cleanup-manifest NEW_MANIFEST_PATH --report NEW_REPORT_PATH
+```
+
+- `--expected-max-concurrent`, `--cleanup-manifest`, and `--report` are
+  mandatory. N must be `1`, `2`, or `3`, and request count cannot exceed three.
+- The runner requires fresh operations observations and an exact empty managed
+  artifact inventory before starting synthetic load. It emits bounded,
+  create-new evidence and never performs cleanup itself.
+- Host capacity execution must run the producer as the dynamically resolved
+  non-root service identity through `scripts/i12-capacity-producer-exec.py` and
+  four root:root 0600 credential files; never pass secret values in argv.
+  Afterward, stop the API and prove exact clean shutdown before the same exact
+  image runs the network-none, non-root cleanup consumer described in
+  `ops/hostinger/RUNBOOK.md`.
+- Default concurrency remains N=1. N=2/N=3 are not qualified or deployed at
+  the I12 local-implementation checkpoint.
+
 ## Local Rules
 
 - Prefer existing runner patterns over adding ad-hoc scripts.
@@ -72,7 +102,9 @@ After execution, always read the generated markdown report file.
 - Keep focused runners behavior-specific; split oversized runners into domain-focused suites.
 - Keep stable deterministic runners unchanged unless changed endpoint behavior requires edits.
 - Full slice matrix reports may mark explicitly declared fail-fast rejections as passing only when status and `errorCode` match the expected case exactly.
-- Queue concurrency reports use staggered completion as the black-box signal for serialized queue processing; client start-order matching is informational.
+- Queue timing and client start order are informational; fresh queue-state and
+  exact artifact-inventory observations are authoritative. Staggered completion
+  is used only as an N=1 serialization diagnostic.
 - Service-auth regression cases must preserve the exact HTTP 401 body:
   `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
 - Operations checks must prove public /ready is minimal, protected diagnostics

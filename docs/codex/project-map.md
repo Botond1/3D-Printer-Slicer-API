@@ -1,5 +1,64 @@
 # Verified project map
 
+## Current I12 Wave 3 Hostinger qualification map
+
+Observed status:
+`I12_LOCAL_IMPLEMENTATION_VERIFIED; VPS_DARK_BASELINE_N1_VERIFIED; HOSTED_AND_N2_N3_PENDING`.
+Exact baseline is protected main
+`65706e381b907c6ba09a8eba504af3adaacac86b`; its Source `32668796239`, Image
+`32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
+`32669484893` are green. The immutable baseline candidate is
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`.
+This corrected I11 state supersedes the older corrective-pending prose below.
+
+Direct executable-source map:
+
+```text
+MAX_CONCURRENT_SLICES canonical policy (default 1, allowed 1..3)
+  -> queue scheduler bounded active slots
+  -> native quarantine subscription
+  -> synchronous admission close / queued rejection / active abort
+  -> active settlement retains slot -> terminal unsubscribe
+  -> serialized post-promotion artifact-retention passes
+  -> fresh readiness/metrics and operations detailed queue samples
+  -> authenticated empty artifact inventory
+  -> root0600 credential files -> no-follow credential-exec -> exact four-entry env
+  -> full privilege drop -> absolute Python producer, with no secret argv
+  -> max-three synthetic Prusa/Orca load
+  -> postflight queue + artifact reconciliation
+  -> bounded curl/subprocess/future-drain deadlines
+  -> create-new 0600 report and cleanup manifest
+  -> graceful API stop -> exact exited/exit-0/OOM-false proof
+  -> exact candidate image, network-none, non-root cleanup consumer
+  -> exact artifact/marker absence and API same-digest restart
+  -> repeat dark readiness/auth/private-peer/egress matrix
+  -> socketless digest-pinned Traefik, route directory initially empty
+  -> exact-zero qualification + cleanup exits
+  -> approved DNS/caller/firewall only -> no-clobber route activation
+  -> post-link failure -> exact dark rollback or bounded uncertainty
+```
+
+On the authorized Ubuntu 24.04 Hostinger KVM 4 host, the baseline candidate is
+running dark at N=1 on internal `slicer-api-private`, with no host API port or
+default route. Dynamic service identity resolved to 999:999. Health/readiness,
+wrong/missing authentication, API and Node/Python native egress denial,
+private-peer access, and synthetic Prusa/Orca slicing passed; generated
+artifacts and workspaces were exactly removed. Docker 29.7.2, Compose 5.5.0,
+four vCPU, about 16 GiB RAM, no swap, and about 205 GiB free disk were observed.
+These facts characterize the current host; they do not yet validate N=2/N=3 or
+arbitrary customer-model capacity.
+
+The pre-existing Traefik 3.7.11 container owns ports 80/443 and is retained
+unchanged. An isolated exact-image socketless CLI/file-provider smoke passed,
+but dark cutover remains pending. Public route activation is blocked until an
+approved hostname/DNS result, intended caller identity/CIDR, firewall policy,
+certificate continuity and synthetic authenticated route proof exist.
+
+No new graph output is retained. Existing graph knowledge was consulted first;
+the queue, artifact, Compose and operator direct sources above are authoritative.
+See
+[`evidence/i12-wave3-hostinger-production-qualification.md`](evidence/i12-wave3-hostinger-production-qualification.md).
+
 ## Current I11 protected-main signed-candidate checkpoint
 
 Observed status: `SIGNED_MAIN_CANDIDATE_VERIFIED; AUTOMATIC_REHEARSAL_CORRECTIVE_PENDING`.
