@@ -1,0 +1,2 @@
+# J0 retention policy: prune only dangling images; retained runtime images use immutable local tags.
+0 0 * * * root sleep $(shuf -i 0-21600 -n 1) && docker image prune -f --filter "until=24h" > /dev/null 2>&1

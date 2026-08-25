@@ -5,6 +5,145 @@ API Compose file unchanged, starts the API on its internal Docker network with
 no host port, and makes the reverse-proxy route a separate atomic activation.
 Use only synthetic probes until the owner approves real caller traffic.
 
+## W0. Preserve signed API images before maintaining prune automation
+
+This is a host-lifetime retention policy, not permission to run a manual prune.
+The daily image-prune cron may remain only under the exact contract below. It
+must not be installed or trusted until both the signed current API image and the
+distinct signed rollback API image have passed their normal digest,
+signature/attestation, and source-identity checks and each has its own verified
+local retention tag.
+
+### Immutable local retention tags
+
+Use only `local/rocket3d-slicer-api:retained-<full-lowercase-source-sha>` as the local
+retention-tag shape. The full 40-character source SHA is the immutable image
+source identity, not the operator-pack SHA. Do not create aliases named
+`current`, `previous`, `rollback`, or `latest`. A source-SHA-qualified retention
+tag is created once for its already verified signed digest and is never
+retargeted. If the tag already exists, its image ID must equal the image ID of
+that exact digest; otherwise stop with `STOP_RETENTION_TAG_RETARGET` and leave
+both images and the running container unchanged.
+
+For each of the two distinct roles, current and rollback, validate the
+out-of-band `signed_digest_ref` and `image_source_sha`, then apply this pattern:
+
+```sh
+case "$image_source_sha" in ''|*[!0-9a-f]*) exit 1 ;; esac
+[ "${#image_source_sha}" -eq 40 ] || exit 1
+retention_tag="local/rocket3d-slicer-api:retained-${image_source_sha}"
+signed_image_id="$(docker image inspect --format '{{.Id}}' "$signed_digest_ref")" || exit 1
+if retained_image_id="$(docker image inspect --format '{{.Id}}' "$retention_tag" 2>/dev/null)"; then
+  [ "$retained_image_id" = "$signed_image_id" ] || {
+    echo 'STOP_RETENTION_TAG_RETARGET' >&2
+    exit 1
+  }
+else
+  docker image tag "$signed_digest_ref" "$retention_tag" || exit 1
+fi
+[ "$(docker image inspect --format '{{.Id}}' "$retention_tag")" = "$signed_image_id" ] || exit 1
+```
+
+Record the two source-SHA-qualified tags, exact digest references, and image IDs
+in the private recovery ledger before relying on automated image pruning. Never
+print registry credentials or private host identifiers. Retiring either tag is
+a later exact-identity destructive action requiring a separate owner decision;
+ordinary deployment, rollback, or cron maintenance never authorizes it.
+
+Without `-a` or `--all`, Docker's default image-prune operation deletes dangling
+images only. The 24-hour filter further limits that dangling set by age. A
+verified local tag therefore keeps its exact image non-dangling even when the
+backend container is stopped or removed. Before this change, an old digest-only
+image with no tag and no container reference is eligible after 24 hours; after
+both retention tags are proved, neither the signed current nor rollback image
+is eligible. Do not infer this protection from a stopped container alone.
+
+### Active legacy sleeper preflight
+
+Replacing a cron file does not cancel a legacy invocation that cron already
+started. Its parent shell can still be sleeping before it runs the old broad
+command. Before touching either tag or cron, inspect the bounded process tree
+for a cron-launched shell whose arguments contain the image-prune subcommand,
+its child `sleep`, or an active prune client. Record only allowlisted PID, PPID,
+elapsed-time, and command identity. If any such wrapper, active legacy sleeper,
+or prune client exists, stop with `STOP_ACTIVE_LEGACY_PRUNE`; do not continue
+and do not kill a generic `sleep`, the Docker daemon, or any container. Only a
+separately authorized action may terminate the exact recorded legacy process
+tree, after which the same preflight must prove it absent.
+
+### Exact cron backup and atomic replacement
+
+The only accepted repository source is the complete one-line
+`ops/hostinger/templates/docker-image-prune.cron`. Its byte-exact command and
+trailing newline are enforced by the focused repository contract test; do not
+retype or assemble it on the host.
+
+First validate `/etc/cron.d/docker-image-prune` as a canonical root-owned regular
+non-link file and validate a canonical root-only `operator_private_backup_dir`
+outside every cron input directory. Create a new unpredictable backup there,
+copy the old cron bytes, and prove byte identity before replacement. Stage the
+verified repository template as a new file in `/etc/cron.d` so the final rename
+cannot cross filesystems. The following variables contain paths only, never
+secret values:
+
+```sh
+cron_target=/etc/cron.d/docker-image-prune
+cron_source="$verified_checkout/ops/hostinger/templates/docker-image-prune.cron"
+cron_backup="$(mktemp -p "$operator_private_backup_dir" 'docker-image-prune.XXXXXXXXXX.cron')" || exit 1
+cp --no-preserve=mode,ownership,timestamps -- "$cron_target" "$cron_backup" || exit 1
+chown -- root:root "$cron_backup" || exit 1
+chmod -- 0600 "$cron_backup" || exit 1
+cmp --silent -- "$cron_target" "$cron_backup" || exit 1
+cron_staged="$(mktemp -p /etc/cron.d 'docker-image-prune.XXXXXXXXXX')" || exit 1
+install --owner=root --group=root --mode=0644 -- "$cron_source" "$cron_staged" || exit 1
+cmp --silent -- "$cron_source" "$cron_staged" || exit 1
+mv -T -- "$cron_staged" "$cron_target" || exit 1
+sync -f "$cron_target" || exit 1
+sync -f /etc/cron.d || exit 1
+cmp --silent -- "$cron_source" "$cron_target" || exit 1
+```
+
+Treat the same-filesystem `mv -T` as the atomic replacement boundary. On any
+failure before it, remove only the exact create-new staged file after proving
+its identity; keep the exact backup. On any failure after it, stop and retain
+the backup plus bounded evidence rather than attempting a broad cleanup or an
+unverified rewrite. Re-run the active-legacy-sleeper preflight immediately
+before the atomic replacement.
+
+The separate Docker builder maintenance may remain weekly, but only in Docker's
+default dangling-build-cache mode: `docker builder prune -f`, with no `-a` or
+`--all`. Record its exact schedule and contents. A non-weekly entry, an all-cache
+option, or any additional Docker mutation is `STOP_BUILDER_PRUNE_POLICY_DRIFT`.
+
+### Automation audit
+
+Before and after the replacement, audit all system cron directories and the
+system crontab, root and deployment-account crontabs, anacron, systemd timers
+and their invoked services, enabled boot units, and any Hostinger template
+maintenance hooks. Search their resolved commands for Docker/Compose lifecycle
+operations, registry operations, image or builder pruning, delayed `sleep`
+wrappers, pulls, restarts, and stack up/down actions. Record a bounded inventory
+and exact non-secret file hashes in the private recovery ledger. The accepted
+post-change set is exactly one daily image-prune entry matching the committed
+template and one weekly default dangling builder-prune entry; any other
+deployment-affecting automation is `STOP_AUTOMATION_AUDIT_DRIFT`.
+
+This policy forbids the Docker `system prune` subcommand in every form and both
+image-prune all-image modes (`-a` and `--all`), as well as builder-prune
+all-cache modes, registry push, and registry prune or deletion as retention
+maintenance. It also forbids cron-based
+registry login, pull, tag retargeting, container restart, Compose lifecycle, or
+route mutation. The exact installed daily cron is automation policy only; it
+does not grant permission for an operator to run an ad hoc image prune.
+
+Retain private before/after evidence for the two cron contents, the old-cron
+backup hash and byte comparison, the full automation audit, the two exact local
+retention tag/image-ID bindings, and the image list before and after. Include a
+reasoned dry classification for the backend stopped or absent: before tagging,
+an older dangling image is eligible after 24 hours; after tagging, both signed
+images remain non-dangling and ineligible. No prune execution is part of this
+evidence procedure.
+
 ## Required immutable inputs
 
 Record the exact API-image source commit and signed digest separately from the
