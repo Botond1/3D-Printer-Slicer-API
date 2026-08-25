@@ -28,8 +28,9 @@ Last synchronized: 2026-08-25
   environment-dependent runtime root selection.
 - Preserve original selected basenames in public profile and bounds
   `source_profile` metadata. The direct native smoke for the flattened snapshots
-  and corrected validation-image HTTP transform/final-dimensions E2E pass; the
-  final rebuilt image identity is not yet recorded. The smoke counts positive
+  and final exact-image HTTP transform/final-dimensions E2E pass; the exact local
+  code/image identity is recorded in the J0 evidence document. The smoke counts
+  positive
   `G1 ... E` only after exact `;BEFORE_LAYER_CHANGE`; prelude/purge extrusion
   is not model-layer proof.
 - Preserve stable Orca runtime `layer_gcode=''` and

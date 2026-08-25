@@ -3,11 +3,8 @@
 ## J0 W2/W3 response and slice-principal checkpoint
 
 Status:
-`J0_W2_W3_FOCUSED_LOCAL_CONTRACTS_PASS; FINAL_AGGREGATE_PENDING;
-NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_ENGINE_HELP_EXACT_IMAGE_PASS;
-J0_ORCA_PARENT_BUILD_EQUALITY_PASS;
-J0_ARRANGE1_ORIENT0_EXACT_IMAGE_HTTP_E2E_PASS;
-J0_FINAL_IMAGE_ID_PENDING_REBUILD;
+`J0_W2_W3_FINAL_LOCAL_CONTRACTS_PASS; J0_FINAL_LOCAL_AGGREGATE_PASS;
+NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_FINAL_EXACT_IMAGE_BUILD_AND_E2E_PASS;
 J0_FILAMENT_W8_BLOCKED_OWNER_INPUT_NOT_STARTED`.
 
 Implemented local candidate exits:
@@ -56,13 +53,16 @@ Implemented local candidate exits:
    probe retained negative Y after an X90 origin rotation and failed with status
    206 / `Nothing to be sliced`; the earlier translated direct fixture did not
    cover this seam. Focused invocation-policy, command, and digest contracts
-   cover the correction. The corrected network-disabled, read-only, healthy-
+   cover the correction. The final network-disabled, read-only, healthy-
    container HTTP E2E passed: the existing Python optimizer yielded pre-request
-   dimensions 20 x 30 x 10 mm, request rotation X90 yielded final dimensions
-   20 x 10 x 30 mm, and the response contained Orca `2.3.1`, a lowercase SHA-
-   256-shaped digest, and original profile basenames. `x-api-key` returned HTTP
-   401, and exact cleanup passed. The final rebuilt image identity is not yet
-   recorded.
+   dimensions 30 x 20 x 10 mm, request rotation X90 yielded final dimensions
+   30 x 10 x 20 mm, and separate WooCommerce and LeadPilot requests returned
+   Orca `2.3.1`, the same lowercase digest, and original profile basenames. A
+   valid WooCommerce credential only under `x-api-key` returned the exact HTTP
+   401 without workspace, queue, or artifact effects; the final queue was idle
+   and exact cleanup passed. Code-bearing SHA
+   `ed85eec63409b7362fe05c2b99031eeb24b5b9c9` produced retained local image ID
+   `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
 6. Prusa INI canonicalization keeps section/key case significant to match native
    Boost semantics and rejects exact duplicate qualified keys. Runtime
    generation replaces one exact top-level request-owned key, rejects a
@@ -104,12 +104,11 @@ Implemented local candidate exits:
 
 Remaining gates:
 
-1. complete final aggregate, exact commit/SHA, and hosted validation with only
-   sanitized, customer-free fixtures;
-2. complete the final source-only rebuild, re-bind the already-passing
-   `--arrange 1` / `--orient 0` HTTP E2E gate to that build, and record its final
-   image identity without treating the validation-image identity as final;
-3. preserve `principals` as the repository activation target and require the
+1. obtain separately authorized hosted exact-SHA validation if required; the
+   final local aggregate is already green at 2161/2161 JavaScript tests, 85/85
+   Python tests run with 84 pass and one expected Windows POSIX-permission skip,
+   244/39 JavaScript/Python syntax files, and 405 tracked safety files;
+2. preserve `principals` as the repository activation target and require the
    dark gate before any router action: sanitized readback of `principals`, both
    actives, and absent shared active/previous, expiry, and both principal
    previous slots for initial activation; one private synthetic slice per
@@ -119,7 +118,7 @@ Remaining gates:
    every configured previous, an owner-approved removal deadline, and post-
    removal rejection. External production activation is outside repository
    evidence and authority;
-4. do not start filament-profile identity or `material_used_g` work until the
+3. do not start filament-profile identity or `material_used_g` work until the
    owner supplies the required Bambu reference profile fields. This independent
    W8 prerequisite is `BLOCKED_OWNER_INPUT / NOT_STARTED`; no current response
    or digest claim satisfies it.
@@ -981,7 +980,7 @@ exception to those gates.
 | D-010 | Promotion to `main` was not part of S0 completion. | At S0 the workflow could deploy every `main` push. S3a has since removed that repository path without creating a replacement promotion mechanism. | S4 then separately authorized S3b promotion design |
 | D-011 | S0.1 remediated the registry/audit findings, but that result alone did not complete the application mitigation for deeply nested multipart fields. | Commit `f9ed1ee6791e531670d5d7703f994bfb51986ebb` locks Multer 2.2.0 and the other verified non-major fixes, and its production audit is zero. S1a commit `e7a409566bb8795a22f38bbf9f514b42c51bda74` separately configures and live-tests fixed `limits.fieldNestingDepth: 0`. | S0.1 registry/audit remediation and S1a application mitigation locally verified |
 | D-012 | Native children require both secret minimization and egress control. | I1 supplies a tested minimal environment excluding API secrets. I12 verifies API/native egress denial for one exact dark deployed digest; drift after image/network/firewall changes remains a risk. | Re-prove exact egress denial after relevant changes and before public activation. |
-| D-013 | I3 established a separate slice credential; I5 superseded the wider service-trust contract and J0 separates the two slice principals. | I5 tests scoped audiences, rotation/revocation, finite admin migration, Origin/proxy/request identity, readiness, events and metrics. J0 adds explicit `legacy`/`migration`/`principals` slice modes with a <=90-day shared-key migration deadline. Final J0 aggregate remains pending; external production activation is outside repository evidence and authority. | Complete repository J0 gates; external production activation requires separate authority. |
+| D-013 | I3 established a separate slice credential; I5 superseded the wider service-trust contract and J0 separates the two slice principals. | I5 tests scoped audiences, rotation/revocation, finite admin migration, Origin/proxy/request identity, readiness, events and metrics. J0 adds explicit `legacy`/`migration`/`principals` slice modes with a <=90-day shared-key migration deadline. The final local J0 aggregate and exact-image proof pass; hosted exact-SHA validation remains unverified, and external production activation is outside repository evidence and authority. | Preserve the green local J0 gates; hosted validation and external production activation require separate authority. |
 | D-014 | `fileSize` alone was not a complete multipart/HTTP resource envelope. | I4 completes bounded upload/archive/artifact/pricing/container controls. I12 proves only small synthetic N=1 host mechanics; arbitrary model duration and N=2/N=3 CPU/RAM/disk behavior remain open. | Keep N=1 until real workload and higher-concurrency envelopes are measured. |
 | D-015 | A `main` push could historically deploy independently of validation CI. | S3a removed that path; I11 completes protected manual signed-candidate publication and automatic no-deploy rehearsal. I12 separately verifies one exact dark deployment and corrected proxy cutover, without public route activation. | Keep publication, dark deployment and public activation as separately authorized identities and stages. |
 | D-016 | The manifest/lock freeze was limited to the S1a/S3a parallel wave. | The dependency patch is now integrated once by patch ID; duplicate `306b799` was not picked. | Future advisory work requires a new serialized owner and audit evidence |

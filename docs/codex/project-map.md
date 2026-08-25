@@ -3,11 +3,8 @@
 ## Current J0 W2/W3 response and slice-auth candidate
 
 Current local classification:
-`J0_W2_W3_FOCUSED_LOCAL_CONTRACTS_PASS; FINAL_AGGREGATE_PENDING;
-NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_ENGINE_HELP_EXACT_IMAGE_PASS;
-J0_ORCA_PARENT_BUILD_EQUALITY_PASS;
-J0_ARRANGE1_ORIENT0_EXACT_IMAGE_HTTP_E2E_PASS;
-J0_FINAL_IMAGE_ID_PENDING_REBUILD;
+`J0_W2_W3_FINAL_LOCAL_CONTRACTS_PASS; J0_FINAL_LOCAL_AGGREGATE_PASS;
+NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_FINAL_EXACT_IMAGE_BUILD_AND_E2E_PASS;
 J0_FILAMENT_W8_BLOCKED_OWNER_INPUT_NOT_STARTED`.
 
 Direct executable-source map:
@@ -34,8 +31,8 @@ preprocessed and bounds-checked Orca geometry
   -> fixed --arrange 1 / --orient 0 request policy
   -> arrange translates the already-rotated model onto the build plate
   -> native auto-orient remains disabled; requested rotation remains owned upstream
-  -> validation exact-image HTTP model-transform/final-dimensions E2E passes
-  -> final rebuilt image identity remains pending
+  -> final exact-image HTTP model-transform/final-dimensions E2E passes
+  -> both principal families pass; x-api-key rejects before request residue
 runtime processing errors
   -> OpenAPI FILE_PROCESSING_TIMEOUT / INTERNAL_PROCESSING_ERROR
      / ORCA_PROFILE_INCOMPATIBLE / MODEL_OUT_OF_PRINTER_BOUNDS
@@ -127,13 +124,14 @@ one x-slicer-api-key header
   X90 origin rotation and failed closed with native status 206 / `Nothing to be
   sliced`; an earlier translated direct-smoke fixture did not cover that seam.
   Focused command/digest contracts pass for the correction. The corrected
-  validation exact-image HTTP E2E also passes: the existing Python optimizer's
-  pre-request dimensions were 20 x 30 x 10 mm, request rotation X90 produced
-  final dimensions 20 x 10 x 30 mm, and the response returned Orca `2.3.1`, a
-  lowercase SHA-256-shaped effective digest, and original profile basenames.
-  Supplying the valid slice credential under `x-api-key` returned 401. The
-  container was network-disabled, read-only, healthy, and exactly cleaned up.
-  The final rebuilt image identity is not yet recorded.
+  final exact-image HTTP E2E also passes: the existing Python optimizer's pre-
+  request dimensions were 30 x 20 x 10 mm, request rotation X90 produced final
+  dimensions 30 x 10 x 20 mm, and both WooCommerce and LeadPilot requests
+  returned Orca `2.3.1`, the same lowercase effective digest, and original
+  profile basenames. Supplying the valid WooCommerce credential only under
+  `x-api-key` returned the exact 401 without workspace, queue, or artifact
+  effects. The container was network-disabled, read-only, healthy, and exactly
+  cleaned up.
 - [`slice-openapi.js`](../../app/docs/slice-openapi.js) preserves `errorCode`
   and adds the four requested previously omitted emitted codes. The adjacent
   review closes the live `MODEL_DIMENSIONS_UNAVAILABLE` 422 `oneOf` gap by
@@ -185,17 +183,21 @@ one x-slicer-api-key header
   OpenAPI/runtime-error alignment, and
   required bounds fields. The live `MODEL_DIMENSIONS_UNAVAILABLE` branch
   correction closes the adjacent 422 review finding. Exact-image startup-version
-  and corrected validation-image HTTP model-transform/final-dimensions E2E
-  evidence pass. The final rebuilt image identity remains pending.
+  and final exact-image HTTP model-transform/final-dimensions E2E evidence pass.
+  The code-bearing source is `ed85eec63409b7362fe05c2b99031eeb24b5b9c9`;
+  its retained local validation image ID is
+  `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
   Filament-profile identity plus `material_used_g` is a
   separate W8 prerequisite classified `BLOCKED_OWNER_INPUT / NOT_STARTED`
   pending the required Bambu reference profile fields; the current digest does
   not establish filament or material-mass identity.
 
-Focused deterministic contracts plus bounded exact-image engine-startup and
-corrected HTTP E2E evidence exist, but the final rebuilt image identity, final
-aggregate, exact commit/SHA, and hosted validation remain pending. External
-production activation is outside repository evidence and authority. See
+Focused deterministic contracts, exact-image native and two-principal HTTP E2E,
+and the complete local aggregate pass. JavaScript is 2161/2161; Python is 85/85
+run with 84 pass and one expected Windows POSIX-permission skip; syntax covers
+244 JavaScript and 39 Python files; tracked repository safety covers 405 files.
+Hosted exact-SHA validation remains unverified. External production activation
+is outside repository evidence and authority. See
 [`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).
 
 ## Current I12 Wave 3 Hostinger qualification map

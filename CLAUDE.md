@@ -51,9 +51,11 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   `--arrange 1` and
   `--orient 0`: arrangement places already-rotated geometry onto the build
   plate, while auto-orient stays disabled and cannot replace the requested
-  rotation. Focused command/digest contracts and a corrected validation-image
-  HTTP transform/final-dimensions E2E pass; the final rebuilt image identity is
-  not yet recorded. This is not deployment or public activation. Filament
+  rotation. Focused command/digest contracts and final exact-image HTTP
+  transform/final-dimensions E2E pass on code SHA `ed85eec63409b7362fe05c2b99031eeb24b5b9c9`
+  and local image ID `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
+  Both principal families pass; a valid key only under `x-api-key` rejects
+  without request residue. This is not deployment or public activation. Filament
   profile plus `material_used_g` remains a separate W8 prerequisite classified
   `BLOCKED_OWNER_INPUT / NOT_STARTED` until the owner supplies the required
   Bambu reference profile fields.

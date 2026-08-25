@@ -3,11 +3,8 @@
 Date: 2026-08-25
 
 Classification:
-`J0_W2_W3_FOCUSED_LOCAL_CONTRACTS_PASS; FINAL_AGGREGATE_PENDING;
-NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_ENGINE_HELP_EXACT_IMAGE_PASS;
-J0_ORCA_PARENT_BUILD_EQUALITY_PASS;
-J0_ARRANGE1_ORIENT0_EXACT_IMAGE_HTTP_E2E_PASS;
-J0_FINAL_IMAGE_ID_PENDING_REBUILD;
+`J0_W2_W3_FINAL_LOCAL_CONTRACTS_PASS; J0_FINAL_LOCAL_AGGREGATE_PASS;
+NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_FINAL_EXACT_IMAGE_BUILD_AND_E2E_PASS;
 J0_FILAMENT_W8_BLOCKED_OWNER_INPUT_NOT_STARTED`.
 
 ## Authority and boundary
@@ -22,9 +19,11 @@ engine-version, Orca command-policy, OpenAPI/runtime-error, required-bounds, and
 slice-principal contracts. Closing the already-live
 `MODEL_DIMENSIONS_UNAVAILABLE` schema gap and completing the live slice-500 enum
 are adjacent OpenAPI review fixes.
-Exact-candidate-image engine help/version proof and the corrected Orca HTTP E2E
-also pass. The final image identity may change during the last source-only
-rebuild, so no final image ID is recorded here.
+Exact-image engine help/version proof, the corrected Orca HTTP E2E, and the
+complete local aggregate pass. The code-bearing source is
+`ed85eec63409b7362fe05c2b99031eeb24b5b9c9`; its retained local validation
+image is
+`sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
 Filament-profile identity plus `material_used_g` is a separate W8 prerequisite
 classified `BLOCKED_OWNER_INPUT / NOT_STARTED` until the owner supplies the
 required Bambu reference profile fields.
@@ -128,8 +127,8 @@ exercises the flattened snapshots against the pinned native resources, and the
 extrusion check accepts a positive `G1 ... E` only after the exact
 `;BEFORE_LAYER_CHANGE` marker, so a prelude/purge move cannot establish model-
 layer extrusion. The
-corrected validation-image HTTP E2E below proves the model-transform/final-
-dimensions seam. The final rebuilt image identity is not yet recorded.
+final exact-image HTTP E2E below proves the model-transform/final-dimensions
+seam.
 
 ## Exact-image engine help observation
 
@@ -159,19 +158,22 @@ onto the build plate and keeps `--orient 0` so Orca does not choose a new
 orientation. Focused invocation-policy, command-array, and digest-binding
 contracts cover this source boundary.
 
-The corrected validation exact image then passed the network-disabled,
-read-only, healthy-container HTTP E2E. The existing Python optimizer produced
-pre-request dimensions 20 x 30 x 10 mm; request rotation X90 produced final
-dimensions 20 x 10 x 30 mm. The successful Orca response contained
-`engine_version=2.3.1`, a lowercase SHA-256-shaped effective-profile digest,
-and the original stable profile basenames. Supplying the otherwise valid slice
-credential under `x-api-key` returned HTTP 401, preserving
-`x-slicer-api-key` as the only slice header. Exact cleanup passed.
+The final exact image then passed the network-disabled, read-only, healthy-
+container HTTP E2E. The existing Python optimizer produced pre-request
+dimensions 30 x 20 x 10 mm; request rotation X90 produced final dimensions
+30 x 10 x 20 mm. Separate WooCommerce and LeadPilot principal requests both
+returned HTTP 200 with `engine_version=2.3.1`, the original stable profile
+basenames, and the same deterministic effective-profile digest
+`09ccf8a09332b19402d518078859988eca833b8bd80be09735b032c9bf01b2e2`.
+Supplying the valid WooCommerce credential only under `x-api-key` returned the
+exact HTTP 401 slice-auth rejection without workspace, queue, or artifact
+effects. `x-slicer-api-key` remains the only slice header; the final queue was
+idle and exact container cleanup passed.
 
 This proves the corrected placement/orientation, response, profile-metadata,
-and single-header behavior on that validation image. The final rebuilt image
-identity remains pending. External production activation is outside this
-repository evidence and authority.
+principal separation, and single-header behavior on the final local validation
+image. External production activation is outside this repository evidence and
+authority.
 
 ## W3 slice-principal contract
 
@@ -238,10 +240,25 @@ Focused deterministic coverage is provided by:
 - `tests/unit/js/i5-security-mutations.test.js`;
 - `tests/unit/js/slice-route-lifecycle.test.js`.
 
-The focused contract lane passed on 2026-08-25. No final aggregate count is
-recorded here; aggregate verification and final classification remain owned by
-the integrator.
+The final code-bearing SHA is
+`ed85eec63409b7362fe05c2b99031eeb24b5b9c9`. A clean, no-cache, pulled-base
+`linux/amd64` build passed the vendored Orca-parent equality gate and produced
+exact image ID
+`sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`
+with `Config.User=slicer`, revision label equal to the code-bearing SHA, and
+resolved service identity `999:999`. It is retained as
+`local/j0-slicer-api:validation6-20260825`. The exact-image native smoke passed
+`help=success`, `synthetic_slice=success`, and `classification=success` before
+exact cleanup. The principal HTTP proof above passed on the same image ID and
+its exact container cleanup passed; the image and validation tag are retained.
 
-Final aggregate, final rebuilt image identity, exact commit/SHA, and hosted
-validation are not established by this record. External production activation
-is outside this repository evidence and authority.
+The complete local aggregate passed on 2026-08-25: JavaScript 2161/2161;
+Python discovered/run 85/85 with 84 passed, zero failed/errors, and one expected
+Windows POSIX-permission skip; JavaScript syntax 244 tracked files; Python
+syntax 39 tracked files; repository safety 405 tracked indexed files; and
+`git diff --check`. The repository has no `bin/verify.sh`, so these executable
+gates are the available final aggregate.
+
+Hosted exact-SHA validation, registry publication, deployment, and external
+production activation are not established by this record and remain outside
+repository evidence and authority.

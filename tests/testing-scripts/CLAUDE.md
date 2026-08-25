@@ -118,10 +118,10 @@ python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --
   actual-binary version, digest/snapshot/flattened-parent lineage, or Orca
   `--arrange 1` / `--orient 0`; its result alone is not complete J0 response-
   contract evidence. Focused contracts cover the corrected placement/orientation
-  and digest policy, and separate exact-image evidence covers startup version
-  resolution plus the corrected HTTP transform/final-dimensions E2E. The final
-  rebuilt image identity is not yet recorded; the Python matrix alone still
-  does not establish these facts.
+  and digest policy, and final exact-image evidence covers startup version
+  resolution plus the HTTP transform/final-dimensions E2E for both principals.
+  The exact local code/image identity and aggregate are recorded in J0 evidence;
+  the Python matrix alone still does not establish these facts.
 - The native Orca smoke accepts positive `G1 ... E` only after the exact
   `;BEFORE_LAYER_CHANGE` marker; prelude/purge extrusion does not establish
   model-layer extrusion.

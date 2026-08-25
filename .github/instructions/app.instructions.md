@@ -56,9 +56,9 @@ Last synchronized: 2026-08-25
   alter slice-native lifecycle metrics/events. Keep Orca invocation at `--arrange 1` /
   `--orient 0` after preprocessing/bounds checks: arrangement places already-
   rotated geometry onto the build plate, while auto-orient stays disabled.
-  Focused command/digest contracts and a corrected validation-image HTTP
-  transform/final-dimensions E2E pass; the final rebuilt image identity is not
-  yet recorded.
+  Focused command/digest contracts and final exact-image HTTP transform/final-
+  dimensions E2E pass for both principals; the exact local code/image identity
+  is recorded in the J0 evidence document.
 - Filament-profile identity and `material_used_g` are a separate W8 prerequisite
   classified `BLOCKED_OWNER_INPUT / NOT_STARTED` until the owner supplies the
   required Bambu reference profile fields.

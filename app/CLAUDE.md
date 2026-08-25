@@ -275,9 +275,11 @@ This document describes the application runtime inside app/.
   lifecycle metrics/events. Orca passes `--arrange 1` / `--orient 0` so
   placement can translate the
   model onto the plate without replacing the request-owned rotation. Focused
-  command/digest contracts and a corrected validation-image HTTP transform/
-  final-dimensions E2E pass; the final rebuilt image identity is not yet
-  recorded.
+  command/digest contracts and final exact-image HTTP transform/final-dimensions
+  E2E pass on code SHA `ed85eec63409b7362fe05c2b99031eeb24b5b9c9` and local
+  image ID `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
+  Both principal families pass; a valid key only under `x-api-key` rejects
+  without request residue.
 - Filament-profile identity and `material_used_g` remain a separate W8
   prerequisite classified `BLOCKED_OWNER_INPUT / NOT_STARTED` until required
   Bambu reference profile fields are supplied; do not infer them from the digest.

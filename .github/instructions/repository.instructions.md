@@ -79,9 +79,9 @@ Last synchronized: 2026-08-25
   exact-image proof. Keep Orca invocation at `--arrange 1` / `--orient 0` after
   preprocessing/bounds checks: arrangement places the already-rotated model
   onto the build plate, while auto-orient stays disabled and cannot replace the
-  requested rotation. Focused command/digest contracts and a corrected
-  validation-image HTTP transform/final-dimensions E2E pass; the final rebuilt
-  image identity is not yet recorded.
+  requested rotation. Focused command/digest contracts and final exact-image
+  HTTP transform/final-dimensions E2E pass for both principals; the exact local
+  code/image identity is recorded in the J0 evidence document.
 - Filament-profile identity plus `material_used_g` is a separate W8 prerequisite
   classified `BLOCKED_OWNER_INPUT / NOT_STARTED` pending required Bambu
   reference profile fields; do not infer it from the effective-profile digest.

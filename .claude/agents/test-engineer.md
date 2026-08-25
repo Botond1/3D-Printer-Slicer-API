@@ -102,9 +102,10 @@ python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --
    startup-module proof cover `engine_version`; focused/build contracts cover
    versioned/equality-gated flattened Orca parents. Focused policy contracts
    cover `--arrange 1` / `--orient 0`: placement may translate the already-
-   rotated model onto the build plate, but auto-orient stays disabled. Separate
-   validation-image HTTP transform/final-dimensions E2E evidence passes; the
-   final rebuilt image identity is not yet recorded. The current Python matrix
+   rotated model onto the build plate, but auto-orient stays disabled. Final
+   exact-image HTTP transform/final-dimensions E2E evidence passes for both
+   principals and is bound to the code/image identity in J0 evidence. The current
+   Python matrix
    helper does not establish those facts or digest/snapshot lineage, so do not
    classify it alone as complete J0 proof.
    The native Orca smoke accepts positive `G1 ... E` only after the exact

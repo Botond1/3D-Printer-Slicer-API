@@ -66,8 +66,9 @@ This folder contains runtime configuration files used by slicing and pricing.
   flattened JSON before downstream use; unknown, cyclic, name-mismatched, or
   wrong-role parents fail closed. Stable runtime derivation clears `layer_gcode`
   and sets `use_relative_e_distances='1'`, aligned with the flattened pinned
-  machine parent's per-layer `G92 E0` reset. The direct native smoke and
-  corrected validation-image HTTP transform/final-dimensions E2E pass; the final
-  rebuilt image identity is not yet recorded. That smoke accepts positive
+  machine parent's per-layer `G92 E0` reset. The direct native smoke and final
+  exact-image HTTP transform/final-dimensions E2E pass; the exact local code/
+  image identity is recorded in the J0 evidence document. That smoke accepts
+  positive
   `G1 ... E` only after the exact `;BEFORE_LAYER_CHANGE` marker, so prelude/
   purge extrusion does not count as model-layer proof.

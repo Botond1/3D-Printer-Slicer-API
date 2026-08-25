@@ -55,10 +55,11 @@ slice-500 assertions must retain `INTERNAL_PROCESSING_ERROR`,
 The current Python matrix helper does not yet establish actual-binary version, digest/
 snapshot/flattened-parent lineage, or Orca `--arrange 1` / `--orient 0`; do not
 classify its result alone as complete J0 proof. Focused contracts cover the
-corrected placement/orientation and digest policy, and separate exact-image
-evidence covers startup version resolution plus the corrected HTTP transform/
-final-dimensions E2E. The final rebuilt image identity is not yet recorded; the
-Python matrix alone still does not establish these facts.
+corrected placement/orientation and digest policy, and final exact-image
+evidence covers startup version resolution plus the HTTP transform/final-
+dimensions E2E for both principals. The exact code/image identity and local
+aggregate are recorded in `docs/codex/evidence/j0-w2-w3-response-auth-contract.md`;
+the Python matrix alone still does not establish these facts.
 The native Orca smoke accepts positive `G1 ... E` only after exact
 `;BEFORE_LAYER_CHANGE`; prelude/purge extrusion does not establish model-layer
 extrusion.

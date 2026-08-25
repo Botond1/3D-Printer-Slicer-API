@@ -130,14 +130,19 @@ Focused startup/parser/cache/failure, response, parent-resolution/digest-
 mutation, and corrected command contracts pass. The superseded arrangement-
 disabled HTTP probe retained negative Y after an X90 origin rotation and failed
 closed with native status 206 / `Nothing to be sliced`; its earlier translated
-direct-smoke fixture did not cover that seam. The corrected validation exact-
-image HTTP E2E passed in a network-disabled, read-only, healthy container:
-pre-request dimensions 20 x 30 x 10 mm plus request rotation X90 produced final
-dimensions 20 x 10 x 30 mm, and the response returned Orca `2.3.1`, a lowercase
-SHA-256-shaped effective digest, and original profile basenames. `x-api-key`
-returned HTTP 401, confirming `x-slicer-api-key` remains the only slice header;
-exact cleanup passed. A last source-only rebuild may change the final image
-identity, which is not yet recorded.
+direct-smoke fixture did not cover that seam. The final local exact-image HTTP
+E2E passed in a network-disabled, read-only, healthy container: pre-request
+dimensions 30 x 20 x 10 mm plus request rotation X90 produced final dimensions
+30 x 10 x 20 mm. Separate WooCommerce and LeadPilot requests returned Orca
+`2.3.1`, the same lowercase effective digest, and original profile basenames.
+A valid WooCommerce credential only under `x-api-key` returned the exact HTTP
+401 without workspace, queue, or artifact effects, confirming
+`x-slicer-api-key` remains the only slice header; the final queue was idle and
+exact cleanup passed. Code-bearing SHA
+`ed85eec63409b7362fe05c2b99031eeb24b5b9c9` produced retained local image ID
+`sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
+The complete local aggregate also passes; hosted exact-SHA validation remains
+unverified.
 
 This candidate is not deployed or a public-activation result. Filament-profile
 identity plus `material_used_g` is a separate W8 prerequisite classified
