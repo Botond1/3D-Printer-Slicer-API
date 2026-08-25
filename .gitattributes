@@ -1,3 +1,7 @@
 Dockerfile text eol=lf
 *.sh text eol=lf
 .github/workflows/*.yml text eol=lf
+ops/hostinger/** text eol=lf
+scripts/i12-capacity-producer-exec.py text eol=lf
+scripts/i12-hostinger-operator-contract.js text eol=lf
+tests/unit/js/i12-hostinger-operator-*.test.js text eol=lf

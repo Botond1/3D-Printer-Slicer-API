@@ -10,6 +10,18 @@ const MAX_FILE_BYTES = 128 * 1024;
 const TRAEFIK_IMAGE = 'traefik:v3.7.11@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144';
 const TRAEFIK_HEALTHCHECK = '      test: ["CMD", "traefik", "healthcheck", "--ping=true", "--ping.entryPoint=health", "--entryPoints.health.address=127.0.0.1:8082"]';
 const TRAEFIK_HEALTHCHECK_BLOCK = `    healthcheck:\n${TRAEFIK_HEALTHCHECK}\n      interval: 30s\n      timeout: 5s\n      retries: 3\n      start_period: 10s`;
+const TRAEFIK_SERVICE_NETWORKS_BLOCK = '    networks:\n'
+    + '      traefik-ingress:\n'
+    + '        gw_priority: 1\n'
+    + '      slicer-api-private:\n'
+    + '        gw_priority: 0';
+const TRAEFIK_INGRESS_NETWORK_BLOCK = '  traefik-ingress:\n'
+    + '    name: 3d-psa-traefik-ingress\n'
+    + '    driver: bridge\n'
+    + '    internal: false';
+const TRAEFIK_PRIVATE_NETWORK_BLOCK = '  slicer-api-private:\n'
+    + '    name: slicer-api-private\n'
+    + '    external: true\n';
 const BACKEND_URL = 'http://3d-psa-backend-server:3000';
 const ACTIVE_ROUTER_NAME = 'slicer-api.yml';
 const DISABLED_HOST = 'slicer-api.invalid';
@@ -98,6 +110,15 @@ function safeSource(source) {
         && !source.includes('\r') && !source.includes('\t') && !source.includes('\0');
 }
 
+function validComposeVersion(value) {
+    const match = typeof value === 'string' && value.length <= 32
+        ? value.match(/^([1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/) : null;
+    if (!match) return false;
+    const [major, minor, patch] = match.slice(1).map(Number);
+    if (![major, minor, patch].every(Number.isSafeInteger)) return false;
+    return major > 2 || (major === 2 && (minor > 33 || (minor === 33 && patch >= 1)));
+}
+
 function validateComposeMountNetworkAndVolumeContract(service, networks, volumes) {
     const mounts = indentedBlock(service, '    volumes:', 4);
     for (const fragment of [
@@ -113,12 +134,13 @@ function validateComposeMountNetworkAndVolumeContract(service, networks, volumes
         || /docker\.sock|providers\.docker/.test(mounts)) {
         return 'traefik_mount_contract_mismatch';
     }
+    if (indentedBlock(service, '    networks:', 4) !== TRAEFIK_SERVICE_NETWORKS_BLOCK) {
+        return 'traefik_service_network_priority_mismatch';
+    }
     const ingress = indentedBlock(networks, '  traefik-ingress:', 2);
     const privateNetwork = indentedBlock(networks, '  slicer-api-private:', 2);
-    if (!ingress.includes('    name: 3d-psa-traefik-ingress')
-        || !ingress.includes('    driver: bridge') || ingress.includes('external:')
-        || !privateNetwork.includes('    name: slicer-api-private')
-        || !privateNetwork.includes('    external: true') || privateNetwork.includes('driver:')) {
+    if (ingress !== TRAEFIK_INGRESS_NETWORK_BLOCK
+        || privateNetwork !== TRAEFIK_PRIVATE_NETWORK_BLOCK) {
         return 'traefik_network_contract_mismatch';
     }
     if (!exactArray(directKeys(volumes, 2), ['traefik-acme'])
@@ -173,8 +195,8 @@ function validateComposeSource(source) {
         '    pids_limit: 128', '    mem_limit: 268435456', '    memswap_limit: 268435456',
         '    cpus: 0.50', '      - /tmp:rw,nosuid,nodev,noexec,size=16m,mode=0700',
         '        max-size: "10m"', '        max-file: "3"',
-        '      traefik.enable: "false"', '      - traefik-ingress',
-        '      - slicer-api-private', '    restart: unless-stopped',
+        '      traefik.enable: "false"', '        gw_priority: 1',
+        '        gw_priority: 0', '    restart: unless-stopped',
         '    stop_grace_period: 30s'
     ]) {
         if (exactLineCount(service, line) !== 1) return 'traefik_runtime_envelope_mismatch';
@@ -261,7 +283,11 @@ function validateRunbookSource(source) {
         'Keep the stopped-old rollback retention',
         'Before starting the\ncandidate, inventory the owners of both host ports 80 and 443',
         'Prove that both old listeners are closed before creating or\nstarting the candidate',
-        'Prove candidate identity, health, redirect,\nprovider set, network attachments',
+        'Prove candidate identity, health, redirect,\nprovider set, the exact two network attachments',
+        'Compose `2.33.1` or newer', '`gw_priority: 1`', '`gw_priority: 0`',
+        'non-internal `traefik-ingress`', 'actual default\nroute uses `traefik-ingress`',
+        'compose_version="$(docker compose version --short)" || exit 1',
+        'node scripts/i12-hostinger-operator-contract.js --check-compose-version "$compose_version" || exit 1',
         'scripts/i12-capacity-artifact-cleanup.js',
         'STOP_CLEANUP_CONSUMER_UNAVAILABLE',
         'scripts/i12-capacity-producer-exec.py',
@@ -279,6 +305,8 @@ function validateRunbookSource(source) {
         'bounded classification and count',
         'Run the consumer even when the qualification runner exits nonzero',
         'same exact signed API digest', 'resolved non-root UID:GID',
+        'exact API-image source commit and signed digest separately from the\nexact operator-pack source commit',
+        'Never relabel an older verified API image as if it were built\nfrom a later operator-only commit.',
         'Allow exactly three binds', '/usr/bin/node',
         '/run/i12-capacity-artifact-cleanup.js',
         'SLICER_API_IMAGE="$candidate_image" node scripts/i7-production-compose-contract.js || exit 1',
@@ -372,10 +400,14 @@ function validateRunbookSource(source) {
         return 'hostinger_capacity_cleanup_order_mismatch';
     }
     const proxyOrder = [
+        'node scripts/i12-hostinger-operator-contract.js --check-compose-version "$compose_version" || exit 1',
+        'docker compose -f ops/hostinger/docker-compose.traefik.yml config --quiet || exit 1',
         'Before starting the\ncandidate, inventory the owners of both host ports 80 and 443',
         'Prove that both old listeners are closed before creating or\nstarting the candidate',
         'docker compose --env-file "$operator_values_file" -f ops/hostinger/docker-compose.traefik.yml up --detach --no-deps --pull never traefik',
-        'Prove candidate identity, health, redirect,\nprovider set, network attachments'
+        'Prove candidate identity, health, redirect,\nprovider set, the exact two network attachments',
+        'effective `RW=false`', '`Mode=""` or `Mode="ro"`',
+        'ACME volume\nstrictly `RW=true` and `Mode="rw"`'
     ].map((fragment) => source.indexOf(fragment));
     if (proxyOrder.some((index) => index < 0)
         || proxyOrder.some((index, position) => position > 0 && index <= proxyOrder[position - 1])) {
@@ -770,6 +802,13 @@ function main(args = process.argv.slice(2)) {
     try { sources = loadOperatorSources(); } catch { console.error('operator_pack_file_invalid'); process.exitCode = 2; return; }
     const packError = validateOperatorPack(sources);
     if (packError) { console.error(packError); process.exitCode = 2; return; }
+    if (args.length === 2 && args[0] === '--check-compose-version') {
+        if (!validComposeVersion(args[1])) {
+            console.error('compose_version_unsupported'); process.exitCode = 2; return;
+        }
+        console.log('compose_version_contract=PASS');
+        return;
+    }
     const values = parseRouterArguments(args);
     if (!values) { console.error('active_router_argument_invalid'); process.exitCode = 2; return; }
     let error;
@@ -790,8 +829,9 @@ if (require.main === module) main();
 
 module.exports = Object.freeze({
     ACTIVE_ROUTER_NAME, BACKEND_URL, CAPACITY_PRODUCER_EXEC, DARK_DYNAMIC_ENTRY, DISABLED_HOST, FILES, MAX_FILE_BYTES, PACK_ROOT, TRAEFIK_COMMANDS,
-    TRAEFIK_HEALTHCHECK, TRAEFIK_IMAGE,
+    TRAEFIK_HEALTHCHECK, TRAEFIK_IMAGE, TRAEFIK_INGRESS_NETWORK_BLOCK,
+    TRAEFIK_PRIVATE_NETWORK_BLOCK, TRAEFIK_SERVICE_NETWORKS_BLOCK,
     activateRouter, disableRouter, loadOperatorPack, validateActiveDynamicDirectory,
     validateActiveRouter, validateCapacityProducerSource, validateComposeSource, validateOperatorPack,
-    validateDarkDynamicDirectory, validateRouterSource, validateRunbookSource
+    validateDarkDynamicDirectory, validateRouterSource, validateRunbookSource, validComposeVersion
 });

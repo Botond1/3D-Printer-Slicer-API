@@ -7,9 +7,11 @@ Use only synthetic probes until the owner approves real caller traffic.
 
 ## Required immutable inputs
 
-Record the exact repository commit, signed API image digest, operator-pack file
-hashes, resolved numeric service UID/GID, hostname, DNS result, and a recovery
-snapshot identifier before starting. The API image must use the canonical
+Record the exact API-image source commit and signed digest separately from the
+exact operator-pack source commit and file hashes. Also record the resolved
+numeric service UID/GID, hostname, DNS result, and a recovery snapshot identifier
+before starting. Never relabel an older verified API image as if it were built
+from a later operator-only commit. The API image must use the canonical
 `registry/repository@sha256:<64 lowercase hex>` form. The Traefik image is fixed
 in this pack as
 `traefik:v3.7.11@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144`.
@@ -261,11 +263,14 @@ to be exact decimal zero before any Traefik action:
 
 Traefik static configuration is CLI-only in this pack; do not add a static
 configuration file or `TRAEFIK_*` static-option environment variables. Validate
-the source contract, then prove Compose interpolation with inert validation-only
-values. This command does not create or inspect the named volume:
+the source contract and fail closed unless the exact Compose client supports
+gateway priority, then prove interpolation with inert validation-only values.
+These commands do not create or inspect the named volume:
 
 ```sh
-ACME_EMAIL=operator@example.invalid TRAEFIK_ACME_VOLUME=i12-existing-acme-volume docker compose -f ops/hostinger/docker-compose.traefik.yml config --quiet
+compose_version="$(docker compose version --short)" || exit 1
+node scripts/i12-hostinger-operator-contract.js --check-compose-version "$compose_version" || exit 1
+ACME_EMAIL=operator@example.invalid TRAEFIK_ACME_VOLUME=i12-existing-acme-volume docker compose -f ops/hostinger/docker-compose.traefik.yml config --quiet || exit 1
 ```
 
 Run `node scripts/i12-hostinger-operator-contract.js || exit 1`. Before starting the
@@ -288,12 +293,21 @@ docker compose --env-file "$operator_values_file" -f ops/hostinger/docker-compos
 ```
 
 It joins the ordinary ingress bridge and the pre-existing external
-`slicer-api-private` network. Prove candidate identity, health, redirect,
-provider set, network attachments, and unchanged dark-cutover ACME hash. Confirm
+`slicer-api-private` network. Require Docker Compose `2.33.1` or newer. The
+service attachment must keep ingress at `gw_priority: 1` and the internal
+private network at `gw_priority: 0`; keep the ordinary ingress bridge explicitly
+non-internal `traefik-ingress`. Do not substitute list ordering or the
+unrelated `priority` field. Prove candidate identity, health, redirect,
+provider set, the exact two network attachments, and that the actual default
+route uses `traefik-ingress`, plus the unchanged dark-cutover ACME hash. Confirm
 that only ports 80 and 443 are published, the dashboard is disabled, and the
 file-provider directory is read-only; Docker provider and Engine socket are absent,
 and the `letsencrypt` resolver still points to
 `/letsencrypt/acme.json` before continuing. The file provider is the only discovery mechanism.
+For the exact dynamic bind, require the recorded source, destination, bind type,
+propagation and effective `RW=false`; accept Docker's `Mode=""` or `Mode="ro"`
+projection only under that effective read-only proof. Keep the ACME volume
+strictly `RW=true` and `Mode="rw"`; never weaken either contract.
 Its exact backend resolves through Docker DNS on
 `slicer-api-private`; Traefik does not require Docker Engine API access or label
 discovery.
