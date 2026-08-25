@@ -64,11 +64,12 @@ policy, thresholds and escalation route before installation.
 
 ## Encrypted backup and recovery proposal
 
-Use restic with an owner-controlled Backblaze B2 or compatible S3 repository.
-Create a least-privilege backup credential and a distinct repository password;
-store each in a root-owned mode `0600` file outside all checkouts and process
-arguments. No repository URL, key or password belongs in Git, a systemd unit,
-Docker inspect output, or the backup report.
+Use restic with an owner-controlled S3-compatible repository. For Backblaze B2,
+use its S3-compatible API rather than restic's native B2 backend, following
+restic's current backend guidance. Create a least-privilege backup credential
+and a distinct repository password; store each in a root-owned mode `0600` file
+outside all checkouts and process arguments. No repository URL, key or password
+belongs in Git, a systemd unit, Docker inspect output, or the backup report.
 
 Back up only state that cannot be recreated from a protected Git commit and an
 immutable signed image:
@@ -89,10 +90,13 @@ not enter this backup scope without a separate retention and privacy decision.
 
 A concrete low-cost starting policy is one encrypted backup per day with 7
 daily, 4 weekly and 6 monthly snapshots, subject to owner approval of RPO,
-retention and storage cost. Every run must preflight an exact allowlist of
-regular/non-link source identities, create a bounded sanitized report, run
-repository integrity checks on an agreed cadence, and alert through the same
-dead-man channel. Backup success alone is not recovery proof.
+retention and storage cost. The owner must also approve the bucket lifecycle
+and object-version retention so provider-side deletion and cost behavior stay
+consistent with restic's `forget`/`prune` policy and the required recovery
+window. Every run must preflight an exact allowlist of regular/non-link source
+identities, create a bounded sanitized report, run repository integrity checks
+on an agreed cadence, and alert through the same dead-man channel. Backup
+success alone is not recovery proof.
 
 Before route activation, perform one restore drill into a newly created private
 temporary tree with mode `0700`. Never restore over the live ACME file, pricing
@@ -155,8 +159,9 @@ match after any W1 or later render-related limit change.
 
 1. Healthchecks.io account ownership, recipient list, ping endpoint, alert
    grace period, thresholds and permission to install/enable the local units.
-2. The owner-controlled B2/S3 destination, region, least-privilege credentials,
-   restic repository password, cost limit, RPO/RTO and retention approval.
+2. The owner-controlled S3-compatible destination, region, least-privilege
+   credentials, restic repository password, cost limit, RPO/RTO, snapshot
+   retention, bucket lifecycle and object-version retention approval.
 3. Exact canonical backup source paths and a decision on whether any mutable
    profile bytes exist outside the verified release source.
 4. A restore-drill maintenance window and approval for temporary private disk
