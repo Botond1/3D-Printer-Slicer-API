@@ -66,6 +66,38 @@ test('Compose mutations cannot widen publication, privilege, mount, or network s
         ['router template loaded initially', replaceRequired(compose, /source: \.\/dynamic/, 'source: ./templates')],
         ['private network not external', replaceRequired(compose, /^    external: true$/m, '    external: false')],
         ['private network renamed', replaceRequired(compose, /^    name: slicer-api-private$/m, '    name: broad-shared-network')],
+        ['ingress internal flag removed', replaceRequired(compose, /^    internal: false\n/m, '')],
+        ['ingress made internal', replaceRequired(compose, /^    internal: false$/m, '    internal: true')],
+        ['extra top-level ingress option', replaceRequired(
+            compose,
+            /^    internal: false$/m,
+            '    internal: false\n    attachable: true'
+        )],
+        ['ingress gateway priority removed', replaceRequired(compose, /^        gw_priority: 1\n/m, '')],
+        ['private gateway priority removed', replaceRequired(compose, /^        gw_priority: 0\n/m, '')],
+        ['gateway priorities tied at zero', replaceRequired(compose, /^        gw_priority: 1$/m, '        gw_priority: 0')],
+        ['gateway priorities tied at one', replaceRequired(compose, /^        gw_priority: 0$/m, '        gw_priority: 1')],
+        ['gateway priorities reversed', replaceRequired(
+            compose,
+            '        gw_priority: 1\n      slicer-api-private:\n        gw_priority: 0',
+            '        gw_priority: 0\n      slicer-api-private:\n        gw_priority: 1'
+        )],
+        ['ordinary priority substituted', replaceRequired(compose, /gw_priority/g, 'priority')],
+        ['short network list restored', replaceRequired(
+            compose,
+            '    networks:\n      traefik-ingress:\n        gw_priority: 1\n      slicer-api-private:\n        gw_priority: 0',
+            '    networks:\n      - traefik-ingress\n      - slicer-api-private'
+        )],
+        ['extra service network attachment', replaceRequired(
+            compose,
+            /^    restart: unless-stopped$/m,
+            '      unexpected-network:\n        gw_priority: 0\n    restart: unless-stopped'
+        )],
+        ['extra ingress network option', replaceRequired(
+            compose,
+            /^        gw_priority: 1$/m,
+            '        gw_priority: 1\n        priority: 100'
+        )],
         ['extra peer service', replaceRequired(
             compose,
             /^networks:\n/m,
@@ -206,10 +238,50 @@ test('runbook mutations cannot skip identity, hash, atomic activation, or safe r
         ['root identity accepted', replaceRequired(runbook, /reject UID 0 or GID 0/, 'accept UID 0 or GID 0')],
         ['hardcoded API identity', `${runbook}\nSLICER_UID=999\n`],
         ['single qualification pass', replaceRequired(runbook, /matrix twice/, 'matrix once')],
+        ['Compose minimum version gate removed', replaceRequired(
+            runbook,
+            /node scripts\/i12-hostinger-operator-contract\.js --check-compose-version "\$compose_version" \|\| exit 1/,
+            'skip Compose version gate'
+        )],
+        ['Compose interpolation failure absorbed', replaceRequired(
+            runbook,
+            /config --quiet \|\| exit 1/,
+            'config --quiet || true'
+        )],
+        ['API and operator source identities conflated', replaceRequired(
+            runbook,
+            /API-image source commit and signed digest separately from the\nexact operator-pack source commit/,
+            'repository commit'
+        )],
         ['file-provider-only gate removed', replaceRequired(
             runbook,
             /Docker provider and Engine socket are absent/,
             'Docker discovery may be enabled'
+        )],
+        ['gateway-priority runtime proof removed', replaceRequired(
+            runbook,
+            /that the actual default\nroute uses `traefik-ingress`/,
+            'that a default route exists'
+        )],
+        ['ordinary ingress boundary removed', replaceRequired(
+            runbook,
+            /non-internal `traefik-ingress`/,
+            'ingress network'
+        )],
+        ['effective read-only mount proof removed', replaceRequired(
+            runbook,
+            /effective `RW=false`/,
+            'mount is probably read-only'
+        )],
+        ['ACME writable-volume contract weakened', replaceRequired(
+            runbook,
+            /strictly `RW=true` and `Mode="rw"`/,
+            'writable when convenient'
+        )],
+        ['gateway-priority field weakened', replaceRequired(
+            runbook,
+            /`gw_priority: 1`/,
+            '`priority: 1`'
         )],
         ['CLI-only contract removed', replaceRequired(runbook, /CLI-only/, 'configuration')],
         ['ACME mode weakened', replaceRequired(runbook, /mode `0600`/, 'mode `0644`')],

@@ -15,6 +15,9 @@ const {
     TRAEFIK_COMMANDS,
     TRAEFIK_HEALTHCHECK,
     TRAEFIK_IMAGE,
+    TRAEFIK_INGRESS_NETWORK_BLOCK,
+    TRAEFIK_PRIVATE_NETWORK_BLOCK,
+    TRAEFIK_SERVICE_NETWORKS_BLOCK,
     activateRouter,
     disableRouter,
     loadOperatorPack,
@@ -23,7 +26,8 @@ const {
     validateCapacityProducerSource,
     validateDarkDynamicDirectory,
     validateOperatorPack,
-    validateRouterSource
+    validateRouterSource,
+    validComposeVersion
 } = require('../../../scripts/i12-hostinger-operator-contract');
 
 const ROOT = path.resolve(__dirname, '../../..');
@@ -55,6 +59,10 @@ test('committed Hostinger pack satisfies the bounded operator contract', () => {
     assert.match(sources.compose, /--entryPoints\.web\.http\.redirections\.entryPoint\.to=websecure/);
     assert.match(sources.compose, /--certificatesResolvers\.letsencrypt\.acme\.storage=\/letsencrypt\/acme\.json/);
     assert.equal(sources.compose.split('\n').filter((line) => line === TRAEFIK_HEALTHCHECK).length, 1);
+    assert.equal(sources.compose.split(TRAEFIK_SERVICE_NETWORKS_BLOCK).length - 1, 1);
+    assert.equal(sources.compose.split(TRAEFIK_INGRESS_NETWORK_BLOCK).length - 1, 1);
+    assert.equal(sources.compose.split(TRAEFIK_PRIVATE_NETWORK_BLOCK).length - 1, 1);
+    assert.equal((sources.compose.match(/^        gw_priority: [01]$/gm) || []).length, 2);
     assert.match(sources.compose, /slicer-api-private:[\s\S]+external: true/);
     assert.match(sources.compose, /TRAEFIK_ACME_VOLUME[\s\S]+external: true/);
     assert.match(sources.runbook, /STOP_EXISTING_PROXY_PARITY_UNPROVEN/);
@@ -71,6 +79,12 @@ test('committed Hostinger pack satisfies the bounded operator contract', () => {
     assert.match(sources.runbook, /\/run\/i12-capacity-artifact-cleanup\.js/);
     assert.match(sources.runbook, /--expected-max-concurrent[\s\S]+--cleanup-manifest/);
     assert.match(sources.runbook, /Run the consumer even when the qualification runner exits nonzero/);
+    assert.match(sources.runbook, /Compose `2\.33\.1` or newer/);
+    assert.match(sources.runbook, /non-internal `traefik-ingress`/);
+    assert.match(sources.runbook, /actual default\nroute uses `traefik-ingress`/);
+    assert.match(sources.runbook, /effective `RW=false`/);
+    assert.match(sources.runbook, /`Mode=""` or `Mode="ro"`/);
+    assert.match(sources.runbook, /API-image source commit[\s\S]+operator-pack source commit/);
     assert.equal(fs.existsSync(path.join(PACK_ROOT, 'traefik.yml')), false);
 });
 
@@ -371,4 +385,26 @@ test('operator contract CLI reports only the bounded PASS classification', () =>
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout.trim(), 'i12_hostinger_operator_contract=PASS');
     assert.equal(result.stderr, '');
+});
+
+test('Compose version gate accepts only canonical versions at or above 2.33.1', () => {
+    for (const version of ['2.33.1', '2.33.2', '2.34.0', '3.0.0', '5.1.4']) {
+        assert.equal(validComposeVersion(version), true, version);
+    }
+    for (const version of ['', '2.33.0', '2.32.99', '1.99.99', '02.33.1', '2.033.1',
+        '2.33.01', '2.33', '2.33.1-rc1', 'v2.33.1', '5.1.4\n']) {
+        assert.equal(validComposeVersion(version), false, JSON.stringify(version));
+    }
+    const pass = spawnSync(process.execPath, [
+        'scripts/i12-hostinger-operator-contract.js', '--check-compose-version', '5.1.4'
+    ], { cwd: ROOT, encoding: 'utf8', timeout: 10_000, windowsHide: true });
+    assert.equal(pass.status, 0, pass.stderr);
+    assert.equal(pass.stdout.trim(), 'compose_version_contract=PASS');
+    assert.equal(pass.stderr, '');
+    const reject = spawnSync(process.execPath, [
+        'scripts/i12-hostinger-operator-contract.js', '--check-compose-version', '2.33.0'
+    ], { cwd: ROOT, encoding: 'utf8', timeout: 10_000, windowsHide: true });
+    assert.equal(reject.status, 2);
+    assert.equal(reject.stdout, '');
+    assert.equal(reject.stderr.trim(), 'compose_version_unsupported');
 });

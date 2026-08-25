@@ -64,8 +64,10 @@ services:
     labels:
       traefik.enable: "false"
     networks:
-      - traefik-ingress
-      - slicer-api-private
+      traefik-ingress:
+        gw_priority: 1
+      slicer-api-private:
+        gw_priority: 0
     restart: unless-stopped
     stop_grace_period: 30s
 
@@ -73,6 +75,7 @@ networks:
   traefik-ingress:
     name: 3d-psa-traefik-ingress
     driver: bridge
+    internal: false
   slicer-api-private:
     name: slicer-api-private
     external: true
