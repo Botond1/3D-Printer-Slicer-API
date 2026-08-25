@@ -3,16 +3,18 @@
 ## I12 Wave 3 Hostinger capacity and ingress control delta
 
 Current classification:
-`I12_API_F710_DARK_N1_VERIFIED; TRAEFIK_LIVE_CUTOVER_FAILED_AND_RESTORED_DARK;
-OPERATOR_PACK_CORRECTIVE_LOCALLY_VERIFIED; HOSTED_AND_RESIDUAL_RECONCILIATION_PENDING`.
-Protected main `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28` has green
-Source/Image, signed publication, and automatic no-deploy rehearsal. Its exact
-signed API digest
+`I12_API_F710_DARK_N1_VERIFIED;
+OPERATOR_MAIN_7C8AEE_RESIDUAL_RECONCILIATION_COMPLETE;
+CORRECTED_TRAEFIK_DARK_CUTOVER_VERIFIED; PUBLIC_ROUTE_DISABLED`.
+Protected operator main `7c8aee0728fc8462c67b4c6d85636bffb7afcdf8`
+passed Source `32804297840` and Image `32804297658`. The distinct deployed API
+image source remains protected-main checkpoint
+`f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`; its exact signed digest
 `sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`
-is healthy and dark-running on the authorized VPS at retained concurrency one.
-Corrective operator-pack commit
-`7a490c150bb8c4c1ec6c22561421202152070fbc` is a separate source identity and
-has local evidence only.
+remains healthy and dark-running on the authorized VPS at retained concurrency
+one. Operator commits `7a490c150bb8c4c1ec6c22561421202152070fbc` and
+`1fe89d7508f5bbd59a75256ec43722f3f19ae1c2` remain separate source
+identities and did not relabel or rebuild the API image.
 
 | Control | Current classification | Boundary |
 | --- | --- | --- |
@@ -23,9 +25,10 @@ has local evidence only.
 | Capacity evidence | `HOST_VERIFIED_SYNTHETIC_N1` | Bounded authenticated queue/artifact evidence and exact cleanup passed at retained N=1. Tiny synthetic mechanics do not establish arbitrary-model safety. |
 | Producer credential handoff | `HOST_VERIFIED_SYNTHETIC` | A root-started helper opens exactly four canonical root:root 0600 single-link files, drops privilege, and directly execs absolute Python with four environment entries. Secret values remain outside argv and evidence. |
 | Synthetic artifact cleanup | `HOST_VERIFIED_SYNTHETIC` | Producer and manifest are dynamic-service-owned; API is cleanly stopped. The exact-image non-root/network-none helper can delete only fully correlated regular artifact/marker pairs. |
-| Traefik control plane | `LIVE_CUTOVER_FAILED; DARK_RESTORATION_VERIFIED; CORRECTIVE_PENDING_HOSTED` | The first cutover exposed ambiguous dual-network gateway ownership. Corrective source requires Compose 2.33.1+, exact ingress/private `gw_priority: 1/0`, external ingress, runtime priority/default-route proof, and retained-old rollback. |
-| Read-only proxy config bind | `RUNTIME_REPRESENTATION_CHARACTERIZED; CORRECTIVE_PENDING_HOSTED` | Exact source/destination plus `RW=false` proves effective read-only. Docker may report empty `Mode`; literal `Mode=ro` is not required. Missing, duplicate, wrong-path, or `RW=true` binds fail closed. |
-| Public ingress | `DISABLED_PENDING_EXTERNAL_PROOF` | No route may activate without hostname/DNS, intended caller, proxy CIDR, firewall, ACME continuity and authenticated synthetic route evidence. |
+| Traefik control plane | `HOST_VERIFIED_DARK_CUTOVER` | The corrected socketless/file-provider-only proxy is running and healthy. Exact ingress/private `GwPriority=1/0`, an ingress-owned IPv4 default route, no container IPv6 default route, no Docker socket/provider, and retained-old rollback were proved. |
+| Read-only proxy config bind | `HOST_VERIFIED_EFFECTIVE_READ_ONLY` | Exact source/destination plus `RW=false` proves effective read-only. Docker may report empty `Mode`; literal `Mode=ro` is not required. Missing, duplicate, wrong-path, or `RW=true` binds fail closed. |
+| Residual reconciliation | `COMPLETE_IDENTITY_BOUND; OLD_PROXY_RETAINED_STOPPED` | The prior failed residual set was identity-bound reconciled; the corrected resumable cutover then established the current candidate/network identities. The old proxy and root-private recovery evidence remain intentionally retained for rollback; task-owned helpers/uploads/temp paths are absent and no prune occurred. |
+| Public ingress | `LISTENERS_ACTIVE; SLICER_ROUTE_DISABLED_PENDING_EXTERNAL_PROOF` | Docker owns exactly one IPv4 and one IPv6 host listener for each of 80/443 while the container networks remain IPv6-disabled. The dynamic route directory is still the exact dark sentinel; no slicer route may activate without hostname/DNS, intended caller, proxy CIDR, firewall, certificate continuity and authenticated synthetic route evidence. |
 | Host runtime | `DARK_F710_N1_VERIFIED` | Exact signed digest, 999:999, internal-only bridge, no API default route, denied API/native egress, health/readiness and Prusa/Orca synthetic slices passed. |
 
 The capacity cleanup sequence is intentionally stop-the-world for synthetic
@@ -34,11 +37,12 @@ exited/exit-zero/non-OOM proof, non-root exact-image cleanup, absence proof,
 same-digest restart and two repeated dark gates. Cleanup success cannot convert
 a failed capacity run into a pass.
 
-The failed Traefik candidate is stopped and its empty ingress network remains
-retained for exact identity-bound reconciliation. The old dedicated proxy is
-running again, the slicer route is absent, and ACME bytes are unchanged. This
-is a service-facing dark restoration, not completed residual cleanup or a
-successful corrected cutover.
+The corrected Traefik candidate is running and healthy; the former dedicated
+proxy is retained stopped. The slicer route remains absent, unknown HTTPS hosts
+return 404 over both listener families, and ACME bytes are unchanged. Final
+read-only audit `i12-final-live-audit-v1` passed 30/30 checks. This is a
+successful dark cutover and identity-bound residual reconciliation, not public
+route activation or full customer-production qualification.
 
 Secrets stay in root-owned external files and are never emitted. The SSH key,
 API keys, ACME content and full container environment/inspect/logs are outside
@@ -48,9 +52,15 @@ engine-wide prune, broad cleanup and public fallback are forbidden.
 See
 [`evidence/i12-wave3-hostinger-production-qualification.md`](evidence/i12-wave3-hostinger-production-qualification.md).
 
-## I11 protected-main signed-candidate control delta
+## Historical I11 protected-main signed-candidate control delta
 
-Status at this documentation boundary:
+I11 completed at protected-main SHA
+`65706e381b907c6ba09a8eba504af3adaacac86b`: Source `32668796239`, Image
+`32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
+`32669484893` succeeded. The earlier corrective-pending classification retained
+below is historical and superseded by those exact results and I12.
+
+Earlier `48afd39b` documentation boundary:
 `SIGNED_MAIN_CANDIDATE_VERIFIED; AUTOMATIC_REHEARSAL_CORRECTIVE_PENDING`.
 Protected PR `#2` merged at main SHA
 `48afd39b26a6c6ca18ec7bbd18a719c846751e26`; its exact Source/Image and signed
@@ -66,13 +76,14 @@ production success is claimed until the corrective exact-SHA hosted path passes.
 | GitHub environment | `LIVE_CONFIG_VERIFIED` | On 2026-08-23, `candidate-publication` ID `20443404498` has protected branches true, custom branch policies false, exactly one `branch_policy` protection rule (ID `63481958`), and no reviewer/wait-timer rules, secrets, variables or deployments. Workflow binds `deployment: false`. |
 | Human approval | `HUMAN_REVIEWER_CAPABILITY_UNAVAILABLE` | `Botond1` is the sole collaborator and cannot self-approve. An empty environment-reviewer list is an explicit capability constraint, not human review. |
 | Evidence and terminal status | `HOSTED_VERIFIED_PUBLISHED_NEW` | Attestations `42460061` and `42460068`, artifact `9500456840`, positive/negative verification, digest round trip and exact cleanup passed. Exact recovery remains implemented/tested but was not needed for this candidate. |
-| Automatic ephemeral rehearsal | `BLOCKED_CORRECTIVE_PENDING` | Run `32667607266` accepted the exact artifact, then failed before registry read/runtime because a depth-one refresh made the checkout shallow. Cleanup separately read unset runtime identity values. The correction requires non-shallow refresh plus an all-empty/all-valid identity tuple; no rehearsal success is claimed yet. |
+| Automatic ephemeral rehearsal | `HISTORICAL_BLOCKED_CORRECTIVE_PENDING` | At the earlier `48afd39b` boundary, run `32667607266` accepted the exact artifact, then failed before registry read/runtime because a depth-one refresh made the checkout shallow. Cleanup separately read unset runtime identity values. The non-shallow/all-empty-or-valid correction later succeeded in exact run `32669484893`. |
 | Deployment/promotion | `OUT_OF_SCOPE_NO_AUTHORITY` | Both modes are candidate publication only. Mutable/release/staging/production tags, deploy, VPS/SSH, registry deletion and production changes remain forbidden. |
 
-Hosted S4/S5 private-peer and I9 rollback results are synthetic, ephemeral
-repository validation. They do not establish deployed callers, proxy/firewall,
-secret delivery, exact production digest, Hostinger/VPS state, live readiness
-or production rollback. See
+At that historical I11 boundary, hosted S4/S5 private-peer and I9 rollback
+results were synthetic, ephemeral repository validation and did not establish
+deployed callers, proxy/firewall, secret delivery, exact production digest,
+Hostinger/VPS state, live readiness or production rollback. I12 now separately
+adds the bounded dark-host evidence above. See
 [`evidence/i11-mainline-signed-candidate.md`](evidence/i11-mainline-signed-candidate.md).
 
 The automatic rehearsal deliberately accepts a published candidate that is an
@@ -110,12 +121,12 @@ classification is intentionally limited to the ephemeral runner boundary.
 | Control | Repository classification | Remaining boundary |
 | --- | --- | --- |
 | Immutable previous/candidate pair | `HOSTED_VERIFIED_EPHEMERAL` | The manifest requires distinct lowercase GHCR manifest, config, and source identities. I9 freshly verified both SLSA/SPDX attestations for the rehearsal-only previous C6 digest and signed C7 candidate. |
-| Workflow authority | `HOSTED_VERIFIED_READ_ONLY_NO_DEPLOY` | Historical I9 exact-branch push, actor, remote HEAD, ancestry and trailer passed. I11 replaces the current workflow trigger with successful protected-main Candidate Publication `workflow_run`; that automatic path remains `PENDING`, while permissions stay global none and read-only per job. |
+| Workflow authority | `HOSTED_VERIFIED_READ_ONLY_NO_DEPLOY` | Historical I9 exact-branch push, actor, remote HEAD, ancestry and trailer passed. I11 replaces the branch trigger with protected-main Candidate Publication `workflow_run`; its automatic no-deploy rehearsal succeeded in run `32669484893`, while permissions stay global none and read-only per job. |
 | Runtime identity and state | `HOSTED_VERIFIED_EPHEMERAL` | Both images resolved to `User=slicer`, shared UID/GID `999:999`, exact config IDs, internal network, no host port/default route, and run-owned `0700` writable state. |
 | Meaningful readiness | `HOSTED_VERIFIED_EPHEMERAL` | Two consecutive private-peer passes proved liveness, minimal and operations readiness, fresh detailed Python/storage/native/config/pricing/retention/queue health, idle queue, and exact auth rejection. |
 | Controlled failure and rollback | `HOSTED_VERIFIED_EPHEMERAL` | Candidate pricing state changed `0700 -> 0500 -> 0700`; liveness survived, readiness failed only with `STORAGE_UNSAFE`, and automatic rollback restored the exact previous digest under a new container/PID. |
 | Evidence and cleanup | `HOSTED_VERIFIED_EPHEMERAL` | Exact-key bounded JSON, allowlisted upload, run-owned state/image/container/network cleanup, no prune, remote immutable digests preserved, and final fail-closed aggregation all passed. |
-| Production topology/promotion | `UNVERIFIED_NOT_AUTHORIZED` | No VPS, deployed digest, proxy/firewall, production secret, caller, approval window, production readiness, or live rollback proof exists. |
+| Production topology/promotion | `UNVERIFIED_NOT_AUTHORIZED` | At the I9 boundary no VPS or deployed topology proof existed. I12 now separately verifies one exact dark digest, private peer, egress denial, readiness and socketless proxy; public caller/firewall/DNS/certificate, complete secret lifecycle, approval window, route activation and live public rollback remain unverified. |
 
 The rehearsal uses only synthetic geometry and freshly generated inert,
 audience-scoped credentials. Credentials and environment dumps are excluded
@@ -566,8 +577,9 @@ Material trust boundaries:
    the repository; any external deployment path is `UNVERIFIED`.
 8. API/native processing to the container network. Historical I5 evidence
    proves unrestricted egress on its ingress-capable topology; I6 selects an
-   internal private-peer repository contract, while deployed egress remains
-   `UNVERIFIED`.
+   internal private-peer repository contract. I12 verifies deployed API/native
+   egress denial for one exact dark digest and topology; that point-in-time proof
+   must be repeated after relevant image, network or firewall changes.
 
 ## Attack surface
 
@@ -607,10 +619,10 @@ delta above when reading test classifications.
 
 | Risk | Severity | Current evidence | Required exit / owner |
 | --- | --- | --- | --- |
-| Native Python/slicer compromise can use unintended egress if deployment drifts. | Critical | Historical I5 A/B proved ordinary-bridge egress. I6 selects an internal-only API/no-host-port topology and repository validation requires calibrated API/native DNS/TCP/UDP denial. | **S4/S5 deployment gate:** verify callers, proxy behavior, firewall, and API/native egress on the exact deployed digest. |
-| Scoped service trust is repository-tested but deployed topology is incomplete. | Critical | I5 tests active/previous audiences, two-restart revocation, finite legacy migration, Origin policy, proxy identity, readiness, and observability. Final candidate/hosted evidence, deployed callers/proxy/firewall, and production secret lifecycle are pending or `UNVERIFIED`. | **S4 service trust/topology + S3b promotion gate:** prove final deployed private ingress, denied unintended caller, denied API/native egress, secret ownership/mode/state, and exact digest before production. An agent cannot grant an exception. |
+| Native Python/slicer compromise can use unintended egress if deployment drifts. | Critical | I12 verifies API/native DNS/TCP/UDP denial for the exact dark deployed digest and private topology. This remains a point-in-time proof; firewall or network drift can invalidate it. | **Public-activation gate:** re-prove the exact digest, topology, denied egress and intended/denied callers after any network/firewall change. |
+| Scoped service trust is repository-tested and the dark private topology is host-verified, but public controls are incomplete. | Critical | I5 tests active/previous audiences, two-restart revocation, finite legacy migration, Origin policy, proxy identity, readiness, and observability. I12 verifies the exact dark private peer, auth rejection, digest and API/native egress; public caller/proxy CIDR, firewall, DNS/certificate and complete production secret lifecycle remain `UNVERIFIED`. | **Public route + secret lifecycle gate:** prove the intended public caller, denied unintended caller, firewall, hostname/certificate, secret ownership/mode/state and exact digest before route activation. An agent cannot grant an exception. |
 | Multipart/HTTP ingress can exhaust resources beyond the application subset. | High | S1a covers bounded multipart fields and cleanup. I3 applies bounded Node header/request/keep-alive timeouts, headers, connections, and requests/socket with fallback. Actual VPS capacity/proxy timeouts, total streamed upload duration, and measured memory/disk/CPU envelopes remain unverified. | **S2:** measure and enforce host/proxy upload duration, connection/concurrency, memory, CPU, and disk envelopes under synthetic load. |
-| Validation is not yet a production promotion chain. | Critical | I10 verifies protected-main governance and I11 run `32667219964` verifies one exact-main immutable signed candidate. Automatic rehearsal remains corrective-pending after fail-closed run `32667607266`; hosted S4/S5/I9 evidence still does not verify deployed proxy/firewall/secrets/digest/VPS or a human change window. | **I11:** finish the corrective automatic no-deploy rehearsal. **S4/S5/S3b operator gate:** separately authorize and prove exact deployed topology, secrets, digest, readiness and rollback before production. |
+| Verified repository and dark-host evidence is not public production acceptance. | Critical | I11 completed automatic no-deploy rehearsal at run `32669484893`. I12 verifies one exact dark API digest and corrected proxy topology, but does not verify public DNS/certificate/caller/firewall, customer traffic, full secret lifecycle, monitoring/backup acceptance or a public change window. | **Public activation gate:** separately authorize and prove every remaining public control, authenticated hostname route and rollback before customer traffic. |
 
 ## Historical S0 control inventory
 

@@ -17,26 +17,30 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
 
 ## I12 Hostinger Production-Qualification Boundary
 
-- Protected main `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28` and its no-deploy
-  Source/Image, signed publication, and automatic rehearsal are verified. Its
-  exact API image digest is
+- Status is `I12_API_F710_DARK_N1_VERIFIED;
+  OPERATOR_MAIN_7C8AEE_RESIDUAL_RECONCILIATION_COMPLETE;
+  CORRECTED_TRAEFIK_DARK_CUTOVER_VERIFIED; PUBLIC_ROUTE_DISABLED`.
+- The deployed API image source remains the protected-main checkpoint
+  `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`; its exact signed image digest is
   `sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
-- The API remains healthy and dark on the authorized Hostinger VPS at retained
-  concurrency one, without a host API port or API default route. No public
-  slicer router is active.
-- The first socketless Traefik cutover failed closed because the dual-attached
-  proxy had no explicit gateway priority. The old dedicated proxy was restored,
-  the route is absent, and ACME bytes are unchanged. Exact failed resources are
-  retained only for identity-bound residual reconciliation.
-- Corrective operator-pack commit
-  `7a490c150bb8c4c1ec6c22561421202152070fbc` is separate from the API-image
-  source. It requires Compose `2.33.1+`, ingress/private `gw_priority: 1/0`,
-  external ingress, runtime default-route proof, and effective read-only bind
-  proof through `RW=false`. It must never relabel the existing API image.
-- The corrective is locally green. Hosted exact-SHA validation, protected-main
-  integration, residual cleanup, and a corrected dark cutover are pending.
-  Hostname/DNS, caller, firewall, certificate continuity, route activation,
-  and production completeness remain unverified.
+  It remains healthy and dark at retained concurrency one, without a host API
+  port or API default route.
+- Corrective operator main
+  `7c8aee0728fc8462c67b4c6d85636bffb7afcdf8` passed Source `32804297840` and
+  Image `32804297658` after protected PR `#5`. Its operator commits are separate
+  from the API-image source and did not rebuild, relabel, or republish that image.
+- The corrected socketless Traefik is healthy with exact ingress/private
+  `gw_priority: 1/0`, ingress-owned default routing, effective read-only config,
+  file provider only, and no Docker socket/provider. Docker owns exact IPv4 and
+  IPv6 host listeners for ports 80/443 while the container networks remain
+  IPv6-disabled; these are separate properties.
+- Failed-cutover resources were reconciled by exact identity into the resumed
+  successful state. The old proxy is intentionally retained stopped for
+  rollback, task-owned remote temp residue is absent, and ACME bytes are unchanged.
+- No public slicer router is active. Hostname/DNS, approved caller/CIDR,
+  firewall acceptance, certificate issuance/continuity, route activation,
+  monitoring/recovery acceptance, customer traffic, and public production
+  completeness remain unverified and separately authorized.
 
 ## Candidate Image Publication Boundary
 
@@ -87,10 +91,13 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   or ambiguous identity blocks. I11 is complete at protected-main SHA
   `65706e381b907c6ba09a8eba504af3adaacac86b`: Source `32668796239`, Image
   `32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
-  `32669484893` succeeded with the exact digest/attestations above.
-- Hosted S4/S5 and I9 results are ephemeral repository evidence, not production
-  proof. Deployed callers, proxy/firewall, secrets, digest, Hostinger/VPS,
-  readiness and rollback remain separately authorized and unverified.
+  `32669484893` all succeeded, completing the I11 checkpoint.
+- Hosted S4/S5 and I9 results remain ephemeral repository evidence. I12
+  separately verifies one exact dark digest, Hostinger VPS, private readiness,
+  API/native egress denial and corrected socketless proxy. Public callers,
+  proxy CIDR/firewall, DNS/certificate, complete secret lifecycle, route
+  activation, customer traffic and public rollback remain separately
+  authorized and unverified.
 
 ## Technology Baseline
 - Backend: Node.js + Express

@@ -51,8 +51,10 @@ Last synchronized: 2026-08-25
 - Development Compose remains loopback-published on an ordinary bridge; local
   Docker Desktop 29.6.1 showed that topology permits API/native DNS/TCP/UDP
   egress. The separate production manifest uses an internal private bridge,
-  no host port, and a digest-only image, but deployed proxy/firewall/egress
-  topology remains `UNVERIFIED`.
+  no host port, and a digest-only image. I12 live dark evidence verifies the
+  exact deployed API/native egress denial, private API peer and corrected
+  Traefik gateway topology; public caller, firewall, DNS/certificate, route and
+  full production acceptance remain `UNVERIFIED`.
 - A dual-attached production Traefik peer requires Compose `2.33.1+`, exactly
   ingress `gw_priority: 1` and private `gw_priority: 0`, a non-internal ingress
   bridge, and runtime proof that the ingress attachment owns its default route.
@@ -96,18 +98,22 @@ Last synchronized: 2026-08-25
 - Evidence may report only `I11_MAIN_CANDIDATE_EVIDENCE_READY`; final
   enforcement may report `I11_MAIN_SIGNED_CANDIDATE_COMPLETE` only after exact
   digest identity, attestations, verification, bounded upload and both cleanup
-  outcomes pass. I11 implementation and hosted results remain `PENDING` until
-  observed.
+  outcomes pass. I11 completed at protected-main SHA
+  `65706e381b907c6ba09a8eba504af3adaacac86b`: Source `32668796239`, Image
+  `32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
+  `32669484893` succeeded.
 - A successful protected-main publication automatically triggers only the
   completed/main `workflow_run` rehearsal. One exact bounded publication
   artifact plus the release policy generates distinct previous/current
   digest-only identities; both images require SLSA/SPDX API+OCI verification
   before hardened I9 readiness, `STORAGE_UNSAFE`, automatic rollback, bounded
-  evidence and exact cleanup. Rehearsal permissions are read-only and its
-  hosted result remains `PENDING`.
-- Hosted S4/S5 and I9 topology/rollback evidence is ephemeral repository proof,
-  not production. Deployed caller/proxy/firewall/secrets/digest/VPS/readiness/
-  rollback remain unverified and separately authorized.
+  evidence and exact cleanup. Rehearsal permissions are read-only; the exact
+  I11 hosted result is the successful run above.
+- Hosted S4/S5 and I9 topology/rollback evidence remains ephemeral repository
+  proof. I12 separately verifies one exact dark N=1 API digest and Traefik
+  topology on the authorized VPS; public caller/firewall/DNS/certificate/route,
+  secret lifecycle, live rollback, and full production acceptance remain
+  unverified and separately authorized.
 
 ## Testing
 - Use Python test runners under tests/testing-scripts/.

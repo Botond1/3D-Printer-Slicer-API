@@ -20,40 +20,51 @@ Canonical Codex knowledge:
 ## Current I12 Wave 3 Hostinger qualification checkpoint
 
 Current classification:
-`I12_API_F710_DARK_N1_VERIFIED; TRAEFIK_CUTOVER_FAILED_AND_RESTORED_DARK;
-OPERATOR_PACK_CORRECTIVE_LOCALLY_VERIFIED; HOSTED_REVALIDATION_AND_RESIDUAL_RECONCILIATION_PENDING`.
-Protected main `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28` passed Source
-`32749722709`, Image `32749722715`, Candidate Publication `32750334897`, and
-automatic no-deploy rehearsal `32751148223`. Its exact signed API image is
+`I12_API_F710_DARK_N1_VERIFIED;
+OPERATOR_MAIN_7C8AEE_RESIDUAL_RECONCILIATION_COMPLETE;
+CORRECTED_TRAEFIK_DARK_CUTOVER_VERIFIED; PUBLIC_ROUTE_DISABLED`.
+Protected operator main `7c8aee0728fc8462c67b4c6d85636bffb7afcdf8`
+passed Source `32804297840` and Image `32804297658` after PR `#5`. The deployed
+API image source remains the protected-main checkpoint
+`f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`,
+whose Source `32749722709`, Image `32749722715`, Candidate Publication
+`32750334897`, and automatic no-deploy rehearsal `32751148223` passed. Its
+exact signed API image remains
 `ghcr.io/botond1/3d-printer-slicer-api@sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
-That API remains healthy and dark on the authorized Hostinger KVM 4 VPS at
-retained concurrency one, with no API host port, no API default route, and no
-public slicer route.
+The API container remains healthy and dark at retained concurrency one on only
+the internal private network, with no API host port or default route.
 
-The first live socketless Traefik cutover failed closed. The pre-correction
-operator pack attached Traefik to both networks without explicit gateway
-priority, producing equal runtime priorities and leaving the private network as
-the default route. The old dedicated proxy was restored, the slicer route is
-absent, and ACME bytes remained unchanged. The failed stopped candidate and its
-empty ingress network are retained only for exact, identity-bound residual
-reconciliation; broad Docker cleanup or prune remains forbidden. A separate
-validator false negative required literal bind `Mode=ro`, although Docker
-reported the exact bind as effectively read-only through `RW=false` and an
-empty `Mode`.
+The corrected socketless Traefik candidate is running and healthy on the exact
+file-provider-only image, with no Docker socket or Docker provider. Runtime
+inspection proved ingress/private gateway priorities `1/0`, an ingress-owned
+IPv4 default route, no container IPv6 default route, the exact effective
+read-only configs bind, and one Docker-owned host listener per port `80`/`443`
+on both IPv4 and IPv6. The container networks themselves remain IPv6-disabled;
+host listener families and container-network IPv6 are separate facts. The
+dynamic route directory contains only `.gitkeep`, unknown HTTPS hosts return
+404, and no public slicer router is active. ACME bytes remain unchanged.
 
-Corrective operator-pack commit
-`7a490c150bb8c4c1ec6c22561421202152070fbc` is distinct from the API-image
-source. It pins Compose `2.33.1+`, ingress `gw_priority: 1`, private
-`gw_priority: 0`, top-level ingress `internal: false`, runtime gateway/default-
-route proof, and effective read-only bind validation. It does not relabel,
-rebuild, publish, or replace the `f71069c` API image. Local focused and complete
-regressions are green; exact-SHA hosted Source/Image validation, protected-main
-integration, exact residual cleanup, and a corrected dark cutover remain
-pending. Hostname/DNS, approved caller, firewall, certificate continuity,
-public route activation, and production completeness remain `UNVERIFIED`. See
+The prior failed residual set was reconciled by exact identity; the corrected
+resumable cutover then established the current candidate/network identities.
+The former dedicated proxy is intentionally retained stopped for bounded
+rollback; the root-private recovery ledger and success evidence are retained,
+while exact helper/upload/temp cleanup passed. Broad
+Docker cleanup or prune remains forbidden. Corrective commit `7a490c150bb8c4c1ec6c22561421202152070fbc`
+and evidence commit `1fe89d7508f5bbd59a75256ec43722f3f19ae1c2` remain distinct
+from the API-image source and did not relabel, rebuild, publish, or replace the
+`f71069c` image. Hostname/DNS, approved public caller/CIDR, firewall acceptance,
+certificate issuance/continuity, route activation, monitoring/recovery
+acceptance, customer traffic, and public production completeness remain
+`UNVERIFIED` and separately authorized. See
 `docs/codex/evidence/i12-wave3-hostinger-production-qualification.md`.
 
-## Current I11 protected-main signed-candidate checkpoint
+## Historical I11 protected-main signed-candidate checkpoint
+
+I11 later completed at protected-main SHA
+`65706e381b907c6ba09a8eba504af3adaacac86b`: Source `32668796239`, Image
+`32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
+`32669484893` succeeded. Any corrective-pending statement retained below is
+historical and superseded by those exact results and the current I12 checkpoint.
 
 I11 started from exact protected-main baseline
 `8253160eef1c3e00c1e40826ec61fd97563ddd9b` and merged PR `#2` at main SHA
@@ -101,7 +112,8 @@ valid previous-candidate ancestry. Its always-run cleanup then independently
 read unset runtime identity variables and masked the primary reason as cleanup
 failure. The corrective contract preserves full history and accepts only an
 all-empty or fully valid four-field cleanup identity tuple; final corrective
-hosted rehearsal evidence remains `PENDING` at this commit boundary.
+hosted rehearsal evidence remained `PENDING` at that earlier commit boundary.
+The later exact corrective run `32669484893` succeeded.
 
 Publication and rehearsal never grant VPS/SSH, production, release, Git-tag,
 mutable image-tag, overwrite or deletion authority. See
@@ -158,7 +170,8 @@ was an exact-branch push workflow with global non-cancelling concurrency and
 read-only permissions. I11 productizes that same runtime proof as a successful
 protected-main Candidate Publication `workflow_run`; it is no longer an I9
 branch-triggered workflow. The historical I9 run IDs and evidence remain valid
-for their commit, while the new automatic rehearsal result is `PENDING`.
+for their commit; I11's protected-main publication-triggered automatic
+rehearsal later succeeded in run `32669484893`.
 
 The runtime pulls both immutable digests, dynamically proves the same positive
 non-root service UID/GID, prepares only run-owned `0700` state and inert scoped
