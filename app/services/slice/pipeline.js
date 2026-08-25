@@ -11,7 +11,11 @@ const { handleProcessingError } = require('./errors');
 const { buildSliceSuccessResponse } = require('./response');
 const { getRequestWorkspace } = require('./workspace');
 const { isSupportedInputExtension, getSupportedInputExtensionsText } = require('./common');
-const { resolveBuildVolumeLimits, resolveProfileSelection } = require('./profiles');
+const {
+    resolveBuildVolumeLimits,
+    resolveProfileSelection
+} = require('./profiles');
+const { snapshotProfileSelection } = require('./profile-snapshot');
 const { resolveSliceOutputTargets, runSlicerAndParseStats } = require('./output-lifecycle');
 const { writeJsonAndWaitForFinish, setResponseSettlement } = require('./response-lifecycle');
 const { throwIfAborted, isAbortError } = require('./command');
@@ -81,13 +85,25 @@ function resolveProfilesOrResponse(res, engine, technology, layerHeight, profile
     };
 }
 
-async function prepareModelOrResponse(res, request, processableFile, originalModelInfo, profiles, workspace, signal) {
+async function prepareModelOrResponse(
+    res,
+    request,
+    processableFile,
+    originalModelInfo,
+    profileSnapshots,
+    selectedProfiles,
+    workspace,
+    signal
+) {
     throwIfAborted(signal);
     const buildVolumeLimits = resolveBuildVolumeLimits(
         request.engine,
         request.technology,
-        profiles.baseConfigFile,
-        profiles.orcaMachineConfigFile
+        profileSnapshots.baseConfigFile,
+        profileSnapshots.orcaMachineConfigFile,
+        request.engine === 'orca'
+            ? selectedProfiles.orcaMachineConfigFile
+            : selectedProfiles.baseConfigFile
     );
     const model = await applyTransformAndValidateModel(
         processableFile,
@@ -147,11 +163,14 @@ async function prepareSliceJob(res, request, workspace, signal) {
         request.profileOverrides
     );
     if (profiles.response) return profiles;
+    const profileSnapshots = await snapshotProfileSelection(request.engine, profiles, workspace);
+    throwIfAborted(signal);
     const preparedModel = await prepareModelOrResponse(
         res,
         request,
         source.processableFile,
         source.originalModelInfo,
+        profileSnapshots,
         profiles,
         workspace,
         signal
@@ -165,16 +184,16 @@ async function prepareSliceJob(res, request, workspace, signal) {
         workspace
     );
     throwIfAborted(signal);
-    return { response: null, request, source, profiles, preparedModel, targets };
+    return { response: null, request, source, profiles, profileSnapshots, preparedModel, targets };
 }
 
 async function executePreparedSlice(req, res, job, workspace, signal) {
     throwIfAborted(signal);
-    const { request, source, profiles, preparedModel, targets } = job;
+    const { request, source, profiles, profileSnapshots, preparedModel, targets } = job;
     const { model, buildVolumeLimits } = preparedModel;
-    const { stats } = await runSlicerAndParseStats({
+    const { stats, effectiveProfileSha256, engineVersion } = await runSlicerAndParseStats({
         ...request,
-        ...profiles,
+        ...profileSnapshots,
         ...targets,
         processableFile: model.processableFile,
         effectiveModelInfo: model.effectiveModelInfo,
@@ -190,6 +209,8 @@ async function executePreparedSlice(req, res, job, workspace, signal) {
         modelBoundsValidation: model.modelBoundsValidation,
         buildVolumeLimits,
         stats,
+        engineVersion,
+        effectiveProfileSha256,
         ...workspace.getOutputCandidateInfo(targets.outputCandidate)
     });
     throwIfAborted(signal);

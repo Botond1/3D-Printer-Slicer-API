@@ -6,7 +6,9 @@ const { runCommand, throwIfAborted } = require('./command');
 const { resolveSingleOutputFile } = require('./common');
 const { parseOutputDetailed } = require('./model-stats');
 const { resolveSlicerExecutable, buildSlicerCommandArgs } = require('./engine');
+const { getSlicerEngineVersion } = require('./engine-version');
 const { createRuntimeSlicerProfile, logEngineProfileSelection } = require('./profiles');
+const { calculateEffectiveProfileSha256 } = require('./profile-digest');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { invalidOutput } = require('./resource-errors');
 const { cleanupManagedArtifacts } = require('../artifact-store');
@@ -54,9 +56,17 @@ async function runSlicerAndParseStats(context) {
     } = context;
     const { signal } = context;
     throwIfAborted(signal);
+    const engineVersion = getSlicerEngineVersion(engine);
     const runtimeConfigFile = await createRuntimeSlicerProfile(
         engine, baseConfigFile, technology, layerHeight, infillPercentage, workspace
     );
+    throwIfAborted(signal);
+    const effectiveProfileSha256 = calculateEffectiveProfileSha256({
+        engine,
+        technology,
+        runtimeConfigFile,
+        orcaMachineConfigFile
+    });
     throwIfAborted(signal);
     logEngineProfileSelection(engine);
     const slicerArgs = buildSlicerCommandArgs(
@@ -91,7 +101,7 @@ async function runSlicerAndParseStats(context) {
     if (!cleanup.quotaSatisfied) {
         throw invalidOutput('Managed artifact retention quota could not be enforced safely.');
     }
-    return { stats };
+    return { stats, effectiveProfileSha256, engineVersion };
 }
 
 module.exports = {

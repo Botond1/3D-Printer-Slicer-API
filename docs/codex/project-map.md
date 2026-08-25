@@ -1,5 +1,196 @@
 # Verified project map
 
+## Current J0 W2/W3 response and slice-auth candidate
+
+Current local classification:
+`J0_W2_W3_FOCUSED_LOCAL_CONTRACTS_PASS; FINAL_AGGREGATE_PENDING;
+NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_ENGINE_HELP_EXACT_IMAGE_PASS;
+J0_ORCA_PARENT_BUILD_EQUALITY_PASS;
+J0_ARRANGE1_ORIENT0_EXACT_IMAGE_HTTP_E2E_PASS;
+J0_FINAL_IMAGE_ID_PENDING_REBUILD;
+J0_FILAMENT_W8_BLOCKED_OWNER_INPUT_NOT_STARTED`.
+
+Direct executable-source map:
+
+```text
+selected Prusa/Orca profile files
+  -> Orca: resolve and flatten versioned repo-copy of v2.3.1 Custom parents
+  -> Docker build: canonical semantic equality with exact pinned /opt parents
+  -> bounded canonical-realpath job-scratch snapshots
+  -> reject unknown/cyclic/wrong-role parent, symlink/non-canonical source,
+     and detected size growth
+  -> one snapshot lineage for bounds, runtime profile, digest, native invocation
+  -> original selected basenames remain profile/source_profile response metadata
+runtime profile layers from that snapshot lineage
+  -> canonical effective-profile payload
+  -> bind request-independent native invocation policy
+  -> bind stable Orca layer_gcode='' + use_relative_e_distances='1'
+  -> exclude request layer-height/infill values
+  -> profiles.effective_profile_sha256 on every success
+both selected slicer executables -> atomic pre-listen bounded --help parse/cache
+  -> publish neither version unless both pass
+  -> required engine_version on every success; malformed/unavailable fails startup
+preprocessed and bounds-checked Orca geometry
+  -> fixed --arrange 1 / --orient 0 request policy
+  -> arrange translates the already-rotated model onto the build plate
+  -> native auto-orient remains disabled; requested rotation remains owned upstream
+  -> validation exact-image HTTP model-transform/final-dimensions E2E passes
+  -> final rebuilt image identity remains pending
+runtime processing errors
+  -> OpenAPI FILE_PROCESSING_TIMEOUT / INTERNAL_PROCESSING_ERROR
+     / ORCA_PROFILE_INCOMPATIBLE / MODEL_OUT_OF_PRINTER_BOUNDS
+slice HTTP 500 runtime errors
+  -> complete OpenAPI enum: INTERNAL_PROCESSING_ERROR / QUEUE_INTERNAL_ERROR
+     / UPLOAD_STORAGE_ERROR / INTERNAL_SERVER_ERROR
+live MODEL_DIMENSIONS_UNAVAILABLE response
+  -> general 422 oneOf branch; exactly one schema match
+MODEL_OUT_OF_PRINTER_BOUNDS
+  -> required model_dimensions_mm + build_volume_limits_mm
+one x-slicer-api-key header
+  -> SLICE_SERVICE_AUTH_MODE=legacy|migration|principals
+  -> shared compatibility family and/or complete WooCommerce+LeadPilot families
+  -> migration requires future <=90-day legacy expiry
+  -> at expiry legacy slots reject; principal slots continue
+  -> fixed-digest comparison of every configured slot
+  -> reject incomplete mode before listen
+```
+
+- [`profile-digest.js`](../../app/services/slice/profile-digest.js) canonicalizes
+  effective Prusa INI or Orca machine/process JSON layers without using paths,
+  job/model identity, request layer height, or request infill. Engine,
+  technology, machine configuration, other process values, and stable
+  server-added Orca runtime settings remain covered. The identity also binds
+  [`engine.js`](../../app/services/slice/engine.js)'s request-independent native
+  invocation policy. Prusa INI ordering/comments are normalized, but section and
+  key case remain distinct to preserve native semantics; exact duplicate
+  qualified keys fail closed like the native Boost INI parser.
+- [`orca-profile-inheritance.js`](../../app/services/slice/orca-profile-inheritance.js)
+  always resolves the documented [versioned repository copies](../../configs/orca/upstream/README.md)
+  of the allowlisted Orca v2.3.1 `Custom` machine/process parent chain, with a
+  bounded depth and fail-closed unknown, cyclic, name-mismatched, or wrong-role
+  parents. A Docker build gate passes only when their canonical JSON semantics
+  match the exact pinned `/opt` native resources through
+  [`verify-orca-profile-vendor.js`](../../scripts/verify-orca-profile-vendor.js).
+  [`profile-snapshot.js`](../../app/services/slice/profile-snapshot.js)
+  snapshots exact Prusa bytes or the fully flattened Orca JSON into the owning
+  job's scratch area after selection and before bounds or runtime derivation.
+  Its shared bounded reader requires the canonical real path, rejects symlinks/
+  non-regular files, and detects size growth rather than silently truncating it.
+  [`pipeline.js`](../../app/services/slice/pipeline.js)
+  passes that snapshot lineage to build-volume parsing and runtime/native work;
+  digest construction consumes the derived runtime profile and snapshotted Orca
+  machine profile. [`profiles.js`](../../app/services/slice/profiles.js) retains
+  selection, runtime-profile generation, and bounds parsing; its stable Orca
+  layer enforces empty `layer_gcode` and relative extrusion through
+  `use_relative_e_distances='1'`, consistent with the flattened pinned machine
+  parent's per-layer `G92 E0` reset. The current J0 smoke accepts positive
+  `G1 ... E` only after exact `;BEFORE_LAYER_CHANGE`; prelude/purge extrusion
+  cannot prove model-layer extrusion. Current focused/exact-image validation
+  covers this stricter guard without retroactively attributing it to historical
+  I2 hosted evidence. Success metadata
+  instead uses the original selection, so its
+  public profile fields and `build_volume_limits_mm.source_profile` retain the
+  original stable basenames rather than randomized scratch names. For each exact
+  top-level request-owned `layer_height` and, for FDM, `fill_density` key, Prusa
+  runtime generation replaces one occurrence, rejects duplicates, or inserts a
+  missing key before the first section; case variants remain distinct.
+- [`output-lifecycle.js`](../../app/services/slice/output-lifecycle.js)
+  calculates that digest from the runtime profile before the native slicer;
+  [`response.js`](../../app/services/slice/response.js) refuses a successful
+  response without one lowercase 64-hex digest under
+  `profiles.effective_profile_sha256`. A focused mutation proves the same-named
+  Orca child produces a different digest after a non-overridden parent-only
+  value changes.
+- [`engine-version.js`](../../app/services/slice/engine-version.js) executes the
+  two selected slicer executables with `--help` before listen, bounds and parses
+  their output, publishes the initialized map only after both succeed, and
+  evicts rejection so malformed or unavailable version identity fails startup.
+  Request work reads that verified map without launching a version subprocess.
+  `engine_version` is required by
+  [`response.js`](../../app/services/slice/response.js) and
+  [`slice-openapi.js`](../../app/docs/slice-openapi.js) on every success.
+  Exact-candidate-image help probes returned exit 0; their bounded outputs were
+  6087 and 5121 bytes. Both
+  `--version` probes returned exit 1, which is why the verified query is
+  `--help`. The actual startup module also passed in a network-disabled,
+  non-root, read-only exact-image envelope and atomically published Prusa
+  `2.8.1+linux-x64-GTK3-202409181416` and Orca `2.3.1` before its disposable
+  container was removed. [`engine.js`](../../app/services/slice/engine.js) now
+  passes `--arrange 1` and `--orient 0` after preprocessing and bounds checks.
+  Arrangement places the already-rotated geometry onto the build plate without
+  enabling native auto-orient, so the request-owned rotation remains unchanged.
+  The superseded arrangement-disabled HTTP probe retained negative Y after an
+  X90 origin rotation and failed closed with native status 206 / `Nothing to be
+  sliced`; an earlier translated direct-smoke fixture did not cover that seam.
+  Focused command/digest contracts pass for the correction. The corrected
+  validation exact-image HTTP E2E also passes: the existing Python optimizer's
+  pre-request dimensions were 20 x 30 x 10 mm, request rotation X90 produced
+  final dimensions 20 x 10 x 30 mm, and the response returned Orca `2.3.1`, a
+  lowercase SHA-256-shaped effective digest, and original profile basenames.
+  Supplying the valid slice credential under `x-api-key` returned 401. The
+  container was network-disabled, read-only, healthy, and exactly cleaned up.
+  The final rebuilt image identity is not yet recorded.
+- [`slice-openapi.js`](../../app/docs/slice-openapi.js) preserves `errorCode`
+  and adds the four requested previously omitted emitted codes. The adjacent
+  review closes the live `MODEL_DIMENSIONS_UNAVAILABLE` 422 `oneOf` gap by
+  placing it only in the general validation branch. Its bounds-error branch
+  requires `model_dimensions_mm.{x,y,z}` and
+  `build_volume_limits_mm.{min,max,source_profile}`, matching
+  [`transform.js`](../../app/services/slice/transform.js). The adjacent 500
+  review also makes that enum match the complete live set:
+  `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
+  and `INTERNAL_SERVER_ERROR`.
+- [`service-auth.js`](../../app/config/service-auth.js) and
+  [`requireAudience.js`](../../app/middleware/requireAudience.js) retain the
+  single `x-slicer-api-key` wire contract while separating WooCommerce and
+  LeadPilot active/previous rotation families. `SLICE_SERVICE_AUTH_MODE`
+  defaults to `legacy`; `migration` requires the shared active plus both
+  principal actives and a future
+  `SLICE_SERVICE_LEGACY_MIGRATION_UNTIL` no more than 90 days away;
+  middleware request time must be strictly before that deadline for either
+  shared slot to authorize, while both principal families remain eligible at
+  and after expiry;
+  `principals` requires both principal actives and forbids shared active/
+  previous material and the expiry. The mode and deadline are resolved once at
+  startup; previous-without-active, incomplete, mode-incompatible, or
+  cross-slot duplicate material fails closed. All resolved slice slots are
+  still fixed-digest compared on every request, including after expiry.
+  A configured valid `ADMIN_API_KEY` also participates in global uniqueness;
+  only its exact repetition as the authorized substitution for one missing
+  non-slice active is skipped during registration.
+  External production activation is outside repository evidence and authority.
+- `GET /health` and `GET /pricing` remain public; W3 does not add authentication
+  to them. The intended public-route activation target is the principal-only
+  slice-auth mode. Before any router action, the dark gate must read back mode
+  `principals`, both principal actives, and absent shared active/previous plus
+  expiry; pass one private synthetic slice per principal; reject available
+  retired shared credentials under `x-slicer-api-key`; reject a correct
+  principal under `x-api-key`; and prove exact cleanup. Missing or inconclusive
+  evidence keeps the route dark. External production activation is outside
+  repository evidence and authority.
+- Compose manifests remain unchanged because their existing `env_file`
+  passthrough carries the selected environment file. External production
+  activation is outside repository evidence and authority.
+- The current local response subset implements effective-profile identity,
+  versioned/equality-gated Orca parent resolution/flattening, stable relative-
+  extrusion settings, atomic startup engine-version resolution, fixed Orca
+  `--arrange 1` / `--orient 0` request policy,
+  OpenAPI/runtime-error alignment, and
+  required bounds fields. The live `MODEL_DIMENSIONS_UNAVAILABLE` branch
+  correction closes the adjacent 422 review finding. Exact-image startup-version
+  and corrected validation-image HTTP model-transform/final-dimensions E2E
+  evidence pass. The final rebuilt image identity remains pending.
+  Filament-profile identity plus `material_used_g` is a
+  separate W8 prerequisite classified `BLOCKED_OWNER_INPUT / NOT_STARTED`
+  pending the required Bambu reference profile fields; the current digest does
+  not establish filament or material-mass identity.
+
+Focused deterministic contracts plus bounded exact-image engine-startup and
+corrected HTTP E2E evidence exist, but the final rebuilt image identity, final
+aggregate, exact commit/SHA, and hosted validation remain pending. External
+production activation is outside repository evidence and authority. See
+[`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).
+
 ## Current I12 Wave 3 Hostinger qualification map
 
 Observed status:
@@ -406,7 +597,10 @@ The remainder of this section preserves the correction history; any C7
   removal plus restart 2.
 - `ADMIN_API_KEY` is only a finite compatibility migration for one named
   non-slice audience, with a future ISO timestamp no more than 90 days away.
-  Normal operation requires all scoped active keys and is fail closed.
+  Any configured valid value participates in global key uniqueness; only its
+  exact authorized substitution for the missing scoped active avoids duplicate
+  self-registration. Normal operation requires all scoped active keys and is
+  fail closed.
 - Browser Origin is exact and isolated per audience. No-Origin service requests
   remain allowed. Proxy trust defaults false and true requires explicit unique
   validated IP/CIDR peers or loopback. Express stops identity at the nearest
@@ -779,7 +973,7 @@ code order is authoritative.
 | Surface | Canonical responsibility and evidence |
 | --- | --- |
 | Bootstrap | [`app/server.js`](../../app/server.js): admin/service-key startup guards, middleware order, docs/routes, bounded listener. |
-| Runtime configuration | [`app/config/constants.js`](../../app/config/constants.js), [`service-auth.js`](../../app/config/service-auth.js), [`paths.js`](../../app/config/paths.js), [`python.js`](../../app/config/python.js). |
+| Runtime configuration | [`app/config/constants.js`](../../app/config/constants.js), [`service-auth.js`](../../app/config/service-auth.js) (explicit slice mode plus scoped/principal rotation families), [`paths.js`](../../app/config/paths.js), [`python.js`](../../app/config/python.js). |
 | HTTP contract | [`app/routes`](../../app/routes), [`app/middleware`](../../app/middleware), and [`swagger-docs.js`](../../app/docs/swagger-docs.js). |
 | HTTP server envelope | [`http-server.js`](../../app/services/http-server.js) validates and applies header/request/keep-alive timeouts, header/connection counts, and requests/socket before listen. |
 | Slice orchestration | [`app/services/slice.service.js`](../../app/services/slice.service.js) owns queue settlement and delegates to [`pipeline.js`](../../app/services/slice/pipeline.js), [`output-lifecycle.js`](../../app/services/slice/output-lifecycle.js), and [`response-lifecycle.js`](../../app/services/slice/response-lifecycle.js). |
@@ -850,9 +1044,12 @@ Runtime route registration, not README lists, is canonical:
   `/operations/**` use operations audience;
 - `/health/detailed` runs fresh readiness probes; `/ready` and
   `/operations/readiness` use the bounded cache;
-- `/prusa/slice` and `/orca/slice` apply rate limiting then mandatory
-  `x-slicer-api-key` authentication before workspace/Multer/queue/native work;
-  active/previous rotation and revocation are repository-tested. I12 verifies
+- `/prusa/slice` and `/orca/slice` apply rate limiting then mandatory, single-
+  header `x-slicer-api-key` authentication before workspace/Multer/queue/native
+  work. The explicit `SLICE_SERVICE_AUTH_MODE` admits only `legacy`, bounded
+  `migration`, or the `principals` final state;
+  WooCommerce and LeadPilot active/previous rotation and revocation are
+  repository-tested. `GET /health` and `GET /pricing` remain public. I12 verifies
   one exact dark private binding, proxy topology and API/native egress denial;
   public caller/firewall/DNS/certificate and complete secret lifecycle remain
   `UNVERIFIED`;

@@ -63,6 +63,84 @@ lifecycle evidence remain separate gates.
 - **Resource/state envelope:** actual-byte limits, validated final artifacts,
   stable job/artifact correlation, leased retention, and atomic pricing state.
 
+### J0 W2/W3 response and slice-auth candidate
+
+The current local candidate adds a deterministic
+`profiles.effective_profile_sha256` to every successful Prusa and Orca response.
+After profile selection and before bounds or runtime derivation, canonical real
+Prusa files are bounded-read and copied byte-for-byte into job scratch. Orca's
+allowlisted, versioned repository copy of the v2.3.1 `Custom` machine/process
+parent chain is bounded-read, resolved, and flattened before its exclusive
+snapshot is created; a Docker build gate requires semantic equality with the
+exact pinned native parent files. Unknown,
+cyclic, role-mismatched, symlink/non-canonical, and detected-growth inputs fail
+closed. Bounds parsing, runtime-profile derivation, digest construction, and
+native invocation all use that snapshot lineage, while response profile
+metadata and `build_volume_limits_mm.source_profile` retain the original stable
+selected child basenames. A parent-only Orca value change therefore changes the
+digest. The digest covers the configured effective machine/process profile
+layers, stable Orca relative-extrusion settings (`layer_gcode=''` and
+`use_relative_e_distances='1'`) aligned with the flattened pinned machine
+parent's per-layer `G92 E0` reset, and the request-independent native invocation
+policy while excluding request-selected layer height and infill. Prusa INI section and key case remains
+significant during canonicalization, and exact duplicate profile keys fail
+closed to match the native Boost parser. Runtime generation replaces one exact
+top-level request-owned key, rejects a duplicate top-level key, and inserts a
+missing request key before the first section.
+
+OpenAPI now names the four requested previously omitted runtime codes:
+`FILE_PROCESSING_TIMEOUT`, `INTERNAL_PROCESSING_ERROR`,
+`ORCA_PROFILE_INCOMPATIBLE`, and `MODEL_OUT_OF_PRINTER_BOUNDS`. The bounds error
+requires both `model_dimensions_mm` and `build_volume_limits_mm`. The adjacent
+review also added the already-live `MODEL_DIMENSIONS_UNAVAILABLE` code to the
+general validation branch, so that payload now matches exactly one 422 `oneOf`
+branch. The slice HTTP 500 schema now lists the complete live set:
+`INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
+and `INTERNAL_SERVER_ERROR`.
+
+Slice authentication still accepts only `x-slicer-api-key`, but supports
+independently rotatable WooCommerce and LeadPilot key pairs.
+`SLICE_SERVICE_AUTH_MODE` explicitly selects `legacy` (the default shared-key
+compatibility mode), `migration` (shared plus both principals with a mandatory
+future expiry no more than 90 days away; at expiry shared slots stop authorizing
+requests while principals continue), or `principals` (both principals and no
+shared key). A one-consumer or mode/slot/expiry mismatch is rejected. The
+route-activation target is `principals`; `GET /health` and `GET /pricing`
+remain authentication-free.
+
+No Compose manifest change is required for these names because the existing
+`env_file` contract passes the selected environment file through. External
+production activation is outside repository evidence and authority.
+
+Every success also requires a startup-verified `engine_version`. Before listen,
+the server atomically parses both selected executables' bounded `--help` output
+and publishes neither version unless both succeed. The exact candidate image
+returned exit 0 with bounded Prusa/Orca help output; `--version` returned exit
+1 for both, so it is not the supported probe. The startup module separately
+passed in a network-disabled, non-root, read-only exact-image envelope and
+published `2.8.1+linux-x64-GTK3-202409181416` and `2.3.1` atomically. Orca
+invocation now passes `--arrange 1` and `--orient 0`:
+arrangement places already-rotated geometry onto the build plate, while native
+auto-orient remains disabled and does not replace the requested rotation.
+Focused startup/parser/cache/failure, response, parent-resolution/digest-
+mutation, and corrected command contracts pass. The superseded arrangement-
+disabled HTTP probe retained negative Y after an X90 origin rotation and failed
+closed with native status 206 / `Nothing to be sliced`; its earlier translated
+direct-smoke fixture did not cover that seam. The corrected validation exact-
+image HTTP E2E passed in a network-disabled, read-only, healthy container:
+pre-request dimensions 20 x 30 x 10 mm plus request rotation X90 produced final
+dimensions 20 x 10 x 30 mm, and the response returned Orca `2.3.1`, a lowercase
+SHA-256-shaped effective digest, and original profile basenames. `x-api-key`
+returned HTTP 401, confirming `x-slicer-api-key` remains the only slice header;
+exact cleanup passed. A last source-only rebuild may change the final image
+identity, which is not yet recorded.
+
+This candidate is not deployed or a public-activation result. Filament-profile
+identity plus `material_used_g` is a separate W8 prerequisite classified
+`BLOCKED_OWNER_INPUT / NOT_STARTED` until the required Bambu reference profile
+fields are supplied. Do not infer filament or material-mass identity from the
+current effective-profile digest.
+
 ### I12 Hostinger production-qualification checkpoint
 
 The deployed API image source is the protected-main checkpoint
@@ -167,31 +245,58 @@ secrets, deployed state, caller authorization, capacity, or live rollback.
 
 ## 🔑 Authentication
 
-Every protected audience has a distinct active key and an optional previous
-rotation slot:
+Each non-slice protected audience has a distinct active key and optional
+previous rotation slot. The slice audience has one shared compatibility family
+plus independent WooCommerce and LeadPilot families:
 
-| Audience | Active / previous environment keys | Header |
+| Audience / principal | Active / previous environment keys | Header |
 | --- | --- | --- |
-| Slice | `SLICE_SERVICE_API_KEY`, `SLICE_SERVICE_API_KEY_PREVIOUS` | `x-slicer-api-key` |
+| Slice shared compatibility | `SLICE_SERVICE_API_KEY`, `SLICE_SERVICE_API_KEY_PREVIOUS` | `x-slicer-api-key` |
+| Slice WooCommerce | `SLICE_SERVICE_WOOCOMMERCE_API_KEY`, `SLICE_SERVICE_WOOCOMMERCE_API_KEY_PREVIOUS` | `x-slicer-api-key` |
+| Slice LeadPilot | `SLICE_SERVICE_LEADPILOT_API_KEY`, `SLICE_SERVICE_LEADPILOT_API_KEY_PREVIOUS` | `x-slicer-api-key` |
 | Pricing | `PRICING_API_KEY`, `PRICING_API_KEY_PREVIOUS` | `x-api-key` |
 | Artifact | `ARTIFACT_API_KEY`, `ARTIFACT_API_KEY_PREVIOUS` | `x-api-key` |
 | Operations | `OPERATIONS_API_KEY`, `OPERATIONS_API_KEY_PREVIOUS` | `x-api-key` |
 
-All active keys are required in normal operation. Every configured value must
-be unique across audiences and slots and contain 32-256 bytes of printable
-ASCII; missing, malformed, placeholder-like, reused, or duplicate material
-refuses startup with a generic error.
+Pricing, artifact, and operations active keys are always required.
+`SLICE_SERVICE_AUTH_MODE` defaults to `legacy` and accepts only:
+
+- `legacy`: shared active required; both principal families and
+  `SLICE_SERVICE_LEGACY_MIGRATION_UNTIL` absent;
+- `migration`: shared active and both principal actives required; the slice
+  migration expiry is parseable, in the future, and no more than 90 days away.
+  Shared active/previous authorize only while request time is strictly before
+  that expiry; both principal families continue at and after it;
+- `principals`: both principal actives required; shared active/previous and the
+  slice migration expiry absent. This is the route-activation target.
+
+Before any route activation, the dark-container readback must prove
+`principals`, both principal actives, and absent shared active/previous and
+expiry. A private synthetic matrix must pass one slice for each principal,
+reject every available retired shared credential under `x-slicer-api-key`, and
+reject a correct principal sent only under `x-api-key`, with exact cleanup. Any
+missing or inconclusive result keeps the route dark. External production
+activation is outside repository evidence and authority.
+
+A previous slot is optional only when its own active exists. Every configured
+value must be unique across all audiences, principals, and slots and contain
+32-256 bytes of printable ASCII; missing, malformed, placeholder-like, reused,
+duplicate, or mode-incompatible material refuses startup with a generic error.
 
 For rotation, set the replacement as active and the former active as previous,
 then restart once. Move the intended caller to the replacement, remove the
 previous slot, and restart a second time to revoke the former key. Key rings are
 snapshotted at startup.
 
-`ADMIN_API_KEY` is not the normal credential. It can temporarily fill one
-missing non-slice active audience only when
+`ADMIN_API_KEY` is separate from the shared slice compatibility family and is
+not a normal credential. It can temporarily fill one missing non-slice active
+audience only when
 `LEGACY_ADMIN_API_KEY_AUDIENCE` names `pricing`, `artifact`, or `operations`
 and `LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL` is a valid future timestamp no more
-than 90 days away. Slice and multi-audience legacy migration are rejected.
+than 90 days away. Any configured valid `ADMIN_API_KEY` participates in global
+key uniqueness; only its exact authorized substitution for that missing scoped
+active avoids duplicate self-registration. Slice and multi-audience legacy
+migration are rejected.
 
 Missing or wrong slice credentials return HTTP `401`:
 
@@ -258,7 +363,7 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 - `app/config/constants.js` - runtime defaults, layer presets, limits, and extension groups.
 - `app/config/paths.js` - root-scoped runtime path resolution (`input/`, `output/`, `configs/`) and directory creation.
 - `app/config/python.js` - secure Python executable resolver (`PYTHON_EXECUTABLE` + `VIRTUAL_ENV` fallbacks).
-- `app/config/service-auth.js` - scoped active/previous credential validation, immutable startup key ring, and finite legacy migration.
+- `app/config/service-auth.js` - scoped active/previous credential validation, independent slice-consumer rings, immutable startup key ring, and finite non-slice legacy migration.
 - `app/config/route-policy.js` - method-aware protected audience classification.
 - `app/config/trust-proxy.js` - fail-closed explicit proxy CIDR/loopback trust compilation.
 
@@ -289,13 +394,17 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 - `app/services/slice.service.js` - end-to-end slicing orchestrator and queue error mapping.
 - `app/services/slice/command.js` - subprocess execution via `execFile` with timeout and optional debug logs.
 - `app/services/slice/common.js` - output naming, isolated Orca output dirs, cleanup utilities.
-- `app/services/slice/engine.js` - slicer argument construction (Prusa vs Orca).
+- `app/services/slice/engine.js` - slicer argument construction, including Orca's fixed `--arrange 1` / `--orient 0` placement/orientation policy.
+- `app/services/slice/engine-version.js` - atomic pre-listen resolution of both actual slicer versions from bounded `--help` output.
 - `app/services/slice/errors.js` - error classification and API error responses.
 - `app/services/slice/input-processing.js` - conversion/orientation preprocessing pipeline.
 - `app/services/slice/model-stats.js` - metadata/stat parsing from slicer outputs.
 - `app/services/slice/number-utils.js` - shared numeric parser helpers.
 - `app/services/slice/options.js` - strict request option validation/parsing.
 - `app/services/slice/profiles.js` - profile selection, runtime profile generation, build-volume limits.
+- `app/services/slice/orca-profile-inheritance.js` - bounded resolution of the versioned repository copy of the Orca v2.3.1 `Custom` parent chain.
+- `app/services/slice/profile-snapshot.js` - exact Prusa-byte and flattened Orca profile snapshots in job scratch.
+- `app/services/slice/profile-digest.js` - deterministic effective-profile and request-independent native-invocation identity excluding request layer-height/infill overrides.
 - `app/services/slice/queue.js` - FIFO queue + per-client fairness + timeout enforcement.
 - `app/services/slice/transform.js` - transform planning/execution and bounds validation.
 - `app/services/slice/value-parsers.js` - safe parsing and profile filename sanitization.
@@ -315,7 +424,12 @@ Both slicing endpoints accept `multipart/form-data` with required file field:
 
 - `choosenFile`
 
-They also require `x-slicer-api-key: <SLICE_SERVICE_API_KEY>`. Admission order is rate limiter -> service authentication -> root-scoped workspace allocation -> Multer upload -> queue -> native processing. An authentication rejection occurs before any request workspace, upload, queue admission, or native process.
+They also require exactly one `x-slicer-api-key` header containing an accepted
+active or previous key from the configured slice-key mode. `x-api-key` is never
+a slice-auth alias. Admission order is rate limiter -> service authentication
+-> root-scoped workspace allocation -> Multer upload -> queue -> native
+processing. An authentication rejection occurs before any request workspace,
+upload, queue admission, or native process.
 
 Optional fields:
 
@@ -352,7 +466,7 @@ Example:
 ```bash
 curl -X POST http://localhost:3000/prusa/slice \
   -H "Accept: application/json" \
-  -H "x-slicer-api-key: <SLICE_SERVICE_API_KEY>" \
+  -H "x-slicer-api-key: <AUTHORIZED_SLICE_KEY>" \
   -F "choosenFile=@/path/to/model.stl" \
   -F "layerHeight=0.2" \
   -F "material=PLA" \
@@ -387,7 +501,7 @@ Example:
 ```bash
 curl -X POST http://localhost:3000/orca/slice \
   -H "Accept: application/json" \
-  -H "x-slicer-api-key: <SLICE_SERVICE_API_KEY>" \
+  -H "x-slicer-api-key: <AUTHORIZED_SLICE_KEY>" \
   -F "choosenFile=@/path/to/model.stl" \
   -F "layerHeight=0.2" \
   -F "material=PLA" \
@@ -406,12 +520,16 @@ curl -X POST http://localhost:3000/orca/slice \
 ```json
 {
   "success": true,
+  "job_id": "job-00000000000000000000000000000000",
+  "artifact_id": "artifact-00000000000000000000000000000000",
   "slicer_engine": "prusa",
+  "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
   "technology": "FDM",
   "material": "PLA",
   "infill": "20%",
   "profiles": {
-    "prusa_profile": "FDM_0.2mm.ini"
+    "prusa_profile": "FDM_0.2mm.ini",
+    "effective_profile_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },
   "model_transform": {
     "size_unit": "mm",
@@ -497,6 +615,13 @@ curl -X POST http://localhost:3000/orca/slice \
 - `SLICE_QUEUE_TIMEOUT`
 - `QUEUE_INTERNAL_ERROR`
 - `INTERNAL_PROCESSING_ERROR`
+- `UPLOAD_STORAGE_ERROR`
+- `INTERNAL_SERVER_ERROR`
+
+For `MODEL_OUT_OF_PRINTER_BOUNDS`, the JSON response always includes
+`model_dimensions_mm` with `x`, `y`, and `z`, plus
+`build_volume_limits_mm` with `min`, `max`, and `source_profile`. The public
+field remains `errorCode`; no `error_code` alias is introduced.
 
 ### Queue and rate-limit response semantics
 
@@ -646,10 +771,17 @@ cp configs/pricing.example.json configs/pricing.json
 
 ### 3. Provision required scoped keys in `.env`
 
-Set distinct, securely generated active values for `SLICE_SERVICE_API_KEY`,
-`PRICING_API_KEY`, `ARTIFACT_API_KEY`, and `OPERATIONS_API_KEY`. Leave previous
-slots empty until a rotation. The deliberately empty `.env.example` credential
-fields are not runnable defaults; startup refuses them.
+Set distinct, securely generated active values for `PRICING_API_KEY`,
+`ARTIFACT_API_KEY`, and `OPERATIONS_API_KEY`, then set one complete explicit
+`SLICE_SERVICE_AUTH_MODE` from `.env.example`. New final-state deployments use
+`principals` with both
+`SLICE_SERVICE_WOOCOMMERCE_API_KEY` and
+`SLICE_SERVICE_LEADPILOT_API_KEY`; the shared `SLICE_SERVICE_API_KEY` family is
+retained only for `legacy` compatibility and bounded `migration`. Migration
+also requires `SLICE_SERVICE_LEGACY_MIGRATION_UNTIL` in the future and at most
+90 days away. Leave previous slots empty until a rotation. The deliberately
+empty `.env.example` credential fields are not runnable defaults; startup
+refuses incomplete modes.
 
 ### 4. Start the app
 
@@ -697,9 +829,10 @@ You can customize pricing, security, and slicing behavior without changing endpo
 - **Pricing Matrix:** Persisted atomically in
   `configs/pricing-state/pricing.json`; a safe legacy `configs/pricing.json`
   can be migrated on startup.
-- **Scoped Security:** Slice, pricing, artifact, and operations audiences each
-  require a distinct active credential and accept only their optional previous
-  rotation slot.
+- **Scoped Security:** Pricing, artifact, and operations each require a distinct
+  active credential. Slice accepts only explicit `legacy`, finite `migration`,
+  or final `principals` mode; WooCommerce and LeadPilot rotate independently
+  through their own optional previous slots.
 - **Scoped Browser CORS:** no-Origin service calls are allowed; browser-origin
   protected calls use only the matching audience allowlist. Exact-origin
   matching rejects cross-audience, opaque, scheme, host-case, and port drift.
@@ -708,9 +841,10 @@ You can customize pricing, security, and slicing behavior without changing endpo
   retains configured safety limits.
 - **Operations Access:** detailed health, actionable readiness, and metrics
   require `OPERATIONS_API_KEY`.
-- **Fail-Fast Security:** normal startup requires all four valid active scoped
-  keys. The legacy admin migration is one non-slice audience, expires within 90
-  days, and is disabled by default.
+- **Fail-Fast Security:** normal startup requires all three non-slice active
+  keys and one complete slice mode. A single named slice principal is rejected.
+  The separate legacy admin migration is one non-slice audience, expires within
+  90 days, and is disabled by default.
 - **Timing-Safe Auth:** supplied material is compared with fixed-length digests
   against active and previous slots; structured rejection events never contain
   credentials.

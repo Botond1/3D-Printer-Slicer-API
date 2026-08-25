@@ -398,6 +398,44 @@ to be exact decimal zero before any Traefik action:
 [ "$cleanup_exit" -eq 0 ] || exit 1
 ```
 
+### J0 principal-only slice-authentication activation gate
+
+The production route target is exactly `SLICE_SERVICE_AUTH_MODE=principals`;
+the development-compatible legacy default is not an activation configuration.
+Before any Traefik or router action, invoke the exact running image's
+`resolveServiceKeyRing(process.env)` inside the dark API container and record
+only a fixed sanitized classification. It must prove mode `principals`, both
+named principal active slots (`woocommerce` and `leadpilot`),
+`legacyAccepted=false`, and `expiresAt=null`. The shared active, shared
+previous, and migration expiry must all be absent. Optional principal previous
+slots are allowed only when their matching active slot remains present. Never
+print, hash, count bytes from, or otherwise disclose any credential value.
+
+Run a private, customer-free synthetic authentication matrix against the dark
+API before continuing. Read each credential from a distinct root-owned,
+mode-`0600`, regular, non-link, single-link file into protected process memory;
+never place a value in argv, shell expansion, trace output, Docker metadata, or
+the evidence record. Require all of these observations:
+
+- the WooCommerce principal under `x-slicer-api-key` completes one bounded
+  synthetic slice successfully;
+- the LeadPilot principal under `x-slicer-api-key` completes one bounded
+  synthetic slice successfully;
+- every retired shared active/previous credential under `x-slicer-api-key`
+  returns exact HTTP 401 / `SLICE_SERVICE_AUTH_REQUIRED` and creates no
+  workspace, queue job, or artifact;
+- a correct principal credential supplied only under `x-api-key` returns exact
+  HTTP 401 / `SLICE_SERVICE_AUTH_REQUIRED` and creates no workspace, queue job,
+  or artifact.
+
+Record only the fixed probe names, HTTP statuses, stable error codes, bounded
+cleanup counts, and the final sanitized classification. Re-prove queue idle and
+exact synthetic artifact cleanup. A missing retired key must be classified in
+the private ledger rather than replaced with a guessed value. If the resolver
+readback, any positive/negative observation, or cleanup is absent or
+inconclusive, keep the route dark and stop with
+`STOP_SLICE_PRINCIPAL_ACTIVATION_UNPROVEN`.
+
 ## 3. Start Traefik with routing still disabled
 
 Traefik static configuration is CLI-only in this pack; do not add a static
@@ -468,8 +506,9 @@ record the exact SHA-256 of the rendered bytes. Validate it before activation:
 `node scripts/i12-hostinger-operator-contract.js --active-router <temporary-file> --host <approved-hostname> --sha256 <64-lowercase-hex> || exit 1`
 
 After DNS, ACME volume continuity, HTTP-challenge reachability, caller
-authorization, and dark readiness are all verified, require the dynamic
-directory to contain only its canonical `.gitkeep`. Invoke the helper's
+authorization, the principal-only slice-authentication activation gate, and
+dark readiness are all verified, require the dynamic directory to contain only
+its canonical `.gitkeep`. Invoke the helper's
 `--activate-router` mode with the same staged path, host and hash. The helper
 rechecks the exact dark directory, atomically creates
 `ops/hostinger/dynamic/slicer-api.yml` with a same-filesystem, no-clobber hard

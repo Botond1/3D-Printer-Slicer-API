@@ -20,15 +20,31 @@ Last synchronized: 2026-08-25
 - Preserve slice route order: limiter -> x-slicer-api-key authentication -> root-scoped workspace/Multer -> queue -> native processing.
 
 ## Security
-- Normal startup requires distinct active slice, pricing, artifact, and
-  operations keys. Optional previous slots are audience-local; every configured
-  value must be unique, non-placeholder, and 32-256 printable-ASCII bytes.
-- Both slice routes require x-slicer-api-key. Missing or wrong values return exact HTTP 401 `SLICE_SERVICE_AUTH_REQUIRED` before workspace allocation.
+- Normal startup requires pricing, artifact, and operations active keys plus one
+  complete slice mode: default shared-only `legacy`; shared plus both principals
+  and a future <=90-day expiry for `migration`; or both principals with no
+  shared slots/expiry for `principals`. Reject one-principal and previous-
+  without-active states; every configured value, including a valid
+  `ADMIN_API_KEY`, must be globally unique, non-placeholder, and 32-256
+  printable ASCII. Only the admin key's exact authorized legacy substitution
+  self-reference is skipped.
+- Both slice routes require exactly one x-slicer-api-key header; x-api-key is not
+  a slice alias and service auth must not gain a dual reader. Missing, wrong, or
+  migration-expired shared values return exact HTTP 401
+  `SLICE_SERVICE_AUTH_REQUIRED` before workspace allocation. Principal slots
+  continue at and after migration expiry.
 - Pricing, artifact, and operations routes require x-api-key for only their
   active or previous audience slot. All comparisons use fixed-size digests.
 - Rotate through two restarts; removing previous before restart revokes the old key.
 - ADMIN_API_KEY is only a <=90-day, explicitly named, one non-slice audience
-  migration. Normal behavior is scoped and fail closed.
+  migration. Any other cross-slot reuse is refused; normal behavior is scoped
+  and fail closed.
+- Before any router action, require the principal-only dark gate: sanitized
+  `principals` readback with both actives and no shared/expiry material, one
+  private positive slice per principal, retired-shared and `x-api-key` negative
+  cases, and exact cleanup. Missing or inconclusive evidence keeps the route
+  dark. External production activation is outside repository evidence and
+  authority.
 - No-Origin requests are allowed. Browser-origin protected calls use only their
   SLICE_, PRICING_, ARTIFACT_, or OPERATIONS_CORS_ALLOWED_ORIGINS list.
 - Protected x-api-key routes remain IP-rate-limited.
@@ -42,6 +58,33 @@ Last synchronized: 2026-08-25
 - Admin output download supports special token ALL for ZIP bulk export while preserving the same containment/symlink safety checks plus MAX_ZIP_ENTRIES and MAX_ZIP_UNCOMPRESSED_BYTES limits.
 - Shell commands use execFile with argument arrays (no shell interpolation).
 - Upload accepts only a single file on choosenFile field with extension validation.
+- Snapshot selected canonical regular Prusa bytes and the allowlisted,
+  flattened versioned repository copy of the Orca v2.3.1 `Custom` parent chain
+  into job scratch before bounds/runtime use. The same lineage feeds bounds,
+  runtime, digest, and native invocation, while public fields retain child
+  basenames. Preserve the Docker build equality gate against pinned native
+  parents and stable Orca `layer_gcode=''` / `use_relative_e_distances='1'`,
+  aligned with the flattened pinned machine parent's per-layer `G92 E0` reset.
+- Every successful Prusa/Orca response requires actual-selected-executable
+  `engine_version` and lowercase `profiles.effective_profile_sha256`. Keep
+  Prusa section/key identity case-sensitive and reject exact duplicate
+  qualified keys like the native Boost parser.
+- OpenAPI includes the four requested omitted runtime codes plus the already-
+  live `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. Keep the bounds
+  branch disjoint and require both dimension payloads. Keep the complete live
+  slice-500 enum: `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
+  `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
+- Resolve both selected engines' versions atomically from bounded `--help`
+  output before listen; publish neither unless both pass. The startup module has
+  exact-image proof. Keep Orca invocation at `--arrange 1` / `--orient 0` after
+  preprocessing/bounds checks: arrangement places the already-rotated model
+  onto the build plate, while auto-orient stays disabled and cannot replace the
+  requested rotation. Focused command/digest contracts and a corrected
+  validation-image HTTP transform/final-dimensions E2E pass; the final rebuilt
+  image identity is not yet recorded.
+- Filament-profile identity plus `material_used_g` is a separate W8 prerequisite
+  classified `BLOCKED_OWNER_INPUT / NOT_STARTED` pending required Bambu
+  reference profile fields; do not infer it from the effective-profile digest.
 - HTTP defaults/bounds are headers timeout 60000 [1000,60000], request timeout 600000 [60000,600000], keep-alive timeout 5000 [1000,60000], header count 2000 [16,2000], connections 128 [1,1024], and requests/socket 100 [1,1000].
 - Invalid HTTP envelope overrides fall back to defaults and effective headers timeout is capped at request timeout. Actual VPS capacity and reverse-proxy timeouts are UNVERIFIED.
 - Public /health is liveness and /ready is minimal readiness. Detailed

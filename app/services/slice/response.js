@@ -71,12 +71,33 @@ function calculateSlicePricing(technology, material, stats) {
 const PROFILE_RESPONSE_MAPPERS = Object.freeze({
     orca: (context) => ({
         machine_profile: path.basename(context.orcaMachineConfigFile),
-        process_profile: path.basename(context.baseConfigFile)
+        process_profile: path.basename(context.baseConfigFile),
+        effective_profile_sha256: requireEffectiveProfileSha256(context.effectiveProfileSha256)
     }),
     prusa: (context) => ({
-        prusa_profile: path.basename(context.baseConfigFile)
+        prusa_profile: path.basename(context.baseConfigFile),
+        effective_profile_sha256: requireEffectiveProfileSha256(context.effectiveProfileSha256)
     })
 });
+
+/**
+ * Require the profile identity on every successful slice response.
+ * @param {unknown} value Candidate SHA-256 digest.
+ * @returns {string} Valid lowercase SHA-256 digest.
+ */
+function requireEffectiveProfileSha256(value) {
+    if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) {
+        throw new Error('Effective profile SHA-256 is unavailable.');
+    }
+    return value;
+}
+
+function requireEngineVersion(value) {
+    if (typeof value !== 'string' || !/^[0-9]+(?:\.[0-9]+){2,3}(?:[-+][A-Za-z0-9._-]+)?$/.test(value)) {
+        throw new Error('Slicer engine version is unavailable.');
+    }
+    return value;
+}
 
 /**
  * Resolve profile payload mapper based on selected slicing engine.
@@ -96,6 +117,8 @@ function resolveProfileMapper(engine) {
  * infillPercentage: string,
  * orcaMachineConfigFile: string | null,
  * baseConfigFile: string,
+ * effectiveProfileSha256: string,
+ * engineVersion: string,
  * transformOptions: {unit: 'mm'|'inch', scalePercent: number | null},
  * transformPlan: {keepProportions: boolean, requestedTargetSize: {x: number | null, y: number | null, z: number | null}, scale: {x: number, y: number, z: number}, rotationDeg: {x: number, y: number, z: number}},
  * originalModelInfo: {x: number, y: number, z: number},
@@ -127,6 +150,7 @@ function buildSliceSuccessResponse(context) {
         job_id: context.jobId,
         artifact_id: context.artifactId,
         slicer_engine: engine,
+        engine_version: requireEngineVersion(context.engineVersion),
         technology,
         material,
         infill: infillPercentage,
@@ -165,6 +189,7 @@ function buildSliceSuccessResponse(context) {
 module.exports = {
     buildSliceSuccessResponse,
     calculateSlicePricing,
+    requireEngineVersion,
     resolveProfileMapper,
     resolvePricingStrategy
 };

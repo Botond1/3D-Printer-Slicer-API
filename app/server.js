@@ -36,6 +36,7 @@ const { createBoundedHttpServer } = require('./services/http-server');
 const { auditStaleWorkspaces, auditWorkspacesThenListen } = require('./services/slice/workspace');
 const { cleanupManagedArtifacts } = require('./services/artifact-store');
 const { beginSliceQueueShutdown } = require('./services/slice/queue');
+const { initializeSlicerEngineVersions } = require('./services/slice/engine-version');
 const { createRuntimeLifecycle } = require('./services/runtime-lifecycle');
 const { createReadinessService } = require('./services/readiness.service');
 const { emitEvent, setEventWriter } = require('./services/observability/events');
@@ -210,6 +211,7 @@ const httpServer = createBoundedHttpServer(app);
  * S1a intentionally keeps production startup audit-only because total request lifetime is not bounded yet.
  */
 async function startServer() {
+    await initializeSlicerEngineVersions();
     const scratchCleanup = await auditStaleWorkspaces({
         jobsRoot: JOB_SCRATCH_DIR,
         delete: true,
@@ -264,10 +266,12 @@ async function startServer() {
     });
 }
 
-runtimeLifecycle.run(startServer).catch(() => {
+runtimeLifecycle.run(startServer).catch((error) => {
     emitEvent('startup.completed', {
         outcome: 'failure',
-        error_code: 'STARTUP_AUDIT_FAILED'
+        error_code: error?.code === 'STARTUP_SLICER_VERSION_FAILED'
+            ? error.code
+            : 'STARTUP_AUDIT_FAILED'
     });
     process.exitCode = 1;
 });

@@ -15,6 +15,46 @@ If architecture/domain rules change in this file, synchronize changes in:
 ## Goal
 Provide a stable and secure slicing API with strict fail-fast validation and production-safe queue controls.
 
+## J0 W2/W3 Public Contract
+
+- Successful Prusa and Orca responses require lowercase
+  `profiles.effective_profile_sha256`. After selection, bounded canonical-realpath
+  Prusa bytes and the flattened, versioned repository copy of the allowlisted
+  Orca v2.3.1 `Custom` parent chain create the job-scratch lineage for bounds,
+  runtime, digest, and native use. Its exact-image build equality gate passes;
+  public fields retain child basenames. Stable Orca runtime settings enforce
+  empty `layer_gcode` plus relative extrusion, aligned with the flattened pinned
+  machine parent's per-layer `G92 E0` reset.
+- Prusa INI identity preserves section/key case. Exact duplicate qualified keys
+  fail closed like the native Boost parser; runtime generation replaces one
+  exact top-level request key, rejects duplicates, and inserts a missing key
+  before the first section.
+- OpenAPI includes the four requested omissions `FILE_PROCESSING_TIMEOUT`,
+  `INTERNAL_PROCESSING_ERROR`, `ORCA_PROFILE_INCOMPATIBLE`, and
+  `MODEL_OUT_OF_PRINTER_BOUNDS`, plus the live
+  `MODEL_DIMENSIONS_UNAVAILABLE` general-422 branch correction. The bounds code
+  requires both dimension payloads. The complete live slice-500 enum is
+  `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
+  and `INTERNAL_SERVER_ERROR`.
+- Slice calls keep exactly one `x-slicer-api-key` header. Explicit `legacy`,
+  finite `migration`, and final `principals` modes govern the shared
+  compatibility and separate WooCommerce/LeadPilot families. `GET /health` and
+  `GET /pricing` stay public. Before any router action, the dark gate must prove
+  principal-only readback, one private positive slice per principal, retired-
+  shared and `x-api-key` negative cases, and exact cleanup. Missing or
+  inconclusive evidence keeps the route dark. External production activation is
+  outside repository evidence and authority.
+- Every success also requires the atomically startup-verified `engine_version`
+  parsed from both selected executables' bounded `--help` output before listen.
+  The startup module has exact-image proof. Orca sends `--arrange 1` and
+  `--orient 0`: arrangement places already-rotated geometry onto the build
+  plate, while auto-orient stays disabled and cannot replace the requested
+  rotation. Focused command/digest contracts and a corrected validation-image
+  HTTP transform/final-dimensions E2E pass; the final rebuilt image identity is
+  not yet recorded. This local candidate is not deployment. Filament profile
+  plus `material_used_g` remains a separate W8 prerequisite classified
+  `BLOCKED_OWNER_INPUT / NOT_STARTED` pending required Bambu reference fields.
+
 ## I12 Hostinger Production-Qualification Boundary
 
 - Status is `I12_API_F710_DARK_N1_VERIFIED;
@@ -190,11 +230,20 @@ Orca:
 - Output mapping uses per-request isolated output directories to avoid cross-request artifact races.
 
 ## Security Rules
-- Normal startup requires distinct active SLICE_SERVICE_API_KEY,
-  PRICING_API_KEY, ARTIFACT_API_KEY, and OPERATIONS_API_KEY values. Optional
-  `_PREVIOUS` slots are audience-local; all configured values must be unique,
-  non-placeholder, and 32-256 printable-ASCII bytes.
-- Slice endpoints require x-slicer-api-key matching SLICE_SERVICE_API_KEY. Missing or wrong credentials return HTTP 401 with `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
+- Normal startup requires pricing, artifact, and operations active keys plus one
+  complete `SLICE_SERVICE_AUTH_MODE`. Default `legacy` requires shared active
+  and forbids principal material/expiry. `migration` requires shared active,
+  both principal actives, and a future <=90-day legacy expiry. `principals`
+  requires both principal actives and forbids shared active/previous and expiry.
+  Optional previous slots require their own active; all configured material,
+  including a valid `ADMIN_API_KEY`, is globally unique, non-placeholder, and
+  32-256 printable ASCII. Only the admin key's exact authorized legacy
+  substitution self-reference is skipped.
+- Slice endpoints require exactly one x-slicer-api-key matching an eligible
+  configured slice slot; x-api-key is not an alias. Migration shared slots stop
+  authorizing at exact request-time expiry while principals continue. Missing
+  or wrong credentials return HTTP 401 with
+  `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
 - Pricing, artifact, and operations endpoints require x-api-key matching only
   their active or previous scoped slot. Cross-audience keys are rejected.
 - Authentication compares fixed-length SHA-256 digests for both slots.
@@ -204,7 +253,8 @@ Orca:
   caller migration, then previous removal and a second restart for revocation.
 - ADMIN_API_KEY is a finite legacy migration key only: one non-slice audience
   named by LEGACY_ADMIN_API_KEY_AUDIENCE, with
-  LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL no more than 90 days away.
+  LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL no more than 90 days away. Any other
+  cross-slot reuse is refused.
 - Preserve slice route order: rate limiter -> service authentication -> root-scoped workspace -> Multer -> queue -> native processing.
 - Forwarded identity defaults off. TRUST_PROXY=true requires unique validated
   explicit IP/CIDR peers or loopback; malformed, wildcard, overbroad,
@@ -295,8 +345,14 @@ Test organization:
 - Keep stable deterministic runners unchanged unless endpoint behavior requires updates.
 
 ## Environment and Config Keys
+- SLICE_SERVICE_AUTH_MODE
 - SLICE_SERVICE_API_KEY
 - SLICE_SERVICE_API_KEY_PREVIOUS
+- SLICE_SERVICE_WOOCOMMERCE_API_KEY
+- SLICE_SERVICE_WOOCOMMERCE_API_KEY_PREVIOUS
+- SLICE_SERVICE_LEADPILOT_API_KEY
+- SLICE_SERVICE_LEADPILOT_API_KEY_PREVIOUS
+- SLICE_SERVICE_LEGACY_MIGRATION_UNTIL
 - PRICING_API_KEY
 - PRICING_API_KEY_PREVIOUS
 - ARTIFACT_API_KEY

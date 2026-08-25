@@ -82,7 +82,7 @@ class CommandExecution {
         this.child = execute(this.executable, this.args, {
             detached: platform !== 'win32',
             env: environmentFactory(process.env, platform),
-            maxBuffer: 1024 * 10000,
+            maxBuffer: this.dependencies.maxBuffer,
             shell: false,
             windowsHide: true
         }, (error, stdout = '', stderr = '') => {
@@ -182,6 +182,7 @@ function createCommandRunner(overrides = {}) {
         clearTimer: overrides.clearTimeout || clearTimeout,
         platform: overrides.platform || process.platform,
         timeoutMs: overrides.timeoutMs || COMMAND_TIMEOUT_MS,
+        maxBuffer: overrides.maxBuffer || 1024 * 10000,
         environmentFactory: overrides.createChildEnvironment || createChildEnvironment,
         terminatorFactory: overrides.createProcessTreeTerminator
             || ((child) => createProcessTreeTerminator(child, overrides.terminationDependencies))

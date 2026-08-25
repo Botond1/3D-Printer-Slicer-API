@@ -14,6 +14,8 @@ const MODEL_PATH = slicePath('model-stats.js');
 const OUTPUT_PATH = slicePath('output-lifecycle.js');
 const PIPELINE_PATH = slicePath('pipeline.js');
 const PROFILES_PATH = slicePath('profiles.js');
+const PROFILE_DIGEST_PATH = slicePath('profile-digest.js');
+const ENGINE_VERSION_PATH = slicePath('engine-version.js');
 
 process.env.PYTHON_EXECUTABLE = process.execPath;
 let runImpl;
@@ -31,8 +33,22 @@ function installCommandMock() {
 }
 
 function resetModules() {
-    for (const file of [INPUT_PATH, MODEL_PATH, OUTPUT_PATH, PIPELINE_PATH]) delete require.cache[file];
+    for (const file of [INPUT_PATH, MODEL_PATH, OUTPUT_PATH, PIPELINE_PATH, PROFILE_DIGEST_PATH, ENGINE_VERSION_PATH]) {
+        delete require.cache[file];
+    }
     installCommandMock();
+    require.cache[PROFILE_DIGEST_PATH] = {
+        id: PROFILE_DIGEST_PATH,
+        filename: PROFILE_DIGEST_PATH,
+        loaded: true,
+        exports: { calculateEffectiveProfileSha256: () => 'a'.repeat(64) }
+    };
+    require.cache[ENGINE_VERSION_PATH] = {
+        id: ENGINE_VERSION_PATH,
+        filename: ENGINE_VERSION_PATH,
+        loaded: true,
+        exports: { getSlicerEngineVersion: () => '2.8.1' }
+    };
 }
 
 test('pre-aborted converter, orientation, and model-info calls launch no command', async () => {

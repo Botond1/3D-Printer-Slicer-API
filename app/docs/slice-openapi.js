@@ -70,11 +70,48 @@ const COMMON_MULTIPART_PROPERTIES = Object.freeze({
 
 const SUCCESS_SCHEMA = Object.freeze({
     type: 'object',
-    required: ['success', 'job_id', 'artifact_id'],
+    required: ['success', 'job_id', 'artifact_id', 'slicer_engine', 'engine_version', 'profiles'],
     properties: {
         success: { type: 'boolean', enum: [true] },
         job_id: { type: 'string', pattern: '^job-[a-f0-9]{32}$' },
-        artifact_id: { type: 'string', pattern: '^artifact-[a-f0-9]{32}$' }
+        artifact_id: { type: 'string', pattern: '^artifact-[a-f0-9]{32}$' },
+        slicer_engine: { type: 'string', enum: ['prusa', 'orca'] },
+        engine_version: {
+            type: 'string',
+            pattern: '^[0-9]+(?:\\.[0-9]+){2,3}(?:[-+][A-Za-z0-9._-]+)?$',
+            description: 'Version reported by the native slicer binary that produced the result.'
+        },
+        profiles: {
+            type: 'object',
+            required: ['effective_profile_sha256'],
+            properties: {
+                effective_profile_sha256: {
+                    type: 'string',
+                    pattern: '^[a-f0-9]{64}$',
+                    description: 'Deterministic SHA-256 of fully resolved effective machine/process profile layers and server-owned native policy, excluding per-request layer-height and infill overrides.'
+                }
+            }
+        }
+    }
+});
+
+const DIMENSIONS_SCHEMA = Object.freeze({
+    type: 'object',
+    required: ['x', 'y', 'z'],
+    properties: {
+        x: { type: 'number' },
+        y: { type: 'number' },
+        z: { type: 'number' }
+    }
+});
+
+const BUILD_VOLUME_LIMITS_SCHEMA = Object.freeze({
+    type: 'object',
+    required: ['min', 'max', 'source_profile'],
+    properties: {
+        min: DIMENSIONS_SCHEMA,
+        max: DIMENSIONS_SCHEMA,
+        source_profile: { type: 'string' }
     }
 });
 
@@ -88,6 +125,50 @@ function errorCodeResponse(description, errorCodes) {
                     properties: {
                         errorCode: { type: 'string', enum: errorCodes }
                     }
+                }
+            }
+        }
+    };
+}
+
+function validationErrorResponse() {
+    const otherValidationCodes = [
+        'INVALID_SLICE_OUTPUT',
+        'INVALID_SLICE_STATS',
+        'FILE_PROCESSING_TIMEOUT',
+        'ORCA_PROFILE_INCOMPATIBLE',
+        'MODEL_DIMENSIONS_UNAVAILABLE'
+    ];
+    return {
+        description: 'Model/profile validation or generated output/statistics validation failed.',
+        content: {
+            'application/json': {
+                schema: {
+                    type: 'object',
+                    required: ['success', 'error', 'errorCode'],
+                    properties: {
+                        success: { type: 'boolean', enum: [false] },
+                        error: { type: 'string' },
+                        errorCode: {
+                            type: 'string',
+                            enum: [...otherValidationCodes, 'MODEL_OUT_OF_PRINTER_BOUNDS']
+                        }
+                    },
+                    oneOf: [
+                        {
+                            required: ['model_dimensions_mm', 'build_volume_limits_mm'],
+                            properties: {
+                                errorCode: { type: 'string', enum: ['MODEL_OUT_OF_PRINTER_BOUNDS'] },
+                                model_dimensions_mm: DIMENSIONS_SCHEMA,
+                                build_volume_limits_mm: BUILD_VOLUME_LIMITS_SCHEMA
+                            }
+                        },
+                        {
+                            properties: {
+                                errorCode: { type: 'string', enum: otherValidationCodes }
+                            }
+                        }
+                    ]
                 }
             }
         }
@@ -136,11 +217,13 @@ function createSliceResponses() {
             'Upload, archive expansion, model, intermediate, or output exceeded a resource limit.',
             ['UPLOAD_RESOURCE_LIMIT_EXCEEDED', 'SLICE_RESOURCE_LIMIT_EXCEEDED']
         ),
-        422: errorCodeResponse(
-            'Model/profile validation or generated output/statistics validation failed.',
-            ['INVALID_SLICE_OUTPUT', 'INVALID_SLICE_STATS']
-        ),
-        500: { description: 'Server Error' }
+        422: validationErrorResponse(),
+        500: errorCodeResponse('Server Error', [
+            'INTERNAL_PROCESSING_ERROR',
+            'QUEUE_INTERNAL_ERROR',
+            'UPLOAD_STORAGE_ERROR',
+            'INTERNAL_SERVER_ERROR'
+        ])
     };
 }
 

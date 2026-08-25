@@ -31,9 +31,13 @@ test('server creates required directories before invoking the audit-before-liste
     const serverPath = path.resolve(__dirname, '../../../app/server.js');
     const source = await fs.readFile(serverPath, 'utf8');
     const ensureIndex = source.indexOf('ensureRequiredDirectories();');
+    const enginePreflightIndex = source.indexOf('await initializeSlicerEngineVersions();');
+    const listenIndex = source.indexOf('httpServer.listen(PORT');
     const startIndex = source.lastIndexOf('runtimeLifecycle.run(startServer).catch');
     assert.ok(ensureIndex >= 0);
     assert.ok(startIndex > ensureIndex);
+    assert.ok(enginePreflightIndex > ensureIndex);
+    assert.ok(listenIndex > enginePreflightIndex);
     assert.match(source, /auditOptions:\s*\{[\s\S]*JOB_WORKSPACE_STALE_AGE_MS/);
     assert.match(source, /jobsRoot:\s*JOB_SCRATCH_DIR,[\s\S]*delete:\s*true/);
     assert.doesNotMatch(source, /auditOptions:\s*\{[\s\S]{0,200}delete:\s*true/);

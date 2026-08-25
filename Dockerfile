@@ -176,6 +176,11 @@ COPY --from=builder /app/node_modules ./node_modules
 # 5. Copy immutable application and profile content as root-owned files
 COPY --chown=0:0 app/ ./
 COPY --chown=0:0 configs/ ./configs/
+COPY --chown=0:0 scripts/verify-orca-profile-vendor.js /tmp/verify-orca-profile-vendor.js
+RUN node /tmp/verify-orca-profile-vendor.js \
+        /app/configs/orca/upstream/Custom \
+        /opt/orcaslicer/resources/profiles/Custom \
+    && rm -- /tmp/verify-orca-profile-vendor.js
 COPY --chown=0:0 package.json package-lock.json ./
 COPY --chown=0:0 --chmod=0555 scripts/i4-container-entrypoint.sh /usr/local/bin/i4-container-entrypoint
 

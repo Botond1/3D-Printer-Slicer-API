@@ -13,24 +13,36 @@ const IMAGE_LABEL = 'io.s3a.expected-image-id';
 const INSPECT_FORMAT = `{{json .Id}}|{{json .Image}}|{{json (index .Config.Labels "${VALIDATION_LABEL}")}}|` +
     `{{json (index .Config.Labels "${IMAGE_LABEL}")}}`;
 
-const SYNTHETIC_TRIANGLES = Object.freeze([
-    { normal: [0, 0, -1], vertices: [[0, 0, 0], [10, 10, 0], [10, 0, 0]] },
-    { normal: [0, 0, -1], vertices: [[0, 0, 0], [0, 10, 0], [10, 10, 0]] },
-    { normal: [0, 0, 1], vertices: [[0, 0, 10], [10, 0, 10], [10, 10, 10]] },
-    { normal: [0, 0, 1], vertices: [[0, 0, 10], [10, 10, 10], [0, 10, 10]] },
-    { normal: [0, -1, 0], vertices: [[0, 0, 0], [10, 0, 0], [10, 0, 10]] },
-    { normal: [0, -1, 0], vertices: [[0, 0, 0], [10, 0, 10], [0, 0, 10]] },
-    { normal: [1, 0, 0], vertices: [[10, 0, 0], [10, 10, 0], [10, 10, 10]] },
-    { normal: [1, 0, 0], vertices: [[10, 0, 0], [10, 10, 10], [10, 0, 10]] },
-    { normal: [0, 1, 0], vertices: [[10, 10, 0], [0, 10, 0], [0, 10, 10]] },
-    { normal: [0, 1, 0], vertices: [[10, 10, 0], [0, 10, 10], [10, 10, 10]] },
-    { normal: [-1, 0, 0], vertices: [[0, 10, 0], [0, 0, 0], [0, 0, 10]] },
-    { normal: [-1, 0, 0], vertices: [[0, 10, 0], [0, 0, 10], [0, 10, 10]] }
+const BASE_SYNTHETIC_TRIANGLES = Object.freeze([
+    { normal: [0, 0, -1], vertices: [[0, 0, 0], [10, 20, 0], [10, 0, 0]] },
+    { normal: [0, 0, -1], vertices: [[0, 0, 0], [0, 20, 0], [10, 20, 0]] },
+    { normal: [0, 0, 1], vertices: [[0, 0, 30], [10, 0, 30], [10, 20, 30]] },
+    { normal: [0, 0, 1], vertices: [[0, 0, 30], [10, 20, 30], [0, 20, 30]] },
+    { normal: [0, -1, 0], vertices: [[0, 0, 0], [10, 0, 0], [10, 0, 30]] },
+    { normal: [0, -1, 0], vertices: [[0, 0, 0], [10, 0, 30], [0, 0, 30]] },
+    { normal: [1, 0, 0], vertices: [[10, 0, 0], [10, 20, 0], [10, 20, 30]] },
+    { normal: [1, 0, 0], vertices: [[10, 0, 0], [10, 20, 30], [10, 0, 30]] },
+    { normal: [0, 1, 0], vertices: [[10, 20, 0], [0, 20, 0], [0, 20, 30]] },
+    { normal: [0, 1, 0], vertices: [[10, 20, 0], [0, 20, 30], [10, 20, 30]] },
+    { normal: [-1, 0, 0], vertices: [[0, 20, 0], [0, 0, 0], [0, 0, 30]] },
+    { normal: [-1, 0, 0], vertices: [[0, 20, 0], [0, 0, 30], [0, 20, 30]] }
 ]);
+
+function rotateTrianglesX90(triangles) {
+    const maximumZ = Math.max(...triangles.flatMap(({ vertices }) =>
+        vertices.map((vertex) => vertex[2])));
+    return triangles.map(({ normal, vertices }) => ({
+        normal: [normal[0], -normal[2], normal[1]],
+        vertices: vertices.map(([x, y, z]) => [x, maximumZ - z, y])
+    }));
+}
+
+// Simulates the request-owned rotation already baked into the STL before Orca.
+const SYNTHETIC_TRIANGLES = Object.freeze(rotateTrianglesX90(BASE_SYNTHETIC_TRIANGLES));
 
 function buildSyntheticStl(triangles = SYNTHETIC_TRIANGLES) {
     if (!Array.isArray(triangles) || triangles.length !== 12) throw new Error('stl_triangle_count');
-    const lines = ['solid synthetic-cube'];
+    const lines = ['solid synthetic-pre-rotated-asymmetric-prism'];
     for (const triangle of triangles) {
         if (!triangle || !Array.isArray(triangle.normal) || triangle.normal.length !== 3 ||
             !Array.isArray(triangle.vertices) || triangle.vertices.length !== 3) {
@@ -47,8 +59,20 @@ function buildSyntheticStl(triangles = SYNTHETIC_TRIANGLES) {
         }
         lines.push('    endloop', '  endfacet');
     }
-    lines.push('endsolid synthetic-cube', '');
+    lines.push('endsolid synthetic-pre-rotated-asymmetric-prism', '');
     return lines.join('\n');
+}
+
+function hasPositiveExtrusionMove(gcodePrefix) {
+    if (typeof gcodePrefix !== 'string') return false;
+    const layerMarker = /(?:^|\r?\n);BEFORE_LAYER_CHANGE(?:\r?\n|$)/.exec(gcodePrefix);
+    if (!layerMarker) return false;
+    const modelLayer = gcodePrefix.slice(layerMarker.index + layerMarker[0].length);
+    return modelLayer.split(/\r?\n/).some((line) => {
+        if (!/^G1(?:\s|$)/.test(line)) return false;
+        const extrusion = /(?:^|\s)E(-?(?:\d+(?:\.\d*)?|\.\d+))(?=\s|;|$)/.exec(line);
+        return extrusion !== null && Number(extrusion[1]) > 0;
+    });
 }
 
 const SYNTHETIC_STL = buildSyntheticStl();
@@ -59,16 +83,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { createRuntimeSlicerProfile } = require('/app/services/slice/profiles');
+const { buildSlicerCommandArgs } = require('/app/services/slice/engine');
+const { snapshotProfileSelection } = require('/app/services/slice/profile-snapshot');
 
 const MAX_ORCA_OUTPUT_BYTES = 1024 * 10000;
 const MAX_GCODE_PREFIX_BYTES = 256 * 1024;
 const root = '/tmp/orca-smoke';
 const input = path.join(root, 'input');
 const output = path.join(root, 'output');
-const model = path.join(input, 'synthetic-cube.stl');
+const model = path.join(input, 'synthetic-pre-rotated-asymmetric-prism.stl');
 const machineProfile = '/app/configs/orca/Bambu_P1S_0.4_nozzle.json';
 const baseProcessProfile = '/app/configs/orca/FDM_0.2mm.json';
 const syntheticStl = ${JSON.stringify(SYNTHETIC_STL)};
+const hasPositiveExtrusionMove = ${hasPositiveExtrusionMove.toString()};
 const childEnvironment = Object.freeze({
     HOME: '/tmp/home',
     LANG: 'C.UTF-8',
@@ -133,18 +160,28 @@ function readPrefix(filePath, size) {
 function assertRuntimeProfile(profilePath) {
     const profile = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
     if (profile.layer_height !== '0.2' || profile.sparse_infill_density !== '20%' ||
-        profile.layer_gcode !== 'G92 E0' || profile.use_relative_e_distances !== '0') {
+        profile.layer_gcode !== '' || profile.use_relative_e_distances !== '1') {
         throw new Error('runtime_profile_contract');
     }
 }
 
-async function executeSmoke() {
+function assertMachineProfile(profilePath) {
+    const profile = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
+    if (typeof profile.before_layer_change_gcode !== 'string' ||
+        !/(?:^|\n)G92 E0(?:\s|$)/.test(profile.before_layer_change_gcode)) {
+        throw new Error('machine_profile_extrusion_contract');
+    }
+}
+
+function prepareSmokeDirectories() {
     for (const directory of [root, input, output, childEnvironment.HOME,
         childEnvironment.XDG_CACHE_HOME, childEnvironment.XDG_CONFIG_HOME,
         childEnvironment.XDG_RUNTIME_DIR]) {
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     }
+}
 
+function assertHelpContract() {
     const help = runOrca(['--help'], 60_000);
     if (help.error || help.signal || help.status !== 0) {
         emitFailure('help', help);
@@ -153,36 +190,54 @@ async function executeSmoke() {
     const helpOutput = (help.stdout || '') + (help.stderr || '');
     if (!/OrcaSlicer-2\.3\.1(?:\b|[-+])/.test(helpOutput) ||
         !/(?:Usage:|OPTIONS:|--help)/.test(helpOutput)) exit(21);
+}
 
-    fs.writeFileSync(model, syntheticStl, { encoding: 'ascii', flag: 'wx', mode: 0o600 });
-    const workspace = {
-        resolvePath: (...segments) => path.resolve(root, ...segments),
-        assertContainedPath: (candidatePath) => {
-            const resolved = path.resolve(candidatePath);
-            if (resolved !== root && !resolved.startsWith(root + path.sep)) {
-                throw new Error('runtime_profile_escape');
-            }
-            return resolved;
+function createSmokeWorkspace() {
+    const assertContained = (candidatePath) => {
+        const resolved = path.resolve(candidatePath);
+        if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+            throw new Error('runtime_profile_escape');
         }
+        return resolved;
     };
-    const runtimeProcessProfile = await createRuntimeSlicerProfile(
-        'orca', baseProcessProfile, 'FDM', 0.2, '20%', workspace);
-    assertRuntimeProfile(runtimeProcessProfile);
-    const settings = machineProfile + ';' + runtimeProcessProfile;
+    return {
+        resolveScratchPath: (...segments) => path.resolve(root, ...segments),
+        resolvePath: (...segments) => path.resolve(root, ...segments),
+        assertScratchContainedPath: assertContained,
+        assertContainedPath: assertContained
+    };
+}
 
-    const sliced = runOrca([
-        '--load-settings', settings,
-        '--arrange', '1',
-        '--orient', '1',
-        '--slice', '0',
-        '--outputdir', output,
-        model
-    ], 180_000);
+async function prepareSliceInvocation() {
+    fs.writeFileSync(model, syntheticStl, { encoding: 'ascii', flag: 'wx', mode: 0o600 });
+    const workspace = createSmokeWorkspace();
+    const snapshots = await snapshotProfileSelection('orca', {
+        baseConfigFile: baseProcessProfile,
+        orcaMachineConfigFile: machineProfile
+    }, workspace);
+    assertMachineProfile(snapshots.orcaMachineConfigFile);
+    const runtimeProcessProfile = await createRuntimeSlicerProfile(
+        'orca', snapshots.baseConfigFile, 'FDM', 0.2, '20%', workspace);
+    assertRuntimeProfile(runtimeProcessProfile);
+    const desiredOutput = path.join(output, 'result.gcode');
+    const slicerArgs = buildSlicerCommandArgs(
+        'FDM', runtimeProcessProfile, desiredOutput, '20%', 'orca', snapshots.orcaMachineConfigFile);
+    const arrangeIndex = slicerArgs.indexOf('--arrange');
+    const orientIndex = slicerArgs.indexOf('--orient');
+    if (arrangeIndex < 0 || slicerArgs[arrangeIndex + 1] !== '1' ||
+        orientIndex < 0 || slicerArgs[orientIndex + 1] !== '0') exit(29);
+    return slicerArgs;
+}
+
+function runSliceProbe(slicerArgs) {
+    const sliced = runOrca([...slicerArgs, model], 180_000);
     if (sliced.error || sliced.signal || sliced.status !== 0) {
         emitFailure('slice', sliced);
         exit(30);
     }
+}
 
+function assertGeneratedGcode() {
     const generated = fs.readdirSync(output)
         .filter((name) => name.toLowerCase().endsWith('.gcode'));
     if (generated.length !== 1) exit(31);
@@ -192,8 +247,17 @@ async function executeSmoke() {
         stat.size > 32 * 1024 * 1024) exit(32);
     const prefix = readPrefix(generatedPath, stat.size);
     if (!/^;\s*generated by OrcaSlicer 2\.3\.1(?:\b|[-+])/mi.test(prefix) ||
-        !/^G1\b[^\r\n]*\bE-?(?:\d+(?:\.\d*)?|\.\d+)/m.test(prefix)) exit(33);
+        !hasPositiveExtrusionMove(prefix)) exit(33);
+    if (!/^M83(?:\s|;|$)/m.test(prefix) || /^M82(?:\s|;|$)/m.test(prefix) ||
+        !/^G92\s+E0(?:\.0*)?(?:\s|;|$)/m.test(prefix)) exit(34);
+}
 
+async function executeSmoke() {
+    prepareSmokeDirectories();
+    assertHelpContract();
+    const slicerArgs = await prepareSliceInvocation();
+    runSliceProbe(slicerArgs);
+    assertGeneratedGcode();
     process.stdout.write('{"orca_cli_help":"pass","synthetic_slice":"pass"}\n');
 }
 
@@ -315,10 +379,12 @@ function parseSmokeResult(result) {
     const failures = new Map([
         [20, 'orca_help_execution_failure'],
         [21, 'orca_help_contract_failure'],
+        [29, 'orca_invocation_policy_failure'],
         [30, 'orca_slice_execution_failure'],
         [31, 'orca_slice_output_count_failure'],
         [32, 'orca_slice_output_contract_failure'],
         [33, 'orca_slice_content_failure'],
+        [34, 'orca_extrusion_mode_failure'],
         [39, 'orca_smoke_internal_failure']
     ]);
     if (result.status !== 0) throw new Error(failures.get(result.status) || 'orca_smoke_failure');
@@ -419,30 +485,13 @@ function main() {
 }
 
 module.exports = Object.freeze({
-    DOCKER_TIMEOUT_MS,
-    IMAGE_LABEL,
-    INSPECT_FORMAT,
-    MAX_DIAGNOSTIC_BYTES,
-    MAX_OUTPUT_BYTES,
-    ORCA_CONTAINER_SCRIPT,
-    SUCCESS_MARKER,
-    SYNTHETIC_STL,
-    SYNTHETIC_TRIANGLES,
-    VALIDATION_LABEL,
-    assertOwned,
-    buildCreateArgs,
-    buildInspectArgs,
-    buildRemoveArgs,
-    buildStartArgs,
-    buildSyntheticStl,
-    cleanupOwnedContainer,
-    parseCreateResult,
-    parseFailureDiagnostic,
-    parseInspectResult,
-    parsePositiveEnvironmentId,
-    parseSmokeResult,
-    runDocker,
-    runSmoke
+    DOCKER_TIMEOUT_MS, IMAGE_LABEL, INSPECT_FORMAT,
+    MAX_DIAGNOSTIC_BYTES, MAX_OUTPUT_BYTES, ORCA_CONTAINER_SCRIPT, SUCCESS_MARKER,
+    BASE_SYNTHETIC_TRIANGLES, SYNTHETIC_STL, SYNTHETIC_TRIANGLES, VALIDATION_LABEL,
+    assertOwned, buildCreateArgs, buildInspectArgs, buildRemoveArgs, buildStartArgs,
+    buildSyntheticStl, cleanupOwnedContainer, hasPositiveExtrusionMove,
+    parseCreateResult, parseFailureDiagnostic, parseInspectResult,
+    parsePositiveEnvironmentId, parseSmokeResult, rotateTrianglesX90, runDocker, runSmoke
 });
 
 if (require.main === module) main();
