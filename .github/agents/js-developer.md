@@ -55,7 +55,10 @@ You own all Node.js + Express code inside `app/`:
    machine parent's per-layer `G92 E0` reset.
 9. **Preserve native identity and orientation ownership.** Resolve/cache
    both engine versions atomically from bounded selected-executable `--help`
-   output before listen; publish neither unless both pass. Keep Orca at
+   output before listen; publish neither unless both pass, and keep startup
+   probes telemetry-disabled so they cannot alter slice-native lifecycle
+   metrics/events. Derive Prusa export flags and Orca machine-then-process
+   settings precedence from the same digest-covered policy. Keep Orca at
    `--arrange 1` / `--orient 0` after preprocessing/bounds checks. Arrangement
    places already-rotated geometry onto the build plate, while auto-orient stays
    disabled and cannot replace the requested rotation. Focused command/digest

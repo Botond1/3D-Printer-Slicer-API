@@ -61,7 +61,9 @@ one x-slicer-api-key header
   technology, machine configuration, other process values, and stable
   server-added Orca runtime settings remain covered. The identity also binds
   [`engine.js`](../../app/services/slice/engine.js)'s request-independent native
-  invocation policy. Prusa INI ordering/comments are normalized, but section and
+  invocation policy. Prusa export flags and Orca's ordered machine-then-process
+  settings precedence are composed from that same hash-fed policy. Prusa INI
+  ordering/comments are normalized, but section and
   key case remain distinct to preserve native semantics; exact duplicate
   qualified keys fail closed like the native Boost INI parser.
 - [`orca-profile-inheritance.js`](../../app/services/slice/orca-profile-inheritance.js)
@@ -105,6 +107,8 @@ one x-slicer-api-key header
   two selected slicer executables with `--help` before listen, bounds and parses
   their output, publishes the initialized map only after both succeed, and
   evicts rejection so malformed or unavailable version identity fails startup.
+  Its explicit telemetry-disabled startup-probe runner cannot increment slice-
+  native outcome/duration metrics or emit slice-native lifecycle events.
   Request work reads that verified map without launching a version subprocess.
   `engine_version` is required by
   [`response.js`](../../app/services/slice/response.js) and
@@ -162,12 +166,15 @@ one x-slicer-api-key header
 - `GET /health` and `GET /pricing` remain public; W3 does not add authentication
   to them. The intended public-route activation target is the principal-only
   slice-auth mode. Before any router action, the dark gate must read back mode
-  `principals`, both principal actives, and absent shared active/previous plus
-  expiry; pass one private synthetic slice per principal; reject available
+  `principals`, both principal actives, and absent shared active/previous,
+  expiry, and both principal previous slots for the initial activation; pass one
+  private synthetic slice per principal; reject available
   retired shared credentials under `x-slicer-api-key`; reject a correct
   principal under `x-api-key`; and prove exact cleanup. Missing or inconclusive
-  evidence keeps the route dark. External production activation is outside
-  repository evidence and authority.
+  evidence keeps the route dark. A later rotation separately proves each
+  configured previous slot, its owner-approved removal deadline, and post-
+  removal rejection. External production activation is outside repository
+  evidence and authority.
 - Compose manifests remain unchanged because their existing `env_file`
   passthrough carries the selected environment file. External production
   activation is outside repository evidence and authority.

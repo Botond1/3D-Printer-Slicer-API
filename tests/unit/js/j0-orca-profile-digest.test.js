@@ -103,8 +103,12 @@ test('profile identity binds the request-independent native invocation policy', 
     await fs.writeFile(orcaProcess, '{}');
     await fs.writeFile(orcaMachine, '{}');
 
-    assert.deepEqual(resolveSlicerInvocationPolicy('orca', 'FDM'), {
-        arrange: '1', orient: '0', slice: '0'
+    const orcaPolicy = resolveSlicerInvocationPolicy('orca', 'FDM');
+    assert.deepEqual(orcaPolicy, {
+        arrange: '1', orient: '0', slice: '0', settingsPrecedence: ['machine', 'process']
+    });
+    assert.notDeepEqual(orcaPolicy, {
+        ...orcaPolicy, settingsPrecedence: ['process', 'machine']
     });
     assert.deepEqual(resolveSlicerInvocationPolicy('prusa', 'FDM'), {
         center: '100,100',

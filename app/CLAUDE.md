@@ -155,7 +155,9 @@ This document describes the application runtime inside app/.
 - app/services/slice/engine.js
   - Resolves slicer executable name by engine.
   - Builds argument arrays and request-independent invocation policy for Prusa
-    and Orca; Orca sends `--arrange 1` / `--orient 0` after preprocessing/
+    and Orca. Prusa export flags and Orca's ordered machine-then-process settings
+    precedence are composed from that same hash-fed policy; Orca sends
+    `--arrange 1` / `--orient 0` after preprocessing/
     bounds checks. Arrangement places already-rotated geometry onto the build
     plate, while auto-orient remains disabled.
 - app/services/slice/engine-version.js
@@ -269,7 +271,9 @@ This document describes the application runtime inside app/.
   `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 - Success requires `engine_version` from the atomic pre-listen bounded `--help`
   verification of both selected executables; the startup module has exact-image
-  proof. Orca passes `--arrange 1` / `--orient 0` so placement can translate the
+  proof and uses a telemetry-disabled runner that cannot alter slice-native
+  lifecycle metrics/events. Orca passes `--arrange 1` / `--orient 0` so
+  placement can translate the
   model onto the plate without replacing the request-owned rotation. Focused
   command/digest contracts and a corrected validation-image HTTP transform/
   final-dimensions E2E pass; the final rebuilt image identity is not yet

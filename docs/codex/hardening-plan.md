@@ -27,7 +27,8 @@ Implemented local candidate exits:
    `profiles.effective_profile_sha256`, a canonical lowercase SHA-256 over the
    effective configured machine/process layers and request-independent native
    invocation policy while excluding request layer height, request infill,
-   paths, and request/job/model identity.
+   paths, and request/job/model identity. Prusa export flags and Orca's ordered
+   machine-then-process settings precedence are composed from that policy.
 3. Stable Orca runtime derivation clears `layer_gcode` and sets
    `use_relative_e_distances='1'` for consistency with the flattened pinned
    machine parent's per-layer `G92 E0` reset; these request-independent settings
@@ -40,7 +41,9 @@ Implemented local candidate exits:
    historical I2 hosted run.
 4. Before listen, both selected slicer executables' bounded `--help` output is
    parsed and cached atomically; neither initialized version is published unless
-   both pass. Every success and OpenAPI require `engine_version`; malformed or
+   both pass. The startup-probe runner explicitly disables slice-native events,
+   outcome counters, and duration buckets. Every success and OpenAPI require
+   `engine_version`; malformed or
    unavailable output fails startup. Exact-candidate-image probes returned exit
    0 with 6087 Prusa bytes and 5121 Orca bytes; `--version` returned exit 1 for
    both and is not used. The actual startup module also passed inside the
@@ -108,11 +111,14 @@ Remaining gates:
    image identity without treating the validation-image identity as final;
 3. preserve `principals` as the repository activation target and require the
    dark gate before any router action: sanitized readback of `principals`, both
-   actives, and absent shared active/previous plus expiry; one private synthetic
-   slice per principal; available retired shared credentials rejected under
+   actives, and absent shared active/previous, expiry, and both principal
+   previous slots for initial activation; one private synthetic slice per
+   principal; available retired shared credentials rejected under
    `x-slicer-api-key`; a correct principal rejected under `x-api-key`; exact
-   cleanup; otherwise keep the route dark. External production activation is
-   outside repository evidence and authority;
+   cleanup; otherwise keep the route dark. A later rotation separately proves
+   every configured previous, an owner-approved removal deadline, and post-
+   removal rejection. External production activation is outside repository
+   evidence and authority;
 4. do not start filament-profile identity or `material_used_g` work until the
    owner supplies the required Bambu reference profile fields. This independent
    W8 prerequisite is `BLOCKED_OWNER_INPUT / NOT_STARTED`; no current response

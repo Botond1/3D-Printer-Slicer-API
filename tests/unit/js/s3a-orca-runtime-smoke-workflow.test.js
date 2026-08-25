@@ -6,9 +6,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '../../..');
-const HELPER_PATH = path.join(ROOT, 'scripts/i2-orca-runtime-smoke.js');
+const RUNNER_PATH = path.join(ROOT, 'scripts/i2-orca-runtime-smoke.js');
+const SUPPORT_PATHS = [
+    'scripts/i2-orca-runtime-smoke-fixture.js',
+    'scripts/i2-orca-runtime-smoke-container-script.js',
+    'scripts/i2-orca-runtime-smoke-contract.js'
+].map((relativePath) => path.join(ROOT, relativePath));
 const WORKFLOW_PATH = path.join(ROOT, '.github/actions/exact-image-gate/action.yml');
-const SOURCE = fs.readFileSync(HELPER_PATH, 'utf8').replace(/\r\n?/g, '\n');
+const RUNNER_SOURCE = fs.readFileSync(RUNNER_PATH, 'utf8').replace(/\r\n?/g, '\n');
+const SUPPORT_SOURCES = SUPPORT_PATHS.map((filePath) =>
+    fs.readFileSync(filePath, 'utf8').replace(/\r\n?/g, '\n'));
+const SOURCE = [RUNNER_SOURCE, ...SUPPORT_SOURCES].join('\n');
 const WORKFLOW = fs.readFileSync(WORKFLOW_PATH, 'utf8').replace(/\r\n?/g, '\n');
 
 function step(id, source = WORKFLOW) {
@@ -16,6 +24,17 @@ function step(id, source = WORKFLOW) {
     assert.notEqual(start, -1, `missing ${id}`);
     const end = source.indexOf('\n      - name:', start);
     return source.slice(start, end < 0 ? source.length : end);
+}
+
+function assertNamedFunctionsAreBounded(filePath, source) {
+    const lines = source.split('\n');
+    const starts = lines.flatMap((line, index) =>
+        /^(?:async )?function [A-Za-z]/.test(line) ? [index] : []);
+    for (const [position, start] of starts.entries()) {
+        const end = starts[position + 1] ?? lines.length;
+        assert.ok(end - start <= 60,
+            `${path.basename(filePath)}:${start + 1} spans ${end - start} physical lines`);
+    }
 }
 
 function helperContract(source) {
@@ -29,7 +48,7 @@ function helperContract(source) {
         'rw,nosuid,nodev,noexec,size=256m,uid=${uid},gid=${gid},mode=0700',
         'validateImageId(imageId)', 'numeric <= 0', "'container', 'create'",
         '${VALIDATION_LABEL}=true', '${IMAGE_LABEL}=${exactImageId}',
-        '\n    assertOwned(record, containerId, imageId);\n',
+        'contract.assertOwned(record, containerId, imageId);',
         "'--entrypoint', '/usr/bin/node'", "runOrca(['--help'], 60_000)",
         "require('/app/services/slice/profiles')",
         "require('/app/services/slice/engine')",
@@ -76,6 +95,24 @@ test('workflow binds Orca smoke to exact identity, cleanup, and final enforcemen
     helperContract(SOURCE);
 });
 
+test('Orca smoke is split into bounded builders and a thin orchestration runner', () => {
+    const containerBuilder = require(SUPPORT_PATHS[1]);
+    const smoke = require(RUNNER_PATH);
+    for (const [filePath, source] of [
+        [RUNNER_PATH, RUNNER_SOURCE],
+        ...SUPPORT_PATHS.map((filePath, index) => [filePath, SUPPORT_SOURCES[index]])
+    ]) {
+        assert.ok(source.split('\n').length <= 250,
+            `${path.basename(filePath)} exceeds 250 physical lines`);
+        assertNamedFunctionsAreBounded(filePath, source);
+    }
+    assert.equal(containerBuilder.buildOrcaContainerScript(), smoke.ORCA_CONTAINER_SCRIPT);
+    assert.match(RUNNER_SOURCE, /function runSmoke\(/);
+    assert.match(RUNNER_SOURCE, /spawnSync\('docker', args,/);
+    assert.doesNotMatch(RUNNER_SOURCE, /String\.raw|spawnSync\('\/usr\/local\/bin\/orca-slicer'/);
+    assert.match(SUPPORT_SOURCES[1], /function buildOrcaContainerScript\(\)/);
+});
+
 test('Orca smoke weakening mutations are rejected by the local contract', async (t) => {
     const mutations = [
         ['network restored', "'--network', 'none'", "'--network', 'bridge'"],
@@ -110,7 +147,8 @@ test('Orca smoke weakening mutations are rejected by the local contract', async 
         ['runtime profile containment removed', 'assertContainedPath:', 'unsafeContainedPath:'],
         ['async failure handling removed',
             "void executeSmoke().catch(() => exit(39));", 'void executeSmoke();'],
-        ['ownership assertion removed', '    assertOwned(record, containerId, imageId);', '    void record;']
+        ['ownership assertion removed', 'contract.assertOwned(record, containerId, imageId);',
+            'void record;']
     ];
     for (const [name, from, to] of mutations) await t.test(name, () => {
         assert.ok(SOURCE.includes(from), `missing ${from}`);

@@ -67,6 +67,9 @@ required Bambu reference profile fields.
   request infill. Engine, technology, machine configuration, other process
   settings, stable server-added Orca runtime settings, and the
   request-independent native invocation policy remain covered.
+- Prusa export flags and Orca's ordered machine-then-process `--load-settings`
+  precedence are composed from that same digest-covered invocation policy, so
+  command behavior cannot silently drift from the cached identity.
 - Prusa INI canonicalization normalizes irrelevant ordering/comments without
   lowercasing section or key names; native-significant case variants therefore
   remain distinct and digest-covered. An exact duplicate qualified key fails
@@ -82,7 +85,9 @@ required Bambu reference profile fields.
   envelope before listen. It requires one engine-specific version and the
   expected help sentinel, publishes the initialized map only after both pass,
   caches successful resolution, and evicts rejection. Request work reads the
-  startup map without a request-owned version process. Both
+  startup map without a request-owned version process. Its explicit telemetry-
+  disabled startup runner emits no slice-native lifecycle events and increments
+  no slice-native outcome or duration metrics. Both
   [`app/services/slice/response.js`](../../../app/services/slice/response.js)
   and OpenAPI require `engine_version` on every success.
 - [`app/services/slice/engine.js`](../../../app/services/slice/engine.js) fixes
@@ -196,13 +201,17 @@ activation is outside this repository evidence and authority.
 
 Before any router action, the operator contract requires a sanitized dark
 readback proving `principals`, both principal actives, `legacyAccepted=false`,
-`expiresAt=null`, and absent shared active/previous plus expiry. One private,
-customer-free synthetic slice per principal must pass; every available retired
-shared credential under `x-slicer-api-key` and a correct principal supplied
-only under `x-api-key` must return exact HTTP 401 without workspace, queue, or
-artifact effects. Missing or inconclusive readback, probe, or cleanup keeps the
-route dark. This gate is defined but not run as repository evidence here;
-external production activation remains outside repository authority.
+`expiresAt=null`, and absent shared active/previous, expiry, and both principal
+previous slots for this initial activation. One private, customer-free
+synthetic slice per active principal must pass; every available retired shared
+credential under `x-slicer-api-key` and a correct principal supplied only under
+`x-api-key` must return exact HTTP 401 without workspace, queue, or artifact
+effects. A later principal rotation is separately authorized and must prove
+every configured previous slot, an owner-approved removal deadline, and post-
+removal rejection before revocation is complete. Missing or inconclusive
+readback, probe, or cleanup keeps the route dark. This gate is defined but not
+run as repository evidence here; external production activation remains
+outside repository authority.
 
 [`app/middleware/requireAudience.js`](../../../app/middleware/requireAudience.js)
 performs every fixed-length digest comparison for the resolved slice ring.

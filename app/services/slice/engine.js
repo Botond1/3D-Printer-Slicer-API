@@ -7,7 +7,8 @@ const path = require('node:path');
 const ORCA_INVOCATION_POLICY = Object.freeze({
     arrange: '1',
     orient: '0',
-    slice: '0'
+    slice: '0',
+    settingsPrecedence: Object.freeze(['machine', 'process'])
 });
 const PRUSA_FDM_INVOCATION_POLICY = Object.freeze({
     center: '100,100',
@@ -25,7 +26,7 @@ const PRUSA_SLA_INVOCATION_POLICY = Object.freeze({
  * Return the request-independent native invocation policy used for profile identity.
  * @param {'prusa'|'orca'} engine Slicer engine key.
  * @param {'FDM'|'SLA'} technology Active print technology.
- * @returns {Readonly<Record<string, string|boolean>>} Stable server-owned CLI policy.
+ * @returns {Readonly<Record<string, string|boolean|readonly string[]>>} Stable server-owned CLI policy.
  */
 function resolveSlicerInvocationPolicy(engine, technology) {
     if (engine === 'orca') return ORCA_INVOCATION_POLICY;
@@ -39,6 +40,24 @@ function resolveSlicerInvocationPolicy(engine, technology) {
  */
 function resolveSlicerExecutable(engine) {
     return engine === 'orca' ? 'orca-slicer' : 'prusa-slicer';
+}
+
+function resolvePrusaExportFlag(exportMode) {
+    if (exportMode !== 'gcode' && exportMode !== 'sla') {
+        throw new Error('Unsupported Prusa export policy.');
+    }
+    return `--export-${exportMode}`;
+}
+
+function composeOrcaSettingsFiles(policy, orcaMachineConfigPath, configFile) {
+    const settingsByRole = {
+        machine: orcaMachineConfigPath,
+        process: configFile
+    };
+    return policy.settingsPrecedence
+        .map((role) => settingsByRole[role])
+        .filter(Boolean)
+        .join(';');
 }
 
 /**
@@ -55,7 +74,7 @@ function buildSlicerCommandArgs(technology, configFile, outputPath, infillPercen
     const policy = resolveSlicerInvocationPolicy(engine, technology);
     if (engine === 'orca') {
         const outputDir = path.dirname(outputPath);
-        const settingsFiles = [orcaMachineConfigPath, configFile].filter(Boolean).join(';');
+        const settingsFiles = composeOrcaSettingsFiles(policy, orcaMachineConfigPath, configFile);
         return [
             '--load-settings', settingsFiles,
             '--arrange', policy.arrange,
@@ -68,13 +87,13 @@ function buildSlicerCommandArgs(technology, configFile, outputPath, infillPercen
     const args = ['--load', configFile, '--center', policy.center];
 
     if (technology === 'SLA') {
-        args.push('--export-sla', '--output', outputPath);
+        args.push(resolvePrusaExportFlag(policy.export), '--output', outputPath);
     } else {
         if (policy.supportMaterial) args.push('--support-material');
         if (policy.supportMaterialAuto) args.push('--support-material-auto');
         args.push(
             '--gcode-flavor', policy.gcodeFlavor,
-            '--export-gcode', '--output', outputPath,
+            resolvePrusaExportFlag(policy.export), '--output', outputPath,
             '--fill-density', infillPercentage
         );
     }

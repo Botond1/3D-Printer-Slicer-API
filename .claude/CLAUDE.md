@@ -46,7 +46,9 @@ Keep slicing behavior safe, deterministic, and production-friendly while preserv
   production activation is outside repository evidence and authority.
 - Every success also requires the atomically startup-verified `engine_version`
   parsed from both selected executables' bounded `--help` output before listen.
-  The startup module has exact-image proof. Orca sends `--arrange 1` and
+  The startup module has exact-image proof and uses a telemetry-disabled runner,
+  so its probes cannot alter slice-native lifecycle metrics/events. Orca sends
+  `--arrange 1` and
   `--orient 0`: arrangement places already-rotated geometry onto the build
   plate, while auto-orient stays disabled and cannot replace the requested
   rotation. Focused command/digest contracts and a corrected validation-image

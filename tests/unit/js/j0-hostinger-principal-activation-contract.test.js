@@ -12,7 +12,12 @@ const REQUIRED = Object.freeze([
     '### J0 principal-only slice-authentication activation gate',
     '`SLICE_SERVICE_AUTH_MODE=principals`',
     'both\nnamed principal active slots (`woocommerce` and `leadpilot`)',
-    'The shared active, shared\nprevious, and migration expiry must all be absent.',
+    'The shared active, shared\nprevious, migration expiry, and both principal previous slots must all be\n'
+        + 'absent for this J0 initial-activation gate.',
+    'A later principal-key rotation is a separate owner-authorized change',
+    'positively\nauthenticate every configured previous slot under `x-slicer-api-key`',
+    'owner-approved removal deadline',
+    'After removal, the retired value must return\nexact HTTP 401 / `SLICE_SERVICE_AUTH_REQUIRED`',
     'every retired shared active/previous credential under `x-slicer-api-key`\n'
         + '  returns exact HTTP 401 / `SLICE_SERVICE_AUTH_REQUIRED` and creates no\n'
         + '  workspace, queue job, or artifact',
@@ -44,8 +49,14 @@ test('principal activation weakening mutations fail the public runbook contract'
             '`SLICE_SERVICE_AUTH_MODE=legacy`'],
         ['single principal', 'both\nnamed principal active slots (`woocommerce` and `leadpilot`)',
             'one principal active slot'],
-        ['shared material retained', 'The shared active, shared\nprevious, and migration expiry must all be absent.',
+        ['shared material retained', 'The shared active, shared\nprevious, migration expiry, and both principal previous slots must all be\n'
+                + 'absent for this J0 initial-activation gate.',
             'Shared credentials remain configured.'],
+        ['principal previous admitted without rotation proof',
+            'positively\nauthenticate every configured previous slot under `x-slicer-api-key`',
+            'ignore configured previous slots'],
+        ['rotation deadline omitted', 'owner-approved removal deadline',
+            'unbounded removal schedule'],
         ['retired key admitted',
             'every retired shared active/previous credential under `x-slicer-api-key`\n'
                 + '  returns exact HTTP 401 / `SLICE_SERVICE_AUTH_REQUIRED` and creates no\n'

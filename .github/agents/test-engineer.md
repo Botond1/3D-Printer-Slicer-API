@@ -110,6 +110,9 @@ python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --
    The native Orca smoke accepts positive `G1 ... E` only after the exact
    `;BEFORE_LAYER_CHANGE` marker; prelude/purge extrusion is not model-layer
    proof.
+   Keep it split into a thin Docker orchestrator plus side-effect-free fixture,
+   container-script, and contract builders; preserve bounded file/function
+   guards and exact generated-script behavior.
    Filament/`material_used_g` is W8 `BLOCKED_OWNER_INPUT / NOT_STARTED`.
 
 ## Troubleshooting

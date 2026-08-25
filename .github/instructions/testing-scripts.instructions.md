@@ -62,6 +62,9 @@ Python matrix alone still does not establish these facts.
 The native Orca smoke accepts positive `G1 ... E` only after exact
 `;BEFORE_LAYER_CHANGE`; prelude/purge extrusion does not establish model-layer
 extrusion.
+Keep the smoke split into its thin Docker orchestrator and side-effect-free
+fixture, container-script, and contract builders; preserve the bounded file/
+function guards and exact generated-script behavior.
 Filament-profile identity and
 `material_used_g` are W8 `BLOCKED_OWNER_INPUT / NOT_STARTED`, not current
 expectations.

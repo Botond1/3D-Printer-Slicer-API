@@ -407,9 +407,17 @@ Before any Traefik or router action, invoke the exact running image's
 only a fixed sanitized classification. It must prove mode `principals`, both
 named principal active slots (`woocommerce` and `leadpilot`),
 `legacyAccepted=false`, and `expiresAt=null`. The shared active, shared
-previous, and migration expiry must all be absent. Optional principal previous
-slots are allowed only when their matching active slot remains present. Never
-print, hash, count bytes from, or otherwise disclose any credential value.
+previous, migration expiry, and both principal previous slots must all be
+absent for this J0 initial-activation gate. Never print, hash, count bytes from,
+or otherwise disclose any credential value.
+
+A later principal-key rotation is a separate owner-authorized change and must
+not reuse the initial-activation classification. Its dark gate must positively
+authenticate every configured previous slot under `x-slicer-api-key`, bind it
+to the matching principal without disclosing credential material, and record an
+owner-approved removal deadline. After removal, the retired value must return
+exact HTTP 401 / `SLICE_SERVICE_AUTH_REQUIRED` with no workspace, queue, or
+artifact effects before revocation is classified complete.
 
 Run a private, customer-free synthetic authentication matrix against the dark
 API before continuing. Read each credential from a distinct root-owned,

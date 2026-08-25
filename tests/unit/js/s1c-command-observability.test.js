@@ -2,8 +2,69 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createCommandRunner } = require('../../../app/services/slice/command');
+const {
+    createCommandRunner,
+    createStartupProbeRunner
+} = require('../../../app/services/slice/command');
 const { handleProcessingError } = require('../../../app/services/slice/errors');
+const metrics = require('../../../app/services/observability/metrics');
+
+test('startup native probes emit no slice events or outcome/duration metrics', async () => {
+    metrics.resetMetricsForTests();
+    const baseline = metrics.renderMetrics();
+    const logs = [];
+    const originalInfo = console.info;
+    console.info = (value) => logs.push(String(value));
+    try {
+        const runner = createStartupProbeRunner({
+            timeoutMs: 1000,
+            setTimeout: () => ({ unref() {} }),
+            clearTimeout() {},
+            execFile(_exe, _args, _options, callback) {
+                callback(null, 'startup help output', '');
+                return { pid: 12344 };
+            }
+        });
+        await runner('inert', ['--help']);
+    } finally {
+        console.info = originalInfo;
+    }
+    assert.equal(metrics.renderMetrics(), baseline);
+    assert.deepEqual(logs, []);
+});
+
+test('timed-out startup probes emit no slice termination events or metrics', async () => {
+    metrics.resetMetricsForTests();
+    const baseline = metrics.renderMetrics();
+    const logs = [];
+    let triggerTimeout;
+    let completeChild;
+    const originalInfo = console.info;
+    console.info = (value) => logs.push(String(value));
+    try {
+        const runner = createStartupProbeRunner({
+            timeoutMs: 1000,
+            setTimeout(callback) {
+                triggerTimeout = callback;
+                return { unref() {} };
+            },
+            clearTimeout() {},
+            createProcessTreeTerminator: () => ({ terminate: async () => {} }),
+            execFile(_exe, _args, _options, callback) {
+                completeChild = callback;
+                return { pid: 12343 };
+            }
+        });
+        const pending = runner('inert', ['--help']);
+        triggerTimeout();
+        completeChild(new Error('terminated'), '', '');
+        await assert.rejects(pending, { code: 'ETIMEDOUT' });
+    } finally {
+        console.info = originalInfo;
+    }
+    assert.equal(metrics.renderMetrics(), baseline);
+    assert.deepEqual(logs, []);
+});
 
 test('22 native telemetry remains bounded and never serializes output or child environment', async () => {
     const logs = [];

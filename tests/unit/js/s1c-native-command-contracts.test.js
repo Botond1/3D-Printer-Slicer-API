@@ -24,7 +24,11 @@ test.after(() => {
     else process.env.PYTHON_EXECUTABLE = originalPythonExecutable;
 });
 const { resolvePythonHelper } = require('../../../app/services/slice/helper-paths');
-const { resolveSlicerExecutable, buildSlicerCommandArgs } = require('../../../app/services/slice/engine');
+const {
+    resolveSlicerExecutable,
+    resolveSlicerInvocationPolicy,
+    buildSlicerCommandArgs
+} = require('../../../app/services/slice/engine');
 
 function installCommandMock(runCommand) {
     const paths = [
@@ -109,12 +113,19 @@ test('converter, orientation, model-info, and transform commands preserve exact 
 });
 test('Prusa and Orca slicer executable/argument arrays remain exact', () => {
     const prusa = buildSlicerCommandArgs('FDM', 'profile.ini', 'out.gcode', '20%', 'prusa', null);
+    const prusaPolicy = resolveSlicerInvocationPolicy('prusa', 'FDM');
     assert.equal(resolveSlicerExecutable('prusa'), 'prusa-slicer');
     assert.deepEqual(prusa, ['--load', 'profile.ini', '--center', '100,100', '--support-material',
         '--support-material-auto', '--gcode-flavor', 'marlin', '--export-gcode', '--output',
         'out.gcode', '--fill-density', '20%']);
+    assert.ok(prusa.includes(`--export-${prusaPolicy.export}`));
     const orca = buildSlicerCommandArgs('FDM', 'process.json', path.join('stage', 'result.gcode'), '20%', 'orca', 'machine.json');
+    const orcaPolicy = resolveSlicerInvocationPolicy('orca', 'FDM');
     assert.equal(resolveSlicerExecutable('orca'), 'orca-slicer');
+    assert.deepEqual(orcaPolicy.settingsPrecedence, ['machine', 'process']);
+    assert.equal(orca[1], orcaPolicy.settingsPrecedence
+        .map((role) => ({ machine: 'machine.json', process: 'process.json' })[role])
+        .join(';'));
     assert.deepEqual(orca, ['--load-settings', 'machine.json;process.json', '--arrange', '1',
         '--orient', '0', '--slice', '0', '--outputdir', 'stage']);
 });

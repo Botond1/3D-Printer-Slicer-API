@@ -2,12 +2,12 @@
 
 /** Bounded, cached resolution of the actual native slicer binary version. */
 
-const { createCommandRunner } = require('./command');
+const { createStartupProbeRunner } = require('./command');
 const { resolveSlicerExecutable } = require('./engine');
 
 const VERSION_TIMEOUT_MS = 10_000;
 const MAX_VERSION_OUTPUT_BYTES = 8_192;
-const versionRunner = createCommandRunner({
+const versionRunner = createStartupProbeRunner({
     timeoutMs: VERSION_TIMEOUT_MS,
     maxBuffer: MAX_VERSION_OUTPUT_BYTES
 });

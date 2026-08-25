@@ -82,7 +82,9 @@ digest. The digest covers the configured effective machine/process profile
 layers, stable Orca relative-extrusion settings (`layer_gcode=''` and
 `use_relative_e_distances='1'`) aligned with the flattened pinned machine
 parent's per-layer `G92 E0` reset, and the request-independent native invocation
-policy while excluding request-selected layer height and infill. Prusa INI section and key case remains
+policy while excluding request-selected layer height and infill. The Prusa
+export flag and Orca machine-then-process settings precedence are derived from
+that same digest-covered policy. Prusa INI section and key case remains
 significant during canonicalization, and exact duplicate profile keys fail
 closed to match the native Boost parser. Runtime generation replaces one exact
 top-level request-owned key, rejects a duplicate top-level key, and inserts a
@@ -118,7 +120,9 @@ and publishes neither version unless both succeed. The exact candidate image
 returned exit 0 with bounded Prusa/Orca help output; `--version` returned exit
 1 for both, so it is not the supported probe. The startup module separately
 passed in a network-disabled, non-root, read-only exact-image envelope and
-published `2.8.1+linux-x64-GTK3-202409181416` and `2.3.1` atomically. Orca
+published `2.8.1+linux-x64-GTK3-202409181416` and `2.3.1` atomically. Startup
+version probes use a telemetry-disabled command runner, so they cannot alter
+slice-native events, outcome counters, or duration buckets. Orca
 invocation now passes `--arrange 1` and `--orient 0`:
 arrangement places already-rotated geometry onto the build plate, while native
 auto-orient remains disabled and does not replace the requested rotation.
@@ -272,7 +276,8 @@ Pricing, artifact, and operations active keys are always required.
 
 Before any route activation, the dark-container readback must prove
 `principals`, both principal actives, and absent shared active/previous and
-expiry. A private synthetic matrix must pass one slice for each principal,
+expiry. This J0 initial-activation gate also requires both principal previous
+slots absent. A private synthetic matrix must pass one slice for each principal,
 reject every available retired shared credential under `x-slicer-api-key`, and
 reject a correct principal sent only under `x-api-key`, with exact cleanup. Any
 missing or inconclusive result keeps the route dark. External production
@@ -283,9 +288,12 @@ value must be unique across all audiences, principals, and slots and contain
 32-256 bytes of printable ASCII; missing, malformed, placeholder-like, reused,
 duplicate, or mode-incompatible material refuses startup with a generic error.
 
-For rotation, set the replacement as active and the former active as previous,
-then restart once. Move the intended caller to the replacement, remove the
-previous slot, and restart a second time to revoke the former key. Key rings are
+For a later, separately owner-authorized rotation, set the replacement as active
+and the former active as previous, then restart once. Before continuing, the dark
+gate must positively authenticate every configured previous slot and record its
+owner-approved removal deadline. Move the intended caller to the replacement,
+remove the previous slot, and restart a second time; exact HTTP 401 plus no
+workspace, queue, or artifact effects proves revocation. Key rings are
 snapshotted at startup.
 
 `ADMIN_API_KEY` is separate from the shared slice compatibility family and is

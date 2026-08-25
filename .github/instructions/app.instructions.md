@@ -52,7 +52,8 @@ Last synchronized: 2026-08-25
   `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 - Atomically verify both selected engine versions from bounded `--help` output
   before listen; requests read the all-success initialized map. The startup
-  module has exact-image proof. Keep Orca invocation at `--arrange 1` /
+  module has exact-image proof and uses a telemetry-disabled runner that cannot
+  alter slice-native lifecycle metrics/events. Keep Orca invocation at `--arrange 1` /
   `--orient 0` after preprocessing/bounds checks: arrangement places already-
   rotated geometry onto the build plate, while auto-orient stays disabled.
   Focused command/digest contracts and a corrected validation-image HTTP
