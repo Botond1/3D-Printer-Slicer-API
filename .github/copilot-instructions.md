@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Copilot Instructions
 
-Last synchronized: 2026-08-24
+Last synchronized: 2026-08-25
 
 ## Architecture Notice
 This project uses both GitHub Copilot and Claude as primary agentic tools.
@@ -17,32 +17,26 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
 
 ## I12 Hostinger Production-Qualification Boundary
 
-- Current protected main is
-  `65706e381b907c6ba09a8eba504af3adaacac86b`. Source `32668796239`, Image
-  `32668796232`, Candidate Publication `32669087688`, and automatic no-deploy
-  rehearsal `32669484893` are all `SUCCESS`. Immutable digest
-  `sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`
-  has SLSA/SPDX attestation IDs `42462498`/`42462513`.
-- That exact pre-I12 candidate is verified dark on the authorized Hostinger VPS
-  at N=1. `MAX_CONCURRENT_SLICES` remains default `1` and accepts explicit exact
-  canonical decimal `1..3` only. N=2/N=3 are not qualified or deployed.
-- Capacity qualification requires explicit `--expected-max-concurrent`,
-  `--cleanup-manifest`, and `--report`, fresh authenticated operations state,
-  and an exactly empty managed-artifact preflight. The producer runs as the
-  dynamically resolved non-root service identity through the verified
-  root0600 credential-exec helper; secret values are never process arguments.
-- Stop and prove the API exited cleanly before cleanup. The same exact image
-  runs as a non-root, network-none consumer and may remove only exact
-  manifest-correlated artifact/marker pairs. Cleanup never overrides the
-  qualification result.
-- The Hostinger Traefik pack uses only the file provider, mounts no Docker
-  Engine socket, and keeps the route disabled during dark qualification.
-  Public hostname/DNS, intended caller, firewall, certificate continuity,
-  route activation, retained capacity, and new-candidate deployment remain
-  pending.
-- I12 currently has local implementation evidence only. Hosted Source/Image,
-  protected-main integration, publication/rehearsal, N=2/N=3 capacity, proxy
-  cutover, and deployment evidence have not completed.
+- Protected main `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28` and its no-deploy
+  Source/Image, signed publication, and automatic rehearsal are verified. Its
+  exact API image digest is
+  `sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
+- The API remains healthy and dark on the authorized Hostinger VPS at retained
+  concurrency one, without a host API port or API default route. No public
+  slicer router is active.
+- The first socketless Traefik cutover failed closed because the dual-attached
+  proxy had no explicit gateway priority. The old dedicated proxy was restored,
+  the route is absent, and ACME bytes are unchanged. Exact failed resources are
+  retained only for identity-bound residual reconciliation.
+- Corrective operator-pack commit
+  `7a490c150bb8c4c1ec6c22561421202152070fbc` is separate from the API-image
+  source. It requires Compose `2.33.1+`, ingress/private `gw_priority: 1/0`,
+  external ingress, runtime default-route proof, and effective read-only bind
+  proof through `RW=false`. It must never relabel the existing API image.
+- The corrective is locally green. Hosted exact-SHA validation, protected-main
+  integration, residual cleanup, and a corrected dark cutover are pending.
+  Hostname/DNS, caller, firewall, certificate continuity, route activation,
+  and production completeness remain unverified.
 
 ## Candidate Image Publication Boundary
 

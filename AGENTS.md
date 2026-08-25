@@ -19,58 +19,38 @@ Canonical Codex knowledge:
 
 ## Current I12 Wave 3 Hostinger qualification checkpoint
 
-I12 starts from exact protected-main SHA
-`65706e381b907c6ba09a8eba504af3adaacac86b` on
-`codex/i12-wave3-hostinger-production-qualification`. That baseline includes
-the completed I11 corrective: Source `32668796239`, Image `32668796232`,
-Candidate Publication `32669087688`, and automatic rehearsal `32669484893`
-all succeeded. Its current immutable signed candidate is
-`ghcr.io/botond1/3d-printer-slicer-api@sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`
-with SLSA/SPDX attestation IDs `42462498` and `42462513`.
+Current classification:
+`I12_API_F710_DARK_N1_VERIFIED; TRAEFIK_CUTOVER_FAILED_AND_RESTORED_DARK;
+OPERATOR_PACK_CORRECTIVE_LOCALLY_VERIFIED; HOSTED_REVALIDATION_AND_RESIDUAL_RECONCILIATION_PENDING`.
+Protected main `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28` passed Source
+`32749722709`, Image `32749722715`, Candidate Publication `32750334897`, and
+automatic no-deploy rehearsal `32751148223`. Its exact signed API image is
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
+That API remains healthy and dark on the authorized Hostinger KVM 4 VPS at
+retained concurrency one, with no API host port, no API default route, and no
+public slicer route.
 
-The I12 implementation keeps concurrency defaulted to one and accepts only
-canonical decimal `MAX_CONCURRENT_SLICES=1..3`. Runtime quarantine now closes
-admission, rejects queued/new work, aborts active native work, holds capacity
-until settlement, and releases its quarantine subscription only after terminal
-drain. Readiness fails when configured/active concurrency leaves the same
-bounded range. Detailed health stays fresh; public and operations surfaces
-retain the bounded cache but perform a live native-safety check on every cache
-hit, so a warm cache cannot mask quarantine or be replaced by an ordinary
-active job. Concurrent artifact promotions receive
-serialized post-promotion retention passes instead of sharing stale cleanup
-results.
+The first live socketless Traefik cutover failed closed. The pre-correction
+operator pack attached Traefik to both networks without explicit gateway
+priority, producing equal runtime priorities and leaving the private network as
+the default route. The old dedicated proxy was restored, the slicer route is
+absent, and ACME bytes remained unchanged. The failed stopped candidate and its
+empty ingress network are retained only for exact, identity-bound residual
+reconciliation; broad Docker cleanup or prune remains forbidden. A separate
+validator false negative required literal bind `Mode=ro`, although Docker
+reported the exact bind as effectively read-only through `RW=false` and an
+empty `Mode`.
 
-The capacity runner requires an exactly empty authenticated artifact inventory,
-fresh operations queue samples, three or fewer synthetic requests, create-new
-bounded report and cleanup-manifest paths, and postflight identity
-reconciliation even after response loss. Curl, subprocess and whole-batch
-deadlines are explicit and timeout results remain bounded and nondisclosing.
-Its exact-image cleanup consumer is
-non-root, argumentless, networkless and limited to the fixed manifest/output
-paths; cleanup is allowed only after a graceful API stop and exact stopped-state
-proof. A root-started credential-exec helper reads only four root:root 0600
-single-link files, drops to the dynamic service UID/GID, and directly execs
-absolute Python with exactly four environment entries; secret values never
-enter argv or helper output. The Hostinger operator pack pins Traefik 3.7.11 by digest, uses only the
-file provider, mounts no Docker socket, starts with an empty dynamic directory,
-and keeps route activation separate and no-clobber. Post-link activation
-failure must either restore and fsync exact dark state or report bounded
-rollback uncertainty; capacity and cleanup exit codes must both be exact zero
-before proxy startup.
-
-The existing signed I11 candidate is dark-deployed on the authorized Hostinger
-KVM 4 VPS at concurrency one. Exact digest, non-root UID/GID, health/readiness,
-private-peer access, API/native egress denial, and synthetic Prusa/Orca slices
-have been observed over SSH; no API host port or public router is active. The
-first I12 exact-SHA Source run `32746427481` passed. Image run `32746430314`
-failed closed because fresh public/operations readiness replaced the warmed idle
-cache during the abort gate. The narrow corrective restores bounded caching on
-those surfaces while retaining fresh detailed health and live native quarantine
-checks; its local regressions pass and exact-SHA hosted revalidation is pending.
-The new signed image, N=2/N=3 measurements, retained production concurrency,
-proxy cutover, firewall, approved hostname/DNS and real caller identity remain
-`PENDING` or `UNVERIFIED`. Do not infer a public service or
-production-complete state. See
+Corrective operator-pack commit
+`7a490c150bb8c4c1ec6c22561421202152070fbc` is distinct from the API-image
+source. It pins Compose `2.33.1+`, ingress `gw_priority: 1`, private
+`gw_priority: 0`, top-level ingress `internal: false`, runtime gateway/default-
+route proof, and effective read-only bind validation. It does not relabel,
+rebuild, publish, or replace the `f71069c` API image. Local focused and complete
+regressions are green; exact-SHA hosted Source/Image validation, protected-main
+integration, exact residual cleanup, and a corrected dark cutover remain
+pending. Hostname/DNS, approved caller, firewall, certificate continuity,
+public route activation, and production completeness remain `UNVERIFIED`. See
 `docs/codex/evidence/i12-wave3-hostinger-production-qualification.md`.
 
 ## Current I11 protected-main signed-candidate checkpoint

@@ -61,35 +61,30 @@ not claim deployed proxy, firewall, secret, digest, VPS, or readiness proof.
 
 ### I12 Hostinger production-qualification checkpoint
 
-I12 starts from current protected `main`
-`65706e381b907c6ba09a8eba504af3adaacac86b`. Source run `32668796239`, Image
-run `32668796232`, Candidate Publication run `32669087688`, and automatic
-no-deploy rehearsal run `32669484893` all succeeded. The immutable signed
-candidate digest is
-`sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`;
-its SLSA and SPDX attestation IDs are `42462498` and `42462513`. That exact
-pre-I12 candidate is verified dark on the authorized Hostinger VPS at N=1.
+I12 is merged at protected main
+`f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`. Its no-deploy Source/Image,
+signed Candidate Publication, and automatic rehearsal passed. The exact signed
+API image
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`
+is healthy and dark on the authorized Hostinger VPS at retained concurrency
+one. It has no host-published API port or API default route, and no public
+slicer router is active.
 
-The I12 repository change keeps `MAX_CONCURRENT_SLICES` at default `1` and
-accepts an explicit value only as the exact canonical decimal `1`, `2`, or `3`.
-N=2 and N=3 are not yet qualified or deployed. Capacity qualification requires
-fresh operations observations, an exactly empty managed-artifact preflight,
-create-new `--cleanup-manifest` and `--report` targets, and an explicit
-`--expected-max-concurrent`. On the host, the producer runs as the dynamically
-resolved non-root service identity through the fail-closed
-`scripts/i12-capacity-producer-exec.py` handoff. It reads only four root:root
-0600 credential files and directly execs Python with four allowlisted
-environment entries, without putting secret values in process arguments or
-output. Cleanup runs only after the API is cleanly
-stopped, using the same exact image as a network-none non-root consumer.
+The first live socketless Traefik cutover failed closed because the operator
+pack did not explicitly select the ingress network as the dual-attached
+proxy's default gateway. The old dedicated proxy was restored, the route
+remained absent, and ACME bytes were unchanged. Corrective operator-pack commit
+`7a490c150bb8c4c1ec6c22561421202152070fbc` is separate from the API-image
+source: it requires Compose `2.33.1+`, ingress/private `gw_priority: 1/0`, an
+external ingress bridge, runtime default-route proof, and effective read-only
+bind proof through Docker's `RW` state. It neither rebuilds nor relabels the
+existing API image.
 
-The Hostinger Traefik operator pack is socketless: it uses only the file
-provider, mounts no Docker Engine socket, and keeps the slicer router disabled
-through dark qualification. Public hostname/DNS, intended caller, firewall,
-certificate continuity, route activation, N=2/N=3 measurement, retained
-capacity, and deployment of a new I12 candidate remain pending. At this
-checkpoint the I12 implementation has local gate evidence only; it has not yet
-passed hosted Source/Image validation, publication, rehearsal, or deployment.
+The corrective is locally verified. Exact-SHA hosted validation,
+protected-main integration, exact residual cleanup, and a second dark cutover
+remain pending. Hostname/DNS, intended caller, firewall, certificate
+continuity, public route activation, and production completeness remain
+unverified.
 See [`ops/hostinger/RUNBOOK.md`](ops/hostinger/RUNBOOK.md).
 
 ### Immutable candidate image contract

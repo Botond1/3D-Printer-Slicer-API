@@ -3,17 +3,19 @@
 ## Checkpoint boundary
 
 - Status at this commit boundary:
-  `I12_CORRECTIVE_LOCALLY_VERIFIED; VPS_DARK_BASELINE_N1_VERIFIED; CORRECTIVE_HOSTED_AND_N2_N3_PENDING`.
-- Exact baseline and protected main:
-  `65706e381b907c6ba09a8eba504af3adaacac86b`.
-- Branch: `codex/i12-wave3-hostinger-production-qualification`.
-- Baseline Source `32668796239`, Image `32668796232`, Candidate Publication
-  `32669087688`, and automatic signed-main rehearsal `32669484893`: `SUCCESS`.
-- Baseline signed candidate:
-  `ghcr.io/botond1/3d-printer-slicer-api@sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`.
-- Baseline image config:
-  `sha256:9aaffb89844a9d24b9d828811df0f778a665c099b8a687177d2543f11100966c`.
-- Baseline SLSA/SPDX attestation IDs: `42462498` / `42462513`.
+  `I12_API_F710_DARK_N1_VERIFIED; TRAEFIK_CUTOVER_FAILED_AND_RESTORED_DARK;
+  OPERATOR_PACK_CORRECTIVE_LOCALLY_VERIFIED; HOSTED_REVALIDATION_AND_RESIDUAL_RECONCILIATION_PENDING`.
+- Exact protected-main API source:
+  `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`.
+- Corrective branch: `codex/i12-wave3-traefik-network-corrective`.
+- Corrective operator-pack commit:
+  `7a490c150bb8c4c1ec6c22561421202152070fbc`.
+- API Source `32749722709`, Image `32749722715`, Candidate Publication
+  `32750334897`, and automatic signed-main rehearsal `32751148223`: `SUCCESS`.
+- Exact signed API image:
+  `ghcr.io/botond1/3d-printer-slicer-api@sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
+- The operator-pack commit is not the API-image source and must not be used to
+  relabel the existing image. Its exact-SHA hosted validation is pending.
 - No public router, customer request, LeadPilot change, registry mutation,
   production tag, release or main direct push is part of this checkpoint.
 
@@ -178,7 +180,13 @@ It uses CLI static configuration plus the file provider only, with no Docker
 provider or Docker Engine socket. It has a read-only root, no-new-privileges,
 capability drop, bounded PID/RAM/CPU/logging, and a noexec 0700 tmpfs. The
 dynamic directory is fail-closed unless it contains exactly the canonical
-`.gitkeep`; the router template remains outside the mounted directory.
+`.gitkeep`; the router template remains outside the mounted directory. The
+corrective source additionally requires Compose `2.33.1+`, exact service
+attachments with `traefik-ingress` `gw_priority: 1` and
+`slicer-api-private` `gw_priority: 0`, and top-level ingress
+`internal: false`. Runtime proof must observe priorities 1/0 and Traefik's
+default route through ingress; ordinary `priority`, list order, missing, tied,
+reversed, or extra network configuration fails closed.
 
 Before candidate proxy startup, the operator must inventory port ownership,
 prove the existing proxy is dedicated, record exact restore metadata, stop it
@@ -193,40 +201,68 @@ separate bounded uncertain classification. Capacity and cleanup exit codes
 must both be exact zero after same-digest restart and two dark passes, before
 Traefik can start.
 
-The existing live Traefik is version 3.7.11 at the same exact digest, currently
-host-networked with Docker discovery. It remains unchanged at this checkpoint.
-An isolated exact-image, network-none, read-only, socketless CLI/file-provider
-runtime smoke passed with no container/image/script residue. That smoke is not
-the dark cutover.
+The first live socketless cutover failed closed. The pre-correction Compose
+source omitted gateway priority, runtime inspect reported equal priority for
+both attachments, and the private network became Traefik's default route. The
+old dedicated Traefik was restored and is running, the slicer route is absent,
+and ACME content remains byte-identical. The failed candidate is stopped with
+exit zero and the empty ingress network remains retained for exact residual
+reconciliation. These residuals are not authority for broad cleanup.
+
+An independent validator predicate also rejected the correct configs bind:
+Docker reported exact source/destination with `RW=false` and empty `Mode`.
+That is effectively read-only, not a writable-mount defect. Corrective runtime
+validation accepts only exact paths plus `RW=false`, with `Mode` either empty
+or explicitly read-only; `RW=true`, missing, duplicate, or wrong-path mounts
+remain rejected. A corrected dark cutover is pending exact-SHA hosted
+integration and exact residual reconciliation.
+
+Bounded post-failure host inventory on 2026-08-25:
+
+- restored old proxy full ID:
+  `673a657b0b240c1fa467e7358c956723cab29ad0bd2200c6f5903fdb0dad9d25`;
+- stopped failed candidate full ID:
+  `8568cf3722e5291c03cf76916f362fc056ffcfe769b3fcd85d3b9fc8f73e3fa6`,
+  exit zero;
+- retained empty ingress network full ID:
+  `1bdeaaa7e84ba2fb2370cd7a3df964c8014dcb564524e2e69046c9c70af618f3`;
+- public slicer route: absent; ACME file: root-owned mode 0600 and unchanged,
+  with empty-file SHA-256
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+The exact API identity is held in private run-owned evidence and must be
+re-read directly from the engine before any later mutation. Cleanup requires a
+fresh exact-ID/label/image/state check; descriptive inventory is not deletion
+authority.
 
 ## Local validation ledger
 
-At the final implementation boundary before hosted execution:
+At corrective operator-pack commit
+`7a490c150bb8c4c1ec6c22561421202152070fbc` before hosted execution:
 
-- focused queue/readiness/retention/capacity/cleanup/operator suites:
-  `342/342 PASS` (`300` JavaScript and `42` Python);
-- full JavaScript suite: `2066/2066 PASS`;
+- focused operator contract/mutation suites: `166/166 PASS`;
+- full JavaScript suite after documentation reconciliation: `2087/2087 PASS`;
 - full Python suite: `85` run, `84` pass and one expected Windows/POSIX
   permission skip;
 - syntax: `216` JavaScript and `39` Python tracked files;
-- repository safety: `368` final tracked indexed files, with staged batches of
-  `15`, `10`, `9`, and `17` implementation files plus the `9`-file corrective;
+- repository safety: `368` tracked indexed files and the exact staged source
+  set;
 - instruction mirrors: `2/2 PASS`; exact npm `10.9.8`; production dependency
-  audit: `0` vulnerabilities; production and Traefik Compose normalization,
-  operator CLI, and working-tree whitespace: `PASS`.
+  audit: `0` vulnerabilities; Traefik Compose source/render validation,
+  operator/version CLI, and working-tree whitespace: `PASS`.
 
-Quality/decomposition review found no remaining runtime blocker. The capacity
-entrypoint is 281 lines after orchestration/reporting/manifest extraction;
-`queue-scheduler.js` is 316 lines, `queue_concurrency_utils.py` is 563 lines,
-and the static Hostinger operator validator is 797 lines. The latter two and
-bounded scheduler/operator evaluators also exceed function-size guidance.
-Further behavior-neutral splitting of these four surfaces is explicitly
-deferred until after exact-SHA hosted proof: the current changes are
-single-purpose and mutation-locked, while another pre-hosted decomposition
-would change evidence anchors without reducing an observed runtime risk. No
-new responsibility may be added to them before that split decision is revisited.
+The local Docker daemon was unavailable. Runtime gateway/default-route and bind
+representation proof therefore remains a mandatory hosted/VPS gate rather than
+being reported as locally green.
 
-## First hosted diagnostic and corrective boundary
+Quality/decomposition review found no P0/P1 defect. The operator contract and
+mutation suite remain above repository size guidance, but this correction adds
+only same-domain gateway, version, mount and identity invariants. A behavior-
+neutral split is explicitly deferred until after the live cutover to avoid
+expanding an already mutation-locked correction. No unrelated responsibility
+may be added before that decision is revisited.
+
+## First hosted diagnostic and API corrective closure
 
 The first target-branch checkpoint was exact SHA
 `47253e4d90797049dc6be322d9525fbcbe1a1ecf`:
@@ -249,25 +285,27 @@ contract. The minimal corrective restores `getStatus()` on `/ready`,
 fresh and cache-independent. Each cache hit still checks live native state and
 returns a fail-closed quarantine overlay without replacing the cached ordinary
 queue snapshot. Focused mutation/regression and full local suites are green;
-the corrective exact-SHA hosted rerun is pending.
+the API corrective later merged at protected main
+`f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`. Source `32749722709`, Image
+`32749722715`, Candidate Publication `32750334897`, and automatic no-deploy
+rehearsal `32751148223` succeeded. The signed `d50c72…` digest is the exact API
+identity used for the dark host state described above.
 
 ## Pending hosted and production exits
 
 The following remain pending and must not be inferred from this checkpoint:
 
-1. one atomic corrective commit and target-branch non-force push;
-2. corrective exact-SHA hosted Source and Image validation, SBOM, Grype
-   HIGH=0/CRITICAL=0,
-   Swiper advisory zero, bounded evidence and cleanup;
-3. protected PR/merge, new signed candidate publication, attestations,
-   verification and automatic no-deploy rehearsal;
-4. exact new-digest dark deployment with rollback identity retained;
-5. N=1, N=2 and N=3 synthetic measurements with exact cleanup and resource
-   evidence, followed by a conservative retained value;
-6. dark socketless Traefik cutover with stopped-old and ACME continuity proof;
-7. firewall policy, approved hostname/DNS, intended caller identity/CIDR and
+1. exact-SHA hosted Source/Image validation of operator-pack commit `7a490c1`;
+2. protected PR integration of that correction without rebuilding or relabeling
+   the `f710` API image;
+3. exact identity-bound cleanup of the stopped failed Traefik candidate, empty
+   ingress network, and run-owned operator residue;
+4. a fresh immutable operator checkout and corrected dark cutover with runtime
+   priority/default-route, exact read-only bind, private-peer, health, listener,
+   route-absence, rollback, and ACME continuity proof;
+5. firewall policy, approved hostname/DNS, intended caller identity/CIDR and
    certificate/route acceptance;
-8. monitoring, backup/recovery acceptance and real customer-workload capacity.
+6. monitoring, backup/recovery acceptance and real customer-workload capacity.
 
 No public route is enabled by this document. Production completeness remains
 `UNVERIFIED` until every applicable external exit is evidenced.

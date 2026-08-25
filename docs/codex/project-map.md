@@ -3,63 +3,52 @@
 ## Current I12 Wave 3 Hostinger qualification map
 
 Observed status:
-`I12_CORRECTIVE_LOCALLY_VERIFIED; VPS_DARK_BASELINE_N1_VERIFIED; CORRECTIVE_HOSTED_AND_N2_N3_PENDING`.
-Exact baseline is protected main
-`65706e381b907c6ba09a8eba504af3adaacac86b`; its Source `32668796239`, Image
-`32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
-`32669484893` are green. The immutable baseline candidate is
-`ghcr.io/botond1/3d-printer-slicer-api@sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`.
-This corrected I11 state supersedes the older corrective-pending prose below.
-The first I12 exact-SHA Source run `32746427481` passed. Image run
-`32746430314` failed closed at the active-abort contract because public and
-operations readiness had bypassed the normal cache. The corrective direct
-source below restores those cached routes, preserves fresh detailed health and
-adds a live native-quarantine overlay on cache hits. Corrective exact-SHA hosted
-evidence is pending.
+`I12_API_F710_DARK_N1_VERIFIED; TRAEFIK_CUTOVER_FAILED_AND_RESTORED_DARK;
+OPERATOR_PACK_CORRECTIVE_LOCALLY_VERIFIED; HOSTED_REVALIDATION_AND_RESIDUAL_RECONCILIATION_PENDING`.
+Protected main `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28` passed Source
+`32749722709`, Image `32749722715`, Candidate Publication `32750334897`, and
+automatic rehearsal `32751148223`. Its exact signed API image is
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
+The separate operator-pack correction is local commit
+`7a490c150bb8c4c1ec6c22561421202152070fbc`; it does not change, rebuild, or
+relabel that API image.
 
 Direct executable-source map:
 
 ```text
-MAX_CONCURRENT_SLICES canonical policy (default 1, allowed 1..3)
-  -> queue scheduler bounded active slots
-  -> native quarantine subscription
-  -> synchronous admission close / queued rejection / active abort
-  -> active settlement retains slot -> terminal unsubscribe
-  -> serialized post-promotion artifact-retention passes
-  -> fresh detailed health + cached public/operations readiness
-  -> cache-hit live native-quarantine fail-closed overlay
-  -> authenticated empty artifact inventory
-  -> root0600 credential files -> no-follow credential-exec -> exact four-entry env
-  -> full privilege drop -> absolute Python producer, with no secret argv
-  -> max-three synthetic Prusa/Orca load
-  -> postflight queue + artifact reconciliation
-  -> bounded curl/subprocess/future-drain deadlines
-  -> create-new 0600 report and cleanup manifest
-  -> graceful API stop -> exact exited/exit-0/OOM-false proof
-  -> exact candidate image, network-none, non-root cleanup consumer
-  -> exact artifact/marker absence and API same-digest restart
-  -> repeat dark readiness/auth/private-peer/egress matrix
-  -> socketless digest-pinned Traefik, route directory initially empty
-  -> exact-zero qualification + cleanup exits
-  -> approved DNS/caller/firewall only -> no-clobber route activation
+f710 source -> signed d50c72 API image
+  -> private-only slicer-api-private -> API has no host port/default route
+7a490c operator pack -> Compose 2.33.1+ preflight
+  -> exact Traefik image + file provider, no Docker socket
+  -> traefik-ingress gw_priority 1, internal false
+  -> slicer-api-private gw_priority 0
+  -> runtime inspect GwPriority 1/0
+  -> Traefik default route through traefik-ingress
+  -> API/image labels and operator-pack source kept distinct
+  -> exact configs bind + RW=false (Mode empty or read-only)
+  -> empty dynamic route directory -> dark private-peer proof
+  -> approved DNS/caller/firewall/certificate only -> no-clobber route link
   -> post-link failure -> exact dark rollback or bounded uncertainty
 ```
 
-On the authorized Ubuntu 24.04 Hostinger KVM 4 host, the baseline candidate is
-running dark at N=1 on internal `slicer-api-private`, with no host API port or
-default route. Dynamic service identity resolved to 999:999. Health/readiness,
-wrong/missing authentication, API and Node/Python native egress denial,
-private-peer access, and synthetic Prusa/Orca slicing passed; generated
-artifacts and workspaces were exactly removed. Docker 29.7.2, Compose 5.5.0,
-four vCPU, about 16 GiB RAM, no swap, and about 205 GiB free disk were observed.
-These facts characterize the current host; they do not yet validate N=2/N=3 or
-arbitrary customer-model capacity.
+On the authorized Ubuntu 24.04 Hostinger KVM 4 host, the `f710` candidate is
+healthy and dark at N=1. Private-peer access, API/native egress denial, and
+synthetic Prusa/Orca slicing were already proven. The first live socketless
+Traefik cutover then failed closed: the old pack produced equal runtime gateway
+priorities and the private attachment became the proxy's default route. The old
+dedicated Traefik was restored and is running; the slicer route is absent and
+ACME bytes are unchanged. A stopped failed candidate and its empty ingress
+network remain only for exact residual reconciliation.
 
-The pre-existing Traefik 3.7.11 container owns ports 80/443 and is retained
-unchanged. An isolated exact-image socketless CLI/file-provider smoke passed,
-but dark cutover remains pending. Public route activation is blocked until an
-approved hostname/DNS result, intended caller identity/CIDR, firewall policy,
-certificate continuity and synthetic authenticated route proof exist.
+The same incident exposed an independent evidence bug: Docker represented the
+exact configs bind with `RW=false` and empty `Mode`. It was effectively
+read-only; requiring literal `Mode=ro` was a validator false negative. The
+corrected source accepts only exact source/destination plus `RW=false` and an
+empty or read-only mode. Corrective hosted validation, protected-main
+integration, exact residual reconciliation, and a corrected dark cutover are
+pending. Public route activation remains blocked on approved hostname/DNS,
+caller identity/CIDR, firewall, certificate continuity, and authenticated
+synthetic route proof.
 
 No new graph output is retained. Existing graph knowledge was consulted first;
 the queue, artifact, Compose and operator direct sources above are authoritative.

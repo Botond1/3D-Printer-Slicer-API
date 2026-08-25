@@ -4,7 +4,7 @@ applyTo: "**"
 
 # Repository Wide Instructions
 
-Last synchronized: 2026-08-23
+Last synchronized: 2026-08-25
 
 ## Architecture
 - Backend stack is Node.js + Express + Python helper scripts.
@@ -53,6 +53,17 @@ Last synchronized: 2026-08-23
   egress. The separate production manifest uses an internal private bridge,
   no host port, and a digest-only image, but deployed proxy/firewall/egress
   topology remains `UNVERIFIED`.
+- A dual-attached production Traefik peer requires Compose `2.33.1+`, exactly
+  ingress `gw_priority: 1` and private `gw_priority: 0`, a non-internal ingress
+  bridge, and runtime proof that the ingress attachment owns its default route.
+  Ordinary `priority`, list order, tied/reversed values, or an implicit gateway
+  are not acceptable substitutes. The API itself remains private-only with no
+  default route.
+- Docker bind evidence is effectively read-only only when the exact source and
+  destination match and runtime `RW=false`; an empty inspect `Mode` is valid and
+  must not be misclassified as writable. Keep API-image source identity and
+  operator-pack source identity separate; never relabel an older API image with
+  a newer operator commit.
 - I10 live policy is verified at exact protected-main SHA
   `8253160eef1c3e00c1e40826ec61fd97563ddd9b`; Source `32662043454` and Image
   `32662043476` succeeded. Strict required checks bind both no-deploy GitHub

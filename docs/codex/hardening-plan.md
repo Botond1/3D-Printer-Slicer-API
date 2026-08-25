@@ -3,58 +3,50 @@
 ## I12 Wave 3 Hostinger production-qualification checkpoint
 
 Status:
-`CORRECTIVE_LOCALLY_VERIFIED; DARK_BASELINE_N1_VERIFIED; CORRECTIVE_HOSTED_PUBLICATION_CAPACITY_AND_CUTOVER_PENDING`.
-Baseline is exact protected main
-`65706e381b907c6ba09a8eba504af3adaacac86b`, whose Source `32668796239`, Image
-`32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
-`32669484893` succeeded. The exact baseline digest
-`sha256:5d209de83d8ddd601fbda8232e6e40f9a641af6d31aa94e99e7c313715a6216c`
-is dark-running on the authorized Hostinger VPS at N=1.
+`I12_API_F710_DARK_N1_VERIFIED; TRAEFIK_CUTOVER_FAILED_AND_RESTORED_DARK;
+OPERATOR_PACK_CORRECTIVE_LOCALLY_VERIFIED; HOSTED_REVALIDATION_AND_RESIDUAL_RECONCILIATION_PENDING`.
+Exact protected main `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28` passed
+Source `32749722709`, Image `32749722715`, Candidate Publication
+`32750334897`, and automatic no-deploy rehearsal `32751148223`. Its exact
+signed API image digest
+`sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`
+is healthy and dark-running on the authorized Hostinger VPS at retained N=1.
 
-I12 exit order:
+Completed exits include concurrency/quarantine/readiness/retention controls,
+bounded capacity and cleanup evidence, protected integration, signed
+publication/rehearsal, exact dark deployment, retained N=1, repeated private
+readiness/auth/egress and synthetic Prusa/Orca proof. The first socketless
+Traefik cutover failed closed because dual-network gateway ownership was not
+explicit. The old dedicated proxy was restored, the route is absent, and ACME
+bytes are unchanged. A stopped failed candidate and empty ingress network are
+retained only for exact residual reconciliation.
 
-1. preserve default N=1 and enforce canonical positive decimal concurrency in
-   the inclusive application range 1..3;
-2. close admission and settle all queue ownership after native quarantine,
-   including exactly-once subscription teardown, independent fresh detailed
-   readiness, and a live native-safety check on cached readiness surfaces;
-3. produce bounded, create-new capacity evidence from fresh authenticated queue
-   and artifact inventory observations, using the root0600 no-follow
-   credential-exec boundary and explicit curl/subprocess/batch deadlines;
-4. stop the API cleanly and use the exact candidate image as a non-root,
-   network-none, manifest-bound cleanup consumer;
-5. serialize each concurrent post-promotion retention pass so no caller can use
-   a stale single-flight quota result;
-6. pass final local syntax/safety/mirror/audit/full-regression gates, then hosted
-   exact-SHA Source and Image validation;
-7. merge only through protected PR, publish/verify a new immutable signed
-   candidate and complete its automatic no-deploy rehearsal;
-8. deploy that exact digest dark, measure N=1 then N=2 then N=3 with bounded
-   CPU/RAM/PID/disk/restart/OOM evidence and exact cleanup after each run;
-9. retain only the highest value with meaningful host headroom; mechanistic
-   tiny-cube success alone cannot justify arbitrary production capacity;
-10. restart the retained exact digest and repeat dark readiness/auth/private-peer
-   and API/native egress-denial proof twice;
-11. replace the dedicated existing proxy only after exact inventory/restore and
-    closed-listener proof; keep the old proxy and ACME state for rollback;
-12. keep the router disabled until approved hostname/DNS, caller identity/CIDR,
-    firewall and certificate continuity are proven; activate only through a
-    no-clobber exact-router boundary;
-13. on any post-link activation failure, prove exact dark rollback or stop with
-    bounded uncertainty; require exact-zero qualification and cleanup exits
-    before proxy startup;
-14. reconcile exact hosted/VPS evidence without claiming public or production
-    completeness for any unverified external control.
+Corrective operator-pack commit
+`7a490c150bb8c4c1ec6c22561421202152070fbc` is not an API-image source. It
+requires Compose `2.33.1+`, ingress/private `gw_priority: 1/0`, top-level
+ingress `internal: false`, runtime gateway/default-route proof, and effective
+read-only bind proof through exact paths plus `RW=false`. The existing `f710`
+API image must not be relabeled, rebuilt, or republished merely for this
+operator correction.
 
-Completed at this checkpoint: dark N=1 baseline identity/topology/egress and
-synthetic Prusa/Orca proof; local queue, capacity-runner, exact-cleanup and
-socketless Traefik implementation; exact Traefik runtime smoke; focused and
-full local regressions. I12 Source run `32746427481` passed, while Image run
-`32746430314` failed closed at the abort/readiness-cache contract. The narrow
-cache-semantics corrective is locally green. Pending: corrective commit/push and
-exact-SHA hosted revalidation, the hosted new-candidate chain, N=2/N=3
-measurements, retained capacity, dark proxy cutover, firewall/hostname/caller
-evidence and route activation.
+Remaining order:
+
+1. complete final local docs/safety/full-regression gates for the immutable
+   corrective operator-pack commit;
+2. pass exact-SHA hosted Source and Image validation, then integrate only by a
+   protected PR;
+3. create a fresh immutable operator checkout while retaining `f710` as the API
+   image source identity;
+4. reconcile only the exact stopped failed proxy, empty ingress network, and
+   run-owned operator residue, preserving the API, restored proxy, ACME state,
+   and all unrelated Docker resources;
+5. re-run preflight and the corrected dark cutover, proving runtime
+   `GwPriority=1/0`, ingress-owned Traefik default route, exact read-only config
+   bind, health/private-peer behavior, and dark route absence;
+6. keep route activation blocked until hostname/DNS, approved caller/CIDR,
+   firewall, certificate continuity, monitoring and recovery evidence exist;
+7. reconcile final hosted/VPS evidence without claiming public or production
+   completeness for any unverified external control.
 
 See
 [`evidence/i12-wave3-hostinger-production-qualification.md`](evidence/i12-wave3-hostinger-production-qualification.md).
