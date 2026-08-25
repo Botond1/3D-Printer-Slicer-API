@@ -3,61 +3,71 @@
 ## Current I12 Wave 3 Hostinger qualification map
 
 Observed status:
-`I12_API_F710_DARK_N1_VERIFIED; TRAEFIK_CUTOVER_FAILED_AND_RESTORED_DARK;
-OPERATOR_PACK_CORRECTIVE_LOCALLY_VERIFIED; HOSTED_REVALIDATION_AND_RESIDUAL_RECONCILIATION_PENDING`.
-Protected main `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28` passed Source
-`32749722709`, Image `32749722715`, Candidate Publication `32750334897`, and
-automatic rehearsal `32751148223`. Its exact signed API image is
+`I12_API_F710_DARK_N1_VERIFIED;
+OPERATOR_MAIN_7C8AEE_RESIDUAL_RECONCILIATION_COMPLETE;
+CORRECTED_TRAEFIK_DARK_CUTOVER_VERIFIED; PUBLIC_ROUTE_DISABLED`.
+Protected operator main `7c8aee0728fc8462c67b4c6d85636bffb7afcdf8`
+passed Source `32804297840` and Image `32804297658` after PR `#5`. The deployed
+API image source remains protected-main checkpoint
+`f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`, with its previously
+green Source/Image/publication/rehearsal chain and exact signed image
 `ghcr.io/botond1/3d-printer-slicer-api@sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
-The separate operator-pack correction is local commit
-`7a490c150bb8c4c1ec6c22561421202152070fbc`; it does not change, rebuild, or
-relabel that API image.
+The separate operator-pack commits `7a490c150bb8c4c1ec6c22561421202152070fbc`
+and `1fe89d7508f5bbd59a75256ec43722f3f19ae1c2` do not change, rebuild,
+publish, or relabel that API image.
 
 Direct executable-source map:
 
 ```text
-f710 source -> signed d50c72 API image
-  -> private-only slicer-api-private -> API has no host port/default route
-7a490c operator pack -> Compose 2.33.1+ preflight
-  -> exact Traefik image + file provider, no Docker socket
-  -> traefik-ingress gw_priority 1, internal false
-  -> slicer-api-private gw_priority 0
-  -> runtime inspect GwPriority 1/0
-  -> Traefik default route through traefik-ingress
+f710 source -> signed d50c72 API image -> healthy dark N=1 API
+  -> private f7018efd internal bridge -> no API host port/default route
+7c8aee operator main -> Compose 2.33.1+ preflight
+  -> pinned socketless Traefik + file provider only
+  -> external ingress d612f324 gw_priority 1
+  -> private f7018efd gw_priority 0
+  -> runtime inspect GwPriority 1/0 and ingress-owned IPv4 default route
+  -> no container IPv6 default route; container networks IPv6-disabled
+  -> exact Docker-owned host listeners: IPv4+IPv6, ports 80+443
   -> API/image labels and operator-pack source kept distinct
   -> exact configs bind + RW=false (Mode empty or read-only)
-  -> empty dynamic route directory -> dark private-peer proof
+  -> exact .gitkeep dynamic directory -> unknown-host redirect/404
+  -> PUBLIC_ROUTE_DISABLED -> dark private-peer proof
   -> approved DNS/caller/firewall/certificate only -> no-clobber route link
   -> post-link failure -> exact dark rollback or bounded uncertainty
 ```
 
-On the authorized Ubuntu 24.04 Hostinger KVM 4 host, the `f710` candidate is
+On the authorized Ubuntu 24.04 Hostinger KVM 4 host, the `f710` API remains
 healthy and dark at N=1. Private-peer access, API/native egress denial, and
-synthetic Prusa/Orca slicing were already proven. The first live socketless
-Traefik cutover then failed closed: the old pack produced equal runtime gateway
-priorities and the private attachment became the proxy's default route. The old
-dedicated Traefik was restored and is running; the slicer route is absent and
-ACME bytes are unchanged. A stopped failed candidate and its empty ingress
-network remain only for exact residual reconciliation.
+synthetic Prusa/Orca slicing remain proven. The corrected Traefik candidate
+`91e043fbc05a55cac7f7b826a121581fc905975159a070c806a76c426bde7b57`
+is running and healthy with restart count zero and OOM false. The old dedicated
+proxy `673a657b0b240c1fa467e7358c956723cab29ad0bd2200c6f5903fdb0dad9d25`
+is intentionally retained stopped for rollback. The prior failed residual set
+was identity-bound reconciled; the corrected resumable cutover then established
+the current candidate/network identities. The root-private recovery bundle
+remains bounded and exact cleanup removed only task-owned helpers/uploads/temp
+paths. ACME SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+is unchanged, and the final read-only audit passed 30/30 checks.
 
-The same incident exposed an independent evidence bug: Docker represented the
-exact configs bind with `RW=false` and empty `Mode`. It was effectively
-read-only; requiring literal `Mode=ro` was a validator false negative. The
-corrected source accepts only exact source/destination plus `RW=false` and an
-empty or read-only mode. Corrective hosted validation, protected-main
-integration, exact residual reconciliation, and a corrected dark cutover are
-pending. Public route activation remains blocked on approved hostname/DNS,
-caller identity/CIDR, firewall, certificate continuity, and authenticated
-synthetic route proof.
+Public route activation remains blocked on approved hostname/DNS, caller
+identity/CIDR, firewall acceptance, certificate issuance/continuity, monitoring
+and recovery acceptance, and authenticated synthetic route proof. Active
+80/443 listeners are the dark proxy transport boundary, not evidence of an
+active slicer router or customer production readiness.
 
 No new graph output is retained. Existing graph knowledge was consulted first;
 the queue, artifact, Compose and operator direct sources above are authoritative.
 See
 [`evidence/i12-wave3-hostinger-production-qualification.md`](evidence/i12-wave3-hostinger-production-qualification.md).
 
-## Current I11 protected-main signed-candidate checkpoint
+## Historical I11 protected-main signed-candidate checkpoint
 
-Observed status: `SIGNED_MAIN_CANDIDATE_VERIFIED; AUTOMATIC_REHEARSAL_CORRECTIVE_PENDING`.
+I11 completed at protected-main SHA
+`65706e381b907c6ba09a8eba504af3adaacac86b`: Source `32668796239`, Image
+`32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
+`32669484893` succeeded. Corrective-pending statements retained below describe
+the earlier `48afd39b` boundary and are superseded by those exact results.
 I11 merged from baseline `8253160eef1c3e00c1e40826ec61fd97563ddd9b`
 through PR `#2` at main SHA
 `48afd39b26a6c6ca18ec7bbd18a719c846751e26`. Direct source map:
@@ -116,10 +126,12 @@ manual workflow_dispatch on exact protected main HEAD
   otherwise-true `1fffab8… -> 48afd39…` ancestry proof; the always-run cleanup
   independently dereferenced unset image refs. The corrective workflow removes
   the shallow fetch and validates an all-empty/all-valid cleanup identity tuple.
-  Corrective exact-SHA hosted evidence is `PENDING` at this commit boundary.
+  Corrective exact-SHA hosted evidence was `PENDING` at that earlier commit
+  boundary; the later protected-main rehearsal run `32669484893` succeeded.
 - No mode authorizes deployment, VPS/SSH, promotion tag, release/Git tag,
   mutable tag, overwrite or registry deletion. Hosted S4/S5/I9 evidence remains
-  ephemeral repository validation, not production proof.
+  ephemeral repository validation. I12 separately adds the bounded dark-host
+  proof above; it is still not public production proof.
 
 See
 [`evidence/i11-mainline-signed-candidate.md`](evidence/i11-mainline-signed-candidate.md).
@@ -840,8 +852,10 @@ Runtime route registration, not README lists, is canonical:
   `/operations/readiness` use the bounded cache;
 - `/prusa/slice` and `/orca/slice` apply rate limiting then mandatory
   `x-slicer-api-key` authentication before workspace/Multer/queue/native work;
-  active/previous rotation and revocation are repository-tested; deployed
-  private binding, proxy/firewall, and egress remain `UNVERIFIED`;
+  active/previous rotation and revocation are repository-tested. I12 verifies
+  one exact dark private binding, proxy topology and API/native egress denial;
+  public caller/firewall/DNS/certificate and complete secret lifecycle remain
+  `UNVERIFIED`;
 - `choosenFile`, stable status/error mappings, Prusa FDM/SLA, Orca FDM-only,
   profile pairing, pricing behavior, and argument semantics are compatibility
   invariants for behavior-preserving stages;
@@ -865,24 +879,25 @@ Runtime route registration, not README lists, is canonical:
   tree requests. Failed termination proof retains the active slot fail closed.
 - Native children no longer inherit arbitrary API environment values. I6
   repository validation denies API/native egress on its selected internal
-  private-peer topology; deployed enforcement remains `UNVERIFIED`.
+  private-peer topology; I12 host evidence verifies that denial for the exact
+  dark deployed digest. It remains point-in-time and must be re-proved after
+  network, firewall or image changes.
 - Docker verifies versioned Prusa/Orca AppImage SHA-256 values, while Ubuntu
   tags, NodeSource/Apt inputs, unversioned Python requirements, action tags, and
   Compose image tags remain floating
   ([`Dockerfile`](../../Dockerfile), [`requirements.txt`](../../requirements.txt),
   [`image-validation.yml`](../../.github/workflows/image-validation.yml)).
 
-The remaining delivery cycle is formally separated: S3a repository-only
-build-once/no-deploy controls are integrated. I4 implements the local S2
-resource/state and container-envelope candidate; exact active-job container
-stop orchestration and live host/proxy evidence remain unproven. I5 implements
-and deterministic-tests the repository credential lifecycle, protected Origin
-policy, proxy/request identity, readiness, events, and metrics. Private ingress
-plus denied API/native egress is blocked by the locally available Docker
-capability and remains unverified on the target host. S3b owns
-staging, promotion, readiness, and rollback only after complete S4 evidence and
-separate explicit user/owner authorization. No repository result verifies
-production topology or authorizes promotion.
+The remaining delivery cycle is formally separated. S3a protected-main
+governance, signed candidate publication and automatic no-deploy rehearsal are
+verified. I4 closes the repository/hosted S2 resource-state envelope; I12 adds
+only small synthetic N=1 host evidence, not arbitrary workload capacity. I5/I6
+implement the credential lifecycle, protected Origin/proxy/request identity,
+readiness/observability and private-peer topology; I12 verifies one exact dark
+deployment with denied API/native egress and corrected proxy gateway behavior.
+Public DNS/certificate/caller/firewall, complete secret lifecycle,
+monitoring/backup acceptance, route activation and customer production remain
+separately authorized and `UNVERIFIED`.
 
 ## Historical S0 test and CI capability matrix
 
@@ -944,21 +959,23 @@ delta above for present test and audit status.
   protected branches true/custom false, with exactly one `branch_policy` rule
   (ID `63481958`) and zero reviewer/wait-timer rules, secrets, variables and
   deployments as of 2026-08-23.
-- `VERIFIED_I11_SIGNED_MAIN_CANDIDATE`: Candidate Publication `32667219964`
-  produced digest `sha256:3cea88b5…2541ea`, attestations `42460061`/`42460068`
-  and bounded artifact `9500456840` with exact cleanup.
-- `PENDING_I11_REHEARSAL_CORRECTIVE`: automatic run `32667607266` failed before
-  registry read/runtime on shallow-history ancestry plus an independent unset-
-  identity cleanup bug. Corrective exact-SHA hosted success is required.
+- `VERIFIED_I11_SIGNED_MAIN_CANDIDATE_AND_REHEARSAL`: main
+  `65706e381b907c6ba09a8eba504af3adaacac86b` passed Source `32668796239`,
+  Image `32668796232`, Candidate Publication `32669087688`, and automatic
+  rehearsal `32669484893`.
 - Production secret delivery remains `UNVERIFIED`.
-- `UNVERIFIED`: deployed commit/image and digest, intended/denied callers, VPS
-  checkout cleanliness, exact reverse-proxy CIDRs/hops/timeouts, actual host
-  capacity, firewall/egress, quotas, backups, monitoring, and rollback readiness.
+- `VERIFIED_DARK_POINT_IN_TIME`: exact `f71069c` signed image, private API
+  binding, API/native egress denial, dark N=1 readiness/slicing, corrected
+  Traefik gateway/listener topology, retained-old rollback and ACME continuity.
+- `UNVERIFIED`: intended public callers, exact public proxy CIDRs/hops/timeouts,
+  capacity beyond small synthetic N=1, firewall acceptance, public DNS and
+  certificate, quotas under real workloads, backups, monitoring, route
+  activation and customer-facing rollback readiness.
 - `UNVERIFIED`: production secret source, ownership, filesystem mode, and
   current/previous/revoked key state.
-- Locally tested process-tree cancellation does not verify hostile
-  archive/model parser behavior, exact Prusa/Orca metadata variants, or the
-  production/container egress boundary.
+- Locally tested process-tree cancellation and the bounded dark host probes do
+  not verify hostile archive/model parser behavior, arbitrary Prusa/Orca
+  metadata variants, or post-change egress drift.
 - Product/browser policy now has separate protected-audience Origin controls;
   the actual deployed allowlists remain `UNVERIFIED`.
 

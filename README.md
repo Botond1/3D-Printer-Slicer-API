@@ -43,8 +43,12 @@ node scripts/i7-production-compose-contract.js &&
 
 The external reverse proxy may join the named private bridge from its own
 stack and retain a separate approved ingress network. It must not provide
-generic forwarding, NAT, or DNS tunnelling for the API. This repository does
-not claim deployed proxy, firewall, secret, digest, VPS, or readiness proof.
+generic forwarding, NAT, or DNS tunnelling for the API. The repository
+contract alone does not prove a deployed proxy, firewall, secret, digest, VPS,
+or readiness state. The I12 checkpoint below adds bounded point-in-time proof
+for one exact dark digest, private readiness, egress denial and socketless
+proxy; public caller/firewall/DNS/certificate/route and complete secret-
+lifecycle evidence remain separate gates.
 
 ---
 
@@ -61,8 +65,8 @@ not claim deployed proxy, firewall, secret, digest, VPS, or readiness proof.
 
 ### I12 Hostinger production-qualification checkpoint
 
-I12 is merged at protected main
-`f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`. Its no-deploy Source/Image,
+The deployed API image source is the protected-main checkpoint
+`f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`; its no-deploy Source/Image,
 signed Candidate Publication, and automatic rehearsal passed. The exact signed
 API image
 `ghcr.io/botond1/3d-printer-slicer-api@sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`
@@ -70,21 +74,22 @@ is healthy and dark on the authorized Hostinger VPS at retained concurrency
 one. It has no host-published API port or API default route, and no public
 slicer router is active.
 
-The first live socketless Traefik cutover failed closed because the operator
-pack did not explicitly select the ingress network as the dual-attached
-proxy's default gateway. The old dedicated proxy was restored, the route
-remained absent, and ACME bytes were unchanged. Corrective operator-pack commit
-`7a490c150bb8c4c1ec6c22561421202152070fbc` is separate from the API-image
-source: it requires Compose `2.33.1+`, ingress/private `gw_priority: 1/0`, an
-external ingress bridge, runtime default-route proof, and effective read-only
-bind proof through Docker's `RW` state. It neither rebuilds nor relabels the
-existing API image.
+The corrected socketless Traefik operator pack reached protected main
+`7c8aee0728fc8462c67b4c6d85636bffb7afcdf8` through PR `#5`; exact-main Source
+`32804297840` and Image `32804297658` passed. The dark cutover is verified:
+the file-provider-only proxy is healthy, has no Docker socket/provider, uses
+ingress/private `gw_priority: 1/0`, routes its own default path through ingress,
+and owns exact IPv4 and IPv6 host listeners for 80/443. The API remains only on
+the private internal network. The failed-cutover residue was identity-bound
+reconciled, the old proxy is intentionally retained stopped for rollback, and
+ACME bytes are unchanged. The operator commits did not rebuild, relabel, or
+republish the API image.
 
-The corrective is locally verified. Exact-SHA hosted validation,
-protected-main integration, exact residual cleanup, and a second dark cutover
-remain pending. Hostname/DNS, intended caller, firewall, certificate
-continuity, public route activation, and production completeness remain
-unverified.
+This remains a dark deployment: the dynamic slicer router is absent. Approved
+hostname/DNS, intended public caller/CIDR, firewall acceptance, certificate
+issuance/continuity, route activation, monitoring/recovery acceptance, customer
+traffic, and public production completeness remain unverified and separately
+authorized.
 See [`ops/hostinger/RUNBOOK.md`](ops/hostinger/RUNBOOK.md).
 
 ### Immutable candidate image contract
@@ -139,7 +144,7 @@ lane: private-peer readiness, controlled `STORAGE_UNSAFE` failure, automatic
 exact-previous rollback, bounded evidence and exact cleanup. The rehearsal is
 registry-read-only/no-deploy and has no OIDC, environment or VPS authority.
 
-I11 is complete on current protected-main SHA
+I11 is complete at its protected-main checkpoint SHA
 `65706e381b907c6ba09a8eba504af3adaacac86b`. Source run `32668796239`, Image
 run `32668796232`, signed Candidate Publication run `32669087688`, and automatic
 rehearsal run `32669484893` all succeeded. The immutable digest is
@@ -807,8 +812,11 @@ The development Compose topology remains loopback-published on an ordinary
 bridge. Historical Docker Desktop 29.6.1 A/B proved that topology retains
 API/native DNS/TCP/UDP egress. I6 then selected the internal private-peer model,
 and I7's production manifest implements the API half without inventing a proxy.
-Deployed caller, proxy, firewall, egress, secret, digest, and VPS evidence is
-still required; no production-ready state is implied.
+I12 adds point-in-time dark-host proof for the exact deployed digest, private
+peer, API/native egress denial and socketless proxy. Public caller/CIDR,
+firewall, DNS/certificate, complete secret lifecycle, route activation and
+customer-production evidence are still required; no production-ready state is
+implied.
 
 ---
 

@@ -4,7 +4,7 @@ applyTo: ".github/**"
 
 # GitHub Folder Instructions
 
-Last synchronized: 2026-08-23
+Last synchronized: 2026-08-25
 
 ## Scope
 - Keep Copilot instructions centralized in .github/copilot-instructions.md.
@@ -51,18 +51,22 @@ Last synchronized: 2026-08-23
   image push or registry write.
 - `I11_MAIN_SIGNED_CANDIDATE_COMPLETE` is reserved for final enforcement after
   digest identity, attestations, verification, bounded upload and exact
-  publication/evidence cleanup. I11 implementation and hosted results remain
-  `PENDING` until observed.
+  publication/evidence cleanup. I11 completed at protected-main SHA
+  `65706e381b907c6ba09a8eba504af3adaacac86b`: Source `32668796239`, Image
+  `32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
+  `32669484893` succeeded.
 - Successful protected-main publication automatically triggers only the
   completed/main `workflow_run` rehearsal. It validates one exact bounded
   publication artifact, creates the policy/provenance-derived previous/current
   digest-only manifest, verifies per-image SLSA/SPDX through API and OCI, and
   runs hardened I9 readiness, `STORAGE_UNSAFE`, automatic rollback, bounded
-  evidence and exact cleanup with read permissions only. Its result is
-  `PENDING` until observed.
-- Candidate publication is no-deploy. Hosted S4/S5/I9 evidence is ephemeral and
-  does not verify production proxy/firewall/secrets/digest/VPS/readiness/
-  rollback or grant production authority.
+  evidence and exact cleanup with read permissions only. The exact I11 hosted
+  result is the successful run above.
+- Candidate publication is no-deploy. Hosted S4/S5/I9 evidence remains
+  ephemeral repository proof. I12 separately verifies one exact dark N=1 API
+  digest and corrected proxy topology on the authorized VPS; public caller,
+  firewall, DNS/certificate/route, secret lifecycle, live rollback and full
+  production acceptance remain unverified and separately authorized.
 
 ## Required Sync Targets
 When changing rules here, synchronize:

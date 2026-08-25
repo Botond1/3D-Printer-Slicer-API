@@ -3,19 +3,24 @@
 ## Checkpoint boundary
 
 - Status at this commit boundary:
-  `I12_API_F710_DARK_N1_VERIFIED; TRAEFIK_CUTOVER_FAILED_AND_RESTORED_DARK;
-  OPERATOR_PACK_CORRECTIVE_LOCALLY_VERIFIED; HOSTED_REVALIDATION_AND_RESIDUAL_RECONCILIATION_PENDING`.
-- Exact protected-main API source:
+  `I12_API_F710_DARK_N1_VERIFIED;
+  OPERATOR_MAIN_7C8AEE_RESIDUAL_RECONCILIATION_COMPLETE;
+  CORRECTED_TRAEFIK_DARK_CUTOVER_VERIFIED; PUBLIC_ROUTE_DISABLED`.
+- Exact deployed API image source checkpoint on protected main:
   `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`.
-- Corrective branch: `codex/i12-wave3-traefik-network-corrective`.
-- Corrective operator-pack commit:
-  `7a490c150bb8c4c1ec6c22561421202152070fbc`.
+- Protected operator main:
+  `7c8aee0728fc8462c67b4c6d85636bffb7afcdf8`, merged through PR `#5`.
+- Operator-pack commits, separate from the API source:
+  `7a490c150bb8c4c1ec6c22561421202152070fbc` then
+  `1fe89d7508f5bbd59a75256ec43722f3f19ae1c2`.
 - API Source `32749722709`, Image `32749722715`, Candidate Publication
   `32750334897`, and automatic signed-main rehearsal `32751148223`: `SUCCESS`.
+- Operator-main Source `32804297840` and Image `32804297658`: `SUCCESS`.
 - Exact signed API image:
   `ghcr.io/botond1/3d-printer-slicer-api@sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
-- The operator-pack commit is not the API-image source and must not be used to
-  relabel the existing image. Its exact-SHA hosted validation is pending.
+- The operator-pack and evidence commits are not API-image sources. The live
+  cutover retained the exact `f71069c` image without rebuild, relabel or registry
+  publication.
 - No public router, customer request, LeadPilot change, registry mutation,
   production tag, release or main direct push is part of this checkpoint.
 
@@ -201,21 +206,24 @@ separate bounded uncertain classification. Capacity and cleanup exit codes
 must both be exact zero after same-digest restart and two dark passes, before
 Traefik can start.
 
+### Historical first cutover failure
+
 The first live socketless cutover failed closed. The pre-correction Compose
 source omitted gateway priority, runtime inspect reported equal priority for
 both attachments, and the private network became Traefik's default route. The
-old dedicated Traefik was restored and is running, the slicer route is absent,
-and ACME content remains byte-identical. The failed candidate is stopped with
-exit zero and the empty ingress network remains retained for exact residual
-reconciliation. These residuals are not authority for broad cleanup.
+old dedicated Traefik was restored, the slicer route remained absent, and ACME
+content remained byte-identical. The failed candidate stopped with exit zero
+and the empty ingress network was retained for exact residual reconciliation.
+These historical identities were later reconciled into the resumed successful
+cutover described below; they were never authority for broad cleanup.
 
 An independent validator predicate also rejected the correct configs bind:
 Docker reported exact source/destination with `RW=false` and empty `Mode`.
 That is effectively read-only, not a writable-mount defect. Corrective runtime
 validation accepts only exact paths plus `RW=false`, with `Mode` either empty
 or explicitly read-only; `RW=true`, missing, duplicate, or wrong-path mounts
-remain rejected. A corrected dark cutover is pending exact-SHA hosted
-integration and exact residual reconciliation.
+remain rejected. Protected-main integration and the corrected dark cutover later
+closed this checkpoint as described below.
 
 Bounded post-failure host inventory on 2026-08-25:
 
@@ -230,10 +238,56 @@ Bounded post-failure host inventory on 2026-08-25:
   with empty-file SHA-256
   `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
 
-The exact API identity is held in private run-owned evidence and must be
-re-read directly from the engine before any later mutation. Cleanup requires a
-fresh exact-ID/label/image/state check; descriptive inventory is not deletion
+The historical exact API identity was held in private run-owned evidence and
+was re-read directly from the engine before later mutation. Cleanup required a
+fresh exact-ID/label/image/state check; descriptive inventory was not deletion
 authority.
+
+### Corrected dark cutover and exact reconciliation
+
+The corrected, resumable cutover completed on 2026-08-25 with these bounded
+identities and observations:
+
+- API container identity prefix
+  `4f393b…` remained healthy at retained N=1 on only the internal private
+  network, with the exact signed `f71069c` image, no host port and no default
+  route;
+- corrected Traefik full ID
+  `91e043fbc05a55cac7f7b826a121581fc905975159a070c806a76c426bde7b57`
+  is running and healthy, restart count zero and OOM false, on pinned engine
+  digest `sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144`;
+- ingress network identity prefix
+  `d612f324…` is an external, IPv6-disabled bridge; private network identity
+  prefix `f7018efd…` is internal and IPv6-disabled. Traefik's exact runtime
+  ingress/private `GwPriority` values are `1/0`, its sole IPv4 default route is
+  through ingress, and it has no container IPv6 default route;
+- Docker owns exactly one host listener for each port 80 and 443 on IPv4 and
+  exactly one on IPv6. Host listener families do not imply container-network
+  IPv6 or an active slicer router;
+- the configs bind has exact source/destination and `RW=false`; the Docker socket
+  is absent, the Docker provider is disabled, the file provider is the only
+  provider, and the dynamic directory contains exactly `.gitkeep`;
+- unknown-host HTTP redirects and unknown-host HTTPS returns 404 over both IPv4
+  and IPv6. The public slicer route remains absent;
+- old dedicated proxy full ID
+  `673a657b0b240c1fa467e7358c956723cab29ad0bd2200c6f5903fdb0dad9d25`
+  is intentionally retained stopped, with restart count zero and OOM false;
+- the prior failed residual set was reconciled by exact identity; the corrected
+  resumable cutover then established the current candidate/network identities.
+  The root-private recovery directory is
+  mode 0700 and retains only its bounded ACME snapshot, old-proxy ledger and
+  `cutover-success.json`; broad cleanup and Docker prune did not occur.
+
+The success record uses schema `i12-traefik-corrected-dark-cutover-v2`, is mode
+0600, and has SHA-256
+`15d491cab3465916b01cbc24a292cae9f3601ad8fdb48f7665a4334e61133057`.
+The old-proxy ledger SHA-256 is
+`95f3522258f5bea6ce7690d65138221d43bec62a151e7662f45caf5275056d6b`.
+The exact empty ACME SHA-256 remains
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+A separate final read-only `i12-final-live-audit-v1` passed 30/30 checks. The
+cutover helper, uploaded helper, audit temp and task-owned remote temp paths were
+proved absent after use.
 
 ## Local validation ledger
 
@@ -252,8 +306,8 @@ At corrective operator-pack commit
   operator/version CLI, and working-tree whitespace: `PASS`.
 
 The local Docker daemon was unavailable. Runtime gateway/default-route and bind
-representation proof therefore remains a mandatory hosted/VPS gate rather than
-being reported as locally green.
+representation proof was therefore not reported as locally green; protected
+hosted validation and the bounded live VPS proof above supplied those exits.
 
 Quality/decomposition review found no P0/P1 defect. The operator contract and
 mutation suite remain above repository size guidance, but this correction adds
@@ -261,6 +315,16 @@ only same-domain gateway, version, mount and identity invariants. A behavior-
 neutral split is explicitly deferred until after the live cutover to avoid
 expanding an already mutation-locked correction. No unrelated responsibility
 may be added before that decision is revisited.
+
+## Protected operator integration closure
+
+Corrective commit `7a490c150bb8c4c1ec6c22561421202152070fbc` and evidence
+commit `1fe89d7508f5bbd59a75256ec43722f3f19ae1c2` reached protected main
+`7c8aee0728fc8462c67b4c6d85636bffb7afcdf8` through PR `#5` without a
+direct main push. Exact-main Source run `32804297840` and Image run
+`32804297658` succeeded. The operator change did not trigger Candidate
+Publication, registry mutation, deployment, or replacement of the running
+`f71069c` API image.
 
 ## First hosted diagnostic and API corrective closure
 
@@ -291,21 +355,23 @@ the API corrective later merged at protected main
 rehearsal `32751148223` succeeded. The signed `d50c72…` digest is the exact API
 identity used for the dark host state described above.
 
-## Pending hosted and production exits
+## Completed operator exits and remaining public prerequisites
+
+Completed exits are exact-SHA hosted Source/Image validation, protected-PR
+integration, immutable operator checkout, identity-bound failed-cutover
+reconciliation, corrected dark cutover, read-only config/topology/listener
+proof, ACME continuity, bounded evidence, and exact task-owned cleanup.
 
 The following remain pending and must not be inferred from this checkpoint:
 
-1. exact-SHA hosted Source/Image validation of operator-pack commit `7a490c1`;
-2. protected PR integration of that correction without rebuilding or relabeling
-   the `f710` API image;
-3. exact identity-bound cleanup of the stopped failed Traefik candidate, empty
-   ingress network, and run-owned operator residue;
-4. a fresh immutable operator checkout and corrected dark cutover with runtime
-   priority/default-route, exact read-only bind, private-peer, health, listener,
-   route-absence, rollback, and ACME continuity proof;
-5. firewall policy, approved hostname/DNS, intended caller identity/CIDR and
+1. firewall acceptance, approved hostname/DNS, intended caller identity/CIDR and
    certificate/route acceptance;
-6. monitoring, backup/recovery acceptance and real customer-workload capacity.
+2. authenticated synthetic proof through the intended public hostname before
+   any customer traffic;
+3. monitoring, alerting, backup/recovery acceptance and a separately approved
+   route-activation window;
+4. real customer-workload capacity evidence and N=2/N=3 qualification before
+   increasing retained concurrency above one.
 
 No public route is enabled by this document. Production completeness remains
 `UNVERIFIED` until every applicable external exit is evidenced.
