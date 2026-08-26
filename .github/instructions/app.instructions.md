@@ -63,7 +63,8 @@ Last synchronized: 2026-08-26
   dimensions E2E pass for both principals; the exact local code/image identity
   is recorded in the J0 evidence document.
 - Preserve J1 Orca filament behavior: repository PLA/PETG selection, exact-byte
-  job snapshot, native machine-process-filament order, digest-covered normalized
+  job snapshot, machine/process through `--load-settings`, selected filament
+  through dedicated `--load-filaments`, digest-covered normalized
   material plus filament JSON or explicit null, and nullable public basename/
   diameter/density. OpenAPI requires nullable `material_used_g`, populated only
   by a direct G-code marker and never derived from length. Strict FDM requires
@@ -71,17 +72,16 @@ Last synchronized: 2026-08-26
   missing or recognized non-positive optional grams marker to null/manual,
   never zero. Selected-profile Orca still requires positive grams; recognized
   zero remains `GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`, and
-  marker drift remains fail closed. J1C focused evidence is 19/19 and the
-  complete local aggregate passes 2212/2212 JavaScript tests plus 84 Python
-  tests with one expected Windows POSIX-permission skip; exact-image behavior
-  remains unverified.
+  marker drift remains fail closed. Owner-supplied VPS evidence verifies the
+  guard-only HTTP 200/null path and the Orca mechanism's 0.00 g to 4.12 g
+  correction. The combined local focused set passes 69/69; the final combined
+  exact-image rerun remains pending.
 - Keep W8 live calibration `BLOCKED_OWNER_INPUT`: the retained P1S and new H2D
   candidates are generic Marlin profiles, not verified native Bambu profiles.
-  The audited vendor set is not self-contained: referenced include templates,
-  H2D-compatible and 0.1/0.3 BBL processes, vendor filament chains, and material
-  fields are missing, while redistribution/license and exact Orca 2.3.1
-  compatibility are unverified. No vendor/resolver/runtime change was made;
-  repository evidence grants no deployment or public-route authority.
+  Their child files own exact `layer_change_gcode='G92 E0'`. The incomplete
+  vendor chain remains a separate time/motion calibration lane and J2 owns bed
+  shape/Z; no vendor profile was imported. Repository evidence grants no
+  deployment or public-route authority.
 - Keep endpoint contracts stable:
   - POST /prusa/slice
   - POST /orca/slice
@@ -107,8 +107,8 @@ Last synchronized: 2026-08-26
   canonical sources, detected growth, unknown/cyclic/name- or role-mismatched
   parents, and exact duplicate Prusa INI qualified keys. Preserve the Docker
   build semantic-equality gate and stable Orca `layer_gcode=''` /
-  `use_relative_e_distances='1'` settings aligned with the flattened pinned
-  machine parent's per-layer `G92 E0` reset.
+  `use_relative_e_distances='1'` settings aligned with each selected repository
+  child machine's exact `layer_change_gcode='G92 E0'` override.
 - Preserve bounded/redacted auth events and exact per-audience CORS policies.
 - Preserve HTTP defaults/bounds: 60000 [1000,60000] headers ms; 600000 [60000,600000] request ms; 5000 [1000,60000] keep-alive ms; 2000 [16,2000] headers; 128 [1,1024] connections; 100 [1,1000] requests/socket.
 - Invalid HTTP envelope overrides fall back to defaults; effective headers timeout is capped at request timeout. VPS capacity and proxy timeouts remain UNVERIFIED.

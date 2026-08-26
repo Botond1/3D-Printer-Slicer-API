@@ -125,18 +125,42 @@ test('Prusa and Orca slicer executable/argument arrays remain exact', () => {
     );
     const orcaPolicy = resolveSlicerInvocationPolicy('orca', 'FDM');
     assert.equal(resolveSlicerExecutable('orca'), 'orca-slicer');
-    assert.deepEqual(orcaPolicy.settingsPrecedence, ['machine', 'process', 'filament']);
+    assert.deepEqual(orcaPolicy.settingsPrecedence, ['machine', 'process']);
+    assert.equal(orcaPolicy.filamentOption, '--load-filaments');
     assert.equal(orca[1], orcaPolicy.settingsPrecedence
-        .map((role) => ({ machine: 'machine.json', process: 'process.json', filament: 'filament.json' })[role])
+        .map((role) => ({ machine: 'machine.json', process: 'process.json' })[role])
         .join(';'));
-    assert.deepEqual(orca, ['--load-settings', 'machine.json;process.json;filament.json', '--arrange', '1',
-        '--orient', '0', '--slice', '0', '--outputdir', 'stage']);
-    assert.equal(
+    assert.deepEqual(orca, ['--load-settings', 'machine.json;process.json',
+        '--load-filaments', 'filament.json', '--arrange', '1', '--orient', '0',
+        '--slice', '0', '--outputdir', 'stage']);
+    assert.deepEqual(
         buildSlicerCommandArgs(
             'FDM', 'process.json', path.join('stage', 'result.gcode'), '20%', 'orca', 'machine.json'
-        )[1],
-        'machine.json;process.json'
+        ),
+        ['--load-settings', 'machine.json;process.json', '--arrange', '1', '--orient', '0',
+            '--slice', '0', '--outputdir', 'stage']
     );
+});
+
+test('Orca filament selection uses only the dedicated native option', () => {
+    const selected = buildSlicerCommandArgs(
+        'FDM', 'process.json', path.join('stage', 'result.gcode'), '20%',
+        'orca', 'machine.json', 'filament.json'
+    );
+    const settingsFiles = selected[selected.indexOf('--load-settings') + 1].split(';');
+    assert.deepEqual(settingsFiles, ['machine.json', 'process.json']);
+    assert.ok(!settingsFiles.includes('filament.json'));
+    assert.deepEqual(
+        selected.slice(selected.indexOf('--load-filaments'), selected.indexOf('--load-filaments') + 2),
+        ['--load-filaments', 'filament.json']
+    );
+
+    const profileless = buildSlicerCommandArgs(
+        'FDM', 'process.json', path.join('stage', 'result.gcode'), '20%',
+        'orca', 'machine.json', null
+    );
+    assert.equal(profileless.includes('--load-filaments'), false);
+    assert.equal(profileless.includes('filament.json'), false);
 });
 
 test('Prusa and Orca execution append only the processable model to exact engine arrays', async (t) => {
@@ -203,14 +227,17 @@ test('Prusa and Orca execution append only the processable model to exact engine
     assert.equal(orcaResult.engineVersion, '2.3.1');
     assert.equal(orcaManualResult.filamentProfileMetadata, null);
     const expectedPrusa = [...buildSlicerCommandArgs('FDM', 'profile.ini', path.join(root, 'prusa.gcode'), '20%', 'prusa'), 'model.stl'];
-    const expectedOrca = [...buildSlicerCommandArgs(
-        'FDM', 'process.json', path.join(root, 'orca', 'result.gcode'), '20%',
-        'orca', 'machine.json', filamentProfile
-    ), 'model.stl'];
-    const expectedOrcaManual = [...buildSlicerCommandArgs(
-        'FDM', 'process.json', path.join(root, 'orca-manual', 'result.gcode'), '20%',
-        'orca', 'machine.json', null
-    ), 'model.stl'];
+    const expectedOrca = [
+        '--load-settings', 'machine.json;process.json',
+        '--load-filaments', filamentProfile,
+        '--arrange', '1', '--orient', '0', '--slice', '0',
+        '--outputdir', path.join(root, 'orca'), 'model.stl'
+    ];
+    const expectedOrcaManual = [
+        '--load-settings', 'machine.json;process.json',
+        '--arrange', '1', '--orient', '0', '--slice', '0',
+        '--outputdir', path.join(root, 'orca-manual'), 'model.stl'
+    ];
     assert.deepEqual(calls.map(({ executable, args }) => [executable, args]), [
         ['prusa-slicer', expectedPrusa],
         ['orca-slicer', expectedOrca],

@@ -3,14 +3,19 @@
 ## Current J1C corrective over the J1 calibration harvest
 
 Current local classification:
-`J1C_RECOGNIZED_ZERO_MASS_CORRECTION_LOCAL_PASS;
-J1C_VENDOR_PROFILE_INTEGRATION_BLOCKED_MISSING_SELF_CONTAINED_INPUT;
+`J1C_ZERO_MASS_GUARD_OWNER_SUPPLIED_VPS_PASS;
+J1C_ORCA_COMMAND_AND_LAYER_RESET_LOCAL_CANDIDATE;
+J1C_FINAL_COMBINED_IMAGE_RERUN_PENDING;
 J1C_CAPABILITY_READINESS_PROPOSAL_ONLY;
-CONTAINER_AND_HOSTED_NOT_VERIFIED; NO_EXTERNAL_PRODUCTION_AUTHORITY`.
+NO_VENDOR_IMPORT; NO_EXTERNAL_PRODUCTION_AUTHORITY`.
 
-The J1 repository contracts remain the baseline. J1C supersedes only the
-earlier assumption that the affected Prusa output omitted the grams marker;
-container diagnosis found a recognized `0.00 g` marker.
+The J1 repository contracts remain the baseline. Owner-supplied VPS evidence
+proves that the guard-only diagnostic image maps the recognized Prusa `0.00 g`
+marker to HTTP 200 with positive length and null mass/rate/price. The production
+Orca correction is repository-owned: machine/process remain under
+`--load-settings`, selected filament uses optional `--load-filaments`, and both
+P1S/H2D child machine profiles own exact `layer_change_gcode='G92 E0'`. The
+exact final combined candidate image and hosted rerun remain pending.
 
 Direct executable-source map:
 
@@ -27,13 +32,15 @@ runtime profile layers from that snapshot lineage
   -> canonical effective-profile payload
   -> bind request-independent native invocation policy
   -> bind stable Orca layer_gcode='' + use_relative_e_distances='1'
+  -> bind selected child machine layer_change_gcode='G92 E0'
   -> Orca binds normalized material and selected filament JSON or explicit null
   -> exclude request layer-height/infill values
   -> profiles.effective_profile_sha256 on every success
 Orca FDM material selection
   -> allowlisted PLA/PETG repository filament profile or explicit null
   -> exact-byte job-scratch snapshot when selected
-  -> native settings precedence machine -> process -> filament
+  -> --load-settings machine;process
+  -> optional --load-filaments selected-filament-snapshot
   -> profiles.filament_profile / filament_diameter_mm / filament_density_g_cm3
   -> null profile forces hourly_rate + stats.estimated_price_huf to null
 FDM G-code output
@@ -79,8 +86,9 @@ one x-slicer-api-key header
   selected filament JSON or explicit null, and stable server-added Orca runtime
   settings remain covered. The identity also binds
   [`engine.js`](../../app/services/slice/engine.js)'s request-independent native
-  invocation policy. Prusa export flags and Orca's ordered machine-process-
-  filament settings precedence are composed from that same hash-fed policy. Prusa INI
+  invocation policy. Prusa export flags, Orca's ordered machine/process
+  settings, and the optional dedicated filament flag are composed from that
+  same hash-fed policy. Prusa INI
   ordering/comments are normalized, but section and
   key case remain distinct to preserve native semantics; exact duplicate
   qualified keys fail closed like the native Boost INI parser.
@@ -105,8 +113,9 @@ one x-slicer-api-key header
   or preserves an explicit null when no mapping/file exists. It otherwise retains
   runtime-profile generation and bounds parsing; its stable Orca
   layer enforces empty `layer_gcode` and relative extrusion through
-  `use_relative_e_distances='1'`, consistent with the flattened pinned machine
-  parent's per-layer `G92 E0` reset. The current J0 smoke accepts positive
+  `use_relative_e_distances='1'`, consistent with each selected repository
+  child machine's exact `layer_change_gcode='G92 E0'` override. The pinned
+  upstream parent copy remains unchanged. The current J0 smoke accepts positive
   `G1 ... E` only after exact `;BEFORE_LAYER_CHANGE`; prelude/purge extrusion
   cannot prove model-layer extrusion. Current focused/exact-image validation
   covers this stricter guard without retroactively attributing it to historical
@@ -119,8 +128,9 @@ one x-slicer-api-key header
   missing key before the first section; case variants remain distinct.
 - [`output-lifecycle.js`](../../app/services/slice/output-lifecycle.js)
   calculates that digest from the runtime profile before the native slicer,
-  composes Orca native settings as machine then process then filament, and reads
-  diameter/density from the exact selected filament snapshot.
+  composes Orca machine/process through `--load-settings`, passes the selected
+  filament snapshot separately through `--load-filaments`, and reads diameter/
+  density from that exact snapshot.
   [`response.js`](../../app/services/slice/response.js) refuses a successful
   response without one lowercase 64-hex digest under
   `profiles.effective_profile_sha256`; Orca additionally exposes the selected
@@ -142,10 +152,10 @@ one x-slicer-api-key header
   zero. Orca with a selected filament profile requires positive direct grams;
   recognized zero remains `GCODE_FILAMENT_NOT_POSITIVE`, while missing or
   drifted mass returns bounded HTTP 500 `SLICE_OUTPUT_UNPARSED`. Profile-less
-  Orca stays null/manual. J1C focused evidence is 19/19 and the complete local
-  aggregate passes 2212/2212 JavaScript tests plus 84 Python tests with one
-  expected Windows POSIX-permission skip. Exact-image/container HTTP behavior
-  remains unverified.
+  Orca stays null/manual. The owner-supplied guard-only VPS run passed; the
+  combined candidate passes 2213/2213 JavaScript tests and 85 Python tests with
+  84 pass plus one expected Windows POSIX-permission skip. Exact-image/container
+  and hosted results remain pending.
 - [`engine-version.js`](../../app/services/slice/engine-version.js) executes the
   two selected slicer executables with `--help` before listen, bounds and parses
   their output, publishes the initialized map only after both succeed, and
@@ -163,7 +173,9 @@ one x-slicer-api-key header
   non-root, read-only exact-image envelope and atomically published Prusa
   `2.8.1+linux-x64-GTK3-202409181416` and Orca `2.3.1` before its disposable
   container was removed. [`engine.js`](../../app/services/slice/engine.js) now
-  passes `--arrange 1` and `--orient 0` after preprocessing and bounds checks.
+  keeps machine/process in `--load-settings`, emits `--load-filaments` only for
+  a selected filament snapshot, and passes `--arrange 1` and `--orient 0` after
+  preprocessing and bounds checks.
   Arrangement places the already-rotated geometry onto the build plate without
   enabling native auto-orient, so the request-owned rotation remains unchanged.
   The superseded arrangement-disabled HTTP probe retained negative Y after an
@@ -234,8 +246,9 @@ one x-slicer-api-key header
   its retained local validation image ID is
   `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
   J1 adds repository PLA/PETG filament selection and exact snapshots, digest-
-  covered normalized material plus filament-or-null identity, ordered Orca
-  machine/process/filament native settings, conditional direct G-code grams, and the
+  covered normalized material plus filament-or-null identity, separate Orca
+  machine/process settings and optional filament native flags, conditional
+  direct G-code grams, and the
   public filament basename/diameter/density fields. Focused deterministic tests
   cover selected-profile Orca mass, nullable Prusa/profile-less Orca, marker-
   drift, and filament-null controls. Manual paths preserve
@@ -243,15 +256,15 @@ one x-slicer-api-key header
   `stats.estimated_price_huf:null`. This is repository behavior, not live
   calibration evidence.
 
-The retained P1S and new H2D candidates identify as generic Marlin profiles,
-not verified native Bambu profiles. A bounded audit parsed 11/11 supplied JSON
-files, matched 11/11 declared hashes, and derived P1S 256 x 256 x 250 mm and H2D
-350 x 320 x 325 mm, but the set is not self-contained. Eleven include templates,
-H2D-compatible and 0.1/0.3 BBL processes, vendor filament/parent chains, and
-required material fields are missing; redistribution/license and exact Orca
-2.3.1 compatibility are unverified. No vendor/resolver/runtime change was made,
-the generic profiles remain, and the selected-filament Orca incompatibility is
-not fixed. W8 remains `BLOCKED_OWNER_INPUT`.
+The retained P1S and H2D candidates remain generic Marlin profiles, but each
+repository-owned child now owns exact `layer_change_gcode='G92 E0'`. Owner-
+supplied mechanism evidence shows the dedicated filament option changes native
+mass from 0.00 g to 4.12 g. No vendor profile was imported. The incomplete
+vendor chain remains a separate W8 motion/time calibration lane and is not a
+J1C blocker. J2 separately owns P1S 256 x 256 x 250 mm and H2D
+350 x 320 x 325 mm bed-shape/Z correction. The privacy-safe
+`scripts/sz-b2-orca-calibration.js` helper still embeds the superseded combined
+settings list; it is outside the production-engine correction and unqualified.
 
 Capability readiness is proposal-only. Public `/health` remains cheap liveness;
 future native capability state belongs on public `/ready`. Docker still checks
@@ -262,7 +275,7 @@ separate implementation and Docker/VPS evidence; raw last-N 5xx is unsafe.
 The exact J1 branch-harvest implementation and local verification boundary are
 recorded in
 [`evidence/j1-calibration-branch-harvest.md`](evidence/j1-calibration-branch-harvest.md).
-The partial J1C correction, vendor blocker, readiness proposal, and explicit
+The J1C correction, separate vendor/calibration boundary, readiness proposal, and explicit
 unverified list are recorded in
 [`evidence/j1c-slice-contract-corrective.md`](evidence/j1c-slice-contract-corrective.md).
 

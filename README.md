@@ -81,11 +81,12 @@ selected child basenames. A parent-only Orca value change therefore changes the
 digest. J1 extends that identity to cover normalized material and selected Orca
 filament JSON or explicit null beside the configured effective machine/process
 layers, stable Orca relative-extrusion settings (`layer_gcode=''` and
-`use_relative_e_distances='1'`) aligned with the flattened pinned machine
-parent's per-layer `G92 E0` reset, and the request-independent native invocation
-policy while excluding request-selected layer height and infill. The Prusa
-export flag and Orca machine-process-filament settings precedence are derived from
-that same digest-covered policy. Prusa INI section and key case remains
+`use_relative_e_distances='1'`) aligned with each repository-owned child
+machine's exact `layer_change_gcode='G92 E0'` override, and the request-
+independent native invocation policy while excluding request-selected layer
+height and infill. The Prusa export flag, Orca machine/process settings order,
+and dedicated filament option are derived from that same digest-covered policy.
+Prusa INI section and key case remains
 significant during canonicalization, and exact duplicate profile keys fail
 closed to match the native Boost parser. Runtime generation replaces one exact
 top-level request-owned key, rejects a duplicate top-level key, and inserts a
@@ -146,7 +147,8 @@ The complete J0 local aggregate also passes; hosted exact-SHA validation remains
 unverified.
 
 J1 adds repository PLA/PETG filament profiles. Orca snapshots the selected
-filament bytes and loads native settings in machine-process-filament order.
+filament bytes, loads machine plus process through `--load-settings`, and loads
+the selected filament separately through `--load-filaments`.
 Successful Orca responses expose nullable `filament_profile`,
 `filament_diameter_mm`, and `filament_density_g_cm3`; an unsupported or missing
 profile returns explicit nulls, changes the effective-profile digest, and forces
@@ -164,21 +166,24 @@ and length mandatory; zero is never published. Orca with a selected filament
 profile still requires positive direct grams: recognized zero remains
 `GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`, and missing/drifted
 required markers remain bounded HTTP 500. Profile-less Orca remains on the
-null/manual-pricing path. The J1C focused correction passes 19/19 tests; the
-complete local aggregate passes 2212/2212 JavaScript tests and 84 Python tests
-with one expected Windows POSIX-permission skip. Exact-image/container and
-hosted behavior remain unverified.
+null/manual-pricing path. Owner-supplied VPS evidence verifies this guard path
+as HTTP 200 with positive filament length and null mass/rate/price. The combined
+parser/command/profile focused set passes 69/69; the final candidate image
+containing both Orca corrections still awaits an exact-image rerun.
 
 This candidate is not deployed or a public-activation result. The retained P1S
 and new H2D candidates identify as generic Marlin profiles, not verified native
 Bambu profiles. A bounded audit parsed 11/11 supplied JSON files, matched 11/11
 declared hashes, and derived P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm,
 but the set is not self-contained: 11 include templates, H2D-compatible and
-0.1/0.3 BBL processes, vendor filament/parent chains, and required material
-fields are missing; redistribution/license and exact Orca 2.3.1 compatibility
-are unverified. No vendor/resolver/runtime change was made, the generic profiles
-remain, and the selected-filament Orca incompatibility is not fixed. W8 live
-calibration remains `BLOCKED_OWNER_INPUT`.
+0.1/0.3 BBL processes, vendor filament/parent chains, and exact Orca 2.3.1
+qualification remain missing. The owner authorized later repository inclusion,
+but no vendor profile was imported. This is a separate W8 time/motion
+calibration lane, not a J1C blocker. Production Orca now uses dedicated
+`--load-filaments`, and both repository-owned child machine profiles own exact
+`layer_change_gcode='G92 E0'`. Owner-supplied mechanism evidence produced
+4.12 g instead of 0.00 g. J2 separately owns the P1S/H2D bed-shape and Z
+correction; W8 live calibration remains `BLOCKED_OWNER_INPUT`.
 
 Capability readiness is a proposal only. Public `GET /health` remains cheap
 liveness, and future slicing-capability state belongs on public `GET /ready`.

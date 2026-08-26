@@ -3,10 +3,11 @@
 ## J1C corrective over the J1 calibration checkpoint
 
 Status:
-`J1C_RECOGNIZED_ZERO_MASS_CORRECTION_LOCAL_PASS;
-J1C_VENDOR_PROFILE_INTEGRATION_BLOCKED_MISSING_SELF_CONTAINED_INPUT;
+`J1C_ZERO_MASS_GUARD_OWNER_SUPPLIED_VPS_PASS;
+J1C_ORCA_COMMAND_AND_LAYER_RESET_LOCAL_CANDIDATE;
+J1C_FINAL_COMBINED_IMAGE_RERUN_PENDING;
 J1C_CAPABILITY_READINESS_PROPOSAL_ONLY;
-CONTAINER_AND_HOSTED_NOT_VERIFIED; NO_EXTERNAL_PRODUCTION_AUTHORITY`.
+NO_VENDOR_IMPORT; NO_EXTERNAL_PRODUCTION_AUTHORITY`.
 
 Implemented local candidate exits:
 
@@ -26,12 +27,13 @@ Implemented local candidate exits:
    effective configured machine/process/filament layers, normalized material,
    and request-independent native invocation policy while excluding request
    layer height, request infill, paths, and request/job/model identity. Prusa
-   export flags and Orca's ordered
-   machine-process-filament settings precedence are composed from that policy.
+   export flags, Orca's ordered machine/process settings, and optional dedicated
+   filament option are composed from that policy.
 3. Stable Orca runtime derivation clears `layer_gcode` and sets
-   `use_relative_e_distances='1'` for consistency with the flattened pinned
-   machine parent's per-layer `G92 E0` reset; these request-independent settings
-   remain digest-covered. A parent-only Orca value
+   `use_relative_e_distances='1'` for consistency with each repository child
+   machine's exact `layer_change_gcode='G92 E0'` override; the pinned upstream
+   parent remains unchanged and these request-independent settings remain
+   digest-covered. A parent-only Orca value
    mutation changes the effective digest even when the
    selected child name and overrides remain unchanged. The current J0 smoke
    accepts positive `G1 ... E` only after exact `;BEFORE_LAYER_CHANGE`, so
@@ -104,8 +106,9 @@ Implemented local candidate exits:
    file. External production activation is outside repository evidence and
    authority.
 12. Orca PLA/PETG selection now resolves a repository filament profile, snapshots
-   its exact bytes, passes native settings in machine-process-filament order,
-   and returns its basename plus actual diameter/density. Normalized material
+   its exact bytes, keeps machine/process under `--load-settings`, passes the
+   selected snapshot separately through `--load-filaments`, and returns its
+   basename plus actual diameter/density. Normalized material
    and selected filament JSON or explicit null are digest-covered. A missing or
    unsupported profile returns `filament_profile:null`, null metadata, a
    distinct digest, `hourly_rate:null`, and `stats.estimated_price_huf:null`;
@@ -121,9 +124,12 @@ Implemented local candidate exits:
     `MAX_MATERIAL_USED_GRAMS`; recognized zero remains
     `GCODE_FILAMENT_NOT_POSITIVE`, and missing or drifted mass returns bounded
     HTTP 500 `SLICE_OUTPUT_UNPARSED`. Profile-less Orca remains null/manual. The
-    focused correction passes 19/19. The complete local aggregate passes
-    2212/2212 JavaScript tests and 84 Python tests with one expected Windows
-    POSIX-permission skip; exact-image/container gates remain unverified.
+    owner-supplied guard-only VPS diagnostic returned HTTP 200 with positive
+    length and null mass/rate/price. The combined local focused set passes
+    69/69; the complete local aggregate passes 2213/2213 JavaScript tests and
+    85 Python tests with 84 pass plus one expected Windows POSIX-permission
+    skip. The exact combined image/container and hosted reruns remain
+    unverified.
 
 Remaining gates:
 
@@ -141,16 +147,15 @@ Remaining gates:
    every configured previous, an owner-approved removal deadline, and post-
    removal rejection. External production activation is outside repository
    evidence and authority;
-3. keep W8 live calibration
-   `BLOCKED_MISSING_SELF_CONTAINED_VENDOR_INPUT`. The bounded audit parsed 11/11
-   supplied JSON files, matched 11/11 declared hashes, and derived P1S
-   256 x 256 x 250 mm plus H2D 350 x 320 x 325 mm, but 11 referenced include
-   templates, H2D-compatible and 0.1/0.3 BBL processes, vendor filament/parent
-   chains, and required material fields are missing. Redistribution/license and
-   exact Orca 2.3.1 compatibility are unverified. Do not copy vendor files or
-   change the resolver/runtime until the set is complete, redistributable, and
-   exact-runtime qualified; the generic profiles and unresolved Orca
-   incompatibility remain;
+3. keep W8 live calibration in its separate incomplete-vendor time/motion lane.
+   No vendor profile was imported. The owner authorized later public-repository
+   inclusion, but the missing include/process/filament chain and exact Orca
+   2.3.1 qualification still forbid a partial import. This lane does not block
+   J1C's production `--load-filaments` binding or exact child-owned
+   `layer_change_gcode='G92 E0'` corrections. The privacy-safe calibration
+   helper still embeds the superseded combined settings list and remains
+   unqualified until separately corrected. J2 separately owns P1S/H2D bed
+   shape and Z;
 4. treat capability readiness as a separate proposal wave. Keep public
    `/health` cheap liveness and place future native capability state on public
    `/ready`. Require at least Prusa and selected-filament Orca startup probes,
@@ -161,7 +166,7 @@ Remaining gates:
 
 See the J1 local branch-harvest evidence in
 [`evidence/j1-calibration-branch-harvest.md`](evidence/j1-calibration-branch-harvest.md)
-and the partial J1C correction in
+and the J1C correction in
 [`evidence/j1c-slice-contract-corrective.md`](evidence/j1c-slice-contract-corrective.md)
 and the historical J0 contract in
 [`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).

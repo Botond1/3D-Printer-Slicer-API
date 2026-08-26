@@ -37,8 +37,11 @@ Last synchronized: 2026-08-26
   is not model-layer proof.
 - Preserve stable Orca runtime `layer_gcode=''` and
   `use_relative_e_distances='1'` settings for relative-extrusion consistency
-  with the flattened pinned machine parent's per-layer `G92 E0` reset.
-- Preserve native settings order machine-process-filament and digest coverage of
+  with each selected repository child machine's exact
+  `layer_change_gcode='G92 E0'` override. Keep the pinned upstream parent
+  unchanged.
+- Preserve machine/process loading through `--load-settings`, optional selected
+  filament loading through `--load-filaments`, and digest coverage of
   normalized material plus selected filament JSON or explicit null. Never
   substitute a default profile when no material mapping/file exists; preserve
   null filament metadata, `material_used_g`, `hourly_rate`, and
@@ -46,8 +49,9 @@ Last synchronized: 2026-08-26
   are required for selected-profile Orca, but remain nullable for the current
   Prusa FDM profile and profile-less Orca; never derive mass from length.
 - Keep P1S/H2D generic-Marlin candidates blocked from W8 live calibration until
-  owner-supplied real Bambu machine/process references and acceptance inputs are
-  available; `H2D-PROFIL-TODO.md` records the gap.
+  the complete Bambu machine/process chain and acceptance inputs are available;
+  this separate vendor lane does not block the repository-owned J1C reset and
+  filament-CLI corrections. `H2D-PROFIL-TODO.md` records the gap.
 
 ## Related Env Keys
 - ORCA_MACHINE_PROFILE

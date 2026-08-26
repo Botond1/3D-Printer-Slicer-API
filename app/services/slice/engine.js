@@ -8,7 +8,8 @@ const ORCA_INVOCATION_POLICY = Object.freeze({
     arrange: '1',
     orient: '0',
     slice: '0',
-    settingsPrecedence: Object.freeze(['machine', 'process', 'filament'])
+    settingsPrecedence: Object.freeze(['machine', 'process']),
+    filamentOption: '--load-filaments'
 });
 const PRUSA_FDM_INVOCATION_POLICY = Object.freeze({
     center: '100,100',
@@ -49,11 +50,10 @@ function resolvePrusaExportFlag(exportMode) {
     return `--export-${exportMode}`;
 }
 
-function composeOrcaSettingsFiles(policy, orcaMachineConfigPath, configFile, orcaFilamentConfigPath) {
+function composeOrcaSettingsFiles(policy, orcaMachineConfigPath, configFile) {
     const settingsByRole = {
         machine: orcaMachineConfigPath,
-        process: configFile,
-        filament: orcaFilamentConfigPath
+        process: configFile
     };
     return policy.settingsPrecedence
         .map((role) => settingsByRole[role])
@@ -87,16 +87,19 @@ function buildSlicerCommandArgs(
         const settingsFiles = composeOrcaSettingsFiles(
             policy,
             orcaMachineConfigPath,
-            configFile,
-            orcaFilamentConfigPath
+            configFile
         );
-        return [
-            '--load-settings', settingsFiles,
+        const args = ['--load-settings', settingsFiles];
+        if (orcaFilamentConfigPath) {
+            args.push(policy.filamentOption, orcaFilamentConfigPath);
+        }
+        args.push(
             '--arrange', policy.arrange,
             '--orient', policy.orient,
             '--slice', policy.slice,
             '--outputdir', outputDir
-        ];
+        );
+        return args;
     }
 
     const args = ['--load', configFile, '--center', policy.center];

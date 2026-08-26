@@ -24,6 +24,12 @@ function writeJson(filePath, value) {
 }
 
 test('repository Orca profiles resolve the exact v2.3.1 Custom parent chain', () => {
+    for (const fileName of ['Bambu_P1S_0.4_nozzle.json', 'Bambu_H2D_0.4_nozzle.json']) {
+        const childProfile = JSON.parse(fs.readFileSync(path.join(ORCA_ROOT, fileName), 'utf8'));
+        assert.equal(Object.hasOwn(childProfile, 'layer_change_gcode'), true);
+        assert.equal(childProfile.layer_change_gcode, 'G92 E0');
+    }
+
     const processProfile = resolveOrcaProfileInheritance(
         path.join(ORCA_ROOT, 'FDM_0.2mm.json'),
         'process'
@@ -42,6 +48,13 @@ test('repository Orca profiles resolve the exact v2.3.1 Custom parent chain', ()
     assert.deepEqual(machineProfile.machine_max_speed_x, ['500']);
     assert.deepEqual(machineProfile.retraction_speed, ['45']);
     assert.equal(machineProfile.printable_height, '250');
+    assert.equal(machineProfile.layer_change_gcode, 'G92 E0');
+
+    const h2dMachineProfile = resolveOrcaProfileInheritance(
+        path.join(ORCA_ROOT, 'Bambu_H2D_0.4_nozzle.json'),
+        'machine'
+    );
+    assert.equal(h2dMachineProfile.layer_change_gcode, 'G92 E0');
 });
 
 test('same-named child changes digest when a non-overridden parent value changes', (t) => {
@@ -155,4 +168,6 @@ test('job snapshots passed downstream are flattened and immutable copies', async
         assert.equal(Object.hasOwn(profile, 'inherits'), false);
         assert.equal(path.dirname(filePath), root);
     }
+    const machineSnapshot = JSON.parse(fs.readFileSync(snapshots.orcaMachineConfigFile, 'utf8'));
+    assert.equal(machineSnapshot.layer_change_gcode, 'G92 E0');
 });

@@ -17,32 +17,31 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
 
 ## J1 Calibration Harvest over the J0 W2/W3 Public Contract
 
-- J1C is `PARTIAL / BLOCKED`. Focused 19/19 evidence proves that a recognized
-  `0.00 g` marker becomes null/manual only when grams are optional, while
-  positive time and length remain required. Selected-profile required zero
-  remains `GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`, and marker
-  drift remains fail closed. The complete local aggregate passes 2212/2212
-  JavaScript tests and 84 Python tests with one expected Windows POSIX-
-  permission skip; exact-image/container and hosted behavior remain unverified.
-- A bounded 11-file vendor audit parsed all JSON, matched 11/11 declared hashes,
-  and derived P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm. Integration is
-  blocked by 11 missing include templates, absent H2D-compatible and 0.1/0.3
-  BBL processes, absent vendor filament/parent chains and material fields, and
-  unverified redistribution/license plus exact Orca 2.3.1 compatibility. No
-  vendor/resolver/runtime change was made; generic profiles remain and the Orca
-  incompatibility is not fixed. Capability readiness is proposal-only: keep
-  public `/health` cheap liveness and place future capability state on public
-  `/ready`; see `docs/codex/evidence/j1c-slice-contract-corrective.md`.
+- J1C's guard-only diagnostic image has owner-supplied VPS proof: recognized
+  `0.00 g` with positive length returns HTTP 200 and null mass/rate/price, while
+  selected-profile zero and marker drift remain fail closed. The combined
+  parser/Orca command/profile focused set passes 69/69; the exact final image
+  containing all corrections still awaits the owner's rerun.
+- Production Orca sends machine plus process through `--load-settings` and an
+  optional selected filament snapshot through dedicated `--load-filaments`.
+  Both repository-owned P1S/H2D children own exact
+  `layer_change_gcode='G92 E0'`; pinned upstream parents remain unchanged.
+  Owner-supplied mechanism evidence produced 4.12 g instead of 0.00 g. The
+  incomplete vendor chain remains a separate W8 calibration lane, not a J1C
+  blocker; J2 separately owns bed shape/Z. Capability readiness remains
+  proposal-only on public `/ready`, while `/health` stays cheap liveness; see
+  `docs/codex/evidence/j1c-slice-contract-corrective.md`.
 - Successful Prusa and Orca responses require lowercase
   `profiles.effective_profile_sha256`. After selection, bounded canonical-realpath
   Prusa bytes and the flattened, versioned repository copy of the allowlisted
   Orca v2.3.1 `Custom` parent chain create the job-scratch lineage for bounds,
   runtime, digest, and native use. Its exact-image build equality gate passes;
   public fields retain child basenames. Stable Orca runtime settings enforce
-  empty `layer_gcode` plus relative extrusion, aligned with the flattened pinned
-  machine parent's per-layer `G92 E0` reset.
+  empty `layer_gcode` plus relative extrusion, aligned with each selected
+  repository child machine's exact `layer_change_gcode='G92 E0'` override.
 - J1 selects repository PLA/PETG filament profiles, snapshots their exact bytes,
-  and composes Orca settings as machine-process-filament. The effective digest
+  loads machine/process through `--load-settings`, and loads selected filament
+  separately through `--load-filaments`. The effective digest
   binds normalized material and selected filament JSON or explicit null.
   Successful Orca payloads expose nullable filament basename plus actual
   diameter/density. OpenAPI requires nullable `stats.material_used_g`; it may

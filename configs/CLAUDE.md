@@ -51,9 +51,11 @@ This folder contains runtime configuration files used by slicing and pricing.
   exact one positive diameter, and exact one positive density must match the
   request; do not substitute a default when no mapping/file exists.
 - `Bambu_P1S_0.4_nozzle.json` and `Bambu_H2D_0.4_nozzle.json` currently identify
-  as generic Marlin profiles, not verified native Bambu profiles. Do not promote
-  them to W8 live calibration without owner-supplied real machine/process
-  references and acceptance inputs documented in `H2D-PROFIL-TODO.md`.
+  as generic Marlin profiles, not verified native Bambu profiles. Each child
+  must own exact `layer_change_gcode='G92 E0'` for the repository's relative-
+  extrusion Orca contract. Do not promote them to W8 live calibration without
+  the complete machine/process chain and acceptance inputs documented in
+  `H2D-PROFIL-TODO.md`.
 - Preserve pricing schema shape:
   - FDM: material -> number
   - SLA: material -> number
@@ -74,7 +76,8 @@ This folder contains runtime configuration files used by slicing and pricing.
 ## Notes
 - Prusa runtime profiles are generated dynamically from base ini files and request options.
 - Orca runtime process profiles are generated dynamically from base json profiles and request options.
-- Orca native settings order is machine-process-filament.
+- Orca loads machine/process through `--load-settings` and a selected filament
+  separately through `--load-filaments`; a null profile omits that option.
 - A missing/unsupported filament profile remains explicit null and changes the
   effective-profile digest; public filament basename/diameter/density,
   `material_used_g`, `hourly_rate`, and `stats.estimated_price_huf` are null, so
@@ -90,8 +93,9 @@ This folder contains runtime configuration files used by slicing and pricing.
   always reads the versioned repository copy, removes `inherits`, and snapshots
   flattened JSON before downstream use; unknown, cyclic, name-mismatched, or
   wrong-role parents fail closed. Stable runtime derivation clears `layer_gcode`
-  and sets `use_relative_e_distances='1'`, aligned with the flattened pinned
-  machine parent's per-layer `G92 E0` reset. The direct native smoke and final
+  and sets `use_relative_e_distances='1'`, aligned with the selected repository
+  child's exact `layer_change_gcode='G92 E0'` override. The pinned upstream
+  parent remains unchanged. The direct native smoke and final
   exact-image HTTP transform/final-dimensions E2E pass; the exact local code/
   image identity is recorded in the J0 evidence document. That smoke accepts
   positive

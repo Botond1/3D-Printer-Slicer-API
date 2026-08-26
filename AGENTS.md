@@ -20,27 +20,31 @@ Canonical Codex knowledge:
 ## Current J1C slice-contract corrective checkpoint
 
 Current classification:
-`J1C_RECOGNIZED_ZERO_MASS_CORRECTION_LOCAL_PASS;
-J1C_VENDOR_PROFILE_INTEGRATION_BLOCKED_MISSING_SELF_CONTAINED_INPUT;
-J1C_CAPABILITY_READINESS_PROPOSAL_ONLY; CONTAINER_AND_HOSTED_NOT_VERIFIED`.
+`J1C_ZERO_MASS_GUARD_OWNER_SUPPLIED_VPS_PASS;
+J1C_ORCA_CORRECTION_LOCAL_FOCUSED_PASS;
+J1C_FINAL_COMBINED_IMAGE_RERUN_PENDING;
+J1C_CAPABILITY_READINESS_PROPOSAL_ONLY; NO_VENDOR_IMPORT; NO_DEPLOY`.
 
 Focused 19/19 evidence proves that optional direct grams map a recognized
 `0.00 g` marker to null/manual pricing while positive time and length remain
 required. When selected-profile Orca requires grams, the same zero remains
 `GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`; marker drift still
-fails closed. The complete local aggregate passes 2212/2212 JavaScript tests and
-84 Python tests with one expected Windows POSIX-permission skip; syntax covers
-251 JavaScript and 39 Python files, and the production dependency audit reports
-zero vulnerabilities. Exact-image/container and hosted exact-SHA behavior remain
-unverified.
+fails closed. Owner-supplied VPS evidence verifies HTTP 200 with positive
+filament length and null mass/rate/price for the guard-only diagnostic image.
 
-A bounded 11-file vendor audit parsed all JSON, matched 11/11 declared hashes,
-and derived P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm. The set is not
-self-contained: referenced include templates, H2D-compatible and 0.1/0.3 BBL
-processes, vendor filament/parent chains, and required material fields are
-missing; redistribution/license and exact Orca 2.3.1 compatibility are
-unverified. No vendor, resolver, or runtime change was made, the generic
-profiles remain, and the selected-filament Orca defect remains not fixed.
+Production Orca now loads only machine plus process through `--load-settings`
+and passes a selected filament snapshot separately through `--load-filaments`.
+Both repository-owned P1S/H2D child machine profiles own exact
+`layer_change_gcode='G92 E0'`; the pinned upstream copy is unchanged. The
+combined focused set passes 69/69. Owner-supplied VPS mechanism evidence shows
+the dedicated filament option changes native output from 0.00 g to 4.12 g, but
+the exact final combined candidate image rerun remains pending.
+
+The incomplete vendor chain is a separate W8 time/motion calibration lane, not
+a J1C blocker; no vendor profile was imported. J2 separately owns P1S
+256 x 256 x 250 mm and H2D 350 x 320 x 325 mm bed-shape/Z correction. The
+privacy-safe calibration helper still embeds the superseded settings-list
+composition and is outside this production-engine correction and unqualified.
 
 Capability readiness is a proposal only. Public `GET /health` remains cheap
 liveness; future capability state belongs on public `GET /ready`. Docker still

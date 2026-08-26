@@ -155,8 +155,9 @@ This document describes the application runtime inside app/.
 - app/services/slice/engine.js
   - Resolves slicer executable name by engine.
   - Builds argument arrays and request-independent invocation policy for Prusa
-    and Orca. Prusa export flags and Orca's ordered machine-process-filament settings
-    precedence are composed from that same hash-fed policy; Orca sends
+    and Orca. Prusa export flags, Orca's machine/process `--load-settings`
+    order, and the selected filament's dedicated `--load-filaments` option are
+    composed from that same hash-fed policy; Orca sends
     `--arrange 1` / `--orient 0` after preprocessing/
     bounds checks. Arrangement places already-rotated geometry onto the build
     plate, while auto-orient remains disabled.
@@ -202,8 +203,8 @@ This document describes the application runtime inside app/.
     qualified keys, and replaces one exact top-level request key or inserts a
     missing one before the first section.
   - Clears Orca `layer_gcode` and sets `use_relative_e_distances='1'` for stable
-    relative extrusion aligned with the flattened pinned machine parent's per-
-    layer `G92 E0` reset.
+    relative extrusion aligned with each repository child machine's exact
+    `layer_change_gcode='G92 E0'` override.
 - app/services/slice/orca-profile-inheritance.js
   - Always resolves and flattens the allowlisted versioned repository copy of
     the Orca v2.3.1 `Custom` machine/process parent chain; unknown, cyclic,
@@ -292,8 +293,9 @@ This document describes the application runtime inside app/.
   image ID `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
   Both principal families pass; a valid key only under `x-api-key` rejects
   without request residue.
-- J1 Orca selection snapshots repository PLA/PETG filament profiles and composes
-  native settings machine-process-filament. The digest binds normalized material
+- J1 Orca selection snapshots repository PLA/PETG filament profiles, loads
+  machine/process through `--load-settings`, and loads selected filament through
+  dedicated `--load-filaments`. The digest binds normalized material
   plus selected filament JSON or explicit null. Orca success exposes nullable
   `filament_profile`, `filament_diameter_mm`, and
   `filament_density_g_cm3`. OpenAPI requires nullable `material_used_g`, which
@@ -302,17 +304,16 @@ This document describes the application runtime inside app/.
   non-positive optional grams marker to null/manual, never zero. Selected-
   profile Orca still requires positive grams; recognized zero remains
   `GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`, and marker drift
-  remains fail closed. J1C focused evidence is 19/19 and the complete local
-  aggregate passes 2212/2212 JavaScript tests plus 84 Python tests with one
-  expected Windows POSIX-permission skip; exact-image behavior remains
-  unverified.
+  remains fail closed. Owner-supplied VPS evidence verifies the guard-only HTTP
+  200/null path and the Orca mechanism's 0.00 g to 4.12 g correction. The
+  combined local focused set passes 69/69; the final combined exact-image rerun
+  remains pending.
 - Keep W8 live calibration `BLOCKED_OWNER_INPUT`: the retained P1S and new H2D
   candidates identify as generic Marlin profiles, not verified native Bambu
-  profiles. The audited vendor set is not self-contained: referenced include
-  templates, H2D-compatible and 0.1/0.3 BBL processes, vendor filament chains,
-  and material fields are missing, while redistribution/license and exact Orca
-  2.3.1 compatibility are unverified. No vendor/resolver/runtime change was
-  made, and no deploy or public route is authorized by the repository contract.
+  profiles. Their child files now own exact `layer_change_gcode='G92 E0'`, but
+  the incomplete vendor chain remains a separate time/motion calibration lane
+  and J2 owns bed shape/Z. No vendor profile was imported, and no deploy or
+  public route is authorized by the repository contract.
 - No-Origin service requests are allowed; browser-origin protected requests
   must match only their exact audience allowlist.
 - /prusa/slice allows FDM and SLA based on layerHeight.

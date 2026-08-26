@@ -20,12 +20,15 @@ remain separate and are not exposed to the native slicer process.
 J0's request-independent Orca policy is preserved:
 
 ```text
---load-settings machine;process;filament
+--load-settings machine;process
+--load-filaments filament
 --arrange 1 --orient 0 --slice 0
 ```
 
-The filament entry is omitted when the selected material has no repository
-profile; there is no empty trailing setting. `--arrange 1` places the already
+The dedicated filament option is omitted when the selected material has no
+repository profile. A filament snapshot must never be appended to
+`--load-settings`, because Orca silently ignores that role there. `--arrange 1`
+places the already
 preprocessed geometry on the bed. `--orient 0` prevents the native slicer from
 silently replacing the request-owned rotation.
 
@@ -85,8 +88,9 @@ J1 maps supported normalized Orca materials to repository profiles:
 | PETG | `filament/PETG_generic.json` | 1,75 mm | 1,27 g/cm³ |
 
 The selected filament file is snapshotted into the job-owned workspace before
-digest construction or native invocation. The Orca settings precedence is
-machine → process → filament. The success response reports the original stable
+digest construction or native invocation. Machine and process load through
+`--load-settings`; the selected filament loads through `--load-filaments`. The
+success response reports the original stable
 basename in `profiles.filament_profile`, plus the exact used
 `profiles.filament_diameter_mm` and `profiles.filament_density_g_cm3` values.
 
@@ -124,27 +128,30 @@ Calibration entries must bind both `engine_version` and
 `profiles.effective_profile_sha256`. Either changing invalidates the previous
 measurement.
 
-## Machine-profile blocker before W8
+## Repository machine correction and separate W8 blocker
 
 The existing `Bambu_P1S_0.4_nozzle.json` and the newly harvested
 `Bambu_H2D_0.4_nozzle.json` are generic Marlin profiles. Their names and build
-volumes do not establish Bambu vendor motion behavior. Material-mass estimates
-may remain useful for development, but time calibration against real Bambu
-Studio cannot be qualified with them.
+volumes do not establish Bambu vendor motion behavior. Their exact child-owned
+`layer_change_gcode='G92 E0'` field is sufficient for the repository relative-
+extrusion contract, but time calibration against real Bambu Studio cannot be
+qualified with these generic motion profiles.
 
 A bounded vendor-input audit parsed all 11 supplied JSON files, matched all 11
 declared hashes, and derived candidate volumes P1S 256 x 256 x 250 mm and H2D
 350 x 320 x 325 mm. The set is not self-contained: 11 referenced include
 templates, an H2D-compatible process, 0.1/0.3 BBL processes, vendor filament
-profiles and parent chains, and required density/diameter/material fields are
-missing. Redistribution/license permission and exact OrcaSlicer 2.3.1 runtime
-compatibility are also unverified.
+profiles and parent chains, and exact OrcaSlicer 2.3.1 runtime qualification
+are missing. The owner authorized later public-repository inclusion; technical
+completeness remains the gate.
 
-No vendor file, resolver, runtime setting, or build-volume constant was changed.
-The generic repository profiles remain and the selected-filament Orca
-incompatibility remains `NOT FIXED`. W8 is still `BLOCKED_OWNER_INPUT`; see
-`configs/orca/H2D-PROFIL-TODO.md`. J1C must not invent motion, firmware,
-acceleration, capacity, or material values.
+No vendor file, resolver, or build-volume constant was changed. Production
+Orca now loads selected filament through `--load-filaments`, and both repository
+child machine profiles own exact `layer_change_gcode='G92 E0'`. Owner-supplied
+mechanism evidence produced 4.12 g instead of 0.00 g. The incomplete vendor
+chain is not a J1C blocker; it keeps W8 time/motion calibration
+`BLOCKED_OWNER_INPUT`. J2 separately owns P1S/H2D bed shape and Z. See
+`configs/orca/H2D-PROFIL-TODO.md`.
 
 ## Capability-readiness proposal boundary
 
@@ -165,6 +172,11 @@ paths belong only in an owner-controlled, repository-external manifest. The
 runner verifies the declared `M01`–`M10` SHA-256 identity before use and must
 emit only anonymized model IDs and verified hashes as model identity in durable
 output; measurement records must not expose a path or basename.
+
+The calibration helper currently embeds its own superseded
+machine/process/filament `--load-settings` composition. It does not use the
+corrected production `engine.js` command builder, was not changed or requalified
+by J1C, and must not produce accepted W8 evidence until corrected separately.
 
 The owner path itself is never passed to Docker. After the source is inspected
 and hash-verified, the runner creates one run-owned temporary staging directory

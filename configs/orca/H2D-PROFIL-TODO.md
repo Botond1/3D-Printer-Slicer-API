@@ -24,13 +24,22 @@ qualify the real P1S profile.
 generic Marlin profile. The filename must not be interpreted as proof of Bambu
 motion, firmware, or vendor-profile equivalence.
 
+Both repository-owned generic child profiles now intentionally own exact
+`layer_change_gcode='G92 E0'`. That narrow Orca relative-extrusion correction
+does not convert either file into a vendor profile and does not implement the
+separate J2 bed-shape/Z contract.
+
 ## Required owner-controlled input
 
-Before J0 W8 can run, the owner/operator must provide or approve repository
-copies of the exact OrcaSlicer 2.3.1 vendor machine profiles for the intended
-P1S and H2D printer/nozzle combinations, including every required inherited
-profile in the vendor chain. The source and licence of those bytes must also be
-approved. The executor must not invent or tune those values.
+The owner authorized later public-repository inclusion on 2026-08-26. Before
+J0 W8 can run, the complete OrcaSlicer 2.3.1-qualified machine/process/filament
+chain for the intended P1S and H2D combinations must still be available,
+including every inherited/include profile. Partial chains must not be imported,
+and the executor must not invent or tune missing values.
+
+This technical completeness gate is a future calibration/time/geometry lane.
+It does not block J1C's production `--load-filaments` binding or the two
+repository-child `layer_change_gcode` corrections.
 
 After replacement, the effective profile digest changes by design. Every
 calibration entry bound to the former

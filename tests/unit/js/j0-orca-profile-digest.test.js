@@ -23,6 +23,7 @@ test('Orca digest excludes request overrides but covers machine, process, and se
     const machineA = path.join(root, 'machine-a.json');
     const machineB = path.join(root, 'machine-b.json');
     const machineChanged = path.join(root, 'machine-changed.json');
+    const machineLayerResetChanged = path.join(root, 'machine-layer-reset-changed.json');
     const processA = path.join(root, 'process-a.json');
     const processB = path.join(root, 'process-b.json');
     const processRequestChanged = path.join(root, 'process-request-changed.json');
@@ -34,13 +35,20 @@ test('Orca digest excludes request overrides but covers machine, process, and se
     const filamentChanged = path.join(root, 'filament-changed.json');
 
     await fs.writeFile(machineA, JSON.stringify({
-        name: 'P1S', printable: { height: '250', area: ['0x0', '250x250'] }
+        name: 'P1S', printable: { height: '250', area: ['0x0', '250x250'] },
+        layer_change_gcode: 'G92 E0'
     }));
     await fs.writeFile(machineB, JSON.stringify({
+        layer_change_gcode: 'G92 E0',
         printable: { area: ['0x0', '250x250'], height: '250' }, name: 'P1S'
     }, null, 4));
     await fs.writeFile(machineChanged, JSON.stringify({
-        name: 'P1S', printable: { height: '260', area: ['0x0', '250x250'] }
+        name: 'P1S', printable: { height: '260', area: ['0x0', '250x250'] },
+        layer_change_gcode: 'G92 E0'
+    }));
+    await fs.writeFile(machineLayerResetChanged, JSON.stringify({
+        name: 'P1S', printable: { height: '250', area: ['0x0', '250x250'] },
+        layer_change_gcode: 'G92 E1'
     }));
     await fs.writeFile(processA, JSON.stringify({
         layer_height: '0.2', sparse_infill_density: '20%', walls: { count: '2' },
@@ -88,6 +96,7 @@ test('Orca digest excludes request overrides but covers machine, process, and se
     assert.equal(digest(processA, machineA), digest(processA, machineA, filamentB, 'pla'));
     assert.equal(digest(processA, machineA), digest(processRequestChanged, machineA));
     assert.notEqual(digest(processA, machineA), digest(processA, machineChanged));
+    assert.notEqual(digest(processA, machineA), digest(processA, machineLayerResetChanged));
     assert.notEqual(digest(processA, machineA), digest(processChanged, machineA));
     assert.notEqual(digest(processA, machineA), digest(processInvariantChanged, machineA));
     assert.notEqual(digest(processA, machineA), digest(processRelativeInvariantChanged, machineA));
@@ -126,7 +135,8 @@ test('profile identity binds the request-independent native invocation policy', 
 
     const orcaPolicy = resolveSlicerInvocationPolicy('orca', 'FDM');
     assert.deepEqual(orcaPolicy, {
-        arrange: '1', orient: '0', slice: '0', settingsPrecedence: ['machine', 'process', 'filament']
+        arrange: '1', orient: '0', slice: '0',
+        settingsPrecedence: ['machine', 'process'], filamentOption: '--load-filaments'
     });
     assert.notDeepEqual(orcaPolicy, {
         ...orcaPolicy, settingsPrecedence: ['process', 'machine']
