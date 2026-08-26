@@ -32,6 +32,7 @@ function createRequireSliceService(options = {}) {
         failure: AUTHENTICATION_FAILURE,
         logger: options.logger,
         compareDigests: options.compareDigests || crypto.timingSafeEqual,
+        clock: options.clock,
         alwaysComparePrevious: Boolean(options.keyRing || previous),
         logMessage: '[SLICE AUTH] Authentication rejected.',
         hideAudienceMetadata: true

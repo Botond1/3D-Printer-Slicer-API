@@ -1,5 +1,131 @@
 # Hardening plan
 
+## J0 W2/W3 response and slice-principal checkpoint
+
+Status:
+`J0_W2_W3_FINAL_LOCAL_CONTRACTS_PASS; J0_FINAL_LOCAL_AGGREGATE_PASS;
+NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_FINAL_EXACT_IMAGE_BUILD_AND_E2E_PASS;
+J0_FILAMENT_W8_BLOCKED_OWNER_INPUT_NOT_STARTED`.
+
+Implemented local candidate exits:
+
+1. After profile selection and before bounds/runtime derivation, Prusa profile
+   bytes are bounded-read from canonical real paths and copied into owning job
+   scratch. Orca always resolves the allowlisted versioned repository copy of
+   the v2.3.1 `Custom` machine/process parent chain, rejects unknown/cyclic/name-
+   or role-mismatched inheritance, removes `inherits`, and snapshots the
+   flattened JSON. A Docker build gate requires canonical semantic equality
+   with the exact pinned native parents. Symlinks/non-canonical sources
+   and detected size growth fail closed. Bounds parsing, runtime-profile
+   derivation, digest construction, and native invocation use that lineage;
+   success profile metadata and bounds `source_profile` retain the original
+   selected child basenames.
+2. Every successful Prusa and Orca response requires
+   `profiles.effective_profile_sha256`, a canonical lowercase SHA-256 over the
+   effective configured machine/process layers and request-independent native
+   invocation policy while excluding request layer height, request infill,
+   paths, and request/job/model identity. Prusa export flags and Orca's ordered
+   machine-then-process settings precedence are composed from that policy.
+3. Stable Orca runtime derivation clears `layer_gcode` and sets
+   `use_relative_e_distances='1'` for consistency with the flattened pinned
+   machine parent's per-layer `G92 E0` reset; these request-independent settings
+   remain digest-covered. A parent-only Orca value
+   mutation changes the effective digest even when the
+   selected child name and overrides remain unchanged. The current J0 smoke
+   accepts positive `G1 ... E` only after exact `;BEFORE_LAYER_CHANGE`, so
+   prelude/purge extrusion cannot prove model-layer extrusion. This stricter
+   guard has current focused/exact-image evidence and is not attributed to the
+   historical I2 hosted run.
+4. Before listen, both selected slicer executables' bounded `--help` output is
+   parsed and cached atomically; neither initialized version is published unless
+   both pass. The startup-probe runner explicitly disables slice-native events,
+   outcome counters, and duration buckets. Every success and OpenAPI require
+   `engine_version`; malformed or
+   unavailable output fails startup. Exact-candidate-image probes returned exit
+   0 with 6087 Prusa bytes and 5121 Orca bytes; `--version` returned exit 1 for
+   both and is not used. The actual startup module also passed inside the
+   network-disabled, non-root, read-only exact-image envelope and atomically
+   published Prusa `2.8.1+linux-x64-GTK3-202409181416` and Orca `2.3.1`.
+5. Orca native arguments now pass `--arrange 1` and `--orient 0` after
+   preprocessing and bounds checks. Arrangement places already-rotated geometry
+   onto the build plate; auto-orient remains disabled and does not replace the
+   request-owned rotation. The superseded arrangement-disabled exact-image HTTP
+   probe retained negative Y after an X90 origin rotation and failed with status
+   206 / `Nothing to be sliced`; the earlier translated direct fixture did not
+   cover this seam. Focused invocation-policy, command, and digest contracts
+   cover the correction. The final network-disabled, read-only, healthy-
+   container HTTP E2E passed: the existing Python optimizer yielded pre-request
+   dimensions 30 x 20 x 10 mm, request rotation X90 yielded final dimensions
+   30 x 10 x 20 mm, and separate WooCommerce and LeadPilot requests returned
+   Orca `2.3.1`, the same lowercase digest, and original profile basenames. A
+   valid WooCommerce credential only under `x-api-key` returned the exact HTTP
+   401 without workspace, queue, or artifact effects; the final queue was idle
+   and exact cleanup passed. Code-bearing SHA
+   `ed85eec63409b7362fe05c2b99031eeb24b5b9c9` produced retained local image ID
+   `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
+6. Prusa INI canonicalization keeps section/key case significant to match native
+   Boost semantics and rejects exact duplicate qualified keys. Runtime
+   generation replaces one exact top-level request-owned key, rejects a
+   duplicate top-level key, and inserts a missing `layer_height` or FDM
+   `fill_density` key before the first section.
+7. OpenAPI preserves `errorCode` and includes exactly the four requested
+   previously omitted emitted codes: `FILE_PROCESSING_TIMEOUT`,
+   `INTERNAL_PROCESSING_ERROR`, `ORCA_PROFILE_INCOMPATIBLE`, and
+   `MODEL_OUT_OF_PRINTER_BOUNDS`. The adjacent review also adds the already-live
+   `MODEL_DIMENSIONS_UNAVAILABLE` to only the general validation branch, closing
+   its 422 `oneOf` gap without adding another requested response feature. It
+   also completes the live slice HTTP 500 enum with
+   `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
+   and `INTERNAL_SERVER_ERROR`.
+8. `MODEL_OUT_OF_PRINTER_BOUNDS` requires both
+   `model_dimensions_mm.{x,y,z}` and
+   `build_volume_limits_mm.{min,max,source_profile}`.
+9. Slice traffic still uses only `x-slicer-api-key`. WooCommerce and LeadPilot
+   have independently rotatable active/previous families; every configured
+   slot is fixed-digest compared and globally unique. A configured valid
+   `ADMIN_API_KEY` also participates in global uniqueness; only its exact
+   authorized substitution for one missing non-slice active avoids duplicate
+   self-registration.
+10. `SLICE_SERVICE_AUTH_MODE` defaults to `legacy` and admits only:
+   shared-active/no-principals/no-expiry `legacy`; shared-active plus both
+   principal-actives and a future <=90-day
+   `SLICE_SERVICE_LEGACY_MIGRATION_UNTIL` for `migration`; or both principal
+   actives with shared active/previous and expiry absent for `principals`.
+   During migration, shared active/previous authorize only while request time
+   is strictly before expiry; principal slots continue at and after expiry and
+   every resolved slot is still fixed-digest compared. Previous slots remain
+   optional only with their own active. Any other mode/slot/deadline
+   combination fails before listen.
+11. `GET /health` and `GET /pricing` remain authentication-free. The intended
+   route-activation target is `principals`. Compose remains unchanged because
+   the existing `env_file` contract already passes the selected environment
+   file. External production activation is outside repository evidence and
+   authority.
+
+Remaining gates:
+
+1. obtain separately authorized hosted exact-SHA validation if required; the
+   final local aggregate is already green at 2161/2161 JavaScript tests, 85/85
+   Python tests run with 84 pass and one expected Windows POSIX-permission skip,
+   244/39 JavaScript/Python syntax files, and 405 tracked safety files;
+2. preserve `principals` as the repository activation target and require the
+   dark gate before any router action: sanitized readback of `principals`, both
+   actives, and absent shared active/previous, expiry, and both principal
+   previous slots for initial activation; one private synthetic slice per
+   principal; available retired shared credentials rejected under
+   `x-slicer-api-key`; a correct principal rejected under `x-api-key`; exact
+   cleanup; otherwise keep the route dark. A later rotation separately proves
+   every configured previous, an owner-approved removal deadline, and post-
+   removal rejection. External production activation is outside repository
+   evidence and authority;
+3. do not start filament-profile identity or `material_used_g` work until the
+   owner supplies the required Bambu reference profile fields. This independent
+   W8 prerequisite is `BLOCKED_OWNER_INPUT / NOT_STARTED`; no current response
+   or digest claim satisfies it.
+
+See
+[`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).
+
 ## I12 Wave 3 Hostinger production-qualification checkpoint
 
 Status:
@@ -366,7 +492,9 @@ Repository implementation and deterministic tests cover:
   comparison, cross-audience rejection, two-restart rotation/revocation, and a
   generic fail-closed startup error;
 - a finite `ADMIN_API_KEY` migration for exactly one named non-slice audience,
-  expiring no more than 90 days after startup evaluation;
+  expiring no more than 90 days after startup evaluation; any configured valid
+  value participates in global uniqueness, with only its exact authorized
+  substitution self-reference skipped;
 - exact per-audience browser Origin allowlists, no-Origin service behavior,
   fail-closed proxy peer validation, nearest-untrusted-hop XFF resolution,
   bounded request-ID validation/replacement, and X-Request-Id propagation;
@@ -765,7 +893,10 @@ S1c follows that AbortSignal contract and owns native process execution:
 
 - I5 implements and deterministic tests cover four distinct credential
   audiences, active/previous slots, exact route/header mapping, two-restart
-  revocation, finite one-audience legacy migration, and stable auth errors.
+  revocation, finite one-audience admin migration, and stable auth errors. J0
+  extends the slice audience with explicit `legacy`, finite `migration`, and
+  final `principals` modes plus separate WooCommerce/LeadPilot rotation; final
+  aggregate and production migration evidence remain required.
 - Exact per-audience Origin policy covers slice, protected pricing, artifact,
   and operations routes while preserving no-Origin service behavior.
 - Proxy configuration fails closed on malformed, wildcard, overbroad,
@@ -849,7 +980,7 @@ exception to those gates.
 | D-010 | Promotion to `main` was not part of S0 completion. | At S0 the workflow could deploy every `main` push. S3a has since removed that repository path without creating a replacement promotion mechanism. | S4 then separately authorized S3b promotion design |
 | D-011 | S0.1 remediated the registry/audit findings, but that result alone did not complete the application mitigation for deeply nested multipart fields. | Commit `f9ed1ee6791e531670d5d7703f994bfb51986ebb` locks Multer 2.2.0 and the other verified non-major fixes, and its production audit is zero. S1a commit `e7a409566bb8795a22f38bbf9f514b42c51bda74` separately configures and live-tests fixed `limits.fieldNestingDepth: 0`. | S0.1 registry/audit remediation and S1a application mitigation locally verified |
 | D-012 | Native children require both secret minimization and egress control. | I1 supplies a tested minimal environment excluding API secrets. I12 verifies API/native egress denial for one exact dark deployed digest; drift after image/network/firewall changes remains a risk. | Re-prove exact egress denial after relevant changes and before public activation. |
-| D-013 | I3 established a separate slice credential; I5 supersedes the wider service-trust contract. | I5 tests four active/previous audiences, rotation/revocation, finite legacy migration, Origin/proxy/request identity, readiness, events and metrics. I12 verifies the exact dark private peer, digest and proxy topology; public caller/firewall/DNS/certificate and complete secret lifecycle remain `UNVERIFIED`. | Complete the public caller, proxy, secret, firewall, DNS/certificate and route-activation gates. |
+| D-013 | I3 established a separate slice credential; I5 superseded the wider service-trust contract and J0 separates the two slice principals. | I5 tests scoped audiences, rotation/revocation, finite admin migration, Origin/proxy/request identity, readiness, events and metrics. J0 adds explicit `legacy`/`migration`/`principals` slice modes with a <=90-day shared-key migration deadline. The final local J0 aggregate and exact-image proof pass; hosted exact-SHA validation remains unverified, and external production activation is outside repository evidence and authority. | Preserve the green local J0 gates; hosted validation and external production activation require separate authority. |
 | D-014 | `fileSize` alone was not a complete multipart/HTTP resource envelope. | I4 completes bounded upload/archive/artifact/pricing/container controls. I12 proves only small synthetic N=1 host mechanics; arbitrary model duration and N=2/N=3 CPU/RAM/disk behavior remain open. | Keep N=1 until real workload and higher-concurrency envelopes are measured. |
 | D-015 | A `main` push could historically deploy independently of validation CI. | S3a removed that path; I11 completes protected manual signed-candidate publication and automatic no-deploy rehearsal. I12 separately verifies one exact dark deployment and corrected proxy cutover, without public route activation. | Keep publication, dark deployment and public activation as separately authorized identities and stages. |
 | D-016 | The manifest/lock freeze was limited to the S1a/S3a parallel wave. | The dependency patch is now integrated once by patch ID; duplicate `306b799` was not picked. | Future advisory work requires a new serialized owner and audit evidence |

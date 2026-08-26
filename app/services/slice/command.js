@@ -82,7 +82,7 @@ class CommandExecution {
         this.child = execute(this.executable, this.args, {
             detached: platform !== 'win32',
             env: environmentFactory(process.env, platform),
-            maxBuffer: 1024 * 10000,
+            maxBuffer: this.dependencies.maxBuffer,
             shell: false,
             windowsHide: true
         }, (error, stdout = '', stderr = '') => {
@@ -118,23 +118,27 @@ class CommandExecution {
             .then(() => this.dependencies.terminatorFactory(this.child).terminate())
             .then(() => {
                 this.terminationComplete = true;
-                emitEvent('native.termination_settled', {
-                    audience: 'slice',
-                    outcome: 'success',
-                    duration_ms: elapsedMilliseconds(terminationStarted)
-                });
+                if (this.dependencies.telemetry === 'slice') {
+                    emitEvent('native.termination_settled', {
+                        audience: 'slice',
+                        outcome: 'success',
+                        duration_ms: elapsedMilliseconds(terminationStarted)
+                    });
+                }
                 this.maybeSettle();
             }, () => {
                 // An unverified tree is deliberately non-terminal: retaining the
                 // command promise also retains the queue slot instead of allowing
                 // another native job to start beside a possible orphan.
                 quarantineNativeRuntime();
-                recordNativeQuarantine();
-                emitEvent('native.quarantined', {
-                    audience: 'slice',
-                    outcome: 'quarantined',
-                    error_code: 'NATIVE_TERMINATION_UNVERIFIED'
-                });
+                if (this.dependencies.telemetry === 'slice') {
+                    recordNativeQuarantine();
+                    emitEvent('native.quarantined', {
+                        audience: 'slice',
+                        outcome: 'quarantined',
+                        error_code: 'NATIVE_TERMINATION_UNVERIFIED'
+                    });
+                }
             });
     }
 
@@ -176,23 +180,32 @@ class CommandExecution {
  * @returns {(executable: string, args?: string[], options?: {signal?: AbortSignal}) => Promise<{stdout: string, stderr: string}>}
  */
 function createCommandRunner(overrides = {}) {
+    const telemetry = overrides.telemetry ?? 'slice';
+    if (telemetry !== 'slice' && telemetry !== 'none') {
+        throw new Error('Unsupported native command telemetry mode.');
+    }
     const dependencies = {
+        telemetry,
         execute: overrides.execFile || execFile,
         setTimer: overrides.setTimeout || setTimeout,
         clearTimer: overrides.clearTimeout || clearTimeout,
         platform: overrides.platform || process.platform,
         timeoutMs: overrides.timeoutMs || COMMAND_TIMEOUT_MS,
+        maxBuffer: overrides.maxBuffer || 1024 * 10000,
         environmentFactory: overrides.createChildEnvironment || createChildEnvironment,
         terminatorFactory: overrides.createProcessTreeTerminator
             || ((child) => createProcessTreeTerminator(child, overrides.terminationDependencies))
     };
     return function run(executable, args = [], options = {}) {
         if (options.signal?.aborted) return Promise.reject(abortReason(options.signal));
-        const started = process.hrtime.bigint();
-        nativeStarted();
-        emitEvent('native.started', { audience: 'slice', outcome: 'started' });
+        const started = telemetry === 'slice' ? process.hrtime.bigint() : null;
+        if (telemetry === 'slice') {
+            nativeStarted();
+            emitEvent('native.started', { audience: 'slice', outcome: 'started' });
+        }
         return new CommandExecution(dependencies, executable, args, options.signal).run().then(
             (value) => {
+                if (telemetry === 'none') return value;
                 const duration = elapsedMilliseconds(started);
                 nativeFinished('success', duration);
                 emitEvent('native.completed', {
@@ -201,6 +214,7 @@ function createCommandRunner(overrides = {}) {
                 return value;
             },
             (error) => {
+                if (telemetry === 'none') throw error;
                 const outcome = error?.code === 'ETIMEDOUT'
                     ? 'timeout'
                     : isAbortError(error, options.signal) ? 'aborted' : 'failure';
@@ -218,11 +232,17 @@ function createCommandRunner(overrides = {}) {
     };
 }
 
+/** Build a bounded startup preflight runner that cannot alter slice telemetry. */
+function createStartupProbeRunner(overrides = {}) {
+    return createCommandRunner({ ...overrides, telemetry: 'none' });
+}
+
 const runCommand = createCommandRunner();
 
 module.exports = {
     runCommand,
     createCommandRunner,
+    createStartupProbeRunner,
     abortReason,
     throwIfAborted,
     isAbortError

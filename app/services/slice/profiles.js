@@ -233,14 +233,23 @@ function parseDimensionLimitsFromPrusaProfile(configPath, technology) {
  * @param {'FDM'|'SLA'} technology Active technology.
  * @param {string} configFile Process/profile config file.
  * @param {string | null} orcaMachineConfigFile Orca machine config path.
+ * @param {string | null} [publicSourceProfileFile=null] Original selected path used only for stable public metadata.
  * @returns {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string}} Resolved limits.
  */
-function resolveBuildVolumeLimits(engine, technology, configFile, orcaMachineConfigFile) {
-    if (engine === 'orca') {
-        return parseDimensionLimitsFromOrcaMachineProfile(orcaMachineConfigFile, technology);
+function resolveBuildVolumeLimits(
+    engine,
+    technology,
+    configFile,
+    orcaMachineConfigFile,
+    publicSourceProfileFile = null
+) {
+    const limits = engine === 'orca'
+        ? parseDimensionLimitsFromOrcaMachineProfile(orcaMachineConfigFile, technology)
+        : parseDimensionLimitsFromPrusaProfile(configFile, technology);
+    if (publicSourceProfileFile) {
+        limits.sourceProfile = path.basename(publicSourceProfileFile);
     }
-
-    return parseDimensionLimitsFromPrusaProfile(configFile, technology);
+    return limits;
 }
 
 /**
@@ -307,8 +316,8 @@ async function createOrcaRuntimeProcessProfile(baseProcessProfilePath, layerHeig
     const profileData = readProfileJson(baseProcessProfilePath);
     profileData.layer_height = `${layerHeight}`;
     profileData.sparse_infill_density = infillPercentage;
-    profileData.layer_gcode = 'G92 E0';
-    profileData.use_relative_e_distances = '0';
+    profileData.layer_gcode = '';
+    profileData.use_relative_e_distances = '1';
 
     const runtimeProfilePath = resolveRuntimeProfilePath(workspace, 'orca-runtime', '.json', options.pathFactory);
     await fsPromises.writeFile(runtimeProfilePath, JSON.stringify(profileData, null, 4), {
@@ -335,17 +344,24 @@ function upsertIniKey(content, key, value) {
         lines.pop();
     }
 
-    let replaced = false;
-    const updatedLines = lines.map((line) => {
-        if (!replaced && keyPattern.test(line)) {
-            replaced = true;
-            return `${key} = ${value}`;
+    let firstSectionIndex = lines.length;
+    let topLevelMatch = -1;
+    for (let index = 0; index < lines.length; index += 1) {
+        if (/^\s*\[[^\]]+]\s*$/.test(lines[index])) {
+            firstSectionIndex = Math.min(firstSectionIndex, index);
         }
-        return line;
-    });
+        if (index >= firstSectionIndex || !keyPattern.test(lines[index])) continue;
+        if (topLevelMatch >= 0) {
+            throw new Error('Duplicate slicer profile key is not supported.');
+        }
+        topLevelMatch = index;
+    }
 
-    if (!replaced) {
-        updatedLines.push(`${key} = ${value}`);
+    const updatedLines = [...lines];
+    if (topLevelMatch >= 0) {
+        updatedLines[topLevelMatch] = `${key} = ${value}`;
+    } else {
+        updatedLines.splice(firstSectionIndex, 0, `${key} = ${value}`);
     }
 
     return `${updatedLines.join('\n')}\n`;

@@ -38,6 +38,11 @@ Covered endpoints: `/orca/slice`, `/prusa/slice`, `/pricing/*`, `/admin/output-f
 
 ### When behavior changes on existing endpoints:
 1. Update test expectations (status codes, response shapes, error codes).
+   Successful J0 slice assertions require machine-readable `engine_version`,
+   lowercase 64-hex `profiles.effective_profile_sha256`, and stable original
+   profile basenames; bounds failures require both dimension payloads. The live
+   slice-500 enum is `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
+   `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 2. Run the affected suite(s) to verify.
 
 ### After code agents finish their work:
@@ -60,7 +65,11 @@ python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --
 
 ## Environment Inputs
 - `SLICER_BASE_URL` — API base URL (from .env, fallback to `http://localhost:3000`)
-- `SLICE_SERVICE_API_KEY` — Slice requests, including capacity qualification
+- `SLICE_SERVICE_API_KEY` — Current runner-only input for slice requests,
+  including capacity qualification. Helpers do not infer server slice mode or
+  automatically read WooCommerce/LeadPilot variables. An explicitly supplied
+  authorized principal value still goes only in `x-slicer-api-key`; never add a
+  second header or re-enable a server shared slot for the runner.
 - `PRICING_API_KEY` — Pricing lifecycle tests
 - `ARTIFACT_API_KEY` — Admin output tests and exact capacity inventories
 - `OPERATIONS_API_KEY` — Fresh queue/readiness observations
@@ -89,6 +98,23 @@ python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --
    runner is the explicit exception: read its required create-new `--report`
    path and preserve its separate cleanup manifest.
 4. **Follow existing runner patterns** — use `common/http_utils.py` for requests, `common/env_utils.py` for config.
+5. **Do not overstate J0 evidence.** Focused contracts and exact-candidate-image
+   startup-module proof cover `engine_version`; focused/build contracts cover
+   versioned/equality-gated flattened Orca parents. Focused policy contracts
+   cover `--arrange 1` / `--orient 0`: placement may translate the already-
+   rotated model onto the build plate, but auto-orient stays disabled. Final
+   exact-image HTTP transform/final-dimensions E2E evidence passes for both
+   principals and is bound to the code/image identity in J0 evidence. The current
+   Python matrix
+   helper does not establish those facts or digest/snapshot lineage, so do not
+   classify it alone as complete J0 proof.
+   The native Orca smoke accepts positive `G1 ... E` only after the exact
+   `;BEFORE_LAYER_CHANGE` marker; prelude/purge extrusion is not model-layer
+   proof.
+   Keep it split into a thin Docker orchestrator plus side-effect-free fixture,
+   container-script, and contract builders; preserve bounded file/function
+   guards and exact generated-script behavior.
+   Filament/`material_used_g` is W8 `BLOCKED_OWNER_INPUT / NOT_STARTED`.
 
 ## Troubleshooting
 - If capacity preflight fails, verify the scoped slice, artifact, and operations

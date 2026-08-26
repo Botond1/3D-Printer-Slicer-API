@@ -26,16 +26,47 @@ You own all Node.js + Express code inside `app/`:
 1. **Root-scoped runtime dirs only.** Use `input/`, `output/`, `configs/` at repo root. NEVER introduce `app/input`, `app/output`, or `app/configs`.
 2. **Fail-fast geometry.** Invalid geometry must return `INVALID_SOURCE_GEOMETRY`. Never auto-heal or mutate user models.
 3. **Queue and rate-limit protections must stay active** for slicing endpoints.
-4. **Scoped active keys are mandatory.** Server startup must fail closed unless
-   distinct valid `SLICE_SERVICE_API_KEY`, `PRICING_API_KEY`,
-   `ARTIFACT_API_KEY`, and `OPERATIONS_API_KEY` values exist. Optional
-   `_PREVIOUS` slots are audience-local.
+4. **Scoped active keys are mandatory.** Server startup requires distinct valid
+   pricing, artifact, and operations actives plus one complete
+   `SLICE_SERVICE_AUTH_MODE`: default shared-only `legacy`; shared plus both
+   principals and a future <=90-day expiry for `migration`; or both principals
+   with no shared slots/expiry for `principals`. Reject one-principal,
+   previous-without-active, duplicate, malformed, and mode-incompatible state.
 5. **Legacy admin migration is finite.** `ADMIN_API_KEY` may temporarily fill
    exactly one named non-slice audience for no more than 90 days; it is never
-   the normal default or a slice credential. Slice uses `x-slicer-api-key`;
+   the normal default or a slice credential. Any configured valid admin key
+   participates in global uniqueness; only its exact authorized substitution
+   self-reference is skipped. Slice uses exactly one
+   `x-slicer-api-key` header and must not gain an `x-api-key`/dual-reader alias;
    pricing, artifact, and operations use audience-scoped `x-api-key`.
 6. **Upload field name must remain `choosenFile`.**
-7. **Keep error code vocabulary stable** — clients depend on exact error code strings.
+7. **Keep response vocabulary stable.** Clients depend on exact error-code
+   strings. Every successful slice requires actual-selected-executable
+   `engine_version` and lowercase `profiles.effective_profile_sha256`; the
+   bounds error requires both dimension payloads, and the live
+   `MODEL_DIMENSIONS_UNAVAILABLE` code stays in the general 422 branch. Keep the
+   complete live slice-500 enum: `INTERNAL_PROCESSING_ERROR`,
+   `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
+8. **Preserve selected-profile byte continuity.** Snapshot canonical regular
+   Prusa bytes and the allowlisted flattened versioned repository copy of the
+   Orca v2.3.1 parent chain into job scratch before bounds/runtime use; keep
+   original child basenames in public metadata. Preserve the Docker build
+   equality gate and stable relative-extrusion settings aligned with the pinned
+   machine parent's per-layer `G92 E0` reset.
+9. **Preserve native identity and orientation ownership.** Resolve/cache
+   both engine versions atomically from bounded selected-executable `--help`
+   output before listen; publish neither unless both pass, and keep startup
+   probes telemetry-disabled so they cannot alter slice-native lifecycle
+   metrics/events. Derive Prusa export flags and Orca machine-then-process
+   settings precedence from the same digest-covered policy. Keep Orca at
+   `--arrange 1` / `--orient 0` after preprocessing/bounds checks. Arrangement
+   places already-rotated geometry onto the build plate, while auto-orient stays
+   disabled and cannot replace the requested rotation. Focused command/digest
+   contracts and final exact-image HTTP transform/final-dimensions E2E pass for
+   both principals; the exact local code/image identity is recorded in J0 evidence.
+10. **Do not start blocked W8 work.** Filament-profile identity plus
+   `material_used_g` is `BLOCKED_OWNER_INPUT / NOT_STARTED` until the owner
+   supplies required Bambu reference profile fields.
 
 ## Engine Rules
 - Prusa: layer heights 0.025, 0.05 (SLA), 0.1, 0.2, 0.3 (FDM)

@@ -3,22 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-const proxyaddr = require('proxy-addr');
-const { loadCommonJsFromSource } = require('./helpers/load-commonjs-from-source');
-
-const ROOT = path.resolve(__dirname, '../../..');
-const FILES = Object.freeze({
-    auth: path.join(ROOT, 'app/config/service-auth.js'),
-    audience: path.join(ROOT, 'app/middleware/requireAudience.js'),
-    cors: path.join(ROOT, 'app/middleware/corsPolicy.js'),
-    trust: path.join(ROOT, 'app/config/trust-proxy.js'),
-    requestId: path.join(ROOT, 'app/middleware/requestId.js'),
-    events: path.join(ROOT, 'app/services/observability/events.js')
-});
-const source = (name) => fs.readFileSync(FILES[name], 'utf8');
-const keyMaterial = (name) => `i5-${name}-${'x'.repeat(48)}`;
+const {
+    keyMaterial,
+    mutateAndLoad
+} = require('./helpers/i5-security-mutation-fixtures');
 
 function environment() {
     return {
@@ -48,6 +36,33 @@ function validateKeyRing(module) {
         ...env,
         ARTIFACT_API_KEY: env.PRICING_API_KEY
     }, { now: 1 }));
+}
+
+function validateSlicePrincipalCompleteness(module) {
+    const env = {
+        ...environment(),
+        SLICE_SERVICE_WOOCOMMERCE_API_KEY: keyMaterial('woocommerce-active'),
+        SLICE_SERVICE_AUTH_MODE: 'migration',
+        SLICE_SERVICE_LEGACY_MIGRATION_UNTIL: '1970-01-02T00:00:00.000Z'
+    };
+    assert.throws(() => module.resolveServiceKeyRing(env, { now: 1 }));
+}
+
+function validateAdminMaterialUniqueness(module) {
+    const env = environment();
+    env.ADMIN_API_KEY = env.SLICE_SERVICE_API_KEY;
+    assert.throws(() => module.resolveServiceKeyRing(env, { now: 1 }));
+}
+
+function validateLegacyAdminSubstitutionSlots(module) {
+    const env = environment();
+    delete env.PRICING_API_KEY;
+    env.ADMIN_API_KEY = keyMaterial('legacy-admin');
+    env.LEGACY_ADMIN_API_KEY_AUDIENCE = 'pricing';
+    env.LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL = '1970-01-02T00:00:00.000Z';
+    assert.doesNotThrow(() => module.resolveServiceKeyRing(env, { now: 1 }));
+    env.PRICING_API_KEY_PREVIOUS = env.ADMIN_API_KEY;
+    assert.throws(() => module.resolveServiceKeyRing(env, { now: 1 }));
 }
 
 function invoke(middleware, supplied) {
@@ -83,73 +98,69 @@ function validateConstantTime(module) {
     assert.deepEqual(calls, [[32, 32], [32, 32], [32, 32], [32, 32]]);
 }
 
-function resolveCors(resolver, origin) {
-    return new Promise((resolve) => resolver({
-        method: 'POST',
-        path: '/pricing/FDM',
-        header: () => origin
-    }, (error, options) => resolve({ error, options })));
-}
-
-async function validatePricingOrigin(module) {
-    const resolver = module.createCorsOptionsResolver({
-        pricingAllowedOrigins: ['https://pricing.invalid'],
-        artifactAllowedOrigins: ['https://artifact.invalid']
+function validateDummySlotsNeverAuthorize(module) {
+    const middleware = module.createRequireAudience({
+        audience: 'slice',
+        keyRing: { audiences: { slice: { active: keyMaterial('slice-active') } } },
+        logger: { warn() {} }
     });
-    assert.equal((await resolveCors(resolver, 'https://pricing.invalid')).error, null);
-    assert.equal((await resolveCors(resolver, 'https://artifact.invalid')).error?.code,
-        'PRICING_CORS_ORIGIN_NOT_ALLOWED');
+    assert.equal(invoke(middleware, '').status, 401);
+    assert.equal(invoke(middleware, undefined).status, 401);
 }
 
-function forwarded(peer, value) {
-    return {
-        connection: { remoteAddress: peer },
-        socket: { remoteAddress: peer },
-        headers: { 'x-forwarded-for': value }
+function validateSliceMigrationExpiry(module) {
+    const expiryMs = Date.parse('2030-01-02T00:00:00.000Z');
+    const legacyActive = keyMaterial('slice-active');
+    const legacyPrevious = keyMaterial('slice-previous');
+    const woocommerceActive = keyMaterial('woocommerce-active');
+    const leadpilotActive = keyMaterial('leadpilot-active');
+    const calls = [];
+    let now = expiryMs;
+    const middleware = module.createRequireAudience({
+        audience: 'slice',
+        keyRing: {
+            audiences: { slice: {
+                active: legacyActive,
+                previous: legacyPrevious,
+                principals: {
+                    woocommerce: { active: woocommerceActive, previous: null },
+                    leadpilot: { active: leadpilotActive, previous: null }
+                }
+            } },
+            sliceCredentialMode: {
+                mode: 'migration',
+                expiresAt: new Date(expiryMs).toISOString()
+            }
+        },
+        compareDigests(left, right) {
+            calls.push([left.length, right.length]);
+            return crypto.timingSafeEqual(left, right);
+        },
+        clock: () => now,
+        logger: { warn() {} }
+    });
+    const observe = (supplied, observedAt) => {
+        now = observedAt;
+        const before = calls.length;
+        const result = invoke(middleware, supplied);
+        assert.equal(calls.length - before, 6);
+        assert.deepEqual(calls.slice(before), Array(6).fill([32, 32]));
+        return result;
     };
-}
 
-function validateTrust(module) {
-    assert.equal(module.resolveTrustProxySetting({}), false);
-    assert.throws(() => module.resolveTrustProxySetting({
-        TRUST_PROXY: 'true', TRUST_PROXY_CIDRS: '0.0.0.0/0'
-    }));
-    const trust = module.resolveTrustProxySetting({
-        TRUST_PROXY: 'true', TRUST_PROXY_CIDRS: '10.0.0.0/24'
-    });
-    assert.equal(proxyaddr.all(forwarded('203.0.113.9', '198.51.100.7'), trust).at(-1),
-        '203.0.113.9');
-}
+    const exactActive = observe(legacyActive, expiryMs);
+    const exactPrevious = observe(legacyPrevious, expiryMs);
+    const exactPrincipal = observe(woocommerceActive, expiryMs);
+    const afterActive = observe(legacyActive, expiryMs + 1);
+    const afterPrevious = observe(legacyPrevious, expiryMs + 1);
+    const afterPrincipal = observe(leadpilotActive, expiryMs + 1);
 
-function validateRequestId(module) {
-    const generated = '00000000-0000-4000-8000-000000000099';
-    assert.equal(module.resolveRequestId('a'.repeat(128), () => generated), 'a'.repeat(128));
-    assert.equal(module.resolveRequestId('a'.repeat(129), () => generated), generated);
-    assert.equal(module.resolveRequestId('safe\r\nforged', () => generated), generated);
-}
-
-function validateEventRedaction(module) {
-    const entries = [];
-    const emit = module.createEventEmitter({
-        writer: (entry) => entries.push(entry),
-        createId: () => '00000000-0000-4000-8000-000000000099'
-    });
-    emit('artifact.accessed', {
-        extra: {
-            action: 'Bearer do-not-leak-credential-value',
-            technology: 'FDM\r\nforged'
-        }
-    });
-    const serialized = JSON.stringify(entries[0]);
-    assert.doesNotMatch(serialized, /do-not-leak|[\r\n]/);
-    assert.equal(entries[0].extra.action, '[REDACTED]');
-    assert.equal(entries[0].extra.technology, 'FDM??forged');
-}
-
-function mutateAndLoad(name, from, to) {
-    const original = source(name);
-    assert.ok(original.includes(from), `missing I5 mutation anchor in ${name}: ${from}`);
-    return loadCommonJsFromSource(FILES[name], original.replace(from, to));
+    assert.equal(exactPrincipal.next, 1);
+    assert.equal(afterPrincipal.next, 1);
+    assert.equal(exactActive.status, 401);
+    assert.equal(exactPrevious.status, 401);
+    assert.equal(afterActive.status, 401);
+    assert.equal(afterPrevious.status, 401);
 }
 
 test('credential audience, revocation, duplicate, and constant-time mutations fail', async (t) => {
@@ -166,53 +177,32 @@ test('credential audience, revocation, duplicate, and constant-time mutations fa
             'if (material.includes(secret)) throw new Error(SERVICE_AUTH_CONFIGURATION_ERROR);',
             'if (false) throw new Error(SERVICE_AUTH_CONFIGURATION_ERROR);',
             validateKeyRing],
+        ['configured admin duplicate admitted', 'auth',
+            'if (adminSecret && isValidServiceSecret(adminSecret)) material.push(adminSecret);',
+            'void adminSecret;',
+            validateAdminMaterialUniqueness],
+        ['legacy previous duplicates substituted admin', 'auth',
+            'if (previous) registerUniqueSecret(material, previous);',
+            'void previous;',
+            validateLegacyAdminSubstitutionSlots],
+        ['partial slice principal rollout admitted', 'auth',
+            '|| !allPrincipalsActive\n        || !Number.isFinite(expiryMs)',
+            '|| !Number.isFinite(expiryMs)',
+            validateSlicePrincipalCompleteness],
         ['active comparison bypasses digest comparator', 'audience',
-            'const activeMatch = compareDigests(suppliedDigest, activeDigest);',
-            'const activeMatch = supplied === keys.active;',
-            validateConstantTime]
+            'compareDigests(suppliedDigest, expectedDigest) && Boolean(slotSecrets[index])',
+            'supplied === slotSecrets[index] && Boolean(slotSecrets[index])',
+            validateConstantTime],
+        ['empty dummy slot authorizes empty header', 'audience',
+            'compareDigests(suppliedDigest, expectedDigest) && Boolean(slotSecrets[index])',
+            'compareDigests(suppliedDigest, expectedDigest)',
+            validateDummySlotsNeverAuthorize],
+        ['request-time slice migration expiry bypassed', 'audience',
+            'const legacyAllowed = legacySlotsAllowed(keys, clock());',
+            'const legacyAllowed = true;',
+            validateSliceMigrationExpiry]
     ];
     for (const [name, file, from, to, validate] of cases) await t.test(name, () => {
         assert.throws(() => validate(mutateAndLoad(file, from, to)), assert.AssertionError);
-    });
-});
-
-test('pricing Origin, trust topology, and request-ID mutations fail', async (t) => {
-    await t.test('pricing inherits artifact allowlist', async () => {
-        const mutated = mutateAndLoad('cors',
-            "pricing: new Set(audienceOrigins('pricing', options.pricingAllowedOrigins))",
-            "pricing: new Set(audienceOrigins('artifact', options.artifactAllowedOrigins))");
-        await assert.rejects(() => validatePricingOrigin(mutated), assert.AssertionError);
-    });
-    const cases = [
-        ['trust defaults enabled', 'trust',
-            "if (!enabled || enabled === 'false') return false;",
-            "if (!enabled || enabled === 'false') return true;", validateTrust],
-        ['overbroad IPv4 CIDR admitted', 'trust',
-            'const minimum = version === 4 ? 8 : 32;',
-            'const minimum = version === 4 ? 0 : 0;', validateTrust],
-        ['every proxy hop trusted', 'trust',
-            'return Boolean(net.isIP(normalized) && trusted.check(normalized, family));',
-            'return true;', validateTrust],
-        ['request IDs become unbounded', 'requestId',
-            '{0,127}', '{0,255}', validateRequestId]
-    ];
-    for (const [name, file, from, to, validate] of cases) await t.test(name, () => {
-        assert.throws(() => validate(mutateAndLoad(file, from, to)), assert.AssertionError);
-    });
-});
-
-test('event secret-redaction and control-character mutations fail', async (t) => {
-    const cases = [
-        ['suspicious credential value emitted',
-            "if (SUSPICIOUS_VALUE.test(value)) return '[REDACTED]';",
-            "if (false) return '[REDACTED]';"],
-        ['control characters preserved',
-            "return value.replace(/[^\\x20-\\x7e]/g, '?').slice(0, 128);",
-            'return value.slice(0, 128);']
-    ];
-    for (const [name, from, to] of cases) await t.test(name, () => {
-        assert.throws(() => validateEventRedaction(
-            mutateAndLoad('events', from, to)
-        ), assert.AssertionError);
     });
 });

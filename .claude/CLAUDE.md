@@ -15,6 +15,50 @@ If rules are changed here, synchronize with:
 ## Goal
 Keep slicing behavior safe, deterministic, and production-friendly while preserving strict domain constraints.
 
+## J0 W2/W3 public contract
+
+- Successful Prusa and Orca payloads require lowercase
+  `profiles.effective_profile_sha256`. After selection, bounded canonical-realpath
+  Prusa bytes and the flattened, versioned repository copy of the allowlisted
+  Orca v2.3.1 `Custom` parent chain provide one job-scratch lineage for bounds,
+  runtime, digest, and native use. Its exact-image build equality gate passes;
+  public fields retain child basenames. Stable Orca runtime settings enforce
+  empty `layer_gcode` plus relative extrusion, aligned with the flattened pinned
+  machine parent's per-layer `G92 E0` reset.
+- Prusa INI section/key case remains significant. Exact duplicate qualified
+  keys fail closed like the native Boost parser; runtime generation replaces
+  one exact top-level request key, rejects duplicates, and inserts a missing key
+  before the first section.
+- OpenAPI adds the four requested omissions `FILE_PROCESSING_TIMEOUT`,
+  `INTERNAL_PROCESSING_ERROR`, `ORCA_PROFILE_INCOMPATIBLE`, and
+  `MODEL_OUT_OF_PRINTER_BOUNDS`, and places the already-live
+  `MODEL_DIMENSIONS_UNAVAILABLE` in the general 422 branch. The bounds code
+  requires model dimensions and build-volume limits. The complete live slice-
+  500 enum is `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
+  `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
+- Slice requests retain exactly one `x-slicer-api-key` header. Explicit
+  `legacy`, finite `migration`, and final `principals` modes select the shared
+  compatibility and separate WooCommerce/LeadPilot key families. Public
+  `GET /health` and `GET /pricing` remain unchanged. Before any router action,
+  the dark gate must prove principal-only readback, one private positive slice
+  per principal, retired-shared and `x-api-key` negative cases, and exact
+  cleanup. Missing or inconclusive evidence keeps the route dark. External
+  production activation is outside repository evidence and authority.
+- Every success also requires the atomically startup-verified `engine_version`
+  parsed from both selected executables' bounded `--help` output before listen.
+  The startup module has exact-image proof and uses a telemetry-disabled runner,
+  so its probes cannot alter slice-native lifecycle metrics/events. Orca sends
+  `--arrange 1` and
+  `--orient 0`: arrangement places already-rotated geometry onto the build
+  plate, while auto-orient stays disabled and cannot replace the requested
+  rotation. Focused command/digest contracts and final exact-image HTTP
+  transform/final-dimensions E2E pass on code SHA `ed85eec63409b7362fe05c2b99031eeb24b5b9c9`
+  and local image ID `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
+  Both principal families pass; a valid key only under `x-api-key` rejects
+  without request residue. The candidate is not deployed. Filament profile plus
+  `material_used_g` remains a separate W8 prerequisite classified
+  `BLOCKED_OWNER_INPUT / NOT_STARTED` pending required Bambu reference fields.
+
 ## I12 Hostinger production-qualification boundary
 
 - Status is `I12_API_F710_DARK_N1_VERIFIED;
@@ -138,11 +182,20 @@ Operations endpoints (operations x-api-key):
 - Keep queue and rate-limiting active for slicing.
 
 ## Security
-- Normal startup requires distinct active SLICE_SERVICE_API_KEY,
-  PRICING_API_KEY, ARTIFACT_API_KEY, and OPERATIONS_API_KEY values. Each
-  optional `_PREVIOUS` slot is audience-local. All material must be unique,
-  non-placeholder, and 32-256 printable-ASCII bytes or startup fails generically.
-- Slice endpoints require x-slicer-api-key matching SLICE_SERVICE_API_KEY. Missing or wrong credentials return HTTP 401 with `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
+- Normal startup requires pricing, artifact, and operations actives plus one
+  complete `SLICE_SERVICE_AUTH_MODE`. Default `legacy` requires shared active
+  and forbids principals/expiry; `migration` requires shared active, both
+  principal actives, and a future <=90-day legacy expiry; `principals` requires
+  both principal actives and forbids shared active/previous and expiry. Optional
+  previous slots require their own active. All configured material, including a
+  valid `ADMIN_API_KEY`, is globally unique, non-placeholder, and 32-256
+  printable ASCII or startup fails; only the admin key's exact authorized
+  legacy substitution self-reference is skipped.
+- Slice endpoints require exactly one x-slicer-api-key matching an eligible
+  configured slice slot; x-api-key is not an alias. Migration shared slots stop
+  authorizing at exact request-time expiry while principal slots continue.
+  Missing or wrong credentials return HTTP 401 with
+  `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
 - Pricing, artifact, and operations endpoints require x-api-key matching their
   own active or previous slot; cross-audience keys are rejected.
 - Fixed-length digest comparisons cover both slots. Structured auth events are
@@ -151,7 +204,8 @@ Operations endpoints (operations x-api-key):
   previous, restart again. Removal revokes the old key.
 - ADMIN_API_KEY is legacy migration material only: one non-slice audience,
   explicitly named and expiring within 90 days through
-  LEGACY_ADMIN_API_KEY_AUDIENCE + LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL.
+  LEGACY_ADMIN_API_KEY_AUDIENCE + LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL. Any
+  other cross-slot reuse is refused.
 - Preserve slice route order: rate limiter -> service authentication -> root-scoped workspace -> Multer -> queue -> native processing.
 - Forwarded identity defaults off. TRUST_PROXY=true requires unique validated
   explicit IP/CIDR peers or loopback; invalid, broad, wildcard, duplicate, or
@@ -227,8 +281,14 @@ Queue and rate behavior:
 - Server startup fails if no valid absolute Python executable can be resolved.
 
 ## Environment Keys
+- SLICE_SERVICE_AUTH_MODE
 - SLICE_SERVICE_API_KEY
 - SLICE_SERVICE_API_KEY_PREVIOUS
+- SLICE_SERVICE_WOOCOMMERCE_API_KEY
+- SLICE_SERVICE_WOOCOMMERCE_API_KEY_PREVIOUS
+- SLICE_SERVICE_LEADPILOT_API_KEY
+- SLICE_SERVICE_LEADPILOT_API_KEY_PREVIOUS
+- SLICE_SERVICE_LEGACY_MIGRATION_UNTIL
 - PRICING_API_KEY
 - PRICING_API_KEY_PREVIOUS
 - ARTIFACT_API_KEY
