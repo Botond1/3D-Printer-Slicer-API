@@ -13,7 +13,8 @@
     "check:syntax:js": "node scripts/validate-js-syntax.js",
     "check:syntax:python": "node scripts/run-python.js scripts/validate-python-syntax.py",
     "check:repository-safety": "node scripts/run-python.js scripts/validate-repository-safety.py --scope tracked --require-nonempty",
-    "check:repository-safety:staged": "node scripts/run-python.js scripts/validate-repository-safety.py --scope staged --require-nonempty"
+    "check:repository-safety:staged": "node scripts/run-python.js scripts/validate-repository-safety.py --scope staged --require-nonempty",
+    "sz-b2:calibrate": "node scripts/sz-b2-orca-calibration.js"
   },
   "dependencies": {
     "archiver": "^8.0.0",

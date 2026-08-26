@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const { readProfileText, readProfileJson } = require('./profile-readers');
 const { resolveSlicerInvocationPolicy } = require('./engine');
 
-const DIGEST_SCHEMA = 'r3d-effective-slice-profile-v1';
+const DIGEST_SCHEMA = 'r3d-effective-slice-profile-v2';
 const PRUSA_REQUEST_OVERRIDE_KEYS = Object.freeze(new Set(['layer_height', 'fill_density']));
 const PRUSA_SLA_REQUEST_OVERRIDE_KEYS = Object.freeze(new Set(['layer_height']));
 const ORCA_REQUEST_OVERRIDE_KEYS = Object.freeze(new Set(['layer_height', 'sparse_infill_density']));
@@ -113,17 +113,30 @@ function requireResolvedOrcaProfile(profile) {
     return profile;
 }
 
+function normalizeDigestMaterial(material) {
+    const normalized = String(material || '').trim().toUpperCase();
+    return normalized || null;
+}
+
 /**
  * Build the canonical profile identity used by the native slicer invocation.
  * The runtime profile is the exact merged profile passed to the slicer, but its
  * request-controlled layer-height and infill values are deliberately removed.
  * Stable server-added Orca settings and all other configured profile values
- * remain covered. Paths and request identity are also excluded.
- * @param {{engine: 'prusa'|'orca', technology: 'FDM'|'SLA', runtimeConfigFile: string, orcaMachineConfigFile?: string|null}} context Profile context.
+ * remain covered. Paths and unrelated request identity are excluded; normalized
+ * material is included because it selects (or deliberately lacks) a filament layer.
+ * @param {{engine: 'prusa'|'orca', technology: 'FDM'|'SLA', material?: string|null, runtimeConfigFile: string, orcaMachineConfigFile?: string|null, orcaFilamentConfigFile?: string|null}} context Profile context.
  * @returns {Record<string, unknown>} Canonicalizable profile identity.
  */
 function createEffectiveProfileIdentity(context) {
-    const { engine, technology, runtimeConfigFile, orcaMachineConfigFile = null } = context;
+    const {
+        engine,
+        technology,
+        material = null,
+        runtimeConfigFile,
+        orcaMachineConfigFile = null,
+        orcaFilamentConfigFile = null
+    } = context;
     if (engine !== 'prusa' && engine !== 'orca') {
         throw new Error('Unsupported slicer engine for effective profile digest.');
     }
@@ -141,6 +154,7 @@ function createEffectiveProfileIdentity(context) {
         schema: DIGEST_SCHEMA,
         engine,
         technology,
+        material: engine === 'orca' ? normalizeDigestMaterial(material) : null,
         invocation: resolveSlicerInvocationPolicy(engine, technology),
         machine: engine === 'orca'
             ? canonicalizeJsonValue(requireResolvedOrcaProfile(readProfileJson(orcaMachineConfigFile)))
@@ -153,13 +167,16 @@ function createEffectiveProfileIdentity(context) {
             : excludeIniKeys(
                 canonicalizeIni(readProfileText(runtimeConfigFile)),
                 technology === 'FDM' ? PRUSA_REQUEST_OVERRIDE_KEYS : PRUSA_SLA_REQUEST_OVERRIDE_KEYS
-            )
+            ),
+        filament: engine === 'orca' && orcaFilamentConfigFile
+            ? canonicalizeJsonValue(readProfileJson(orcaFilamentConfigFile))
+            : null
     };
 }
 
 /**
  * Calculate the effective profile digest used by the native slicer invocation.
- * @param {{engine: 'prusa'|'orca', technology: 'FDM'|'SLA', runtimeConfigFile: string, orcaMachineConfigFile?: string|null}} context Profile context.
+ * @param {{engine: 'prusa'|'orca', technology: 'FDM'|'SLA', material?: string|null, runtimeConfigFile: string, orcaMachineConfigFile?: string|null, orcaFilamentConfigFile?: string|null}} context Profile context.
  * @returns {string} Lowercase SHA-256 digest.
  */
 function calculateEffectiveProfileSha256(context) {
@@ -178,5 +195,6 @@ module.exports = {
     createEffectiveProfileIdentity,
     excludeIniKeys,
     excludeJsonKeys,
+    normalizeDigestMaterial,
     requireResolvedOrcaProfile
 };

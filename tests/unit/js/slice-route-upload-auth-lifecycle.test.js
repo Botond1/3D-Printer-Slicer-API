@@ -109,6 +109,10 @@ function createSuccessfulHandler(engine, outputRoot, effects) {
 }
 
 function assertRouteOrder(router, engine, rateLimiter, authenticate) {
+    assert.deepEqual(
+        router.stack.filter((layer) => layer.route).map((layer) => layer.route.path).sort(),
+        ['/orca/slice', '/prusa/slice']
+    );
     const route = router.stack.find((layer) => layer.route.path === `/${engine}/slice`).route;
     assert.equal(route.stack.length, 3);
     assert.equal(route.stack[0].handle, rateLimiter);

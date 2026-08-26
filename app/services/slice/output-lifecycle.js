@@ -9,6 +9,7 @@ const { resolveSlicerExecutable, buildSlicerCommandArgs } = require('./engine');
 const { getSlicerEngineVersion } = require('./engine-version');
 const { createRuntimeSlicerProfile, logEngineProfileSelection } = require('./profiles');
 const { calculateEffectiveProfileSha256 } = require('./profile-digest');
+const { readOrcaFilamentProfileMetadata } = require('./filament-profile');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { invalidOutput } = require('./resource-errors');
 const { cleanupManagedArtifacts } = require('../artifact-store');
@@ -51,7 +52,8 @@ async function assertValidContainedArtifact(filePath, workspace, technology, pol
 async function runSlicerAndParseStats(context) {
     const {
         engine, technology, layerHeight, infillPercentage, baseConfigFile,
-        orcaMachineConfigFile, slicerOutputPath, outputCandidate,
+        orcaMachineConfigFile, orcaFilamentConfigFile, material,
+        slicerOutputPath, outputCandidate,
         engineOutputDir, processableFile, effectiveModelInfo, workspace
     } = context;
     const { signal } = context;
@@ -61,11 +63,16 @@ async function runSlicerAndParseStats(context) {
         engine, baseConfigFile, technology, layerHeight, infillPercentage, workspace
     );
     throwIfAborted(signal);
+    const filamentProfileMetadata = engine === 'orca'
+        ? readOrcaFilamentProfileMetadata(orcaFilamentConfigFile, material)
+        : null;
     const effectiveProfileSha256 = calculateEffectiveProfileSha256({
         engine,
         technology,
+        material,
         runtimeConfigFile,
-        orcaMachineConfigFile
+        orcaMachineConfigFile,
+        orcaFilamentConfigFile
     });
     throwIfAborted(signal);
     logEngineProfileSelection(engine);
@@ -75,7 +82,8 @@ async function runSlicerAndParseStats(context) {
         slicerOutputPath,
         infillPercentage,
         engine,
-        orcaMachineConfigFile
+        orcaMachineConfigFile,
+        orcaFilamentConfigFile
     );
     await runCommand(resolveSlicerExecutable(engine), [...slicerArgs, processableFile], { signal });
     throwIfAborted(signal);
@@ -92,7 +100,10 @@ async function runSlicerAndParseStats(context) {
         technology,
         layerHeight,
         effectiveModelInfo.height_mm,
-        engine
+        engine,
+        {
+            requireFilamentGrams: engine === 'orca' && orcaFilamentConfigFile !== null
+        }
     );
     throwIfAborted(signal);
     await workspace.promoteOutputCandidate(outputCandidate, effectiveOutputPath);
@@ -101,7 +112,7 @@ async function runSlicerAndParseStats(context) {
     if (!cleanup.quotaSatisfied) {
         throw invalidOutput('Managed artifact retention quota could not be enforced safely.');
     }
-    return { stats, effectiveProfileSha256, engineVersion };
+    return { stats, effectiveProfileSha256, engineVersion, filamentProfileMetadata };
 }
 
 module.exports = {

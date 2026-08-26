@@ -165,6 +165,21 @@ test('mutation rejects authentication moved after request lifecycle allocation',
     );
 });
 
+test('mutation rejects authentication removed from the real route chain', async () => {
+    const source = readSource(ROUTE_PATH);
+    const mutatedSource = mutate(
+        source,
+        "router.post('/prusa/slice', rateLimiter, authenticate, lifecycle('prusa'));",
+        "router.post('/prusa/slice', rateLimiter, lifecycle('prusa'));",
+        'authentication removed from route'
+    );
+    const mutatedModule = loadCommonJsFromSource(ROUTE_PATH, mutatedSource);
+    await assert.rejects(
+        () => assertAuthBeforeAllocation(mutatedModule.createSliceRouter),
+        assert.AssertionError
+    );
+});
+
 test('mutation rejects direct credential equality that bypasses timingSafeEqual', () => {
     const source = readSource(AUTH_PATH);
     const liveModule = require(AUTH_PATH);

@@ -17,6 +17,43 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
+## Current J1C slice-contract corrective checkpoint
+
+Current classification:
+`J1C_ZERO_MASS_GUARD_OWNER_SUPPLIED_VPS_PASS;
+J1C_ORCA_CORRECTION_LOCAL_FOCUSED_PASS;
+J1C_FINAL_COMBINED_IMAGE_RERUN_PENDING;
+J1C_CAPABILITY_READINESS_PROPOSAL_ONLY; NO_VENDOR_IMPORT; NO_DEPLOY`.
+
+Focused 19/19 evidence proves that optional direct grams map a recognized
+`0.00 g` marker to null/manual pricing while positive time and length remain
+required. When selected-profile Orca requires grams, the same zero remains
+`GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`; marker drift still
+fails closed. Owner-supplied VPS evidence verifies HTTP 200 with positive
+filament length and null mass/rate/price for the guard-only diagnostic image.
+
+Production Orca now loads only machine plus process through `--load-settings`
+and passes a selected filament snapshot separately through `--load-filaments`.
+Both repository-owned P1S/H2D child machine profiles own exact
+`layer_change_gcode='G92 E0'`; the pinned upstream copy is unchanged. The
+combined focused set passes 69/69. Owner-supplied VPS mechanism evidence shows
+the dedicated filament option changes native output from 0.00 g to 4.12 g, but
+the exact final combined candidate image rerun remains pending.
+
+The incomplete vendor chain is a separate W8 time/motion calibration lane, not
+a J1C blocker; no vendor profile was imported. J2 separately owns P1S
+256 x 256 x 250 mm and H2D 350 x 320 x 325 mm bed-shape/Z correction. The
+privacy-safe calibration helper still embeds the superseded settings-list
+composition and is outside this production-engine correction and unqualified.
+
+Capability readiness is a proposal only. Public `GET /health` remains cheap
+liveness; future capability state belongs on public `GET /ready`. Docker still
+checks `/health`, while Traefik already consumes `/ready`, so a future `/ready`
+503 could withhold routing without making Docker unhealthy. Startup native
+smokes and typed rolling per-engine failure/recovery require a separate wave.
+See
+[`docs/codex/evidence/j1c-slice-contract-corrective.md`](docs/codex/evidence/j1c-slice-contract-corrective.md).
+
 ## Current I12 Wave 3 Hostinger qualification checkpoint
 
 Current classification:

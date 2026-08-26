@@ -63,9 +63,9 @@ lifecycle evidence remain separate gates.
 - **Resource/state envelope:** actual-byte limits, validated final artifacts,
   stable job/artifact correlation, leased retention, and atomic pricing state.
 
-### J0 W2/W3 response and slice-auth candidate
+### J1 calibration harvest over the J0 W2/W3 candidate
 
-The current local candidate adds a deterministic
+The J0 local candidate added a deterministic
 `profiles.effective_profile_sha256` to every successful Prusa and Orca response.
 After profile selection and before bounds or runtime derivation, canonical real
 Prusa files are bounded-read and copied byte-for-byte into job scratch. Orca's
@@ -78,13 +78,15 @@ closed. Bounds parsing, runtime-profile derivation, digest construction, and
 native invocation all use that snapshot lineage, while response profile
 metadata and `build_volume_limits_mm.source_profile` retain the original stable
 selected child basenames. A parent-only Orca value change therefore changes the
-digest. The digest covers the configured effective machine/process profile
+digest. J1 extends that identity to cover normalized material and selected Orca
+filament JSON or explicit null beside the configured effective machine/process
 layers, stable Orca relative-extrusion settings (`layer_gcode=''` and
-`use_relative_e_distances='1'`) aligned with the flattened pinned machine
-parent's per-layer `G92 E0` reset, and the request-independent native invocation
-policy while excluding request-selected layer height and infill. The Prusa
-export flag and Orca machine-then-process settings precedence are derived from
-that same digest-covered policy. Prusa INI section and key case remains
+`use_relative_e_distances='1'`) aligned with each repository-owned child
+machine's exact `layer_change_gcode='G92 E0'` override, and the request-
+independent native invocation policy while excluding request-selected layer
+height and infill. The Prusa export flag, Orca machine/process settings order,
+and dedicated filament option are derived from that same digest-covered policy.
+Prusa INI section and key case remains
 significant during canonicalization, and exact duplicate profile keys fail
 closed to match the native Boost parser. Runtime generation replaces one exact
 top-level request-owned key, rejects a duplicate top-level key, and inserts a
@@ -97,8 +99,8 @@ requires both `model_dimensions_mm` and `build_volume_limits_mm`. The adjacent
 review also added the already-live `MODEL_DIMENSIONS_UNAVAILABLE` code to the
 general validation branch, so that payload now matches exactly one 422 `oneOf`
 branch. The slice HTTP 500 schema now lists the complete live set:
-`INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
-and `INTERNAL_SERVER_ERROR`.
+`SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
+`UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 
 Slice authentication still accepts only `x-slicer-api-key`, but supports
 independently rotatable WooCommerce and LeadPilot key pairs.
@@ -141,14 +143,56 @@ A valid WooCommerce credential only under `x-api-key` returned the exact HTTP
 exact cleanup passed. Code-bearing SHA
 `ed85eec63409b7362fe05c2b99031eeb24b5b9c9` produced retained local image ID
 `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
-The complete local aggregate also passes; hosted exact-SHA validation remains
+The complete J0 local aggregate also passes; hosted exact-SHA validation remains
 unverified.
 
-This candidate is not deployed or a public-activation result. Filament-profile
-identity plus `material_used_g` is a separate W8 prerequisite classified
-`BLOCKED_OWNER_INPUT / NOT_STARTED` until the required Bambu reference profile
-fields are supplied. Do not infer filament or material-mass identity from the
-current effective-profile digest.
+J1 adds repository PLA/PETG filament profiles. Orca snapshots the selected
+filament bytes, loads machine plus process through `--load-settings`, and loads
+the selected filament separately through `--load-filaments`.
+Successful Orca responses expose nullable `filament_profile`,
+`filament_diameter_mm`, and `filament_density_g_cm3`; an unsupported or missing
+profile returns explicit nulls, changes the effective-profile digest, and forces
+`hourly_rate:null` plus `stats.estimated_price_huf:null` so the API does not
+calculate an automatic price. Strict FDM parsing is default-on through
+`SLICE_STRICT_GCODE_METRICS=true` and requires positive time and filament-length
+markers. OpenAPI requires the nullable `stats.material_used_g` field, which is
+populated only from a direct G-code mass marker and is never derived from length.
+A later container diagnosis showed that the affected Prusa FDM output contains
+a recognized `0.00 g` marker, superseding the earlier no-marker assumption. J1C
+maps a missing or recognized non-positive optional marker to
+`material_used_g:null`, `hourly_rate:null`, and
+`stats.estimated_price_huf:null` for manual pricing while keeping positive time
+and length mandatory; zero is never published. Orca with a selected filament
+profile still requires positive direct grams: recognized zero remains
+`GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`, and missing/drifted
+required markers remain bounded HTTP 500. Profile-less Orca remains on the
+null/manual-pricing path. Owner-supplied VPS evidence verifies this guard path
+as HTTP 200 with positive filament length and null mass/rate/price. The combined
+parser/command/profile focused set passes 69/69; the final candidate image
+containing both Orca corrections still awaits an exact-image rerun.
+
+This candidate is not deployed or a public-activation result. The retained P1S
+and new H2D candidates identify as generic Marlin profiles, not verified native
+Bambu profiles. A bounded audit parsed 11/11 supplied JSON files, matched 11/11
+declared hashes, and derived P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm,
+but the set is not self-contained: 11 include templates, H2D-compatible and
+0.1/0.3 BBL processes, vendor filament/parent chains, and exact Orca 2.3.1
+qualification remain missing. The owner authorized later repository inclusion,
+but no vendor profile was imported. This is a separate W8 time/motion
+calibration lane, not a J1C blocker. Production Orca now uses dedicated
+`--load-filaments`, and both repository-owned child machine profiles own exact
+`layer_change_gcode='G92 E0'`. Owner-supplied mechanism evidence produced
+4.12 g instead of 0.00 g. J2 separately owns the P1S/H2D bed-shape and Z
+correction; W8 live calibration remains `BLOCKED_OWNER_INPUT`.
+
+Capability readiness is a proposal only. Public `GET /health` remains cheap
+liveness, and future slicing-capability state belongs on public `GET /ready`.
+Docker continues to check `/health`, while Traefik already consumes `/ready`, so
+a future capability-driven 503 can withhold routing without making Docker
+unhealthy. Startup Prusa plus selected-filament Orca probes and typed rolling
+per-engine failure/recovery need a separate implementation and Docker/VPS
+evidence; raw last-N HTTP 5xx is not a safe readiness rule. See
+[`docs/codex/evidence/j1c-slice-contract-corrective.md`](docs/codex/evidence/j1c-slice-contract-corrective.md).
 
 ### I12 Hostinger production-qualification checkpoint
 
@@ -473,6 +517,11 @@ Uses `prusa-slicer`.
   - optional X/Y/Z rotation
 - Validates final model size against selected printer profile limits (`min`/`max` build volume)
 - You can override profile file with `printerProfile` from `configs/prusa`
+- A missing or recognized non-positive optional G-code grams marker keeps
+  required-but-nullable `stats.material_used_g:null`, `hourly_rate:null`, and
+  `stats.estimated_price_huf:null`; zero is never published and no length/
+  density conversion or automatic price is applied. Positive time and filament
+  length remain required.
 
 Example:
 
@@ -496,12 +545,23 @@ Uses `orca-slicer`.
 - Forced `FDM` processing
 - Allowed `layerHeight`: `0.1`, `0.2`, `0.3`
 - Rejects SLA-only materials
-- Runs with Orca arrange/orient flow and machine+process profile pair
+- Runs with Orca arrange/orient flow and machine+process+optional-filament profile order
   - Machine profile file is resolved from `.env` via `ORCA_MACHINE_PROFILE` (default: `Bambu_P1S_0.4_nozzle.json`)
 - Process profile file is selected by `layerHeight` (`0.1/0.2/0.3`) and can be overridden via `.env`:
   - `ORCA_PROCESS_PROFILE_0_1`
   - `ORCA_PROCESS_PROFILE_0_2`
   - `ORCA_PROCESS_PROFILE_0_3`
+- PLA/PETG resolve to `configs/orca/filament/PLA_generic.json` or
+  `PETG_generic.json`; an unmapped/absent profile remains explicit null.
+- The null-profile success path also returns `hourly_rate:null` and
+  `stats.material_used_g:null` plus `stats.estimated_price_huf:null`; it requires
+  manual pricing.
+- Successful Orca profile metadata exposes the selected filament basename and
+  the diameter/density read from the exact job snapshot.
+- FDM output requires positive direct time and length markers. With a selected
+  Orca filament profile it additionally requires a positive direct gram marker;
+  missing or drifted grams return HTTP 500 `SLICE_OUTPUT_UNPARSED`.
+  `SLICE_STRICT_GCODE_METRICS=false` is diagnostic-only.
 - Request-level profile overrides are supported:
   - `printerProfile` → machine profile from `configs/orca`
   - `processProfile` → process profile from `configs/orca`
@@ -587,13 +647,14 @@ curl -X POST http://localhost:3000/orca/slice \
     },
     "source_profile": "FDM_0.2mm.ini"
   },
-  "hourly_rate": 800,
+  "hourly_rate": null,
   "stats": {
     "print_time_seconds": 5400,
     "print_time_readable": "1h 30m",
     "material_used_m": 12.45,
+    "material_used_g": null,
     "object_height_mm": 45.2,
-    "estimated_price_huf": 1350
+    "estimated_price_huf": null
   }
 }
 ```
@@ -873,6 +934,11 @@ You can customize pricing, security, and slicing behavior without changing endpo
 - **Queue Fairness:** Per-client queue ownership is bounded (`MAX_SLICE_QUEUE_PER_IP`) so one client cannot monopolize all pending capacity.
 - **Queue Safety Limits:** Queue length and wait timeout are bounded (`MAX_SLICE_QUEUE_LENGTH`, `MAX_SLICE_QUEUE_WAIT_MS`).
 - **Upload Body Limit:** Multipart upload size is capped (`MAX_UPLOAD_BYTES`, default `500MB`).
+- **Successful Material Limits:** FDM filament length and any present direct mass
+  are bounded by `MAX_MATERIAL_USED_METERS` (default `10000`) and
+  `MAX_MATERIAL_USED_GRAMS` (default `100000`); nullable direct mass remains a
+  manual-pricing result. SLA resin is bounded by `MAX_MATERIAL_USED_ML`
+  (default `100000`).
 - **ZIP Safety Limits:** ZIP upload inspection and admin `ALL` bulk export are guarded by max entries (`MAX_ZIP_ENTRIES`, default `500`) and max cumulative size (`MAX_ZIP_UNCOMPRESSED_BYTES`, default `500MB`).
 - **ZIP Content Rule:** ZIP uploads must contain exactly one supported source file; unsupported or suspicious ZIP contents are rejected and cleaned up.
 - **Body Parser Limits:** JSON/form payload size is capped (`JSON_BODY_LIMIT`, `FORM_BODY_LIMIT`, default `1mb`).

@@ -93,8 +93,7 @@ function assertRuntimeProfile(profilePath) {
 
 function assertMachineProfile(profilePath) {
     const profile = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
-    if (typeof profile.before_layer_change_gcode !== 'string' ||
-        !/(?:^|\n)G92 E0(?:\s|$)/.test(profile.before_layer_change_gcode)) {
+    if (profile.layer_change_gcode !== 'G92 E0') {
         throw new Error('machine_profile_extrusion_contract');
     }
 }

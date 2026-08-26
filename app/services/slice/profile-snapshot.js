@@ -52,9 +52,9 @@ async function snapshotResolvedOrcaProfile(sourcePath, profileType, prefix, work
  * Snapshot every selected profile before bounds parsing or runtime derivation.
  * Public response metadata continues to use the original selection paths.
  * @param {'prusa'|'orca'} engine Slicer engine key.
- * @param {{baseConfigFile: string, orcaMachineConfigFile: string|null}} selection Original selection.
+ * @param {{baseConfigFile: string, orcaMachineConfigFile: string|null, orcaFilamentConfigFile?: string|null}} selection Original selection.
  * @param {{resolveScratchPath(...segments: string[]): string, assertScratchContainedPath(candidatePath: string): string}} workspace Owning workspace.
- * @returns {Promise<{baseConfigFile: string, orcaMachineConfigFile: string|null}>} Exact job-owned inputs.
+ * @returns {Promise<{baseConfigFile: string, orcaMachineConfigFile: string|null, orcaFilamentConfigFile: string|null}>} Exact job-owned inputs.
  */
 async function snapshotProfileSelection(engine, selection, workspace) {
     if (engine !== 'prusa' && engine !== 'orca') {
@@ -81,7 +81,15 @@ async function snapshotProfileSelection(engine, selection, workspace) {
             workspace
         )
         : null;
-    return { baseConfigFile, orcaMachineConfigFile };
+    const orcaFilamentConfigFile = engine === 'orca' && selection.orcaFilamentConfigFile
+        ? await snapshotProfileFile(
+            selection.orcaFilamentConfigFile,
+            'orca-filament-profile',
+            '.json',
+            workspace
+        )
+        : null;
+    return { baseConfigFile, orcaMachineConfigFile, orcaFilamentConfigFile };
 }
 
 module.exports = { snapshotProfileFile, snapshotProfileSelection, snapshotResolvedOrcaProfile };

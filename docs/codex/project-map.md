@@ -1,11 +1,21 @@
 # Verified project map
 
-## Current J0 W2/W3 response and slice-auth candidate
+## Current J1C corrective over the J1 calibration harvest
 
 Current local classification:
-`J0_W2_W3_FINAL_LOCAL_CONTRACTS_PASS; J0_FINAL_LOCAL_AGGREGATE_PASS;
-NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_FINAL_EXACT_IMAGE_BUILD_AND_E2E_PASS;
-J0_FILAMENT_W8_BLOCKED_OWNER_INPUT_NOT_STARTED`.
+`J1C_ZERO_MASS_GUARD_OWNER_SUPPLIED_VPS_PASS;
+J1C_ORCA_COMMAND_AND_LAYER_RESET_LOCAL_CANDIDATE;
+J1C_FINAL_COMBINED_IMAGE_RERUN_PENDING;
+J1C_CAPABILITY_READINESS_PROPOSAL_ONLY;
+NO_VENDOR_IMPORT; NO_EXTERNAL_PRODUCTION_AUTHORITY`.
+
+The J1 repository contracts remain the baseline. Owner-supplied VPS evidence
+proves that the guard-only diagnostic image maps the recognized Prusa `0.00 g`
+marker to HTTP 200 with positive length and null mass/rate/price. The production
+Orca correction is repository-owned: machine/process remain under
+`--load-settings`, selected filament uses optional `--load-filaments`, and both
+P1S/H2D child machine profiles own exact `layer_change_gcode='G92 E0'`. The
+exact final combined candidate image and hosted rerun remain pending.
 
 Direct executable-source map:
 
@@ -22,8 +32,25 @@ runtime profile layers from that snapshot lineage
   -> canonical effective-profile payload
   -> bind request-independent native invocation policy
   -> bind stable Orca layer_gcode='' + use_relative_e_distances='1'
+  -> bind selected child machine layer_change_gcode='G92 E0'
+  -> Orca binds normalized material and selected filament JSON or explicit null
   -> exclude request layer-height/infill values
   -> profiles.effective_profile_sha256 on every success
+Orca FDM material selection
+  -> allowlisted PLA/PETG repository filament profile or explicit null
+  -> exact-byte job-scratch snapshot when selected
+  -> --load-settings machine;process
+  -> optional --load-filaments selected-filament-snapshot
+  -> profiles.filament_profile / filament_diameter_mm / filament_density_g_cm3
+  -> null profile forces hourly_rate + stats.estimated_price_huf to null
+FDM G-code output
+  -> bounded strict positive time + filament-length parsing
+  -> stats.material_used_g is required-but-nullable and only direct, never derived
+  -> optional mass: missing or recognized non-positive grams -> null/manual
+  -> selected-profile Orca: positive direct grams required and capped
+  -> selected-profile recognized zero -> GCODE_FILAMENT_NOT_POSITIVE
+  -> profile-less Orca: null mass/rate/price -> manual
+  -> required-marker drift -> HTTP 500 SLICE_OUTPUT_UNPARSED, never silent zero
 both selected slicer executables -> atomic pre-listen bounded --help parse/cache
   -> publish neither version unless both pass
   -> required engine_version on every success; malformed/unavailable fails startup
@@ -37,8 +64,8 @@ runtime processing errors
   -> OpenAPI FILE_PROCESSING_TIMEOUT / INTERNAL_PROCESSING_ERROR
      / ORCA_PROFILE_INCOMPATIBLE / MODEL_OUT_OF_PRINTER_BOUNDS
 slice HTTP 500 runtime errors
-  -> complete OpenAPI enum: INTERNAL_PROCESSING_ERROR / QUEUE_INTERNAL_ERROR
-     / UPLOAD_STORAGE_ERROR / INTERNAL_SERVER_ERROR
+  -> complete OpenAPI enum: SLICE_OUTPUT_UNPARSED / INTERNAL_PROCESSING_ERROR
+     / QUEUE_INTERNAL_ERROR / UPLOAD_STORAGE_ERROR / INTERNAL_SERVER_ERROR
 live MODEL_DIMENSIONS_UNAVAILABLE response
   -> general 422 oneOf branch; exactly one schema match
 MODEL_OUT_OF_PRINTER_BOUNDS
@@ -53,13 +80,15 @@ one x-slicer-api-key header
 ```
 
 - [`profile-digest.js`](../../app/services/slice/profile-digest.js) canonicalizes
-  effective Prusa INI or Orca machine/process JSON layers without using paths,
-  job/model identity, request layer height, or request infill. Engine,
-  technology, machine configuration, other process values, and stable
-  server-added Orca runtime settings remain covered. The identity also binds
+  effective Prusa INI or Orca machine/process/filament JSON layers without using
+  paths, job/model identity, request layer height, or request infill. Engine,
+  technology, normalized material, machine configuration, other process values,
+  selected filament JSON or explicit null, and stable server-added Orca runtime
+  settings remain covered. The identity also binds
   [`engine.js`](../../app/services/slice/engine.js)'s request-independent native
-  invocation policy. Prusa export flags and Orca's ordered machine-then-process
-  settings precedence are composed from that same hash-fed policy. Prusa INI
+  invocation policy. Prusa export flags, Orca's ordered machine/process
+  settings, and the optional dedicated filament flag are composed from that
+  same hash-fed policy. Prusa INI
   ordering/comments are normalized, but section and
   key case remain distinct to preserve native semantics; exact duplicate
   qualified keys fail closed like the native Boost INI parser.
@@ -71,18 +100,22 @@ one x-slicer-api-key header
   match the exact pinned `/opt` native resources through
   [`verify-orca-profile-vendor.js`](../../scripts/verify-orca-profile-vendor.js).
   [`profile-snapshot.js`](../../app/services/slice/profile-snapshot.js)
-  snapshots exact Prusa bytes or the fully flattened Orca JSON into the owning
-  job's scratch area after selection and before bounds or runtime derivation.
+  snapshots exact Prusa bytes, fully flattened Orca machine/process JSON, and
+  the selected exact-byte Orca filament JSON into the owning job's scratch area
+  after selection and before bounds or runtime derivation.
   Its shared bounded reader requires the canonical real path, rejects symlinks/
   non-regular files, and detects size growth rather than silently truncating it.
   [`pipeline.js`](../../app/services/slice/pipeline.js)
   passes that snapshot lineage to build-volume parsing and runtime/native work;
   digest construction consumes the derived runtime profile and snapshotted Orca
-  machine profile. [`profiles.js`](../../app/services/slice/profiles.js) retains
-  selection, runtime-profile generation, and bounds parsing; its stable Orca
+  machine/filament profiles. [`profiles.js`](../../app/services/slice/profiles.js)
+  selects the allowlisted repository filament profile from normalized material,
+  or preserves an explicit null when no mapping/file exists. It otherwise retains
+  runtime-profile generation and bounds parsing; its stable Orca
   layer enforces empty `layer_gcode` and relative extrusion through
-  `use_relative_e_distances='1'`, consistent with the flattened pinned machine
-  parent's per-layer `G92 E0` reset. The current J0 smoke accepts positive
+  `use_relative_e_distances='1'`, consistent with each selected repository
+  child machine's exact `layer_change_gcode='G92 E0'` override. The pinned
+  upstream parent copy remains unchanged. The current J0 smoke accepts positive
   `G1 ... E` only after exact `;BEFORE_LAYER_CHANGE`; prelude/purge extrusion
   cannot prove model-layer extrusion. Current focused/exact-image validation
   covers this stricter guard without retroactively attributing it to historical
@@ -94,12 +127,35 @@ one x-slicer-api-key header
   runtime generation replaces one occurrence, rejects duplicates, or inserts a
   missing key before the first section; case variants remain distinct.
 - [`output-lifecycle.js`](../../app/services/slice/output-lifecycle.js)
-  calculates that digest from the runtime profile before the native slicer;
+  calculates that digest from the runtime profile before the native slicer,
+  composes Orca machine/process through `--load-settings`, passes the selected
+  filament snapshot separately through `--load-filaments`, and reads diameter/
+  density from that exact snapshot.
   [`response.js`](../../app/services/slice/response.js) refuses a successful
   response without one lowercase 64-hex digest under
-  `profiles.effective_profile_sha256`. A focused mutation proves the same-named
-  Orca child produces a different digest after a non-overridden parent-only
-  value changes.
+  `profiles.effective_profile_sha256`; Orca additionally exposes the selected
+  `filament_profile`, actual `filament_diameter_mm`, and
+  `filament_density_g_cm3`, or three explicit nulls when no profile exists.
+  The null-profile path also returns `hourly_rate:null` and
+  `stats.estimated_price_huf:null`, so the API does not calculate an automatic
+  price.
+  Focused mutations prove both parent-only drift and filament-present versus
+  filament-null identity change the digest.
+- [`gcode-metrics.js`](../../app/services/slice/gcode-metrics.js) and
+  [`model-stats.js`](../../app/services/slice/model-stats.js) make strict FDM
+  output parsing the default through `SLICE_STRICT_GCODE_METRICS=true`.
+  Positive print time and filament length are required from bounded native
+  output. OpenAPI requires nullable `stats.material_used_g`; a non-null value is
+  only the slicer's direct mass marker and is never derived by multiplying
+  length. A missing or recognized non-positive marker on an optional-mass path
+  succeeds with null mass/rate/price for manual pricing and never publishes
+  zero. Orca with a selected filament profile requires positive direct grams;
+  recognized zero remains `GCODE_FILAMENT_NOT_POSITIVE`, while missing or
+  drifted mass returns bounded HTTP 500 `SLICE_OUTPUT_UNPARSED`. Profile-less
+  Orca stays null/manual. The owner-supplied guard-only VPS run passed; the
+  combined candidate passes 2213/2213 JavaScript tests and 85 Python tests with
+  84 pass plus one expected Windows POSIX-permission skip. Exact-image/container
+  and hosted results remain pending.
 - [`engine-version.js`](../../app/services/slice/engine-version.js) executes the
   two selected slicer executables with `--help` before listen, bounds and parses
   their output, publishes the initialized map only after both succeed, and
@@ -117,7 +173,9 @@ one x-slicer-api-key header
   non-root, read-only exact-image envelope and atomically published Prusa
   `2.8.1+linux-x64-GTK3-202409181416` and Orca `2.3.1` before its disposable
   container was removed. [`engine.js`](../../app/services/slice/engine.js) now
-  passes `--arrange 1` and `--orient 0` after preprocessing and bounds checks.
+  keeps machine/process in `--load-settings`, emits `--load-filaments` only for
+  a selected filament snapshot, and passes `--arrange 1` and `--orient 0` after
+  preprocessing and bounds checks.
   Arrangement places the already-rotated geometry onto the build plate without
   enabling native auto-orient, so the request-owned rotation remains unchanged.
   The superseded arrangement-disabled HTTP probe retained negative Y after an
@@ -140,8 +198,8 @@ one x-slicer-api-key header
   `build_volume_limits_mm.{min,max,source_profile}`, matching
   [`transform.js`](../../app/services/slice/transform.js). The adjacent 500
   review also makes that enum match the complete live set:
-  `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
-  and `INTERNAL_SERVER_ERROR`.
+  `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
+  `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 - [`service-auth.js`](../../app/config/service-auth.js) and
   [`requireAudience.js`](../../app/middleware/requireAudience.js) retain the
   single `x-slicer-api-key` wire contract while separating WooCommerce and
@@ -187,13 +245,43 @@ one x-slicer-api-key header
   The code-bearing source is `ed85eec63409b7362fe05c2b99031eeb24b5b9c9`;
   its retained local validation image ID is
   `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
-  Filament-profile identity plus `material_used_g` is a
-  separate W8 prerequisite classified `BLOCKED_OWNER_INPUT / NOT_STARTED`
-  pending the required Bambu reference profile fields; the current digest does
-  not establish filament or material-mass identity.
+  J1 adds repository PLA/PETG filament selection and exact snapshots, digest-
+  covered normalized material plus filament-or-null identity, separate Orca
+  machine/process settings and optional filament native flags, conditional
+  direct G-code grams, and the
+  public filament basename/diameter/density fields. Focused deterministic tests
+  cover selected-profile Orca mass, nullable Prusa/profile-less Orca, marker-
+  drift, and filament-null controls. Manual paths preserve
+  `material_used_g:null`, `hourly_rate:null`, and
+  `stats.estimated_price_huf:null`. This is repository behavior, not live
+  calibration evidence.
 
-Focused deterministic contracts, exact-image native and two-principal HTTP E2E,
-and the complete local aggregate pass. JavaScript is 2161/2161; Python is 85/85
+The retained P1S and H2D candidates remain generic Marlin profiles, but each
+repository-owned child now owns exact `layer_change_gcode='G92 E0'`. Owner-
+supplied mechanism evidence shows the dedicated filament option changes native
+mass from 0.00 g to 4.12 g. No vendor profile was imported. The incomplete
+vendor chain remains a separate W8 motion/time calibration lane and is not a
+J1C blocker. J2 separately owns P1S 256 x 256 x 250 mm and H2D
+350 x 320 x 325 mm bed-shape/Z correction. The privacy-safe
+`scripts/sz-b2-orca-calibration.js` helper still embeds the superseded combined
+settings list; it is outside the production-engine correction and unqualified.
+
+Capability readiness is proposal-only. Public `/health` remains cheap liveness;
+future native capability state belongs on public `/ready`. Docker still checks
+`/health`, while Traefik already consumes `/ready`. Startup Prusa plus selected-
+filament Orca probes and typed per-engine rolling failure/recovery require a
+separate implementation and Docker/VPS evidence; raw last-N 5xx is unsafe.
+
+The exact J1 branch-harvest implementation and local verification boundary are
+recorded in
+[`evidence/j1-calibration-branch-harvest.md`](evidence/j1-calibration-branch-harvest.md).
+The J1C correction, separate vendor/calibration boundary, readiness proposal, and explicit
+unverified list are recorded in
+[`evidence/j1c-slice-contract-corrective.md`](evidence/j1c-slice-contract-corrective.md).
+
+The J0 focused deterministic contracts, exact-image native/two-principal HTTP
+E2E, and complete local aggregate remain historical evidence: JavaScript is
+2161/2161; Python is 85/85
 run with 84 pass and one expected Windows POSIX-permission skip; syntax covers
 244 JavaScript and 39 Python files; tracked repository safety covers 405 files.
 Hosted exact-SHA validation remains unverified. External production activation

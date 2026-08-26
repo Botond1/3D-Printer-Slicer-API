@@ -70,7 +70,16 @@ const COMMON_MULTIPART_PROPERTIES = Object.freeze({
 
 const SUCCESS_SCHEMA = Object.freeze({
     type: 'object',
-    required: ['success', 'job_id', 'artifact_id', 'slicer_engine', 'engine_version', 'profiles'],
+    required: [
+        'success',
+        'job_id',
+        'artifact_id',
+        'slicer_engine',
+        'engine_version',
+        'profiles',
+        'hourly_rate',
+        'stats'
+    ],
     properties: {
         success: { type: 'boolean', enum: [true] },
         job_id: { type: 'string', pattern: '^job-[a-f0-9]{32}$' },
@@ -85,10 +94,52 @@ const SUCCESS_SCHEMA = Object.freeze({
             type: 'object',
             required: ['effective_profile_sha256'],
             properties: {
+                filament_profile: {
+                    type: 'string',
+                    nullable: true,
+                    description: 'Exact Orca filament profile used, or null when the material has no mapped profile and pricing must remain manual.'
+                },
+                filament_diameter_mm: {
+                    type: 'number',
+                    nullable: true,
+                    description: 'Filament diameter read from the exact Orca profile snapshot passed to the slicer.'
+                },
+                filament_density_g_cm3: {
+                    type: 'number',
+                    nullable: true,
+                    description: 'Filament density read from the exact Orca profile snapshot passed to the slicer.'
+                },
                 effective_profile_sha256: {
                     type: 'string',
                     pattern: '^[a-f0-9]{64}$',
-                    description: 'Deterministic SHA-256 of fully resolved effective machine/process profile layers and server-owned native policy, excluding per-request layer-height and infill overrides.'
+                    description: 'Deterministic SHA-256 of effective machine/process/filament profile layers, normalized material, and server-owned native policy, excluding per-request layer-height and infill overrides.'
+                }
+            }
+        },
+        hourly_rate: {
+            type: 'number',
+            nullable: true,
+            description: 'Configured hourly rate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
+        },
+        stats: {
+            type: 'object',
+            required: ['material_used_m', 'material_used_g', 'estimated_price_huf'],
+            properties: {
+                material_used_m: {
+                    type: 'number',
+                    minimum: 0,
+                    description: 'Filament length parsed directly from slicer output.'
+                },
+                material_used_g: {
+                    type: 'number',
+                    nullable: true,
+                    minimum: 0,
+                    description: 'Filament mass parsed directly from the slicer marker; null when the selected native profile emits no mass marker. It is never derived from length.'
+                },
+                estimated_price_huf: {
+                    type: 'number',
+                    nullable: true,
+                    description: 'Calculated estimate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
                 }
             }
         }
@@ -219,6 +270,7 @@ function createSliceResponses() {
         ),
         422: validationErrorResponse(),
         500: errorCodeResponse('Server Error', [
+            'SLICE_OUTPUT_UNPARSED',
             'INTERNAL_PROCESSING_ERROR',
             'QUEUE_INTERNAL_ERROR',
             'UPLOAD_STORAGE_ERROR',

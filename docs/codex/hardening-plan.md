@@ -1,11 +1,13 @@
 # Hardening plan
 
-## J0 W2/W3 response and slice-principal checkpoint
+## J1C corrective over the J1 calibration checkpoint
 
 Status:
-`J0_W2_W3_FINAL_LOCAL_CONTRACTS_PASS; J0_FINAL_LOCAL_AGGREGATE_PASS;
-NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_FINAL_EXACT_IMAGE_BUILD_AND_E2E_PASS;
-J0_FILAMENT_W8_BLOCKED_OWNER_INPUT_NOT_STARTED`.
+`J1C_ZERO_MASS_GUARD_OWNER_SUPPLIED_VPS_PASS;
+J1C_ORCA_COMMAND_AND_LAYER_RESET_LOCAL_CANDIDATE;
+J1C_FINAL_COMBINED_IMAGE_RERUN_PENDING;
+J1C_CAPABILITY_READINESS_PROPOSAL_ONLY;
+NO_VENDOR_IMPORT; NO_EXTERNAL_PRODUCTION_AUTHORITY`.
 
 Implemented local candidate exits:
 
@@ -22,14 +24,16 @@ Implemented local candidate exits:
    selected child basenames.
 2. Every successful Prusa and Orca response requires
    `profiles.effective_profile_sha256`, a canonical lowercase SHA-256 over the
-   effective configured machine/process layers and request-independent native
-   invocation policy while excluding request layer height, request infill,
-   paths, and request/job/model identity. Prusa export flags and Orca's ordered
-   machine-then-process settings precedence are composed from that policy.
+   effective configured machine/process/filament layers, normalized material,
+   and request-independent native invocation policy while excluding request
+   layer height, request infill, paths, and request/job/model identity. Prusa
+   export flags, Orca's ordered machine/process settings, and optional dedicated
+   filament option are composed from that policy.
 3. Stable Orca runtime derivation clears `layer_gcode` and sets
-   `use_relative_e_distances='1'` for consistency with the flattened pinned
-   machine parent's per-layer `G92 E0` reset; these request-independent settings
-   remain digest-covered. A parent-only Orca value
+   `use_relative_e_distances='1'` for consistency with each repository child
+   machine's exact `layer_change_gcode='G92 E0'` override; the pinned upstream
+   parent remains unchanged and these request-independent settings remain
+   digest-covered. A parent-only Orca value
    mutation changes the effective digest even when the
    selected child name and overrides remain unchanged. The current J0 smoke
    accepts positive `G1 ... E` only after exact `;BEFORE_LAYER_CHANGE`, so
@@ -75,8 +79,8 @@ Implemented local candidate exits:
    `MODEL_DIMENSIONS_UNAVAILABLE` to only the general validation branch, closing
    its 422 `oneOf` gap without adding another requested response feature. It
    also completes the live slice HTTP 500 enum with
-   `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
-   and `INTERNAL_SERVER_ERROR`.
+   `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
+   `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 8. `MODEL_OUT_OF_PRINTER_BOUNDS` requires both
    `model_dimensions_mm.{x,y,z}` and
    `build_volume_limits_mm.{min,max,source_profile}`.
@@ -101,13 +105,38 @@ Implemented local candidate exits:
    the existing `env_file` contract already passes the selected environment
    file. External production activation is outside repository evidence and
    authority.
+12. Orca PLA/PETG selection now resolves a repository filament profile, snapshots
+   its exact bytes, keeps machine/process under `--load-settings`, passes the
+   selected snapshot separately through `--load-filaments`, and returns its
+   basename plus actual diameter/density. Normalized material
+   and selected filament JSON or explicit null are digest-covered. A missing or
+   unsupported profile returns `filament_profile:null`, null metadata, a
+   distinct digest, `hourly_rate:null`, and `stats.estimated_price_huf:null`;
+   no automatic price is calculated. Focused tests cover the positive and null
+   cases.
+13. Strict FDM G-code metric parsing is default-on through
+    `SLICE_STRICT_GCODE_METRICS=true` and requires positive time and filament
+    length. OpenAPI requires nullable `material_used_g`; it is populated only by
+    a direct G-code marker and never derived from length. J1C supersedes the
+    earlier no-marker assumption: a missing or recognized non-positive marker
+    on an optional-mass path becomes null/manual, never zero. Selected-profile
+    Orca still requires positive direct grams within
+    `MAX_MATERIAL_USED_GRAMS`; recognized zero remains
+    `GCODE_FILAMENT_NOT_POSITIVE`, and missing or drifted mass returns bounded
+    HTTP 500 `SLICE_OUTPUT_UNPARSED`. Profile-less Orca remains null/manual. The
+    owner-supplied guard-only VPS diagnostic returned HTTP 200 with positive
+    length and null mass/rate/price. The combined local focused set passes
+    69/69; the complete local aggregate passes 2213/2213 JavaScript tests and
+    85 Python tests with 84 pass plus one expected Windows POSIX-permission
+    skip. The exact combined image/container and hosted reruns remain
+    unverified.
 
 Remaining gates:
 
 1. obtain separately authorized hosted exact-SHA validation if required; the
-   final local aggregate is already green at 2161/2161 JavaScript tests, 85/85
-   Python tests run with 84 pass and one expected Windows POSIX-permission skip,
-   244/39 JavaScript/Python syntax files, and 405 tracked safety files;
+   historical J0 final local aggregate is green at 2161/2161 JavaScript tests,
+   85/85 Python tests run with 84 pass and one expected Windows POSIX-permission
+   skip, 244/39 JavaScript/Python syntax files, and 405 tracked safety files;
 2. preserve `principals` as the repository activation target and require the
    dark gate before any router action: sanitized readback of `principals`, both
    actives, and absent shared active/previous, expiry, and both principal
@@ -118,12 +147,28 @@ Remaining gates:
    every configured previous, an owner-approved removal deadline, and post-
    removal rejection. External production activation is outside repository
    evidence and authority;
-3. do not start filament-profile identity or `material_used_g` work until the
-   owner supplies the required Bambu reference profile fields. This independent
-   W8 prerequisite is `BLOCKED_OWNER_INPUT / NOT_STARTED`; no current response
-   or digest claim satisfies it.
+3. keep W8 live calibration in its separate incomplete-vendor time/motion lane.
+   No vendor profile was imported. The owner authorized later public-repository
+   inclusion, but the missing include/process/filament chain and exact Orca
+   2.3.1 qualification still forbid a partial import. This lane does not block
+   J1C's production `--load-filaments` binding or exact child-owned
+   `layer_change_gcode='G92 E0'` corrections. The privacy-safe calibration
+   helper still embeds the superseded combined settings list and remains
+   unqualified until separately corrected. J2 separately owns P1S/H2D bed
+   shape and Z;
+4. treat capability readiness as a separate proposal wave. Keep public
+   `/health` cheap liveness and place future native capability state on public
+   `/ready`. Require at least Prusa and selected-filament Orca startup probes,
+   contained cleanup, readiness state/cache/admission integration, Docker/VPS
+   evidence, and typed per-engine rolling failure with anti-DoS and recovery/
+   hysteresis. Docker continues to check `/health` while Traefik consumes
+   `/ready`; raw last-N HTTP 5xx must not drive readiness.
 
-See
+See the J1 local branch-harvest evidence in
+[`evidence/j1-calibration-branch-harvest.md`](evidence/j1-calibration-branch-harvest.md)
+and the J1C correction in
+[`evidence/j1c-slice-contract-corrective.md`](evidence/j1c-slice-contract-corrective.md)
+and the historical J0 contract in
 [`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).
 
 ## I12 Wave 3 Hostinger production-qualification checkpoint

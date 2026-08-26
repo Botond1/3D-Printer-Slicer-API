@@ -8,7 +8,8 @@ const ORCA_INVOCATION_POLICY = Object.freeze({
     arrange: '1',
     orient: '0',
     slice: '0',
-    settingsPrecedence: Object.freeze(['machine', 'process'])
+    settingsPrecedence: Object.freeze(['machine', 'process']),
+    filamentOption: '--load-filaments'
 });
 const PRUSA_FDM_INVOCATION_POLICY = Object.freeze({
     center: '100,100',
@@ -68,20 +69,37 @@ function composeOrcaSettingsFiles(policy, orcaMachineConfigPath, configFile) {
  * @param {string} infillPercentage Infill override (e.g. `20%`).
  * @param {'prusa'|'orca'} [engine='prusa'] Selected slicer engine.
  * @param {string | null} [orcaMachineConfigPath=null] Orca machine profile path.
+ * @param {string | null} [orcaFilamentConfigPath=null] Orca filament profile path.
  * @returns {string[]} CLI argument array.
  */
-function buildSlicerCommandArgs(technology, configFile, outputPath, infillPercentage, engine = 'prusa', orcaMachineConfigPath = null) {
+function buildSlicerCommandArgs(
+    technology,
+    configFile,
+    outputPath,
+    infillPercentage,
+    engine = 'prusa',
+    orcaMachineConfigPath = null,
+    orcaFilamentConfigPath = null
+) {
     const policy = resolveSlicerInvocationPolicy(engine, technology);
     if (engine === 'orca') {
         const outputDir = path.dirname(outputPath);
-        const settingsFiles = composeOrcaSettingsFiles(policy, orcaMachineConfigPath, configFile);
-        return [
-            '--load-settings', settingsFiles,
+        const settingsFiles = composeOrcaSettingsFiles(
+            policy,
+            orcaMachineConfigPath,
+            configFile
+        );
+        const args = ['--load-settings', settingsFiles];
+        if (orcaFilamentConfigPath) {
+            args.push(policy.filamentOption, orcaFilamentConfigPath);
+        }
+        args.push(
             '--arrange', policy.arrange,
             '--orient', policy.orient,
             '--slice', policy.slice,
             '--outputdir', outputDir
-        ];
+        );
+        return args;
     }
 
     const args = ['--load', configFile, '--center', policy.center];
@@ -102,6 +120,7 @@ function buildSlicerCommandArgs(technology, configFile, outputPath, infillPercen
 }
 
 module.exports = {
+    composeOrcaSettingsFiles,
     resolveSlicerExecutable,
     resolveSlicerInvocationPolicy,
     buildSlicerCommandArgs

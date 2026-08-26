@@ -20,13 +20,19 @@ test('resolved selected profiles are snapshotted before later source replacement
     const scratch = path.join(root, 'scratch');
     const processProfile = path.join(root, 'process.json');
     const machineProfile = path.join(root, 'machine.json');
+    const filamentProfile = path.join(root, 'filament.json');
     const processValue = { type: 'process', name: 'process', walls: '2' };
     const machineValue = { type: 'machine', name: 'machine', printable_height: '250' };
+    const filamentValue = {
+        type: 'filament', name: 'filament', inherits: 'fdm_filament_pla',
+        filament_type: ['PLA'], filament_diameter: ['1.75'], filament_density: ['1.24']
+    };
     const processBytes = Buffer.from(`${JSON.stringify(processValue)}\n`);
     const machineBytes = Buffer.from(`${JSON.stringify(machineValue)}\n`);
     await fs.mkdir(scratch);
     await fs.writeFile(processProfile, processBytes);
     await fs.writeFile(machineProfile, machineBytes);
+    await fs.writeFile(filamentProfile, `${JSON.stringify(filamentValue)}\n`);
     const workspace = {
         resolveScratchPath(...segments) { return path.resolve(scratch, ...segments); },
         assertScratchContainedPath(candidate) {
@@ -39,18 +45,23 @@ test('resolved selected profiles are snapshotted before later source replacement
 
     const snapshots = await snapshotProfileSelection('orca', {
         baseConfigFile: processProfile,
-        orcaMachineConfigFile: machineProfile
+        orcaMachineConfigFile: machineProfile,
+        orcaFilamentConfigFile: filamentProfile
     }, workspace);
     await fs.writeFile(processProfile, '{"type":"process","name":"replacement","walls":"9"}\n');
     await fs.writeFile(machineProfile, '{"type":"machine","name":"replacement","printable_height":"999"}\n');
+    await fs.writeFile(filamentProfile, '{"type":"filament","name":"replacement"}\n');
 
     assert.deepEqual(JSON.parse(await fs.readFile(snapshots.baseConfigFile, 'utf8')), processValue);
     assert.deepEqual(JSON.parse(await fs.readFile(snapshots.orcaMachineConfigFile, 'utf8')), machineValue);
+    assert.deepEqual(JSON.parse(await fs.readFile(snapshots.orcaFilamentConfigFile, 'utf8')), filamentValue);
     assert.match(path.basename(snapshots.baseConfigFile), /^orca-base-profile-[a-f0-9]{16}\.json$/);
     assert.match(path.basename(snapshots.orcaMachineConfigFile), /^orca-machine-profile-[a-f0-9]{16}\.json$/);
+    assert.match(path.basename(snapshots.orcaFilamentConfigFile), /^orca-filament-profile-[a-f0-9]{16}\.json$/);
     if (process.platform !== 'win32') {
         assert.equal((await fs.stat(snapshots.baseConfigFile)).mode & 0o777, 0o600);
         assert.equal((await fs.stat(snapshots.orcaMachineConfigFile)).mode & 0o777, 0o600);
+        assert.equal((await fs.stat(snapshots.orcaFilamentConfigFile)).mode & 0o777, 0o600);
     }
 });
 

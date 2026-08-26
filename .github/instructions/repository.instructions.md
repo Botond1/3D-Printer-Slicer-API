@@ -4,7 +4,7 @@ applyTo: "**"
 
 # Repository Wide Instructions
 
-Last synchronized: 2026-08-25
+Last synchronized: 2026-08-26
 
 ## Architecture
 - Backend stack is Node.js + Express + Python helper scripts.
@@ -64,7 +64,9 @@ Last synchronized: 2026-08-25
   runtime, digest, and native invocation, while public fields retain child
   basenames. Preserve the Docker build equality gate against pinned native
   parents and stable Orca `layer_gcode=''` / `use_relative_e_distances='1'`,
-  aligned with the flattened pinned machine parent's per-layer `G92 E0` reset.
+  aligned with each selected repository child machine's exact
+  `layer_change_gcode='G92 E0'` override. Keep machine/process under
+  `--load-settings` and optional selected filament under `--load-filaments`.
 - Every successful Prusa/Orca response requires actual-selected-executable
   `engine_version` and lowercase `profiles.effective_profile_sha256`. Keep
   Prusa section/key identity case-sensitive and reject exact duplicate

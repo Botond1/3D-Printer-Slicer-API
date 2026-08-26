@@ -68,6 +68,12 @@ const ORCA_PROCESS_PROFILE_BY_LAYER = {
     '0.3': 'FDM_0.3mm.json'
 };
 
+/** Orca filament profiles selected by normalized FDM material key. */
+const ORCA_FILAMENT_PROFILE_BY_MATERIAL = Object.freeze({
+    PLA: 'PLA_generic.json',
+    PETG: 'PETG_generic.json'
+});
+
 /**
  * Default fallback pricing matrix in HUF/hour.
  * @type {{FDM: Record<string, number>, SLA: Record<string, number>}}
@@ -125,6 +131,7 @@ module.exports = {
     DEFAULTS,
     MAX_CONCURRENT_SLICES_RANGE,
     LAYER_HEIGHTS,
+    ORCA_FILAMENT_PROFILE_BY_MATERIAL,
     ORCA_PROCESS_PROFILE_BY_LAYER,
     DEFAULT_PRICING,
     MAX_BUILD_VOLUMES,

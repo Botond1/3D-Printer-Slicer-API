@@ -73,15 +73,16 @@ async function assertBoundedModelFile(filePath, workspace, policy = resolveResou
     return safePath;
 }
 
-function resolveProfilesOrResponse(res, engine, technology, layerHeight, profileOverrides) {
-    const selection = resolveProfileSelection(engine, technology, layerHeight, profileOverrides);
+function resolveProfilesOrResponse(res, engine, technology, layerHeight, profileOverrides, material) {
+    const selection = resolveProfileSelection(engine, technology, layerHeight, profileOverrides, material);
     if (!selection.isValid) {
         return { response: res.status(selection.status).json(selection.response) };
     }
     return {
         response: null,
         baseConfigFile: selection.baseConfigFile,
-        orcaMachineConfigFile: selection.orcaMachineConfigFile
+        orcaMachineConfigFile: selection.orcaMachineConfigFile,
+        orcaFilamentConfigFile: selection.orcaFilamentConfigFile
     };
 }
 
@@ -160,7 +161,8 @@ async function prepareSliceJob(res, request, workspace, signal) {
         request.engine,
         request.technology,
         request.layerHeight,
-        request.profileOverrides
+        request.profileOverrides,
+        request.material
     );
     if (profiles.response) return profiles;
     const profileSnapshots = await snapshotProfileSelection(request.engine, profiles, workspace);
@@ -191,7 +193,7 @@ async function executePreparedSlice(req, res, job, workspace, signal) {
     throwIfAborted(signal);
     const { request, source, profiles, profileSnapshots, preparedModel, targets } = job;
     const { model, buildVolumeLimits } = preparedModel;
-    const { stats, effectiveProfileSha256, engineVersion } = await runSlicerAndParseStats({
+    const { stats, effectiveProfileSha256, engineVersion, filamentProfileMetadata } = await runSlicerAndParseStats({
         ...request,
         ...profileSnapshots,
         ...targets,
@@ -211,6 +213,7 @@ async function executePreparedSlice(req, res, job, workspace, signal) {
         stats,
         engineVersion,
         effectiveProfileSha256,
+        filamentProfileMetadata,
         ...workspace.getOutputCandidateInfo(targets.outputCandidate)
     });
     throwIfAborted(signal);

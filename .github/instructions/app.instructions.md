@@ -4,7 +4,7 @@ applyTo: "app/**"
 
 # App Folder Instructions
 
-Last synchronized: 2026-08-25
+Last synchronized: 2026-08-26
 
 ## Responsibilities
 - app/server.js handles bootstrap, middleware, routes, docs, and static output serving.
@@ -16,7 +16,9 @@ Last synchronized: 2026-08-25
   `app/services/slice/orca-profile-inheritance.js`, snapshots in
   `app/services/slice/profile-snapshot.js`, effective-profile identity in
   `app/services/slice/profile-digest.js`, native version identity in
-  `app/services/slice/engine-version.js`, response, errors).
+  `app/services/slice/engine-version.js`, filament selection/metadata in
+  `app/services/slice/filament-profile.js`, strict FDM metrics in
+  `app/services/slice/gcode-metrics.js`, response, errors).
 - app/config/service-auth.js resolves immutable pricing/artifact/operations
   rings plus explicit `legacy`, finite `migration`, or final `principals` slice
   mode with shared compatibility and WooCommerce/LeadPilot rings.
@@ -48,8 +50,9 @@ Last synchronized: 2026-08-25
 - Keep OpenAPI's four requested omissions plus the already-live
   `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. The disjoint
   `MODEL_OUT_OF_PRINTER_BOUNDS` branch requires both dimension payloads. Keep
-  the complete live slice-500 enum: `INTERNAL_PROCESSING_ERROR`,
-  `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
+  the complete live slice-500 enum: `SLICE_OUTPUT_UNPARSED`,
+  `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
+  and `INTERNAL_SERVER_ERROR`.
 - Atomically verify both selected engine versions from bounded `--help` output
   before listen; requests read the all-success initialized map. The startup
   module has exact-image proof and uses a telemetry-disabled runner that cannot
@@ -59,9 +62,26 @@ Last synchronized: 2026-08-25
   Focused command/digest contracts and final exact-image HTTP transform/final-
   dimensions E2E pass for both principals; the exact local code/image identity
   is recorded in the J0 evidence document.
-- Filament-profile identity and `material_used_g` are a separate W8 prerequisite
-  classified `BLOCKED_OWNER_INPUT / NOT_STARTED` until the owner supplies the
-  required Bambu reference profile fields.
+- Preserve J1 Orca filament behavior: repository PLA/PETG selection, exact-byte
+  job snapshot, machine/process through `--load-settings`, selected filament
+  through dedicated `--load-filaments`, digest-covered normalized
+  material plus filament JSON or explicit null, and nullable public basename/
+  diameter/density. OpenAPI requires nullable `material_used_g`, populated only
+  by a direct G-code marker and never derived from length. Strict FDM requires
+  positive time and length. Current Prusa FDM and profile-less Orca map a
+  missing or recognized non-positive optional grams marker to null/manual,
+  never zero. Selected-profile Orca still requires positive grams; recognized
+  zero remains `GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`, and
+  marker drift remains fail closed. Owner-supplied VPS evidence verifies the
+  guard-only HTTP 200/null path and the Orca mechanism's 0.00 g to 4.12 g
+  correction. The combined local focused set passes 69/69; the final combined
+  exact-image rerun remains pending.
+- Keep W8 live calibration `BLOCKED_OWNER_INPUT`: the retained P1S and new H2D
+  candidates are generic Marlin profiles, not verified native Bambu profiles.
+  Their child files own exact `layer_change_gcode='G92 E0'`. The incomplete
+  vendor chain remains a separate time/motion calibration lane and J2 owns bed
+  shape/Z; no vendor profile was imported. Repository evidence grants no
+  deployment or public-route authority.
 - Keep endpoint contracts stable:
   - POST /prusa/slice
   - POST /orca/slice
@@ -87,8 +107,8 @@ Last synchronized: 2026-08-25
   canonical sources, detected growth, unknown/cyclic/name- or role-mismatched
   parents, and exact duplicate Prusa INI qualified keys. Preserve the Docker
   build semantic-equality gate and stable Orca `layer_gcode=''` /
-  `use_relative_e_distances='1'` settings aligned with the flattened pinned
-  machine parent's per-layer `G92 E0` reset.
+  `use_relative_e_distances='1'` settings aligned with each selected repository
+  child machine's exact `layer_change_gcode='G92 E0'` override.
 - Preserve bounded/redacted auth events and exact per-audience CORS policies.
 - Preserve HTTP defaults/bounds: 60000 [1000,60000] headers ms; 600000 [60000,600000] request ms; 5000 [1000,60000] keep-alive ms; 2000 [16,2000] headers; 128 [1,1024] connections; 100 [1,1000] requests/socket.
 - Invalid HTTP envelope overrides fall back to defaults; effective headers timeout is capped at request timeout. VPS capacity and proxy timeouts remain UNVERIFIED.
@@ -102,6 +122,10 @@ Last synchronized: 2026-08-25
 - Do not auto-heal invalid geometry.
 - Preserve public minimal readiness and operations-only detailed reasons/metrics.
   Keep /health/detailed fresh and /ready plus /operations/readiness cached.
+- J1C capability readiness is proposal-only: keep `/health` cheap and place any
+  future native slicing-capability state on public `/ready`. Require separate
+  startup-smoke, Docker/VPS, typed per-engine failure, anti-DoS, and recovery/
+  hysteresis evidence before implementation.
 - Never add request/job/artifact/customer values as metric labels.
 - Preserve fail-closed proxy CIDR/loopback compilation and safe request-ID validation.
 - I6 validation requires an internal-only API with no host port/default route,
