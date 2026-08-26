@@ -47,6 +47,18 @@ test('minimal environment passes runtime essentials and excludes secret/applicat
         'TELEGRAM_BOT_TOKEN', 'EMAIL_API_KEY', 'SLICE_RATE_LIMIT_MAX_REQUESTS',
         'NODE_OPTIONS', 'PYTHONPATH']) assert.equal(env[key], undefined, key);
 });
+test('Windows allowlist lookup is case-insensitive and empty optional values stay omitted', () => {
+    const env = createChildEnvironment({
+        Path: 'C:\\runtime',
+        systemroot: 'C:\\Windows',
+        lang: '',
+        LC_ALL: ''
+    }, 'win32');
+    assert.equal(env.PATH, 'C:\\runtime');
+    assert.equal(env.SystemRoot, 'C:\\Windows');
+    assert.equal(Object.hasOwn(env, 'LANG'), false);
+    assert.equal(Object.hasOwn(env, 'LC_ALL'), false);
+});
 test('POSIX child environment uses fixed writable homes and never inherits parent HOME/XDG paths', () => {
     const env = createChildEnvironment({
         PATH: '/usr/bin',

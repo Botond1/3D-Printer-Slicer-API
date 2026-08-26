@@ -8,6 +8,21 @@ const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { runCommand, throwIfAborted, isAbortError } = require('./command');
 const { resourceLimit, invalidStats } = require('./resource-errors');
 const { parseSl1Stats } = require('./sl1-stats');
+const {
+    FILAMENT_GRAM_PATTERNS,
+    GcodeMetricsError,
+    parseGcodeMetricsStrict
+} = require('./gcode-metrics');
+
+/**
+ * Strict G-code metrics are the default and only an explicit `false` selects
+ * the historical tolerant parser during a controlled drift investigation.
+ * @param {NodeJS.ProcessEnv|Record<string, unknown>} [environment=process.env] Environment source.
+ * @returns {boolean} True when metric drift must fail closed.
+ */
+function isStrictGcodeMetricsEnabled(environment = process.env) {
+    return String(environment.SLICE_STRICT_GCODE_METRICS || 'true').trim().toLowerCase() !== 'false';
+}
 
 async function readBoundedText(filePath, maximumBytes) {
     const handle = await fs.open(filePath, 'r');
@@ -159,24 +174,65 @@ function extractMaterialUsedMetersFromGcode(content) {
 }
 
 /**
+ * Extract the slicer's directly reported mass for the explicit legacy-parser
+ * escape hatch. This never derives grams from length or material constants.
+ * @param {string} content Full G-code text content.
+ * @returns {number} Positive grams when a supported marker is present, otherwise zero.
+ */
+function extractMaterialUsedGramsFromGcode(content) {
+    for (const pattern of FILAMENT_GRAM_PATTERNS) {
+        const match = pattern.regex.exec(content);
+        if (!match) continue;
+        const grams = pattern.toGrams(match);
+        if (Number.isFinite(grams) && grams > 0) return grams;
+    }
+    return 0;
+}
+
+/**
  * Parse FDM-specific output metadata from generated G-code.
- * @param {{print_time_seconds: number, print_time_readable: string, material_used_m: number}} stats Mutable stats object.
+ * @param {{print_time_seconds: number, print_time_readable: string, material_used_m: number, material_used_g: number|null}} stats Mutable stats object.
  * @param {'FDM'|'SLA'} technology Active technology.
  * @param {string} filePath Output file path.
  * @param {'prusa'|'orca'} [engine='prusa'] Engine identifier.
  * @returns {void}
  */
-async function parseFdmOutputStats(stats, technology, filePath, engine = 'prusa', policy = resolveResourcePolicy()) {
+async function parseFdmOutputStats(
+    stats,
+    technology,
+    filePath,
+    engine = 'prusa',
+    policy = resolveResourcePolicy(),
+    options = {}
+) {
     if (technology !== 'FDM') return;
+    stats.material_used_g = null;
+    stats.material_used_g_source = null;
     try {
         const content = await readBoundedText(filePath, policy.MAX_OUTPUT_PARSE_BYTES);
+        if (isStrictGcodeMetricsEnabled()) {
+            const metrics = parseGcodeMetricsStrict(content, {
+                requireFilamentGrams: options.requireFilamentGrams ?? engine === 'orca'
+            });
+            stats.print_time_seconds = metrics.print_time_seconds;
+            stats.print_time_source = metrics.print_time_source;
+            stats.material_used_g = metrics.filament_used_g;
+            stats.material_used_g_source = metrics.filament_used_g_source;
+            stats.material_used_m = metrics.filament_used_mm === null
+                ? 0
+                : metrics.filament_used_mm / 1000;
+            return;
+        }
         const printTime = extractPrintTimeFromGcode(content);
         stats.print_time_seconds = printTime.print_time_seconds;
         stats.print_time_readable = printTime.print_time_readable;
         stats.material_used_m = extractMaterialUsedMetersFromGcode(content);
+        const directGrams = extractMaterialUsedGramsFromGcode(content);
+        stats.material_used_g = directGrams > 0 ? directGrams : null;
 
     } catch (error_) {
         if (error_?.code === 'SLICE_RESOURCE_LIMIT_EXCEEDED') throw error_;
+        if (error_ instanceof GcodeMetricsError) throw error_;
         throw invalidStats('Slicer statistics could not be parsed.');
     }
 }
@@ -220,20 +276,24 @@ function finalizeReadableTime(stats, technology) {
  * @param {number|string} layerHeight Requested layer height.
  * @param {number} knownHeight Known model height in millimeters.
  * @param {'prusa'|'orca'} engine Slicer engine.
- * @returns {Promise<{print_time_seconds: number, print_time_readable: string, material_used_m: number, object_height_mm: number, estimated_price_huf: number}>}
+ * @param {{requireFilamentGrams?: boolean}} [options] Exact native mass requirement.
+ * @returns {Promise<{print_time_seconds: number, print_time_readable: string, material_used_m: number, material_used_g: number|null, object_height_mm: number, estimated_price_huf: number}>}
  */
-async function parseOutputDetailed(filePath, technology, layerHeight, knownHeight, engine = 'prusa') {
+async function parseOutputDetailed(filePath, technology, layerHeight, knownHeight, engine = 'prusa', options = {}) {
     const policy = resolveResourcePolicy();
     const stats = {
         print_time_seconds: 0,
         print_time_readable: 'Unknown',
         material_used_m: 0,
+        material_used_g: 0,
+        print_time_source: null,
+        material_used_g_source: null,
         material_used_ml: 0,
         object_height_mm: Number.isFinite(Number(knownHeight)) ? Number(knownHeight) : 0,
         estimated_price_huf: 0
     };
 
-    await parseFdmOutputStats(stats, technology, filePath, engine, policy);
+    await parseFdmOutputStats(stats, technology, filePath, engine, policy, options);
     if (technology === 'SLA') {
         const slaStats = await parseSl1Stats(filePath, { resourcePolicy: policy });
         stats.material_used_ml = slaStats.material_used_ml;
@@ -258,6 +318,13 @@ function validateSliceStats(stats, technology, policy = resolveResourcePolicy())
     if (stats.material_used_m > policy.MAX_MATERIAL_USED_METERS) {
         throw invalidStats('Slicer material usage is outside the allowed range.');
     }
+    if (stats.material_used_g !== null &&
+        (!Number.isFinite(stats.material_used_g) || stats.material_used_g < 0)) {
+        throw invalidStats('Slicer material mass is invalid.');
+    }
+    if (stats.material_used_g !== null && stats.material_used_g > policy.MAX_MATERIAL_USED_GRAMS) {
+        throw invalidStats('Slicer material mass is outside the allowed range.');
+    }
     if (stats.material_used_ml > policy.MAX_MATERIAL_USED_ML) {
         throw invalidStats('Slicer resin usage is outside the allowed range.');
     }
@@ -266,6 +333,9 @@ function validateSliceStats(stats, technology, policy = resolveResourcePolicy())
     }
     if (technology === 'FDM' && stats.material_used_m <= 0) {
         throw invalidStats('FDM output is missing required material usage.');
+    }
+    if (technology === 'FDM' && stats.material_used_g === 0) {
+        throw invalidStats('FDM output is missing required material mass.');
     }
     if (technology === 'SLA' && stats.material_used_ml <= 0) {
         throw invalidStats('SLA output is missing required material usage.');
@@ -279,5 +349,7 @@ module.exports = {
     validateSliceStats,
     readBoundedText,
     extractPrintTimeFromGcode,
-    extractMaterialUsedMetersFromGcode
+    extractMaterialUsedGramsFromGcode,
+    extractMaterialUsedMetersFromGcode,
+    isStrictGcodeMetricsEnabled
 };

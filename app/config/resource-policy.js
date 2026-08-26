@@ -32,6 +32,7 @@ const RESOURCE_DEFINITIONS = Object.freeze({
     MAX_PRICING_BYTES: { default: MiB, min: 1_024, max: 10 * MiB },
     MAX_PRINT_TIME_SECONDS: { default: 30 * 24 * 60 * 60, min: 1, max: 365 * 24 * 60 * 60 },
     MAX_MATERIAL_USED_METERS: { default: 10_000, min: 1, max: 100_000 },
+    MAX_MATERIAL_USED_GRAMS: { default: 100_000, min: 1, max: 1_000_000 },
     MAX_MATERIAL_USED_ML: { default: 100_000, min: 1, max: 1_000_000 },
     MAX_HOURLY_PRICE_HUF: { default: 1_000_000, min: 1, max: 100_000_000 },
     MAX_MODEL_DIMENSION_MM: { default: 10_000, min: 250, max: 100_000 },

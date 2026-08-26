@@ -1,0 +1,39 @@
+{
+    "type": "filament",
+    "setting_id": "ORCA_FIL_PLA_LOCAL",
+    "name": "Generic PLA @R3D",
+    "from": "user",
+    "instantiation": "true",
+    "inherits": "fdm_filament_pla",
+    "filament_type": [
+        "PLA"
+    ],
+    "filament_vendor": [
+        "Generic"
+    ],
+    "filament_density": [
+        "1.24"
+    ],
+    "filament_diameter": [
+        "1.75"
+    ],
+    "filament_cost": [
+        "20"
+    ],
+    "nozzle_temperature": [
+        "220"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "220"
+    ],
+    "hot_plate_temp": [
+        "60"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "60"
+    ],
+    "compatible_printers": [
+        "MyMarlin 0.4 nozzle",
+        "MyH2D 0.4 nozzle"
+    ]
+}

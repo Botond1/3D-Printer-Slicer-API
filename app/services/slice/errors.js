@@ -3,6 +3,7 @@
  */
 
 const { DEFAULTS } = require('../../config/constants');
+const { GcodeMetricsError } = require('./gcode-metrics');
 
 /**
  * Detect converter-level geometry failures from command output.
@@ -97,6 +98,15 @@ function isOrcaPresetCompatibilityError(err) {
  * @returns {import('express').Response} Serialized error response.
  */
 function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, getSupportedInputExtensionsText) {
+
+    if (err instanceof GcodeMetricsError) {
+        return res.status(500).json({
+            success: false,
+            error: 'Slicer output metrics could not be parsed safely. No estimate was returned.',
+            errorCode: 'SLICE_OUTPUT_UNPARSED',
+            detailCode: err.code
+        });
+    }
 
     if (err?.code === 'SLICE_RESOURCE_LIMIT_EXCEEDED') {
         return res.status(413).json({

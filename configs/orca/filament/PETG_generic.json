@@ -1,0 +1,39 @@
+{
+    "type": "filament",
+    "setting_id": "ORCA_FIL_PETG_LOCAL",
+    "name": "Generic PETG @R3D",
+    "from": "user",
+    "instantiation": "true",
+    "inherits": "fdm_filament_pet",
+    "filament_type": [
+        "PETG"
+    ],
+    "filament_vendor": [
+        "Generic"
+    ],
+    "filament_density": [
+        "1.27"
+    ],
+    "filament_diameter": [
+        "1.75"
+    ],
+    "filament_cost": [
+        "24"
+    ],
+    "nozzle_temperature": [
+        "240"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "240"
+    ],
+    "hot_plate_temp": [
+        "70"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "70"
+    ],
+    "compatible_printers": [
+        "MyMarlin 0.4 nozzle",
+        "MyH2D 0.4 nozzle"
+    ]
+}

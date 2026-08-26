@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Copilot Instructions
 
-Last synchronized: 2026-08-25
+Last synchronized: 2026-08-26
 
 ## Architecture Notice
 This project uses both GitHub Copilot and Claude as primary agentic tools.
@@ -15,7 +15,7 @@ If architecture/domain rules change in this file, synchronize changes in:
 ## Goal
 Provide a stable and secure slicing API with strict fail-fast validation and production-safe queue controls.
 
-## J0 W2/W3 Public Contract
+## J1 Calibration Harvest over the J0 W2/W3 Public Contract
 
 - Successful Prusa and Orca responses require lowercase
   `profiles.effective_profile_sha256`. After selection, bounded canonical-realpath
@@ -25,6 +25,18 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   public fields retain child basenames. Stable Orca runtime settings enforce
   empty `layer_gcode` plus relative extrusion, aligned with the flattened pinned
   machine parent's per-layer `G92 E0` reset.
+- J1 selects repository PLA/PETG filament profiles, snapshots their exact bytes,
+  and composes Orca settings as machine-process-filament. The effective digest
+  binds normalized material and selected filament JSON or explicit null.
+  Successful Orca payloads expose nullable filament basename plus actual
+  diameter/density. OpenAPI requires nullable `stats.material_used_g`; it may
+  contain only a direct G-code mass marker and is never derived from filament
+  length. Strict FDM output requires positive time and length. The current Prusa
+  FDM profile has no direct grams marker, so its successful response returns
+  `material_used_g:null`, `hourly_rate:null`, and
+  `stats.estimated_price_huf:null`. Orca with a selected filament profile also
+  requires positive direct grams and maps missing/drifted mass to HTTP 500
+  `SLICE_OUTPUT_UNPARSED`; profile-less Orca remains null/manual.
 - Prusa INI identity preserves section/key case. Exact duplicate qualified keys
   fail closed like the native Boost parser; runtime generation replaces one
   exact top-level request key, rejects duplicates, and inserts a missing key
@@ -34,8 +46,8 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   `MODEL_OUT_OF_PRINTER_BOUNDS`, plus the live
   `MODEL_DIMENSIONS_UNAVAILABLE` general-422 branch correction. The bounds code
   requires both dimension payloads. The complete live slice-500 enum is
-  `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
-  and `INTERNAL_SERVER_ERROR`.
+  `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
+  `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 - Slice calls keep exactly one `x-slicer-api-key` header. Explicit `legacy`,
   finite `migration`, and final `principals` modes govern the shared
   compatibility and separate WooCommerce/LeadPilot families. `GET /health` and
@@ -55,9 +67,14 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   transform/final-dimensions E2E pass on code SHA `ed85eec63409b7362fe05c2b99031eeb24b5b9c9`
   and local image ID `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
   Both principal families pass; a valid key only under `x-api-key` rejects
-  without request residue. This local candidate is not deployment. Filament
-  profile plus `material_used_g` remains a separate W8 prerequisite classified
-  `BLOCKED_OWNER_INPUT / NOT_STARTED` pending required Bambu reference fields.
+  without request residue. That exact-image result is historical J0 evidence,
+  not J1 deployment. J1 focused tests cover filament selection/null identity,
+  nullable Prusa/manual pricing, selected-profile Orca direct grams, and strict
+  marker-drift failure. Strict mode defaults on and never substitutes zero or a
+  length-derived mass.
+  The retained P1S and new H2D candidates are generic Marlin profiles, so real
+  Bambu references, owner-selected models, and acceptance thresholds keep W8
+  live calibration `BLOCKED_OWNER_INPUT`.
 
 ## I12 Hostinger Production-Qualification Boundary
 
@@ -381,6 +398,9 @@ Test organization:
 - JSON_BODY_LIMIT
 - FORM_BODY_LIMIT
 - MAX_UPLOAD_BYTES
+- MAX_MATERIAL_USED_METERS
+- MAX_MATERIAL_USED_GRAMS
+- MAX_MATERIAL_USED_ML
 - SLICE_RATE_LIMIT_WINDOW_MS
 - SLICE_RATE_LIMIT_MAX_REQUESTS
 - SLICE_RATE_LIMIT_BURST_CAPACITY
@@ -393,6 +413,7 @@ Test organization:
 - MAX_ZIP_ENTRIES
 - MAX_ZIP_UNCOMPRESSED_BYTES
 - SLICE_COMMAND_TIMEOUT_MS
+- SLICE_STRICT_GCODE_METRICS
 - PYTHON_EXECUTABLE
 - VIRTUAL_ENV
 - ORCA_MACHINE_PROFILE

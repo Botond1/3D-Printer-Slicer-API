@@ -15,13 +15,16 @@ const { buildSlicerCommandArgs, resolveSlicerInvocationPolicy } = require('../..
 const { requireEngineVersion } = require('../../../app/services/slice/response');
 
 test('actual native version output is parsed for both pinned engine families', () => {
-    assert.equal(parseEngineVersionOutput('prusa', {
+    const prusaVersion = parseEngineVersionOutput('prusa', {
         stdout: 'PrusaSlicer-2.8.1+linux-x64-GTK3\nUsage: prusa-slicer [ OPTIONS ]\n --help Show help\n'
-    }), '2.8.1+linux-x64-GTK3');
-    assert.equal(parseEngineVersionOutput('orca', {
+    });
+    const orcaVersion = parseEngineVersionOutput('orca', {
         stderr: '[warning] Current OrcaSlicer Version 02.03.01.00\n' +
             'Usage: orca-slicer [ OPTIONS ]\nOPTIONS:\n --help Show help\n'
-    }), '02.03.01.00');
+    });
+    assert.equal(prusaVersion, '2.8.1+linux-x64-GTK3');
+    assert.equal(orcaVersion, '02.03.01.00');
+    assert.notEqual(prusaVersion, orcaVersion);
 });
 
 test('version resolution executes the selected binary once and caches exact output', async () => {
@@ -92,15 +95,22 @@ test('startup initialization is atomic and request lookup launches no child proc
 
 test('Orca native policy places but never reorients the transformed and bounds-checked model', () => {
     assert.deepEqual(resolveSlicerInvocationPolicy('orca', 'FDM'), {
-        arrange: '1', orient: '0', slice: '0', settingsPrecedence: ['machine', 'process']
+        arrange: '1', orient: '0', slice: '0', settingsPrecedence: ['machine', 'process', 'filament']
     });
-    const args = buildSlicerCommandArgs('FDM', 'process.json', 'out/result.gcode', '20%', 'orca', 'machine.json');
+    const args = buildSlicerCommandArgs(
+        'FDM', 'process.json', 'out/result.gcode', '20%', 'orca', 'machine.json', 'filament.json'
+    );
     const arrangeIndex = args.indexOf('--arrange');
     const orientIndex = args.indexOf('--orient');
     assert.ok(arrangeIndex >= 0);
     assert.ok(orientIndex >= 0);
     assert.equal(args[arrangeIndex + 1], '1');
     assert.equal(args[orientIndex + 1], '0');
+    assert.equal(args[1], 'machine.json;process.json;filament.json');
+    assert.equal(
+        buildSlicerCommandArgs('FDM', 'process.json', 'out/result.gcode', '20%', 'orca', 'machine.json')[1],
+        'machine.json;process.json'
+    );
 });
 
 test('success contract accepts only a verified machine-readable engine version', () => {

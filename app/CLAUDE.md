@@ -1,6 +1,6 @@
 # App Folder - Local Claude Guide
 
-Last synchronized: 2026-08-25
+Last synchronized: 2026-08-26
 
 ## Scope
 
@@ -155,7 +155,7 @@ This document describes the application runtime inside app/.
 - app/services/slice/engine.js
   - Resolves slicer executable name by engine.
   - Builds argument arrays and request-independent invocation policy for Prusa
-    and Orca. Prusa export flags and Orca's ordered machine-then-process settings
+    and Orca. Prusa export flags and Orca's ordered machine-process-filament settings
     precedence are composed from that same hash-fed policy; Orca sends
     `--arrange 1` / `--orient 0` after preprocessing/
     bounds checks. Arrangement places already-rotated geometry onto the build
@@ -166,11 +166,20 @@ This document describes the application runtime inside app/.
 - app/services/slice/errors.js
   - Classifies pipeline failures (geometry, zip, timeout, unsupported format, Orca profile mismatch).
   - Converts exceptions to stable API error responses.
+- app/services/slice/filament-profile.js
+  - Resolves the allowlisted Orca filament profile from normalized material and
+    reads exact positive diameter/density from the selected snapshot.
+- app/services/slice/gcode-metrics.js
+  - Strictly parses bounded positive FDM time and filament length. Direct grams
+    are nullable for Prusa/profile-less Orca, but mandatory for Orca with a
+    selected filament profile; mass is never derived from length.
 - app/services/slice/input-processing.js
   - Converts supported model/CAD inputs to STL via Python scripts.
   - Runs orientation optimization with graceful fallback.
 - app/services/slice/model-stats.js
-  - Reads model dimensions and parses slicer outputs for print-time/material stats.
+  - Reads model dimensions and parses slicer outputs for print-time/material
+    length and nullable direct grams. `SLICE_STRICT_GCODE_METRICS` defaults to
+    true; missing required Orca mass maps to `SLICE_OUTPUT_UNPARSED`.
   - Builds SLA print-time estimates when metadata is absent.
 - app/services/slice/native-runtime-status.js
   - Owns the process-local fail-closed native-runtime quarantine and publishes
@@ -181,7 +190,7 @@ This document describes the application runtime inside app/.
   - Validates request fields: layerHeight, material, infill, size/scale/rotation, unit, and profile overrides.
   - Enforces engine/technology layer constraints and material-technology compatibility.
 - app/services/slice/profiles.js
-  - Resolves Prusa and Orca profile selection.
+  - Resolves Prusa and Orca machine/process/filament profile selection.
   - Validates profile existence.
   - Creates runtime profile variants and resolves build-volume limits from
     snapshot bytes while preserving the original selected basename for public
@@ -240,8 +249,8 @@ This document describes the application runtime inside app/.
     effective-profile digest, four requested omitted runtime codes, the live
     `MODEL_DIMENSIONS_UNAVAILABLE` general branch, and the disjoint bounds branch
     requiring both dimension payloads. The slice-500 enum is the complete live
-    set: `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
-    `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
+    set: `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`,
+    `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 
 ## Python Helper Scripts in app/
 
@@ -267,8 +276,8 @@ This document describes the application runtime inside app/.
 - OpenAPI documents the four requested omitted codes plus the already-live
   `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. Bounds errors require
   both `model_dimensions_mm` and `build_volume_limits_mm`. The complete live
-  slice-500 enum is `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
-  `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
+  slice-500 enum is `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`,
+  `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 - Success requires `engine_version` from the atomic pre-listen bounded `--help`
   verification of both selected executables; the startup module has exact-image
   proof and uses a telemetry-disabled runner that cannot alter slice-native
@@ -280,9 +289,20 @@ This document describes the application runtime inside app/.
   image ID `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
   Both principal families pass; a valid key only under `x-api-key` rejects
   without request residue.
-- Filament-profile identity and `material_used_g` remain a separate W8
-  prerequisite classified `BLOCKED_OWNER_INPUT / NOT_STARTED` until required
-  Bambu reference profile fields are supplied; do not infer them from the digest.
+- J1 Orca selection snapshots repository PLA/PETG filament profiles and composes
+  native settings machine-process-filament. The digest binds normalized material
+  plus selected filament JSON or explicit null. Orca success exposes nullable
+  `filament_profile`, `filament_diameter_mm`, and
+  `filament_density_g_cm3`. OpenAPI requires nullable `material_used_g`, which
+  must be direct and never length-derived. Strict FDM requires positive time and
+  length; selected-profile Orca also requires positive grams or returns 500
+  `SLICE_OUTPUT_UNPARSED`. Current Prusa FDM and profile-less Orca keep grams,
+  `hourly_rate`, and `stats.estimated_price_huf` null for manual pricing.
+- Keep W8 live calibration `BLOCKED_OWNER_INPUT`: the retained P1S and new H2D
+  candidates identify as generic Marlin profiles, not verified native Bambu
+  profiles. Real machine/process references, owner-selected models, and owner-
+  approved acceptance thresholds are required; no deploy or public route is
+  authorized by the repository contract.
 - No-Origin service requests are allowed; browser-origin protected requests
   must match only their exact audience allowlist.
 - /prusa/slice allows FDM and SLA based on layerHeight.

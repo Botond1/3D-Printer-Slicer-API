@@ -1,11 +1,11 @@
 # Hardening plan
 
-## J0 W2/W3 response and slice-principal checkpoint
+## J1 calibration harvest over the J0 W2/W3 checkpoint
 
 Status:
-`J0_W2_W3_FINAL_LOCAL_CONTRACTS_PASS; J0_FINAL_LOCAL_AGGREGATE_PASS;
-NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_FINAL_EXACT_IMAGE_BUILD_AND_E2E_PASS;
-J0_FILAMENT_W8_BLOCKED_OWNER_INPUT_NOT_STARTED`.
+`J1_REPOSITORY_FILAMENT_AND_STRICT_GCODE_METRICS_IMPLEMENTED_FOCUSED_TESTED;
+J1_LIVE_BAMBU_CALIBRATION_BLOCKED_OWNER_INPUT;
+NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_FINAL_EXACT_IMAGE_BUILD_AND_E2E_PASS`.
 
 Implemented local candidate exits:
 
@@ -22,10 +22,11 @@ Implemented local candidate exits:
    selected child basenames.
 2. Every successful Prusa and Orca response requires
    `profiles.effective_profile_sha256`, a canonical lowercase SHA-256 over the
-   effective configured machine/process layers and request-independent native
-   invocation policy while excluding request layer height, request infill,
-   paths, and request/job/model identity. Prusa export flags and Orca's ordered
-   machine-then-process settings precedence are composed from that policy.
+   effective configured machine/process/filament layers, normalized material,
+   and request-independent native invocation policy while excluding request
+   layer height, request infill, paths, and request/job/model identity. Prusa
+   export flags and Orca's ordered
+   machine-process-filament settings precedence are composed from that policy.
 3. Stable Orca runtime derivation clears `layer_gcode` and sets
    `use_relative_e_distances='1'` for consistency with the flattened pinned
    machine parent's per-layer `G92 E0` reset; these request-independent settings
@@ -75,8 +76,8 @@ Implemented local candidate exits:
    `MODEL_DIMENSIONS_UNAVAILABLE` to only the general validation branch, closing
    its 422 `oneOf` gap without adding another requested response feature. It
    also completes the live slice HTTP 500 enum with
-   `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
-   and `INTERNAL_SERVER_ERROR`.
+   `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
+   `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 8. `MODEL_OUT_OF_PRINTER_BOUNDS` requires both
    `model_dimensions_mm.{x,y,z}` and
    `build_volume_limits_mm.{min,max,source_profile}`.
@@ -101,13 +102,30 @@ Implemented local candidate exits:
    the existing `env_file` contract already passes the selected environment
    file. External production activation is outside repository evidence and
    authority.
+12. Orca PLA/PETG selection now resolves a repository filament profile, snapshots
+   its exact bytes, passes native settings in machine-process-filament order,
+   and returns its basename plus actual diameter/density. Normalized material
+   and selected filament JSON or explicit null are digest-covered. A missing or
+   unsupported profile returns `filament_profile:null`, null metadata, a
+   distinct digest, `hourly_rate:null`, and `stats.estimated_price_huf:null`;
+   no automatic price is calculated. Focused tests cover the positive and null
+   cases.
+13. Strict FDM G-code metric parsing is default-on through
+    `SLICE_STRICT_GCODE_METRICS=true` and requires positive time and filament
+    length. OpenAPI requires nullable `material_used_g`; it is populated only by
+    a direct G-code marker and never derived from length. The current Prusa FDM
+    profile emits no grams marker, so mass/rate/price remain null for manual
+    pricing. Selected-profile Orca still requires positive direct grams within
+    `MAX_MATERIAL_USED_GRAMS`; missing or drifted mass returns bounded HTTP 500
+    `SLICE_OUTPUT_UNPARSED`. Profile-less Orca remains null/manual. Focused
+    positive, nullable, and drift controls pass.
 
 Remaining gates:
 
 1. obtain separately authorized hosted exact-SHA validation if required; the
-   final local aggregate is already green at 2161/2161 JavaScript tests, 85/85
-   Python tests run with 84 pass and one expected Windows POSIX-permission skip,
-   244/39 JavaScript/Python syntax files, and 405 tracked safety files;
+   historical J0 final local aggregate is green at 2161/2161 JavaScript tests,
+   85/85 Python tests run with 84 pass and one expected Windows POSIX-permission
+   skip, 244/39 JavaScript/Python syntax files, and 405 tracked safety files;
 2. preserve `principals` as the repository activation target and require the
    dark gate before any router action: sanitized readback of `principals`, both
    actives, and absent shared active/previous, expiry, and both principal
@@ -118,10 +136,13 @@ Remaining gates:
    every configured previous, an owner-approved removal deadline, and post-
    removal rejection. External production activation is outside repository
    evidence and authority;
-3. do not start filament-profile identity or `material_used_g` work until the
-   owner supplies the required Bambu reference profile fields. This independent
-   W8 prerequisite is `BLOCKED_OWNER_INPUT / NOT_STARTED`; no current response
-   or digest claim satisfies it.
+3. keep W8 live calibration `BLOCKED_OWNER_INPUT`. The retained P1S and new H2D
+   candidates identify as generic Marlin profiles, not verified native Bambu
+   profiles. Require real P1S/H2D machine/process references, approved material/
+   spool references, ten owner-selected calibration models, and owner-approved
+   acceptance thresholds before any live run. J1 repository and focused-test
+   evidence grants no deploy, route activation, customer traffic, or production
+   calibration authority.
 
 See
 [`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).

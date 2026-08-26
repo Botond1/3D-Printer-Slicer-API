@@ -28,6 +28,8 @@ const {
 } = require('../../../app/services/slice/response');
 const { applyTransformAndValidateModel } = require('../../../app/services/slice/transform');
 const { resolveBuildVolumeLimits } = require('../../../app/services/slice/profiles');
+const { handleProcessingError } = require('../../../app/services/slice/errors');
+const { GcodeMetricsError } = require('../../../app/services/slice/gcode-metrics');
 
 const SHA256 = 'a'.repeat(64);
 
@@ -42,10 +44,29 @@ test('both engine profile payloads expose the same required effective digest key
     assert.deepEqual(resolveProfileMapper('orca')({
         baseConfigFile: path.join('profiles', 'FDM_0.2mm.json'),
         orcaMachineConfigFile: path.join('profiles', 'Bambu_P1S_0.4_nozzle.json'),
+        orcaFilamentConfigFile: path.join('profiles', 'PLA_generic.json'),
+        filamentProfileMetadata: { diameterMm: 1.75, densityGcm3: 1.24 },
         effectiveProfileSha256: SHA256
     }), {
         machine_profile: 'Bambu_P1S_0.4_nozzle.json',
         process_profile: 'FDM_0.2mm.json',
+        filament_profile: 'PLA_generic.json',
+        filament_diameter_mm: 1.75,
+        filament_density_g_cm3: 1.24,
+        effective_profile_sha256: SHA256
+    });
+    assert.deepEqual(resolveProfileMapper('orca')({
+        baseConfigFile: 'process.json',
+        orcaMachineConfigFile: 'machine.json',
+        orcaFilamentConfigFile: null,
+        filamentProfileMetadata: null,
+        effectiveProfileSha256: SHA256
+    }), {
+        machine_profile: 'machine.json',
+        process_profile: 'process.json',
+        filament_profile: null,
+        filament_diameter_mm: null,
+        filament_density_g_cm3: null,
         effective_profile_sha256: SHA256
     });
     assert.throws(
@@ -65,7 +86,27 @@ test('OpenAPI exposes engine identity, W2 digest, requested omissions, and live 
     assert.deepEqual(success.properties.profiles.properties.effective_profile_sha256, {
         type: 'string',
         pattern: '^[a-f0-9]{64}$',
-        description: 'Deterministic SHA-256 of fully resolved effective machine/process profile layers and server-owned native policy, excluding per-request layer-height and infill overrides.'
+        description: 'Deterministic SHA-256 of effective machine/process/filament profile layers, normalized material, and server-owned native policy, excluding per-request layer-height and infill overrides.'
+    });
+    assert.equal(success.properties.profiles.properties.filament_profile.nullable, true);
+    assert.ok(success.required.includes('hourly_rate'));
+    assert.deepEqual(success.properties.hourly_rate, {
+        type: 'number',
+        nullable: true,
+        description: 'Configured hourly rate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
+    });
+    assert.ok(success.properties.stats.required.includes('material_used_g'));
+    assert.deepEqual(success.properties.stats.properties.material_used_g, {
+        type: 'number',
+        nullable: true,
+        minimum: 0,
+        description: 'Filament mass parsed directly from the slicer marker; null when the selected native profile emits no mass marker. It is never derived from length.'
+    });
+    assert.ok(success.properties.stats.required.includes('estimated_price_huf'));
+    assert.deepEqual(success.properties.stats.properties.estimated_price_huf, {
+        type: 'number',
+        nullable: true,
+        description: 'Calculated estimate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
     });
 
     const validation = responses[422].content['application/json'].schema;
@@ -80,6 +121,7 @@ test('OpenAPI exposes engine identity, W2 digest, requested omissions, and live 
     assert.deepEqual(
         responses[500].content['application/json'].schema.properties.errorCode.enum,
         [
+            'SLICE_OUTPUT_UNPARSED',
             'INTERNAL_PROCESSING_ERROR',
             'QUEUE_INTERNAL_ERROR',
             'UPLOAD_STORAGE_ERROR',
@@ -190,6 +232,8 @@ test('success response preserves selected profile metadata after snapshot-backed
         infillPercentage: '20%',
         baseConfigFile: path.join('selected', 'FDM_0.2mm.json'),
         orcaMachineConfigFile: path.join('selected', sourceProfile),
+        orcaFilamentConfigFile: path.join('selected', 'PLA_generic.json'),
+        filamentProfileMetadata: { diameterMm: 1.75, densityGcm3: 1.24 },
         effectiveProfileSha256: SHA256,
         engineVersion: '2.3.1',
         transformOptions: { unit: 'mm', scalePercent: null },
@@ -210,6 +254,7 @@ test('success response preserves selected profile metadata after snapshot-backed
             print_time_seconds: 60,
             print_time_readable: '1m',
             material_used_m: 1,
+            material_used_g: 3.01,
             object_height_mm: 30
         },
         jobId: 'job-id',
@@ -218,8 +263,171 @@ test('success response preserves selected profile metadata after snapshot-backed
     assert.equal(response.profiles.machine_profile, sourceProfile);
     assert.equal(response.engine_version, '2.3.1');
     assert.equal(response.profiles.process_profile, 'FDM_0.2mm.json');
+    assert.equal(response.profiles.filament_profile, 'PLA_generic.json');
+    assert.equal(response.profiles.filament_diameter_mm, 1.75);
+    assert.equal(response.profiles.filament_density_g_cm3, 1.24);
+    assert.equal(response.stats.material_used_g, 3.01);
     assert.deepEqual(response.model_transform.rotation_deg, { x: 90, y: 0, z: 0 });
     assert.deepEqual(response.model_transform.final_dimensions_mm, { x: 10, y: 30, z: 20 });
     assert.equal(response.build_volume_limits_mm.source_profile, sourceProfile);
     assert.doesNotMatch(JSON.stringify(response), /orca-(?:base|machine)-profile-[a-f0-9]{16}/);
+});
+
+test('successful Orca slicing without a filament profile requires manual pricing', () => {
+    const response = buildSliceSuccessResponse({
+        engine: 'orca',
+        technology: 'FDM',
+        material: 'ABS',
+        infillPercentage: '20%',
+        baseConfigFile: path.join('selected', 'FDM_0.2mm.json'),
+        orcaMachineConfigFile: path.join('selected', 'Bambu_P1S_0.4_nozzle.json'),
+        orcaFilamentConfigFile: null,
+        filamentProfileMetadata: null,
+        effectiveProfileSha256: SHA256,
+        engineVersion: '2.3.1',
+        transformOptions: { unit: 'mm', scalePercent: null },
+        transformPlan: {
+            keepProportions: true,
+            requestedTargetSize: { x: null, y: null, z: null },
+            scale: { x: 1, y: 1, z: 1 },
+            rotationDeg: { x: 0, y: 0, z: 0 }
+        },
+        originalModelInfo: { x: 10, y: 20, z: 30 },
+        modelBoundsValidation: { dimensions: { x: 10, y: 20, z: 30 } },
+        buildVolumeLimits: {
+            min: { x: 0, y: 0, z: 0 },
+            max: { x: 256, y: 256, z: 256 },
+            sourceProfile: 'Bambu_P1S_0.4_nozzle.json'
+        },
+        stats: {
+            print_time_seconds: 60,
+            print_time_readable: '1m',
+            material_used_m: 1,
+            material_used_g: 3.01,
+            object_height_mm: 30
+        },
+        jobId: 'job-id',
+        artifactId: 'artifact-id'
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.profiles.filament_profile, null);
+    assert.equal(response.profiles.filament_diameter_mm, null);
+    assert.equal(response.profiles.filament_density_g_cm3, null);
+    assert.equal(response.profiles.effective_profile_sha256, SHA256);
+    assert.equal(response.hourly_rate, null);
+    assert.equal(response.stats.estimated_price_huf, null);
+    assert.equal(response.stats.print_time_seconds, 60);
+    assert.equal(response.stats.material_used_m, 1);
+    assert.equal(response.stats.material_used_g, 3.01);
+});
+
+test('successful Prusa slicing without a native mass marker stays explicit and manual', () => {
+    const response = buildSliceSuccessResponse({
+        engine: 'prusa',
+        technology: 'FDM',
+        material: 'PLA',
+        infillPercentage: '20%',
+        baseConfigFile: path.join('selected', 'FDM_0.2mm.ini'),
+        orcaMachineConfigFile: null,
+        orcaFilamentConfigFile: null,
+        filamentProfileMetadata: null,
+        effectiveProfileSha256: SHA256,
+        engineVersion: '2.8.1',
+        transformOptions: { unit: 'mm', scalePercent: null },
+        transformPlan: {
+            keepProportions: true,
+            requestedTargetSize: { x: null, y: null, z: null },
+            scale: { x: 1, y: 1, z: 1 },
+            rotationDeg: { x: 0, y: 0, z: 0 }
+        },
+        originalModelInfo: { x: 10, y: 20, z: 30 },
+        modelBoundsValidation: { dimensions: { x: 10, y: 20, z: 30 } },
+        buildVolumeLimits: {
+            min: { x: 0, y: 0, z: 0 },
+            max: { x: 256, y: 256, z: 256 },
+            sourceProfile: 'FDM_0.2mm.ini'
+        },
+        stats: {
+            print_time_seconds: 120,
+            print_time_readable: '0h 2m ',
+            material_used_m: 1.13704,
+            material_used_g: null,
+            object_height_mm: 30
+        },
+        jobId: 'job-id',
+        artifactId: 'artifact-id'
+    });
+
+    assert.equal(response.success, true);
+    assert.equal(response.profiles.prusa_profile, 'FDM_0.2mm.ini');
+    assert.equal(response.stats.material_used_m, 1.13704);
+    assert.equal(response.stats.material_used_g, null);
+    assert.equal(response.hourly_rate, null);
+    assert.equal(response.stats.estimated_price_huf, null);
+});
+
+test('SLA pricing remains independent of the FDM direct-mass guard', () => {
+    const response = buildSliceSuccessResponse({
+        engine: 'prusa',
+        technology: 'SLA',
+        material: 'Standard',
+        infillPercentage: '20%',
+        baseConfigFile: path.join('selected', 'SLA_0.05mm.ini'),
+        orcaMachineConfigFile: null,
+        orcaFilamentConfigFile: null,
+        filamentProfileMetadata: null,
+        effectiveProfileSha256: SHA256,
+        engineVersion: '2.8.1',
+        transformOptions: { unit: 'mm', scalePercent: null },
+        transformPlan: {
+            keepProportions: true,
+            requestedTargetSize: { x: null, y: null, z: null },
+            scale: { x: 1, y: 1, z: 1 },
+            rotationDeg: { x: 0, y: 0, z: 0 }
+        },
+        originalModelInfo: { x: 10, y: 20, z: 30 },
+        modelBoundsValidation: { dimensions: { x: 10, y: 20, z: 30 } },
+        buildVolumeLimits: {
+            min: { x: 0, y: 0, z: 0 },
+            max: { x: 120, y: 68, z: 150 },
+            sourceProfile: 'SLA_0.05mm.ini'
+        },
+        stats: {
+            print_time_seconds: 60,
+            print_time_readable: '0h 1m (Est.)',
+            material_used_m: 0,
+            material_used_g: 0,
+            material_used_ml: 1,
+            object_height_mm: 30
+        },
+        jobId: 'job-id',
+        artifactId: 'artifact-id'
+    });
+
+    assert.equal(response.hourly_rate, 1800);
+    assert.equal(response.stats.estimated_price_huf, 450);
+});
+
+test('strict metric drift maps to a bounded HTTP 500 without paths', () => {
+    const observed = { status: null, payload: null };
+    const res = {
+        status(value) { observed.status = value; return this; },
+        json(value) { observed.payload = value; return this; }
+    };
+    handleProcessingError(
+        new GcodeMetricsError('GCODE_TIME_UNPARSED', 'private input detail'),
+        res,
+        null,
+        null,
+        () => ''
+    );
+    assert.equal(observed.status, 500);
+    assert.deepEqual(observed.payload, {
+        success: false,
+        error: 'Slicer output metrics could not be parsed safely. No estimate was returned.',
+        errorCode: 'SLICE_OUTPUT_UNPARSED',
+        detailCode: 'GCODE_TIME_UNPARSED'
+    });
+    assert.equal(JSON.stringify(observed).includes('private input detail'), false);
 });

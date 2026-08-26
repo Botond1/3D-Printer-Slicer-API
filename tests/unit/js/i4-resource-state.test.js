@@ -93,6 +93,7 @@ test('technology-specific stats reject NaN, Infinity, negative, zero-required an
         print_time_seconds: 60,
         print_time_readable: '0h 1m',
         material_used_m: 0.01,
+        material_used_g: 0.03,
         material_used_ml: 0,
         object_height_mm: 20,
         estimated_price_huf: 0
@@ -104,11 +105,17 @@ test('technology-specific stats reject NaN, Infinity, negative, zero-required an
         });
     }
     assert.throws(() => validateSliceStats({ ...validFdm, material_used_m: 0 }, 'FDM', policy));
+    assert.throws(() => validateSliceStats({ ...validFdm, material_used_g: 0 }, 'FDM', policy));
+    assert.doesNotThrow(() => validateSliceStats({ ...validFdm, material_used_g: null }, 'FDM', policy));
+    assert.throws(() => validateSliceStats({ ...validFdm, material_used_g: NaN }, 'FDM', policy));
+    assert.throws(() => validateSliceStats({
+        ...validFdm, material_used_g: policy.MAX_MATERIAL_USED_GRAMS + 1
+    }, 'FDM', policy));
     assert.doesNotThrow(() => validateSliceStats({
-        ...validFdm, material_used_m: 0, material_used_ml: 1
+        ...validFdm, material_used_m: 0, material_used_g: 0, material_used_ml: 1
     }, 'SLA', policy));
     assert.throws(() => validateSliceStats({
-        ...validFdm, material_used_m: 0, material_used_ml: 0
+        ...validFdm, material_used_m: 0, material_used_g: 0, material_used_ml: 0
     }, 'SLA', policy));
 });
 

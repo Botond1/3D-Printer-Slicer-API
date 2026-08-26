@@ -17,6 +17,7 @@ const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { readProfileText, readProfileJson, readIniKeyValues } = require('./profile-readers');
 const { parseNumberLike } = require('./value-parsers');
 const { roundToThree } = require('./common');
+const { resolveOrcaFilamentConfigPath } = require('./filament-profile');
 
 /**
  * Resolve Orca process profile filename from explicit override, env, or defaults.
@@ -435,13 +436,17 @@ async function createRuntimeSlicerProfile(engine, baseConfigFile, technology, la
  * @param {'prusa'|'orca'} engine Slicer engine key.
  * @param {'FDM'|'SLA'} technology Active technology.
  * @param {number} layerHeight Requested layer height.
- * @param {{prusaProfile?: string | null, orcaMachineProfile?: string | null, orcaProcessProfile?: string | null}} profileOverrides Profile overrides.
- * @returns {{isValid: true, baseConfigFile: string, orcaMachineConfigFile: string | null} | {isValid: false, status: number, response: {success: false, error: string, errorCode: string}}} Selection result.
+ * @param {{prusaProfile?: string | null, orcaMachineProfile?: string | null, orcaProcessProfile?: string | null, orcaFilamentProfile?: string | null}} profileOverrides Profile overrides.
+ * @param {string|null} [material=null] Requested material key.
+ * @returns {{isValid: true, baseConfigFile: string, orcaMachineConfigFile: string | null, orcaFilamentConfigFile: string | null} | {isValid: false, status: number, response: {success: false, error: string, errorCode: string}}} Selection result.
  */
-function resolveProfileSelection(engine, technology, layerHeight, profileOverrides) {
+function resolveProfileSelection(engine, technology, layerHeight, profileOverrides, material = null) {
     const baseConfigFile = resolveConfigPath(engine, technology, layerHeight, profileOverrides);
     const orcaMachineConfigFile = engine === 'orca'
         ? resolveOrcaMachineConfigPath(profileOverrides)
+        : null;
+    const orcaFilamentConfigFile = engine === 'orca'
+        ? resolveOrcaFilamentConfigPath(material, profileOverrides)
         : null;
 
     if (!fs.existsSync(baseConfigFile)) {
@@ -471,7 +476,8 @@ function resolveProfileSelection(engine, technology, layerHeight, profileOverrid
     return {
         isValid: true,
         baseConfigFile,
-        orcaMachineConfigFile
+        orcaMachineConfigFile,
+        orcaFilamentConfigFile
     };
 }
 
@@ -490,6 +496,7 @@ function logEngineProfileSelection(engine) {
 
 module.exports = {
     resolveConfigPath,
+    resolveOrcaFilamentConfigPath,
     resolveOrcaMachineConfigPath,
     resolveBuildVolumeLimits,
     validateModelDimensionsAgainstLimits,

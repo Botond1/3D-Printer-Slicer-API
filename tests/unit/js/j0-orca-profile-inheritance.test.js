@@ -150,7 +150,7 @@ test('job snapshots passed downstream are flattened and immutable copies', async
         baseConfigFile: path.join(ORCA_ROOT, 'FDM_0.2mm.json'),
         orcaMachineConfigFile: path.join(ORCA_ROOT, 'Bambu_P1S_0.4_nozzle.json')
     }, workspace);
-    for (const filePath of Object.values(snapshots)) {
+    for (const filePath of Object.values(snapshots).filter(Boolean)) {
         const profile = JSON.parse(fs.readFileSync(filePath, 'utf8'));
         assert.equal(Object.hasOwn(profile, 'inherits'), false);
         assert.equal(path.dirname(filePath), root);

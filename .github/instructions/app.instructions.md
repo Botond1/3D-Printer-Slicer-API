@@ -4,7 +4,7 @@ applyTo: "app/**"
 
 # App Folder Instructions
 
-Last synchronized: 2026-08-25
+Last synchronized: 2026-08-26
 
 ## Responsibilities
 - app/server.js handles bootstrap, middleware, routes, docs, and static output serving.
@@ -16,7 +16,9 @@ Last synchronized: 2026-08-25
   `app/services/slice/orca-profile-inheritance.js`, snapshots in
   `app/services/slice/profile-snapshot.js`, effective-profile identity in
   `app/services/slice/profile-digest.js`, native version identity in
-  `app/services/slice/engine-version.js`, response, errors).
+  `app/services/slice/engine-version.js`, filament selection/metadata in
+  `app/services/slice/filament-profile.js`, strict FDM metrics in
+  `app/services/slice/gcode-metrics.js`, response, errors).
 - app/config/service-auth.js resolves immutable pricing/artifact/operations
   rings plus explicit `legacy`, finite `migration`, or final `principals` slice
   mode with shared compatibility and WooCommerce/LeadPilot rings.
@@ -48,8 +50,9 @@ Last synchronized: 2026-08-25
 - Keep OpenAPI's four requested omissions plus the already-live
   `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. The disjoint
   `MODEL_OUT_OF_PRINTER_BOUNDS` branch requires both dimension payloads. Keep
-  the complete live slice-500 enum: `INTERNAL_PROCESSING_ERROR`,
-  `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
+  the complete live slice-500 enum: `SLICE_OUTPUT_UNPARSED`,
+  `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
+  and `INTERNAL_SERVER_ERROR`.
 - Atomically verify both selected engine versions from bounded `--help` output
   before listen; requests read the all-success initialized map. The startup
   module has exact-image proof and uses a telemetry-disabled runner that cannot
@@ -59,9 +62,20 @@ Last synchronized: 2026-08-25
   Focused command/digest contracts and final exact-image HTTP transform/final-
   dimensions E2E pass for both principals; the exact local code/image identity
   is recorded in the J0 evidence document.
-- Filament-profile identity and `material_used_g` are a separate W8 prerequisite
-  classified `BLOCKED_OWNER_INPUT / NOT_STARTED` until the owner supplies the
-  required Bambu reference profile fields.
+- Preserve J1 Orca filament behavior: repository PLA/PETG selection, exact-byte
+  job snapshot, native machine-process-filament order, digest-covered normalized
+  material plus filament JSON or explicit null, and nullable public basename/
+  diameter/density. OpenAPI requires nullable `material_used_g`, populated only
+  by a direct G-code marker and never derived from length. Strict FDM requires
+  positive time and length; selected-profile Orca also requires positive grams,
+  with missing/drifted mass returning 500 `SLICE_OUTPUT_UNPARSED`. Current Prusa
+  FDM and profile-less Orca preserve null grams, `hourly_rate`, and
+  `stats.estimated_price_huf`; no automatic price may be calculated.
+- Keep W8 live calibration `BLOCKED_OWNER_INPUT`: the retained P1S and new H2D
+  candidates are generic Marlin profiles, not verified native Bambu profiles.
+  Require real machine/process references, owner-selected models, and owner-
+  approved acceptance thresholds; repository evidence grants no deployment or
+  public-route authority.
 - Keep endpoint contracts stable:
   - POST /prusa/slice
   - POST /orca/slice

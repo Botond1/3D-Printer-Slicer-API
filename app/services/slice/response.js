@@ -68,12 +68,37 @@ function calculateSlicePricing(technology, material, stats) {
     };
 }
 
-const PROFILE_RESPONSE_MAPPERS = Object.freeze({
-    orca: (context) => ({
+function mapOrcaProfileResponse(context) {
+    const filamentProfile = context.orcaFilamentConfigFile
+        ? path.basename(context.orcaFilamentConfigFile)
+        : null;
+    const metadata = context.filamentProfileMetadata;
+    if (filamentProfile === null) {
+        if (metadata !== null && metadata !== undefined) {
+            throw new Error('Filament metadata exists without a selected Orca filament profile.');
+        }
+    } else if (
+        !metadata
+        || !Number.isFinite(metadata.diameterMm)
+        || metadata.diameterMm <= 0
+        || !Number.isFinite(metadata.densityGcm3)
+        || metadata.densityGcm3 <= 0
+    ) {
+        throw new Error('Selected Orca filament profile metadata is unavailable.');
+    }
+
+    return {
         machine_profile: path.basename(context.orcaMachineConfigFile),
         process_profile: path.basename(context.baseConfigFile),
+        filament_profile: filamentProfile,
+        filament_diameter_mm: metadata?.diameterMm ?? null,
+        filament_density_g_cm3: metadata?.densityGcm3 ?? null,
         effective_profile_sha256: requireEffectiveProfileSha256(context.effectiveProfileSha256)
-    }),
+    };
+}
+
+const PROFILE_RESPONSE_MAPPERS = Object.freeze({
+    orca: mapOrcaProfileResponse,
     prusa: (context) => ({
         prusa_profile: path.basename(context.baseConfigFile),
         effective_profile_sha256: requireEffectiveProfileSha256(context.effectiveProfileSha256)
@@ -116,6 +141,8 @@ function resolveProfileMapper(engine) {
  * material: string,
  * infillPercentage: string,
  * orcaMachineConfigFile: string | null,
+ * orcaFilamentConfigFile: string | null,
+ * filamentProfileMetadata: {diameterMm: number, densityGcm3: number} | null,
  * baseConfigFile: string,
  * effectiveProfileSha256: string,
  * engineVersion: string,
@@ -124,7 +151,7 @@ function resolveProfileMapper(engine) {
  * originalModelInfo: {x: number, y: number, z: number},
  * modelBoundsValidation: {dimensions: {x: number, y: number, z: number}},
  * buildVolumeLimits: {min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string},
- * stats: {print_time_seconds: number, print_time_readable: string, material_used_m: number, object_height_mm: number, estimated_price_huf: number}
+ * stats: {print_time_seconds: number, print_time_readable: string, material_used_m: number, material_used_g: number|null, object_height_mm: number, estimated_price_huf: number|null}
  * }} context Response context.
  * @returns {Record<string, unknown>} API response payload.
  */
@@ -142,8 +169,13 @@ function buildSliceSuccessResponse(context) {
         stats
     } = context;
 
-    const { hourlyRate, totalPrice } = calculateSlicePricing(technology, material, stats);
     const profiles = resolveProfileMapper(engine)(context);
+    const requiresManualPricing = (technology === 'FDM' &&
+        (!Number.isFinite(stats.material_used_g) || stats.material_used_g <= 0)) ||
+        (engine === 'orca' && profiles.filament_profile === null);
+    const { hourlyRate, totalPrice } = requiresManualPricing
+        ? { hourlyRate: null, totalPrice: null }
+        : calculateSlicePricing(technology, material, stats);
 
     return {
         success: true,
@@ -189,6 +221,7 @@ function buildSliceSuccessResponse(context) {
 module.exports = {
     buildSliceSuccessResponse,
     calculateSlicePricing,
+    mapOrcaProfileResponse,
     requireEngineVersion,
     resolveProfileMapper,
     resolvePricingStrategy
