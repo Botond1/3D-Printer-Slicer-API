@@ -9,6 +9,18 @@ OWNER_NAME_DENYLIST_NOT_VERIFIED;
 J1_LIVE_BAMBU_CALIBRATION_BLOCKED_OWNER_INPUT;
 NO_PUSH_NO_REGISTRY_WRITE_NO_DEPLOY_NO_PUBLIC_ROUTE`.
 
+## J1C corrective addendum
+
+Later container-level diagnosis found that the affected Prusa output contained
+a recognized direct grams marker with value `0.00`, rather than no marker. The
+J1C focused correction treats that recognized zero as null/manual only when
+grams are optional, while selected-profile required zero remains
+`GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`. This supersedes only
+the J1 claim about the current Prusa marker shape; the local commands, outputs,
+privacy evidence, and all other J1 boundaries below remain historical evidence.
+See
+[`j1c-slice-contract-corrective.md`](j1c-slice-contract-corrective.md).
+
 ## Authority, provenance, and boundary
 
 This record covers the local J1 harvest on branch
@@ -119,9 +131,11 @@ is never calculated from length, diameter, or density.
 - Profile-less Orca remains successful with null filament metadata, null mass,
   null hourly rate, and null estimated price. Its digest is distinct from the
   selected-profile digest.
-- The current Prusa FDM profile emits no direct grams marker. It therefore
-  returns null mass/rate/price for manual pricing, never zero or a derived
-  value. Positive time and length remain mandatory.
+- J1 originally classified the current Prusa FDM output as having no direct
+  grams marker. J1C supersedes that marker-shape claim: a recognized `0.00 g`
+  marker on the optional-mass path returns null mass/rate/price for manual
+  pricing, never zero or a derived value. Positive time and length remain
+  mandatory.
 - SLA pricing remains independent of the FDM direct-mass guard.
 - Selected PLA/PETG profile metadata must contain exactly one matching material
   type and exactly one positive used diameter and density. Those exact values

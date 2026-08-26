@@ -67,15 +67,21 @@ Last synchronized: 2026-08-26
   material plus filament JSON or explicit null, and nullable public basename/
   diameter/density. OpenAPI requires nullable `material_used_g`, populated only
   by a direct G-code marker and never derived from length. Strict FDM requires
-  positive time and length; selected-profile Orca also requires positive grams,
-  with missing/drifted mass returning 500 `SLICE_OUTPUT_UNPARSED`. Current Prusa
-  FDM and profile-less Orca preserve null grams, `hourly_rate`, and
-  `stats.estimated_price_huf`; no automatic price may be calculated.
+  positive time and length. Current Prusa FDM and profile-less Orca map a
+  missing or recognized non-positive optional grams marker to null/manual,
+  never zero. Selected-profile Orca still requires positive grams; recognized
+  zero remains `GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`, and
+  marker drift remains fail closed. J1C focused evidence is 19/19 and the
+  complete local aggregate passes 2212/2212 JavaScript tests plus 84 Python
+  tests with one expected Windows POSIX-permission skip; exact-image behavior
+  remains unverified.
 - Keep W8 live calibration `BLOCKED_OWNER_INPUT`: the retained P1S and new H2D
   candidates are generic Marlin profiles, not verified native Bambu profiles.
-  Require real machine/process references, owner-selected models, and owner-
-  approved acceptance thresholds; repository evidence grants no deployment or
-  public-route authority.
+  The audited vendor set is not self-contained: referenced include templates,
+  H2D-compatible and 0.1/0.3 BBL processes, vendor filament chains, and material
+  fields are missing, while redistribution/license and exact Orca 2.3.1
+  compatibility are unverified. No vendor/resolver/runtime change was made;
+  repository evidence grants no deployment or public-route authority.
 - Keep endpoint contracts stable:
   - POST /prusa/slice
   - POST /orca/slice
@@ -116,6 +122,10 @@ Last synchronized: 2026-08-26
 - Do not auto-heal invalid geometry.
 - Preserve public minimal readiness and operations-only detailed reasons/metrics.
   Keep /health/detailed fresh and /ready plus /operations/readiness cached.
+- J1C capability readiness is proposal-only: keep `/health` cheap and place any
+  future native slicing-capability state on public `/ready`. Require separate
+  startup-smoke, Docker/VPS, typed per-engine failure, anti-DoS, and recovery/
+  hysteresis evidence before implementation.
 - Never add request/job/artifact/customer values as metric labels.
 - Preserve fail-closed proxy CIDR/loopback compilation and safe request-ID validation.
 - I6 validation requires an internal-only API with no host port/default route,

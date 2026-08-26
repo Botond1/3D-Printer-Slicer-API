@@ -40,15 +40,19 @@ FDM output is parsed by `app/services/slice/gcode-metrics.js`. The strict path
 requires known positive print-time and filament-length markers. OpenAPI requires
 `stats.material_used_g`, but the field is nullable: a non-null value must come
 from a direct G-code mass marker and is never calculated from length or density.
-The current Prusa FDM profile emits no direct grams marker, so the successful
-Prusa response returns `material_used_g:null`, `hourly_rate:null`, and
+J1C supersedes the earlier claim that the affected Prusa FDM output had no
+direct marker: container diagnosis found a recognized `0.00 g` marker. When
+grams are optional, a missing or recognized non-positive marker returns
+`material_used_g:null`, `hourly_rate:null`, and
 `stats.estimated_price_huf:null` for manual pricing; it never substitutes zero.
 
 Orca with a selected repository filament profile additionally requires a known
 positive direct mass marker. Multiple extruder gram values are summed. Missing,
 malformed, ambiguous, or non-positive required Orca mass becomes bounded
-`500 SLICE_OUTPUT_UNPARSED`; above-policy mass is also refused. Profile-less
-Orca accepts the absent mass only as null and remains on the manual-pricing path.
+`500 SLICE_OUTPUT_UNPARSED`; recognized zero is specifically
+`GCODE_FILAMENT_NOT_POSITIVE`. Above-policy mass is also refused. Profile-less
+Orca accepts missing or recognized non-positive mass only as null and remains on
+the manual-pricing path.
 
 `SLICE_STRICT_GCODE_METRICS=true` is the default when the variable is omitted.
 The explicit value `false` exists only as a bounded drift-diagnosis switch and
@@ -62,8 +66,9 @@ visible without changing the public nullable contract.
 Focused regression coverage:
 
 - known Orca and Prusa time/length markers and direct-mass variants;
-- current Prusa missing-mass success with null mass/rate/price;
-- selected-profile Orca missing-mass failure and profile-less Orca null/manual;
+- current Prusa missing/recognized-zero success with null mass/rate/price;
+- selected-profile Orca missing/recognized-zero failure and profile-less Orca
+  null/manual;
 - multiple-extruder summation;
 - malformed and drifted markers;
 - strict default when the environment variable is absent;
@@ -127,10 +132,31 @@ volumes do not establish Bambu vendor motion behavior. Material-mass estimates
 may remain useful for development, but time calibration against real Bambu
 Studio cannot be qualified with them.
 
-The owner/operator must supply and approve the exact OrcaSlicer 2.3.1 vendor
-machine profiles and their inherited chains before W8. See
-`configs/orca/H2D-PROFIL-TODO.md`. This is `BLOCKED_OWNER_INPUT`; J1 must not
-invent motion, firmware, acceleration, or capacity values.
+A bounded vendor-input audit parsed all 11 supplied JSON files, matched all 11
+declared hashes, and derived candidate volumes P1S 256 x 256 x 250 mm and H2D
+350 x 320 x 325 mm. The set is not self-contained: 11 referenced include
+templates, an H2D-compatible process, 0.1/0.3 BBL processes, vendor filament
+profiles and parent chains, and required density/diameter/material fields are
+missing. Redistribution/license permission and exact OrcaSlicer 2.3.1 runtime
+compatibility are also unverified.
+
+No vendor file, resolver, runtime setting, or build-volume constant was changed.
+The generic repository profiles remain and the selected-filament Orca
+incompatibility remains `NOT FIXED`. W8 is still `BLOCKED_OWNER_INPUT`; see
+`configs/orca/H2D-PROFIL-TODO.md`. J1C must not invent motion, firmware,
+acceleration, capacity, or material values.
+
+## Capability-readiness proposal boundary
+
+J1C adds no readiness code. `GET /health` remains cheap public liveness and
+future slicing-capability state belongs on public `GET /ready`. A meaningful
+startup gate needs at least Prusa and selected-filament Orca native probes,
+contained scratch/process cleanup, readiness cache/state and admission
+integration, and Docker/VPS evidence. Docker continues to check `/health`;
+Traefik already consumes `/ready`, so a future `/ready` 503 may withhold routing
+without making Docker unhealthy. Rolling degradation needs typed per-engine
+capability failures, anti-DoS rules, and bounded recovery/hysteresis; raw last-N
+HTTP 5xx is unsafe. This is proposal-only and belongs to a separate wave.
 
 ## Privacy-safe calibration runner
 

@@ -189,13 +189,19 @@ function parseGcodeMetricsStrict(content, options = {}) {
 
     const length = matchOrdered(text, FILAMENT_LENGTH_PATTERNS, 'toMillimeters');
     const grams = matchOrdered(text, FILAMENT_GRAM_PATTERNS, 'toGrams');
-    if (grams === null) {
-        if (requireFilamentGrams) {
+    if (grams === null || grams.value <= 0) {
+        if (requireFilamentGrams && grams === null) {
             throw new GcodeMetricsError(
                 GCODE_METRIC_ERROR_CODES.FILAMENT_UNPARSED,
                 'No known filament-mass marker matched the slicer output ' +
                 `(expected one of: ${FILAMENT_GRAM_PATTERNS.map((pattern) => pattern.id).join(', ')}). ` +
                 'Grams is the billing unit — refusing to report 0 g.'
+            );
+        }
+        if (requireFilamentGrams) {
+            throw new GcodeMetricsError(
+                GCODE_METRIC_ERROR_CODES.FILAMENT_NOT_POSITIVE,
+                `The filament-mass marker "${grams.source}" reported ${grams.value} g.`
             );
         }
         return {
@@ -206,12 +212,6 @@ function parseGcodeMetricsStrict(content, options = {}) {
             filament_used_mm: length === null ? null : length.value,
             filament_used_mm_source: length === null ? null : length.source
         };
-    }
-    if (grams.value <= 0) {
-        throw new GcodeMetricsError(
-            GCODE_METRIC_ERROR_CODES.FILAMENT_NOT_POSITIVE,
-            `The filament-mass marker "${grams.source}" reported ${grams.value} g.`
-        );
     }
 
     return {

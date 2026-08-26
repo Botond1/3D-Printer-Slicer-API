@@ -17,6 +17,39 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
+## Current J1C slice-contract corrective checkpoint
+
+Current classification:
+`J1C_RECOGNIZED_ZERO_MASS_CORRECTION_LOCAL_PASS;
+J1C_VENDOR_PROFILE_INTEGRATION_BLOCKED_MISSING_SELF_CONTAINED_INPUT;
+J1C_CAPABILITY_READINESS_PROPOSAL_ONLY; CONTAINER_AND_HOSTED_NOT_VERIFIED`.
+
+Focused 19/19 evidence proves that optional direct grams map a recognized
+`0.00 g` marker to null/manual pricing while positive time and length remain
+required. When selected-profile Orca requires grams, the same zero remains
+`GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`; marker drift still
+fails closed. The complete local aggregate passes 2212/2212 JavaScript tests and
+84 Python tests with one expected Windows POSIX-permission skip; syntax covers
+251 JavaScript and 39 Python files, and the production dependency audit reports
+zero vulnerabilities. Exact-image/container and hosted exact-SHA behavior remain
+unverified.
+
+A bounded 11-file vendor audit parsed all JSON, matched 11/11 declared hashes,
+and derived P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm. The set is not
+self-contained: referenced include templates, H2D-compatible and 0.1/0.3 BBL
+processes, vendor filament/parent chains, and required material fields are
+missing; redistribution/license and exact Orca 2.3.1 compatibility are
+unverified. No vendor, resolver, or runtime change was made, the generic
+profiles remain, and the selected-filament Orca defect remains not fixed.
+
+Capability readiness is a proposal only. Public `GET /health` remains cheap
+liveness; future capability state belongs on public `GET /ready`. Docker still
+checks `/health`, while Traefik already consumes `/ready`, so a future `/ready`
+503 could withhold routing without making Docker unhealthy. Startup native
+smokes and typed rolling per-engine failure/recovery require a separate wave.
+See
+[`docs/codex/evidence/j1c-slice-contract-corrective.md`](docs/codex/evidence/j1c-slice-contract-corrective.md).
+
 ## Current I12 Wave 3 Hostinger qualification checkpoint
 
 Current classification:

@@ -171,15 +171,18 @@ This document describes the application runtime inside app/.
     reads exact positive diameter/density from the selected snapshot.
 - app/services/slice/gcode-metrics.js
   - Strictly parses bounded positive FDM time and filament length. Direct grams
-    are nullable for Prusa/profile-less Orca, but mandatory for Orca with a
-    selected filament profile; mass is never derived from length.
+    are nullable for Prusa/profile-less Orca: a missing or recognized non-
+    positive optional marker becomes null, never zero. Grams remain mandatory
+    and positive for Orca with a selected filament profile; mass is never
+    derived from length.
 - app/services/slice/input-processing.js
   - Converts supported model/CAD inputs to STL via Python scripts.
   - Runs orientation optimization with graceful fallback.
 - app/services/slice/model-stats.js
   - Reads model dimensions and parses slicer outputs for print-time/material
     length and nullable direct grams. `SLICE_STRICT_GCODE_METRICS` defaults to
-    true; missing required Orca mass maps to `SLICE_OUTPUT_UNPARSED`.
+    true; missing required Orca mass maps to `SLICE_OUTPUT_UNPARSED`, and a
+    recognized required zero maps through `GCODE_FILAMENT_NOT_POSITIVE`.
   - Builds SLA print-time estimates when metadata is absent.
 - app/services/slice/native-runtime-status.js
   - Owns the process-local fail-closed native-runtime quarantine and publishes
@@ -295,20 +298,31 @@ This document describes the application runtime inside app/.
   `filament_profile`, `filament_diameter_mm`, and
   `filament_density_g_cm3`. OpenAPI requires nullable `material_used_g`, which
   must be direct and never length-derived. Strict FDM requires positive time and
-  length; selected-profile Orca also requires positive grams or returns 500
-  `SLICE_OUTPUT_UNPARSED`. Current Prusa FDM and profile-less Orca keep grams,
-  `hourly_rate`, and `stats.estimated_price_huf` null for manual pricing.
+  length. Current Prusa FDM and profile-less Orca map a missing or recognized
+  non-positive optional grams marker to null/manual, never zero. Selected-
+  profile Orca still requires positive grams; recognized zero remains
+  `GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`, and marker drift
+  remains fail closed. J1C focused evidence is 19/19 and the complete local
+  aggregate passes 2212/2212 JavaScript tests plus 84 Python tests with one
+  expected Windows POSIX-permission skip; exact-image behavior remains
+  unverified.
 - Keep W8 live calibration `BLOCKED_OWNER_INPUT`: the retained P1S and new H2D
   candidates identify as generic Marlin profiles, not verified native Bambu
-  profiles. Real machine/process references, owner-selected models, and owner-
-  approved acceptance thresholds are required; no deploy or public route is
-  authorized by the repository contract.
+  profiles. The audited vendor set is not self-contained: referenced include
+  templates, H2D-compatible and 0.1/0.3 BBL processes, vendor filament chains,
+  and material fields are missing, while redistribution/license and exact Orca
+  2.3.1 compatibility are unverified. No vendor/resolver/runtime change was
+  made, and no deploy or public route is authorized by the repository contract.
 - No-Origin service requests are allowed; browser-origin protected requests
   must match only their exact audience allowlist.
 - /prusa/slice allows FDM and SLA based on layerHeight.
 - /orca/slice is FDM-only and profile compatibility aware.
 - /orca/slice resolves generated output from per-request isolated output directory before final filename alignment.
 - /health is liveness. /ready is public minimal readiness only.
+- J1C capability readiness is proposal-only: keep `/health` cheap, place future
+  native slicing capability on public `/ready`, and require separate startup-
+  smoke, Docker/VPS, typed per-engine failure, anti-DoS, and recovery/hysteresis
+  evidence before implementation.
 - /health/detailed, /operations/readiness, and /operations/metrics require the
   operations key. Readiness reason codes are stable and metrics labels are fixed.
 - /health/detailed uses fresh readiness probes; /ready and

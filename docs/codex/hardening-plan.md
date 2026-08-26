@@ -1,11 +1,12 @@
 # Hardening plan
 
-## J1 calibration harvest over the J0 W2/W3 checkpoint
+## J1C corrective over the J1 calibration checkpoint
 
 Status:
-`J1_REPOSITORY_FILAMENT_AND_STRICT_GCODE_METRICS_IMPLEMENTED_FOCUSED_TESTED;
-J1_LIVE_BAMBU_CALIBRATION_BLOCKED_OWNER_INPUT;
-NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_FINAL_EXACT_IMAGE_BUILD_AND_E2E_PASS`.
+`J1C_RECOGNIZED_ZERO_MASS_CORRECTION_LOCAL_PASS;
+J1C_VENDOR_PROFILE_INTEGRATION_BLOCKED_MISSING_SELF_CONTAINED_INPUT;
+J1C_CAPABILITY_READINESS_PROPOSAL_ONLY;
+CONTAINER_AND_HOSTED_NOT_VERIFIED; NO_EXTERNAL_PRODUCTION_AUTHORITY`.
 
 Implemented local candidate exits:
 
@@ -113,12 +114,16 @@ Implemented local candidate exits:
 13. Strict FDM G-code metric parsing is default-on through
     `SLICE_STRICT_GCODE_METRICS=true` and requires positive time and filament
     length. OpenAPI requires nullable `material_used_g`; it is populated only by
-    a direct G-code marker and never derived from length. The current Prusa FDM
-    profile emits no grams marker, so mass/rate/price remain null for manual
-    pricing. Selected-profile Orca still requires positive direct grams within
-    `MAX_MATERIAL_USED_GRAMS`; missing or drifted mass returns bounded HTTP 500
-    `SLICE_OUTPUT_UNPARSED`. Profile-less Orca remains null/manual. Focused
-    positive, nullable, and drift controls pass.
+    a direct G-code marker and never derived from length. J1C supersedes the
+    earlier no-marker assumption: a missing or recognized non-positive marker
+    on an optional-mass path becomes null/manual, never zero. Selected-profile
+    Orca still requires positive direct grams within
+    `MAX_MATERIAL_USED_GRAMS`; recognized zero remains
+    `GCODE_FILAMENT_NOT_POSITIVE`, and missing or drifted mass returns bounded
+    HTTP 500 `SLICE_OUTPUT_UNPARSED`. Profile-less Orca remains null/manual. The
+    focused correction passes 19/19. The complete local aggregate passes
+    2212/2212 JavaScript tests and 84 Python tests with one expected Windows
+    POSIX-permission skip; exact-image/container gates remain unverified.
 
 Remaining gates:
 
@@ -136,16 +141,28 @@ Remaining gates:
    every configured previous, an owner-approved removal deadline, and post-
    removal rejection. External production activation is outside repository
    evidence and authority;
-3. keep W8 live calibration `BLOCKED_OWNER_INPUT`. The retained P1S and new H2D
-   candidates identify as generic Marlin profiles, not verified native Bambu
-   profiles. Require real P1S/H2D machine/process references, approved material/
-   spool references, ten owner-selected calibration models, and owner-approved
-   acceptance thresholds before any live run. J1 repository and focused-test
-   evidence grants no deploy, route activation, customer traffic, or production
-   calibration authority.
+3. keep W8 live calibration
+   `BLOCKED_MISSING_SELF_CONTAINED_VENDOR_INPUT`. The bounded audit parsed 11/11
+   supplied JSON files, matched 11/11 declared hashes, and derived P1S
+   256 x 256 x 250 mm plus H2D 350 x 320 x 325 mm, but 11 referenced include
+   templates, H2D-compatible and 0.1/0.3 BBL processes, vendor filament/parent
+   chains, and required material fields are missing. Redistribution/license and
+   exact Orca 2.3.1 compatibility are unverified. Do not copy vendor files or
+   change the resolver/runtime until the set is complete, redistributable, and
+   exact-runtime qualified; the generic profiles and unresolved Orca
+   incompatibility remain;
+4. treat capability readiness as a separate proposal wave. Keep public
+   `/health` cheap liveness and place future native capability state on public
+   `/ready`. Require at least Prusa and selected-filament Orca startup probes,
+   contained cleanup, readiness state/cache/admission integration, Docker/VPS
+   evidence, and typed per-engine rolling failure with anti-DoS and recovery/
+   hysteresis. Docker continues to check `/health` while Traefik consumes
+   `/ready`; raw last-N HTTP 5xx must not drive readiness.
 
 See the J1 local branch-harvest evidence in
 [`evidence/j1-calibration-branch-harvest.md`](evidence/j1-calibration-branch-harvest.md)
+and the partial J1C correction in
+[`evidence/j1c-slice-contract-corrective.md`](evidence/j1c-slice-contract-corrective.md)
 and the historical J0 contract in
 [`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).
 

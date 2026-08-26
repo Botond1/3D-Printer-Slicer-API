@@ -17,6 +17,22 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
 
 ## J1 calibration harvest over the J0 W2/W3 public contract
 
+- J1C is `PARTIAL / BLOCKED`. Focused 19/19 evidence proves that a recognized
+  `0.00 g` marker becomes null/manual only when grams are optional, while
+  positive time and length remain required. Selected-profile required zero
+  remains `GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`, and marker
+  drift remains fail closed. The complete local aggregate passes 2212/2212
+  JavaScript tests and 84 Python tests with one expected Windows POSIX-
+  permission skip; exact-image/container and hosted behavior remain unverified.
+- A bounded 11-file vendor audit parsed all JSON, matched 11/11 declared hashes,
+  and derived P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm. Integration is
+  blocked by 11 missing include templates, absent H2D-compatible and 0.1/0.3
+  BBL processes, absent vendor filament/parent chains and material fields, and
+  unverified redistribution/license plus exact Orca 2.3.1 compatibility. No
+  vendor/resolver/runtime change was made; generic profiles remain and the Orca
+  incompatibility is not fixed. Capability readiness is proposal-only: keep
+  public `/health` cheap liveness and place future capability state on public
+  `/ready`; see `docs/codex/evidence/j1c-slice-contract-corrective.md`.
 - Every successful Prusa and Orca response requires lowercase
   `profiles.effective_profile_sha256`. After selection, bounded canonical-realpath
   Prusa bytes and the flattened, versioned repository copy of the allowlisted
@@ -31,10 +47,10 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   Successful Orca payloads expose nullable filament basename plus actual
   diameter/density. OpenAPI requires nullable `stats.material_used_g`; it may
   contain only a direct G-code mass marker and is never derived from filament
-  length. Strict FDM output requires positive time and length. The current Prusa
-  FDM profile has no direct grams marker, so its successful response returns
-  `material_used_g:null`, `hourly_rate:null`, and
-  `stats.estimated_price_huf:null`. Orca with a selected filament profile also
+  length. Strict FDM output requires positive time and length. On the optional-
+  mass Prusa path, a missing or recognized non-positive direct grams marker
+  returns `material_used_g:null`, `hourly_rate:null`, and
+  `stats.estimated_price_huf:null`; zero is never published. Orca with a selected filament profile also
   requires positive direct grams and maps missing/drifted mass to HTTP 500
   `SLICE_OUTPUT_UNPARSED`; profile-less Orca remains null/manual.
 - Prusa INI digest identity is case-sensitive for section/key names and exact

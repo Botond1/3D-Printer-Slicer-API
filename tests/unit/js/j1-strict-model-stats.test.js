@@ -45,22 +45,50 @@ test('bounded output parsing publishes direct length and gram markers side by si
     assert.equal(stats.material_used_g_source, 'filament_used_g');
 });
 
-test('Prusa output without a native mass marker remains successful but explicitly manual', async (t) => {
+test('Prusa output with positive length and a zero native mass marker remains explicitly manual', async (t) => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'j1-prusa-direct-mass-'));
     t.after(() => fs.rm(root, { recursive: true, force: true }));
     const output = path.join(root, 'result.gcode');
     await fs.writeFile(output, [
-        '; estimated printing time (normal mode) = 2m',
-        '; filament used [mm] = 1137.04',
+        'M73 P0 R2',
+        '; filament used [mm] = 1359.69',
+        '; filament used [cm3] = 3.27',
+        '; total filament used [g] = 0.00',
         'G1 X1 E1',
         ''
     ].join('\n'));
 
     const stats = await parseOutputDetailed(output, 'FDM', 0.2, 10, 'prusa');
     assert.equal(stats.print_time_seconds, 120);
-    assert.equal(stats.material_used_m, 1.13704);
+    assert.equal(stats.material_used_m, 1.35969);
     assert.equal(stats.material_used_g, null);
     assert.equal(stats.material_used_g_source, null);
+});
+
+test('selected Orca filament qualification rejects the same zero native mass marker', async (t) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'j1-orca-zero-direct-mass-'));
+    t.after(() => fs.rm(root, { recursive: true, force: true }));
+    const output = path.join(root, 'result.gcode');
+    await fs.writeFile(output, [
+        'M73 P0 R2',
+        '; filament used [mm] = 1359.69',
+        '; filament used [cm3] = 3.27',
+        '; total filament used [g] = 0.00',
+        ''
+    ].join('\n'));
+
+    await assert.rejects(
+        parseOutputDetailed(
+            output,
+            'FDM',
+            0.2,
+            10,
+            'orca',
+            { requireFilamentGrams: true }
+        ),
+        (error) => error?.errorCode === 'SLICE_OUTPUT_UNPARSED' &&
+            error?.code === 'GCODE_FILAMENT_NOT_POSITIVE'
+    );
 });
 
 test('Orca filament qualification still rejects a missing direct mass marker', async (t) => {

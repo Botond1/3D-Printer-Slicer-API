@@ -155,18 +155,39 @@ calculate an automatic price. Strict FDM parsing is default-on through
 `SLICE_STRICT_GCODE_METRICS=true` and requires positive time and filament-length
 markers. OpenAPI requires the nullable `stats.material_used_g` field, which is
 populated only from a direct G-code mass marker and is never derived from length.
-The current Prusa FDM profile emits no direct mass marker, so successful Prusa
-FDM output returns `material_used_g:null`, `hourly_rate:null`, and
-`stats.estimated_price_huf:null` for manual pricing. Orca with a selected
-filament profile still requires positive direct grams; missing or drifted mass
-returns bounded HTTP 500 `SLICE_OUTPUT_UNPARSED`. Profile-less Orca remains on
-the null/manual-pricing path. Focused deterministic tests cover these branches.
+A later container diagnosis showed that the affected Prusa FDM output contains
+a recognized `0.00 g` marker, superseding the earlier no-marker assumption. J1C
+maps a missing or recognized non-positive optional marker to
+`material_used_g:null`, `hourly_rate:null`, and
+`stats.estimated_price_huf:null` for manual pricing while keeping positive time
+and length mandatory; zero is never published. Orca with a selected filament
+profile still requires positive direct grams: recognized zero remains
+`GCODE_FILAMENT_NOT_POSITIVE` -> `SLICE_OUTPUT_UNPARSED`, and missing/drifted
+required markers remain bounded HTTP 500. Profile-less Orca remains on the
+null/manual-pricing path. The J1C focused correction passes 19/19 tests; the
+complete local aggregate passes 2212/2212 JavaScript tests and 84 Python tests
+with one expected Windows POSIX-permission skip. Exact-image/container and
+hosted behavior remain unverified.
 
 This candidate is not deployed or a public-activation result. The retained P1S
 and new H2D candidates identify as generic Marlin profiles, not verified native
-Bambu profiles. Real P1S/H2D machine/process references, approved material/spool
-references, ten owner-selected calibration models, and owner-approved acceptance
-thresholds are required, so W8 live calibration remains `BLOCKED_OWNER_INPUT`.
+Bambu profiles. A bounded audit parsed 11/11 supplied JSON files, matched 11/11
+declared hashes, and derived P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm,
+but the set is not self-contained: 11 include templates, H2D-compatible and
+0.1/0.3 BBL processes, vendor filament/parent chains, and required material
+fields are missing; redistribution/license and exact Orca 2.3.1 compatibility
+are unverified. No vendor/resolver/runtime change was made, the generic profiles
+remain, and the selected-filament Orca incompatibility is not fixed. W8 live
+calibration remains `BLOCKED_OWNER_INPUT`.
+
+Capability readiness is a proposal only. Public `GET /health` remains cheap
+liveness, and future slicing-capability state belongs on public `GET /ready`.
+Docker continues to check `/health`, while Traefik already consumes `/ready`, so
+a future capability-driven 503 can withhold routing without making Docker
+unhealthy. Startup Prusa plus selected-filament Orca probes and typed rolling
+per-engine failure/recovery need a separate implementation and Docker/VPS
+evidence; raw last-N HTTP 5xx is not a safe readiness rule. See
+[`docs/codex/evidence/j1c-slice-contract-corrective.md`](docs/codex/evidence/j1c-slice-contract-corrective.md).
 
 ### I12 Hostinger production-qualification checkpoint
 
@@ -491,10 +512,11 @@ Uses `prusa-slicer`.
   - optional X/Y/Z rotation
 - Validates final model size against selected printer profile limits (`min`/`max` build volume)
 - You can override profile file with `printerProfile` from `configs/prusa`
-- The current Prusa FDM profile has no direct G-code grams marker. Its successful
-  response keeps required-but-nullable `stats.material_used_g:null`,
-  `hourly_rate:null`, and `stats.estimated_price_huf:null`; no length/density
-  conversion or automatic price is applied.
+- A missing or recognized non-positive optional G-code grams marker keeps
+  required-but-nullable `stats.material_used_g:null`, `hourly_rate:null`, and
+  `stats.estimated_price_huf:null`; zero is never published and no length/
+  density conversion or automatic price is applied. Positive time and filament
+  length remain required.
 
 Example:
 

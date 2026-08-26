@@ -1,11 +1,16 @@
 # Verified project map
 
-## Current J1 calibration harvest over the J0 W2/W3 candidate
+## Current J1C corrective over the J1 calibration harvest
 
 Current local classification:
-`J1_REPOSITORY_FILAMENT_AND_STRICT_GCODE_METRICS_IMPLEMENTED_FOCUSED_TESTED;
-J1_LIVE_BAMBU_CALIBRATION_BLOCKED_OWNER_INPUT;
-NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_FINAL_EXACT_IMAGE_BUILD_AND_E2E_PASS`.
+`J1C_RECOGNIZED_ZERO_MASS_CORRECTION_LOCAL_PASS;
+J1C_VENDOR_PROFILE_INTEGRATION_BLOCKED_MISSING_SELF_CONTAINED_INPUT;
+J1C_CAPABILITY_READINESS_PROPOSAL_ONLY;
+CONTAINER_AND_HOSTED_NOT_VERIFIED; NO_EXTERNAL_PRODUCTION_AUTHORITY`.
+
+The J1 repository contracts remain the baseline. J1C supersedes only the
+earlier assumption that the affected Prusa output omitted the grams marker;
+container diagnosis found a recognized `0.00 g` marker.
 
 Direct executable-source map:
 
@@ -34,8 +39,9 @@ Orca FDM material selection
 FDM G-code output
   -> bounded strict positive time + filament-length parsing
   -> stats.material_used_g is required-but-nullable and only direct, never derived
-  -> current Prusa FDM: missing direct grams -> null mass/rate/price -> manual
+  -> optional mass: missing or recognized non-positive grams -> null/manual
   -> selected-profile Orca: positive direct grams required and capped
+  -> selected-profile recognized zero -> GCODE_FILAMENT_NOT_POSITIVE
   -> profile-less Orca: null mass/rate/price -> manual
   -> required-marker drift -> HTTP 500 SLICE_OUTPUT_UNPARSED, never silent zero
 both selected slicer executables -> atomic pre-listen bounded --help parse/cache
@@ -131,10 +137,15 @@ one x-slicer-api-key header
   Positive print time and filament length are required from bounded native
   output. OpenAPI requires nullable `stats.material_used_g`; a non-null value is
   only the slicer's direct mass marker and is never derived by multiplying
-  length. The current Prusa FDM profile emits no direct grams, so it succeeds
-  with null mass/rate/price for manual pricing. Orca with a selected filament
-  profile requires positive direct grams; missing or drifted mass returns bounded
-  HTTP 500 `SLICE_OUTPUT_UNPARSED`. Profile-less Orca stays null/manual.
+  length. A missing or recognized non-positive marker on an optional-mass path
+  succeeds with null mass/rate/price for manual pricing and never publishes
+  zero. Orca with a selected filament profile requires positive direct grams;
+  recognized zero remains `GCODE_FILAMENT_NOT_POSITIVE`, while missing or
+  drifted mass returns bounded HTTP 500 `SLICE_OUTPUT_UNPARSED`. Profile-less
+  Orca stays null/manual. J1C focused evidence is 19/19 and the complete local
+  aggregate passes 2212/2212 JavaScript tests plus 84 Python tests with one
+  expected Windows POSIX-permission skip. Exact-image/container HTTP behavior
+  remains unverified.
 - [`engine-version.js`](../../app/services/slice/engine-version.js) executes the
   two selected slicer executables with `--help` before listen, bounds and parses
   their output, publishes the initialized map only after both succeed, and
@@ -233,15 +244,27 @@ one x-slicer-api-key header
   calibration evidence.
 
 The retained P1S and new H2D candidates identify as generic Marlin profiles,
-not verified native Bambu profiles. Real P1S/H2D machine and process profiles,
-approved material/spool references, ten owner-selected calibration models, and
-owner-approved acceptance thresholds are still required. Therefore W8 live
-calibration remains `BLOCKED_OWNER_INPUT`; no deploy, public-route activation,
-customer traffic, or production calibration is authorized or proven by J1.
+not verified native Bambu profiles. A bounded audit parsed 11/11 supplied JSON
+files, matched 11/11 declared hashes, and derived P1S 256 x 256 x 250 mm and H2D
+350 x 320 x 325 mm, but the set is not self-contained. Eleven include templates,
+H2D-compatible and 0.1/0.3 BBL processes, vendor filament/parent chains, and
+required material fields are missing; redistribution/license and exact Orca
+2.3.1 compatibility are unverified. No vendor/resolver/runtime change was made,
+the generic profiles remain, and the selected-filament Orca incompatibility is
+not fixed. W8 remains `BLOCKED_OWNER_INPUT`.
+
+Capability readiness is proposal-only. Public `/health` remains cheap liveness;
+future native capability state belongs on public `/ready`. Docker still checks
+`/health`, while Traefik already consumes `/ready`. Startup Prusa plus selected-
+filament Orca probes and typed per-engine rolling failure/recovery require a
+separate implementation and Docker/VPS evidence; raw last-N 5xx is unsafe.
 
 The exact J1 branch-harvest implementation and local verification boundary are
 recorded in
 [`evidence/j1-calibration-branch-harvest.md`](evidence/j1-calibration-branch-harvest.md).
+The partial J1C correction, vendor blocker, readiness proposal, and explicit
+unverified list are recorded in
+[`evidence/j1c-slice-contract-corrective.md`](evidence/j1c-slice-contract-corrective.md).
 
 The J0 focused deterministic contracts, exact-image native/two-principal HTTP
 E2E, and complete local aggregate remain historical evidence: JavaScript is
