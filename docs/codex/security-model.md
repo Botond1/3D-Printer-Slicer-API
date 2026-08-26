@@ -27,7 +27,9 @@ NO_EXTERNAL_PRODUCTION_AUTHORITY; J0_FINAL_EXACT_IMAGE_BUILD_AND_E2E_PASS`.
 The J0 final local image identity and aggregate remain historical evidence; J1
 is classified only by its focused local contracts here. Hosted exact-SHA
 validation remains unverified. External production activation is outside
-repository evidence and authority. See
+repository evidence and authority. See the J1 local branch-harvest record in
+[`evidence/j1-calibration-branch-harvest.md`](evidence/j1-calibration-branch-harvest.md)
+and the historical J0 record in
 [`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).
 
 ## I12 Wave 3 Hostinger capacity and ingress control delta

@@ -239,6 +239,10 @@ owner-approved acceptance thresholds are still required. Therefore W8 live
 calibration remains `BLOCKED_OWNER_INPUT`; no deploy, public-route activation,
 customer traffic, or production calibration is authorized or proven by J1.
 
+The exact J1 branch-harvest implementation and local verification boundary are
+recorded in
+[`evidence/j1-calibration-branch-harvest.md`](evidence/j1-calibration-branch-harvest.md).
+
 The J0 focused deterministic contracts, exact-image native/two-principal HTTP
 E2E, and complete local aggregate remain historical evidence: JavaScript is
 2161/2161; Python is 85/85

@@ -144,7 +144,9 @@ Remaining gates:
    evidence grants no deploy, route activation, customer traffic, or production
    calibration authority.
 
-See
+See the J1 local branch-harvest evidence in
+[`evidence/j1-calibration-branch-harvest.md`](evidence/j1-calibration-branch-harvest.md)
+and the historical J0 contract in
 [`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).
 
 ## I12 Wave 3 Hostinger production-qualification checkpoint
