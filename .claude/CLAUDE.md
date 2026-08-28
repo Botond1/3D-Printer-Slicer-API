@@ -15,6 +15,75 @@ If rules are changed here, synchronize with:
 ## Goal
 Keep slicing behavior safe, deterministic, and production-friendly while preserving strict domain constraints.
 
+## J2 bounds, catalogue, network, and calibration checkpoint
+
+- J2 starts from protected main
+  `0dedbe1e9e4c32a0373982a45bf788cdcdb4f024`. Shipped P1S FDM envelopes are
+  `256 x 256 x 250 mm` for Prusa and Orca; H2D is
+  `350 x 320 x 325 mm`. FDM fallback equals that largest supported H2D
+  envelope, the existing `1 mm` profile minima remain unchanged pending a
+  separate owner semantics decision, and `MAX_MODEL_DIMENSION_MM` accepts no
+  configured value below `350`. P1S Z `230 mm` is accepted; Z `251 mm` and
+  `260 mm` are rejected.
+- Public `GET /profiles` is a startup-built, immutable, informational catalogue
+  whose current payload is exactly 15 machine-bound server-owned FDM rows. It
+  uses the same selection/snapshot/runtime/digest/bounds chain as slicing,
+  exposes a strong
+  `ETag` plus body `catalogue_sha256`, supports `If-None-Match`/304, and returns
+  typed non-critical 503 `PROFILE_CATALOGUE_UNAVAILABLE` on initialization
+  failure without blocking slicing. V1 is explicitly FDM-only: the
+  `120 x 120 x 150 mm` SLA fallback is not a machine envelope and must never be
+  advertised.
+- The v1 entry shape is engine-generic and future-compatible: bounded `engine`,
+  generic `slice_selector.endpoint` plus ordered
+  `parameters[{name,value}]`, ordered path-free
+  `profile_components[{role,basename,selector_parameter}]`, and
+  `effective_profile_identity_schema: r3d-effective-slice-profile-v2`.
+  Nullable `selector_parameter` ties machine/combined components to
+  `printerProfile`, process to `processProfile`, and filament to no selector.
+  `build_volume_limits_mm.max_source_kind: profile-explicit` proves all maximum
+  axes came from explicit profile metadata; `min` is a generic floor, not
+  machine metadata.
+- The owner-confirmed future SLA printer is the Elegoo Saturn 4 Ultra, but the
+  current Prusa `--export-sla` and SL1 metadata parser are incompatible with
+  its `.goo`/`.ctb` artifacts and credible MSLA timing. Do not guess its build
+  envelope. SLA remediation is a separate future wave using owner-supplied
+  Chitubox/Elegoo Satellite profiles. A later truthful SLA row can use the same
+  v1 entry schema without a schema-version change; no SLA row exists today.
+- Every per-printer/per-engine preset row remains visible. Presets within one
+  printer/engine must have the same envelope or catalogue construction fails.
+  `machine_resolutions` publishes one technology/printer envelope only when all
+  represented engines agree; otherwise that pair is `excluded`, its resolved
+  envelope is null, and `reason: cross_engine_conflict` is loud in both machine
+  and fleet views. Never choose component-wise smaller conflicting values.
+  `fleet_resolutions` contains one machine-attributed derivation per technology,
+  only from its remaining resolved machines, and lists excluded printers with
+  their reason. Current FDM P1S engines agree at `256 x 256 x 250 mm`, and H2D
+  dominates at `350 x 320 x 325 mm`. Never add a manual `fleet_max` field.
+- The J2 Hostinger preparation reads one through four unique private IPv4 `/32`
+  rows. Initial phase `leadpilot-only` requires exactly one row; expansion to
+  other callers is separately authorized. A host-firewall TCP reset and fixed
+  private `J2_ALLOWLIST_DENY` event, or router HTTP 403, remain distinct from
+  backend HTTP 401. Every route action requires one inherited root-private FD9
+  lock held across the whole rehearsal plus unchanged canonical, root-owned,
+  non-writable ancestor chains. Terminal proof uses strict
+  `--assert-router-dark`; only logical fsync-cutpoint recovery is locally proved,
+  while real crash/power-loss durability remains external `NOT_VERIFIED`. The
+  external orchestrator must prove intended/denied callers, TLS issuance/
+  renewal, and the repeated activation/rollback sequence. A completed rehearsal requires proven terminal dark; any
+  `*_rollback_uncertain` result is `STOP/UNKNOWN`. Live rehearsal is
+  `BLOCKED / NOT RUN` because no exact J0-capable main image has been
+  published/deployed and private live evidence is absent. J2 performs no route
+  mutation; the latest prior I12 dark state was
+  not re-verified. Never infer permanent activation from repository gates.
+- Calibration now has nine numeric Bambu reference cases and the `M03`
+  P1S-overheight rejection. Measurement fixes Orca `--orient 0`, disables
+  support in the measurement-only runtime profile, and reuses the production
+  machine/process `--load-settings` plus separate `--load-filaments` policy.
+  Orca measurement and
+  automatic-pricing acceptance remain blocked on complete approved vendor
+  profiles and an available local Docker daemon.
+
 ## J1 calibration harvest over the J0 W2/W3 public contract
 
 - J1C's guard-only diagnostic image has owner-supplied VPS proof: recognized
@@ -87,9 +156,10 @@ Keep slicing behavior safe, deterministic, and production-friendly while preserv
   nullable Prusa/manual pricing, selected-profile Orca direct grams, and strict
   marker-drift failure. Strict mode defaults on and never substitutes zero or a
   length-derived mass.
-  The retained P1S and new H2D candidates are generic Marlin profiles, so real
-  Bambu references, owner-selected models, and acceptance thresholds keep W8
-  live calibration `BLOCKED_OWNER_INPUT`.
+  The retained P1S and H2D candidates are generic Marlin profiles. Nine numeric
+  Bambu references plus the `M03` P1S-boundary result are recorded, but W8 Orca
+  calibration remains `BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`; no automatic-
+  pricing acceptance is inferred.
 
 ## I12 Hostinger production-qualification boundary
 
@@ -183,6 +253,7 @@ Public endpoints:
 - GET /health
 - GET /ready
 - GET /pricing
+- GET /profiles
 - GET /openapi.json
 - GET /docs
 - GET /
@@ -345,6 +416,7 @@ Queue and rate behavior:
 - JSON_BODY_LIMIT
 - FORM_BODY_LIMIT
 - MAX_UPLOAD_BYTES
+- MAX_MODEL_DIMENSION_MM
 - MAX_MATERIAL_USED_METERS
 - MAX_MATERIAL_USED_GRAMS
 - MAX_MATERIAL_USED_ML
@@ -409,6 +481,7 @@ Focused test runners:
 - tests/testing-scripts/admin/admin_output_files_test_runner.py
 - tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
 - tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py
+- tests/testing-scripts/profiles/profile_catalogue_test_runner.py
 - `python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --expected-max-concurrent N --retry-on-429 1 --cleanup-manifest NEW_MANIFEST_PATH --report NEW_REPORT_PATH`
 
 The capacity runner requires an exactly empty artifact inventory before load

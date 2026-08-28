@@ -173,10 +173,12 @@ runner verifies the declared `M01`–`M10` SHA-256 identity before use and must
 emit only anonymized model IDs and verified hashes as model identity in durable
 output; measurement records must not expose a path or basename.
 
-The calibration helper currently embeds its own superseded
-machine/process/filament `--load-settings` composition. It does not use the
-corrected production `engine.js` command builder, was not changed or requalified
-by J1C, and must not produce accepted W8 evidence until corrected separately.
+J2 routes the calibration invocation through the production `engine.js`
+command builder. Machine/process profiles load through `--load-settings`, the
+selected filament loads separately through `--load-filaments`, and the helper
+still forces `--orient 0` plus support-off settings before digest and native
+execution. This closes the J1C invocation drift, but missing owner-approved
+vendor profiles and local Docker still block accepted Orca calibration evidence.
 
 The owner path itself is never passed to Docker. After the source is inspected
 and hash-verified, the runner creates one run-owned temporary staging directory

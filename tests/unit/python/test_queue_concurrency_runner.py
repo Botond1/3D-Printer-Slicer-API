@@ -142,8 +142,54 @@ class SyntheticAndParsingTests(unittest.TestCase):
         self.assertEqual(command[command.index("--connect-timeout") + 1], "5")
         self.assertEqual(command[command.index("--max-time") + 1], "180")
         self.assertEqual(run.call_args.kwargs["timeout"], 185)
+        self.assertFalse(any(opaque in argument for argument in command))
+        self.assertEqual(command.count("@-"), 1)
+        self.assertEqual(command[command.index("-H") + 1], "@-")
+        self.assertEqual(
+            run.call_args.kwargs["input"],
+            "x-slicer-api-key: private-slice-key\n",
+        )
         self.assertEqual((status, body), (0, {"errorCode": "REQUEST_TOTAL_TIMEOUT"}))
         self.assertNotIn("private-slice-key", json.dumps(body))
+
+    def test_json_curl_credentials_use_stdin_and_never_argv(self) -> None:
+        opaque = "private-admin-key"
+        completed = subprocess.CompletedProcess(
+            ["curl"], 0, stdout='{"success":true}\nHTTP_STATUS:200\n', stderr="",
+        )
+        with mock.patch.object(http_utils.subprocess, "run", return_value=completed) as run:
+            status, body = http_utils.curl_json(
+                method="GET", base_url="https://example.test", endpoint="/ready",
+                api_key=opaque,
+            )
+
+        command = run.call_args.args[0]
+        self.assertFalse(any(opaque in argument for argument in command))
+        self.assertEqual(command.count("@-"), 1)
+        self.assertEqual(command[command.index("-H") + 1], "@-")
+        self.assertEqual(run.call_args.kwargs["input"], "x-api-key: private-admin-key\n")
+        self.assertEqual((status, body), (200, {"success": True}))
+
+        with mock.patch.object(http_utils.subprocess, "run", return_value=completed) as run:
+            status, body, _headers = http_utils.curl_json_response(
+                method="GET", base_url="https://example.test", endpoint="/profiles",
+                api_key=opaque,
+            )
+
+        command = run.call_args.args[0]
+        self.assertFalse(any(opaque in argument for argument in command))
+        self.assertEqual(command.count("@-"), 1)
+        self.assertEqual(command[command.index("-H") + 1], "@-")
+        self.assertEqual(run.call_args.kwargs["input"], "x-api-key: private-admin-key\n")
+        self.assertEqual((status, body), (200, {"success": True}))
+
+    def test_curl_credential_header_rejects_multiline_values(self) -> None:
+        for invalid in ("first\nsecond", "first\rsecond", "first\0second"):
+            with self.subTest(invalid=repr(invalid)), self.assertRaises(ValueError):
+                http_utils.curl_json(
+                    method="GET", base_url="https://example.test", endpoint="/ready",
+                    api_key=invalid,
+                )
 
     def test_slice_curl_transport_failure_does_not_expose_stderr(self) -> None:
         opaque = "private-slice-key"

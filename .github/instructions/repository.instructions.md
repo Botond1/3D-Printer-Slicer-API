@@ -10,6 +10,7 @@ Last synchronized: 2026-08-26
 - Backend stack is Node.js + Express + Python helper scripts.
 - Slicing engines: PrusaSlicer (FDM/SLA) and OrcaSlicer (FDM only).
 - Service-authenticated slicing endpoints: /prusa/slice and /orca/slice.
+- Public informational startup catalogue: GET /profiles.
 
 ## Hard Constraints
 - Runtime directories must remain root-scoped: input/, output/, configs/.
@@ -18,6 +19,11 @@ Last synchronized: 2026-08-26
 - Keep queueing and rate-limiting active for CPU-heavy slicing work.
 - Keep Orca output mapping deterministic via per-request isolated output directory handling.
 - Preserve slice route order: limiter -> x-slicer-api-key authentication -> root-scoped workspace/Multer -> queue -> native processing.
+- Preserve exact P1S `256 x 256 x 250 mm` and H2D
+  `350 x 320 x 325 mm` machine envelopes. FDM fallback equals the largest
+  supported H2D envelope; the existing `1 mm` profile minima remain unchanged;
+  configured
+  `MAX_MODEL_DIMENSION_MM` cannot be below `350`.
 
 ## Security
 - Normal startup requires pricing, artifact, and operations active keys plus one
@@ -45,6 +51,47 @@ Last synchronized: 2026-08-26
   cases, and exact cleanup. Missing or inconclusive evidence keeps the route
   dark. External production activation is outside repository evidence and
   authority.
+- Keep `/profiles` unauthenticated, startup-built, immutable, informational,
+  and independent of slicing availability. Preserve the strong ETag,
+  conditional 304, body `catalogue_sha256`, typed non-critical 503, and the
+  current exact 15-row machine-bound FDM-only v1 set. Never publish the generic
+  `120 x 120 x 150 mm` SLA fallback as a machine envelope. Keep every
+  per-printer/per-engine preset row; fail on envelope drift within one
+  technology/printer/engine. Resolve a technology/printer pair only when all
+  represented engines agree. Otherwise publish only that pair as excluded with
+  null envelope and `cross_engine_conflict`, repeat it in its technology's
+  `fleet_resolutions[].excluded_printers`, and never select component-wise
+  smaller values. Derive one fleet maximum per technology only from its
+  remaining resolved, named machines. Current FDM P1S resolves to
+  `256 x 256 x 250 mm` and H2D dominates FDM at `350 x 320 x 325 mm`; never add a
+  manual `fleet_max`.
+- The future SLA printer is the owner-confirmed Elegoo Saturn 4 Ultra, but its
+  dimensions must not be guessed. Current Prusa `--export-sla`/SL1 handling is
+  incompatible with Elegoo `.goo`/`.ctb` artifacts and credible MSLA timing.
+  Remediate in a separate wave from owner Chitubox/Elegoo Satellite profiles.
+  Preserve bounded generic `engine`, generic endpoint plus ordered
+  `slice_selector.parameters[{name,value}]`, ordered path-free
+  `profile_components[{role,basename,selector_parameter}]`, exact nullable
+  component-to-selector bindings, the exact
+  `r3d-effective-slice-profile-v2` identity marker, and
+  `max_source_kind: profile-explicit` so a later truthful SLA row and its
+  independent SLA fleet resolution can use v1 without a schema-version change.
+  The unchanged generic `1 mm` `min` is a compatibility floor, not machine metadata.
+- Hostinger public-route preparation accepts one through four unique private
+  IPv4 `/32` entries. Initial `leadpilot-only` phase requires exactly one;
+  expanded callers are separately authorized. Host-firewall TCP rejection and
+  fixed private `J2_ALLOWLIST_DENY`, or router HTTP 403, must remain distinct
+  from backend HTTP 401. The external orchestrator owns allowed/denied, TLS
+  issuance/renewal, rollback, and final-dark proof. One inherited root-private
+  FD9 lock must span the complete rehearsal; each action re-proves canonical,
+  root-owned, non-writable ancestors and terminal proof uses strict
+  `--assert-router-dark`. Local evidence covers logical fsync cutpoints, not
+  real crash/power-loss durability. Any
+  `*_rollback_uncertain` result is `STOP/UNKNOWN`, not dark evidence. Current
+  live rehearsal is `BLOCKED / NOT RUN` until an exact J0-capable image is
+  published and deployed and private live evidence exists. J2 performs no
+  route mutation and does not freshly verify the prior I12 dark state;
+  repository gates cannot authorize permanent activation.
 - No-Origin requests are allowed. Browser-origin protected calls use only their
   SLICE_, PRICING_, ARTIFACT_, or OPERATIONS_CORS_ALLOWED_ORIGINS list.
 - Protected x-api-key routes remain IP-rate-limited.
@@ -84,9 +131,10 @@ Last synchronized: 2026-08-26
   requested rotation. Focused command/digest contracts and final exact-image
   HTTP transform/final-dimensions E2E pass for both principals; the exact local
   code/image identity is recorded in the J0 evidence document.
-- Filament-profile identity plus `material_used_g` is a separate W8 prerequisite
-  classified `BLOCKED_OWNER_INPUT / NOT_STARTED` pending required Bambu
-  reference profile fields; do not infer it from the effective-profile digest.
+- Bambu reference numbers are available for nine measurable cases plus one
+  P1S-overheight boundary. Tight Orca time/mass qualification remains blocked
+  on the complete owner-approved vendor profile chain and runnable Docker; do
+  not infer calibration from the effective-profile digest or physical envelope.
 - HTTP defaults/bounds are headers timeout 60000 [1000,60000], request timeout 600000 [60000,600000], keep-alive timeout 5000 [1000,60000], header count 2000 [16,2000], connections 128 [1,1024], and requests/socket 100 [1,1000].
 - Invalid HTTP envelope overrides fall back to defaults and effective headers timeout is capped at request timeout. Actual VPS capacity and reverse-proxy timeouts are UNVERIFIED.
 - Public /health is liveness and /ready is minimal readiness. Detailed

@@ -21,6 +21,7 @@ const EVENT_NAMES = Object.freeze([
     'native.started',
     'native.termination_settled',
     'pricing.mutated',
+    'profile_catalogue.changed',
     'queue.admitted',
     'queue.expired',
     'queue.rejected',

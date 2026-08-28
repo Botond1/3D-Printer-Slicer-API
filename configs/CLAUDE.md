@@ -18,10 +18,14 @@ This folder contains runtime configuration files used by slicing and pricing.
 - configs/prusa/*.ini
   - Prusa profile presets by layer height.
   - Includes FDM and SLA presets.
+  - All three shipped FDM profiles identify the P1S build envelope as
+    `256 x 256 x 250 mm`; bed size must not vary with layer height.
 
 - configs/orca/*.json
   - Orca machine and process presets.
   - Machine and process compatibility must be respected.
+  - The repository P1S/H2D machine children expose the physical envelopes
+    `256 x 256 x 250 mm` and `350 x 320 x 325 mm` respectively.
 
 - configs/orca/filament/*.json
   - Allowlisted material-selected Orca filament profiles.
@@ -54,8 +58,14 @@ This folder contains runtime configuration files used by slicing and pricing.
   as generic Marlin profiles, not verified native Bambu profiles. Each child
   must own exact `layer_change_gcode='G92 E0'` for the repository's relative-
   extrusion Orca contract. Do not promote them to W8 live calibration without
-  the complete machine/process chain and acceptance inputs documented in
-  `H2D-PROFIL-TODO.md`.
+  the complete approved machine/process/filament chain and the missing Orca-
+  side measurements documented in `H2D-PROFIL-TODO.md`.
+- Treat the corrected build envelopes as physical fit metadata only. They do
+  not make either generic Marlin child a Bambu-faithful motion/time profile.
+- Keep every shipped machine-bound FDM envelope compatible with the public
+  startup `/profiles` catalogue. The application fallback is the largest
+  supported H2D envelope rather than a narrower silent rejection; exact
+  profile metadata remains preferred and authoritative.
 - Preserve pricing schema shape:
   - FDM: material -> number
   - SLA: material -> number
@@ -69,6 +79,7 @@ This folder contains runtime configuration files used by slicing and pricing.
 - MAX_MATERIAL_USED_METERS
 - MAX_MATERIAL_USED_GRAMS
 - MAX_MATERIAL_USED_ML
+- MAX_MODEL_DIMENSION_MM
 - SLICE_STRICT_GCODE_METRICS
 - PYTHON_EXECUTABLE
 - VIRTUAL_ENV
@@ -89,6 +100,18 @@ This folder contains runtime configuration files used by slicing and pricing.
 - Profile overrides from requests are filename-only and sanitized before lookup.
 - Public profile fields and bounds `source_profile` retain the original selected
   basename rather than the randomized snapshot name.
+- The provisional catalogue v1 is explicitly FDM-only. Never label the generic
+  `120 x 120 x 150 mm` SLA fallback as a profile-derived machine envelope.
+- A catalogue row may publish build-volume maxima only when all three axes are
+  explicit profile metadata; expose this as
+  `build_volume_limits_mm.max_source_kind: profile-explicit`. The unchanged
+  generic `1 mm` minimum is a compatibility floor, not machine metadata.
+- The owner-confirmed future SLA printer is the Elegoo Saturn 4 Ultra. Do not
+  guess its dimensions: current Prusa `--export-sla` and SL1 parsing cannot
+  represent Elegoo `.goo`/`.ctb` artifacts or credible MSLA timing. A later
+  wave must use owner Chitubox/Elegoo Satellite profiles. The generic bounded
+  v1 selector/component/identity shape can add a truthful row without a
+  schema-version change; the current payload remains FDM-only.
 - Orca JSON may name only an allowlisted v2.3.1 `Custom` parent. The resolver
   always reads the versioned repository copy, removes `inherits`, and snapshots
   flattened JSON before downstream use; unknown, cyclic, name-mismatched, or

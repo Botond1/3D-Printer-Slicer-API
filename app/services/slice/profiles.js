@@ -110,7 +110,7 @@ function parsePlanarCoordinates(rawPoints) {
  * Build default min/max build-volume limits for technology.
  * @param {string} profilePath Source profile path.
  * @param {'FDM'|'SLA'} technology Active technology.
- * @returns {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string}} Default limit object.
+ * @returns {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string, explicitMaxAxes: {x: boolean, y: boolean, z: boolean}}} Default limit object.
  */
 function createDefaultBuildVolumeLimits(profilePath, technology) {
     const defaultMax = MAX_BUILD_VOLUMES[technology] || MAX_BUILD_VOLUMES.FDM;
@@ -118,7 +118,8 @@ function createDefaultBuildVolumeLimits(profilePath, technology) {
     return {
         min: { ...defaultMin },
         max: { ...defaultMax },
-        sourceProfile: path.basename(profilePath)
+        sourceProfile: path.basename(profilePath),
+        explicitMaxAxes: { x: false, y: false, z: false }
     };
 }
 
@@ -127,26 +128,32 @@ function createDefaultBuildVolumeLimits(profilePath, technology) {
  * @param {{x?: number, y?: number, z?: number}} target Mutable target object.
  * @param {'x'|'y'|'z'} axis Axis key.
  * @param {number | null} value Candidate value.
- * @returns {void}
+ * @returns {boolean} Whether the candidate was accepted and assigned.
  */
 function assignPositiveAxisValue(target, axis, value) {
     if (Number.isFinite(value) && value > 0 && value <= resolveResourcePolicy().MAX_MODEL_DIMENSION_MM) {
         target[axis] = value;
+        return true;
     }
+    return false;
 }
 
 /**
  * Apply axis values from generic object onto target bounds.
  * @param {{x?: number, y?: number, z?: number}} target Mutable target object.
  * @param {Record<string, unknown> | null | undefined} sourceObject Source object.
+ * @param {{x?: boolean, y?: boolean, z?: boolean} | null} [explicitAxes=null] Optional explicit-axis tracker.
  * @returns {void}
  */
-function applyAxisValuesFromObject(target, sourceObject) {
+function applyAxisValuesFromObject(target, sourceObject, explicitAxes = null) {
     if (!sourceObject || typeof sourceObject !== 'object') return;
 
-    assignPositiveAxisValue(target, 'x', parseNumberLike(sourceObject.x));
-    assignPositiveAxisValue(target, 'y', parseNumberLike(sourceObject.y));
-    assignPositiveAxisValue(target, 'z', parseNumberLike(sourceObject.z));
+    for (const axis of ['x', 'y', 'z']) {
+        if (assignPositiveAxisValue(target, axis, parseNumberLike(sourceObject[axis]))
+            && explicitAxes) {
+            explicitAxes[axis] = true;
+        }
+    }
 }
 
 /**
@@ -154,19 +161,23 @@ function applyAxisValuesFromObject(target, sourceObject) {
  * @param {{x?: number, y?: number, z?: number}} target Mutable target object.
  * @param {Record<string, string>} iniMap INI key/value map.
  * @param {{x: string, y: string, z: string}} keyMap Axis-to-INI-key mapping.
+ * @param {{x?: boolean, y?: boolean, z?: boolean} | null} [explicitAxes=null] Optional explicit-axis tracker.
  * @returns {void}
  */
-function applyAxisValuesFromIniMap(target, iniMap, keyMap) {
-    assignPositiveAxisValue(target, 'x', parseNumberLike(iniMap[keyMap.x]));
-    assignPositiveAxisValue(target, 'y', parseNumberLike(iniMap[keyMap.y]));
-    assignPositiveAxisValue(target, 'z', parseNumberLike(iniMap[keyMap.z]));
+function applyAxisValuesFromIniMap(target, iniMap, keyMap, explicitAxes = null) {
+    for (const axis of ['x', 'y', 'z']) {
+        if (assignPositiveAxisValue(target, axis, parseNumberLike(iniMap[keyMap[axis]]))
+            && explicitAxes) {
+            explicitAxes[axis] = true;
+        }
+    }
 }
 
 /**
  * Parse build-volume limits from Orca machine profile JSON.
  * @param {string} machineConfigPath Orca machine profile path.
  * @param {'FDM'|'SLA'} technology Active technology.
- * @returns {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string}} Parsed limits.
+ * @returns {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string, explicitMaxAxes: {x: boolean, y: boolean, z: boolean}}} Parsed limits.
  */
 function parseDimensionLimitsFromOrcaMachineProfile(machineConfigPath, technology) {
     const limits = createDefaultBuildVolumeLimits(machineConfigPath, technology);
@@ -178,11 +189,15 @@ function parseDimensionLimitsFromOrcaMachineProfile(machineConfigPath, technolog
     if (printableArea) {
         limits.max.x = printableArea.x;
         limits.max.y = printableArea.y;
+        limits.explicitMaxAxes.x = true;
+        limits.explicitMaxAxes.y = true;
     }
 
-    assignPositiveAxisValue(limits.max, 'z', parseNumberLike(profileData.printable_height));
+    if (assignPositiveAxisValue(limits.max, 'z', parseNumberLike(profileData.printable_height))) {
+        limits.explicitMaxAxes.z = true;
+    }
     applyAxisValuesFromObject(limits.min, profileData.min_printable_size);
-    applyAxisValuesFromObject(limits.max, profileData.max_printable_size);
+    applyAxisValuesFromObject(limits.max, profileData.max_printable_size, limits.explicitMaxAxes);
 
     return limits;
 }
@@ -191,7 +206,7 @@ function parseDimensionLimitsFromOrcaMachineProfile(machineConfigPath, technolog
  * Parse build-volume limits from Prusa INI profile.
  * @param {string} configPath Prusa profile path.
  * @param {'FDM'|'SLA'} technology Active technology.
- * @returns {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string}} Parsed limits.
+ * @returns {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string, explicitMaxAxes: {x: boolean, y: boolean, z: boolean}}} Parsed limits.
  */
 function parseDimensionLimitsFromPrusaProfile(configPath, technology) {
     const limits = createDefaultBuildVolumeLimits(configPath, technology);
@@ -205,14 +220,18 @@ function parseDimensionLimitsFromPrusaProfile(configPath, technology) {
         if (bedShape) {
             limits.max.x = bedShape.x;
             limits.max.y = bedShape.y;
+            limits.explicitMaxAxes.x = true;
+            limits.explicitMaxAxes.y = true;
         }
     }
 
-    assignPositiveAxisValue(
+    if (assignPositiveAxisValue(
         limits.max,
         'z',
         parseNumberLike(iniMap.max_print_height || iniMap.printable_height || iniMap.print_height)
-    );
+    )) {
+        limits.explicitMaxAxes.z = true;
+    }
 
     applyAxisValuesFromIniMap(limits.min, iniMap, {
         x: 'min_print_size_x',
@@ -223,7 +242,7 @@ function parseDimensionLimitsFromPrusaProfile(configPath, technology) {
         x: 'max_print_size_x',
         y: 'max_print_size_y',
         z: 'max_print_size_z'
-    });
+    }, limits.explicitMaxAxes);
 
     return limits;
 }
@@ -235,7 +254,7 @@ function parseDimensionLimitsFromPrusaProfile(configPath, technology) {
  * @param {string} configFile Process/profile config file.
  * @param {string | null} orcaMachineConfigFile Orca machine config path.
  * @param {string | null} [publicSourceProfileFile=null] Original selected path used only for stable public metadata.
- * @returns {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string}} Resolved limits.
+ * @returns {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string, explicitMaxAxes: {x: boolean, y: boolean, z: boolean}}} Resolved limits.
  */
 function resolveBuildVolumeLimits(
     engine,

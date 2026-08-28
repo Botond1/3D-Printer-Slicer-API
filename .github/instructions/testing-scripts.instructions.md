@@ -4,7 +4,7 @@ applyTo: "tests/testing-scripts/**"
 
 # Testing Scripts Instructions
 
-Last synchronized: 2026-08-25
+Last synchronized: 2026-08-26
 
 ## Test Entry Points
 - slicing/full_api_test_runner.py
@@ -17,6 +17,7 @@ Last synchronized: 2026-08-25
 - rate_limit/rate_limit_regression_test_runner.py
 - queue/queue_concurrency_test_runner.py
 - operations/operations_readiness_metrics_test_runner.py
+- profiles/profile_catalogue_test_runner.py
 
 ## Reporting Rules
 - Write reports to tests/testing-scripts/results/.
@@ -42,7 +43,37 @@ Last synchronized: 2026-08-25
 - PRICING_API_KEY for pricing lifecycle tests.
 - ARTIFACT_API_KEY for output listing/download tests.
 - OPERATIONS_API_KEY for detailed health/readiness/metrics tests.
-- Never print any credential value in output or reports.
+- Never print any credential value in output or reports, and use the shared
+  stdin-backed curl authentication helper so the value never enters process
+  arguments or a retained temporary file.
+
+The profile-catalogue runner must prove public 200, exact FDM-only v1 shape,
+canonical body digest, strong ETag/304, and every per-printer/per-engine preset
+row. It must independently rederive `machine_resolutions` and
+`fleet_resolutions` per technology: FDM P1S engines currently agree at
+`256 x 256 x 250 mm`; a mutated cross-engine conflict keeps all rows, publishes only that technology/printer pair as
+excluded/null/`cross_engine_conflict`, repeats the exclusion in the fleet view,
+and never selects component-wise smaller values. H2D remains the current
+machine-attributed maximum at `350 x 320 x 325 mm`; a conflicting largest
+machine must narrow the ceiling to a remaining resolved real machine. It must
+reject intra-engine preset drift and any manual maximum field. It must prove the
+generic
+`120 x 120 x 150 mm` SLA fallback is absent as a machine envelope and must not
+fabricate Elegoo Saturn 4 Ultra dimensions. A mixed synthetic FDM/SLA contract
+must prove that each technology resolves independently in the same v1 schema.
+It must also prove bounded generic
+`engine`, generic endpoint plus ordered
+`slice_selector.parameters[{name,value}]`, ordered path-free
+`profile_components[{role,basename,selector_parameter}]`, exact nullable
+component-to-selector bindings, exact
+`effective_profile_identity_schema: r3d-effective-slice-profile-v2`, and
+`build_volume_limits_mm.max_source_kind: profile-explicit`; `min` is not machine
+metadata. This shape can later admit a real SLA row without a
+schema-version change. Its optional
+`--verify-prusa-slice-parity` lane runs only with an available native API and
+slice key, and must bind the live success digest to the matching catalogue
+entry. Always read `results/profile_catalogue_test_result.md` after execution;
+do not promote source-only results to exact-image, hosted, or live evidence.
 
 Service-auth negative cases must assert exact HTTP 401
 `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
@@ -66,9 +97,10 @@ extrusion.
 Keep the smoke split into its thin Docker orchestrator and side-effect-free
 fixture, container-script, and contract builders; preserve the bounded file/
 function guards and exact generated-script behavior.
-Filament-profile identity and
-`material_used_g` are W8 `BLOCKED_OWNER_INPUT / NOT_STARTED`, not current
-expectations.
+Nine numeric Bambu references plus the `M03` P1S-boundary result are recorded,
+but the matching Orca calibration is
+`BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`. Do not treat the reference side or
+the profile-catalogue runner as time/mass or automatic-pricing acceptance.
 
 Operations checks must prove public /ready is minimal, protected diagnostics
 return OPERATIONS_AUTH_REQUIRED without a key, and all outputs stay bounded and

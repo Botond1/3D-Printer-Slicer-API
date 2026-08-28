@@ -17,6 +17,43 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
+## Current J2 bounds, catalogue, and dark-route candidate
+
+J2 starts at protected-main baseline
+`0dedbe1e9e4c32a0373982a45bf788cdcdb4f024`. Current classification is
+`J2_LOCAL_AGGREGATE_PASS; J2_HOSTED_BASELINE_SOURCE_IMAGE_PASS_NO_PUBLISH;
+J2_LIVE_ACTIVATION_REHEARSAL_BLOCKED_NOT_RUN; J2_NO_ROUTE_MUTATION;
+J2_REHEARSAL_TERMINAL_CONTRACT_DARK;
+J2_ORCA_CALIBRATION_BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`.
+
+All three Prusa FDM profiles and Orca P1S resolve to
+`256 x 256 x 250 mm`; Orca H2D resolves to `350 x 320 x 325 mm`. FDM fallback
+matches the largest supported H2D envelope, while the existing `1 mm` lower
+compatibility boundary remains unchanged pending a separate owner semantics
+decision. P1S Z `230 mm` passes; Z `251 mm`/`260 mm` and planar overflow fail
+through the production bounds path.
+
+Public informational `GET /profiles` is startup-built and non-critical. It
+keeps every preset row, fails on same-engine preset drift, resolves a machine
+only when its engines agree, and otherwise publishes null/excluded
+`cross_engine_conflict` without selecting a smaller value. Fleet ceilings are
+machine-attributed and technology-partitioned, so a later real SLA row fits v1
+without contaminating FDM resolution. Current rows are FDM-only; the generic
+SLA fallback is never a machine. Elegoo values remain owner-profile future work.
+
+The dark route contract accepts one through four unique `/32` callers, with
+LeadPilot alone in phase one. Network denial is distinct from backend HTTP 401.
+All route actions require one inherited root-private rehearsal lock and stable
+root-owned protected ancestors; terminal acceptance requires strict dark
+assertion. J2 did not mutate the live route because the exact J0-capable deploy,
+private inputs, and external allowlist/TLS/rollback observations are absent.
+
+Calibration records nine numeric Bambu references plus the `M03` boundary. Its
+Orca runner enforces `--orient 0`, support off before digest/native work, and
+reuses production machine/process `--load-settings` plus separate
+`--load-filaments`. Vendor-faithful measurement remains blocked. See
+[`docs/codex/evidence/j2-bounds-network-calibration.md`](docs/codex/evidence/j2-bounds-network-calibration.md).
+
 ## Current J1C slice-contract corrective checkpoint
 
 Current classification:
@@ -41,10 +78,9 @@ the dedicated filament option changes native output from 0.00 g to 4.12 g, but
 the exact final combined candidate image rerun remains pending.
 
 The incomplete vendor chain is a separate W8 time/motion calibration lane, not
-a J1C blocker; no vendor profile was imported. J2 separately owns P1S
-256 x 256 x 250 mm and H2D 350 x 320 x 325 mm bed-shape/Z correction. The
-privacy-safe calibration helper still embeds the superseded settings-list
-composition and is outside this production-engine correction and unqualified.
+a J1C blocker; no vendor profile was imported. J2 later corrects P1S
+256 x 256 x 250 mm and H2D 350 x 320 x 325 mm bed-shape/Z, and makes the
+privacy-safe calibration helper reuse J1C's production invocation policy.
 
 Capability readiness is a proposal only. Public `GET /health` remains cheap
 liveness; future capability state belongs on public `GET /ready`. Docker still

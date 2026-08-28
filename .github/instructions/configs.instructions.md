@@ -15,11 +15,18 @@ Last synchronized: 2026-08-26
 - orca/upstream/Custom/**/*.json are the versioned runtime source for the pinned
   OrcaSlicer v2.3.1 `Custom` parent chain; Docker build requires canonical
   semantic equality with the exact native files.
+- Shipped Prusa FDM and Orca P1S profiles resolve
+  `256 x 256 x 250 mm`; the Orca H2D child resolves
+  `350 x 320 x 325 mm`.
 
 ## Rules
 - Keep configs at repository root in configs/.
 - Keep pricing schema shape intact for FDM and SLA objects.
 - Do not rename profile files unless profile resolution logic is updated as well.
+- Do not let physical bed/height metadata vary by layer height. Exact profile
+  metadata remains authoritative; FDM fallback is the largest supported H2D
+  envelope and the existing `1 mm` profile minima remain unchanged pending a
+  separate owner semantics decision.
 - Preserve Prusa INI section/key case and reject exact duplicate qualified keys.
 - Keep selected profiles and allowlisted Orca parents canonical regular files so
   bounded exact Prusa-byte or flattened-Orca job-scratch snapshots precede
@@ -49,9 +56,26 @@ Last synchronized: 2026-08-26
   are required for selected-profile Orca, but remain nullable for the current
   Prusa FDM profile and profile-less Orca; never derive mass from length.
 - Keep P1S/H2D generic-Marlin candidates blocked from W8 live calibration until
-  the complete Bambu machine/process chain and acceptance inputs are available;
-  this separate vendor lane does not block the repository-owned J1C reset and
-  filament-CLI corrections. `H2D-PROFIL-TODO.md` records the gap.
+  the complete approved Bambu machine/process/filament chain and the missing
+  Orca-side measurements are available; this separate vendor lane does not
+  block the repository-owned J1C reset and filament-CLI corrections.
+  `H2D-PROFIL-TODO.md` records the gap.
+- Correct physical envelopes do not qualify generic Marlin motion/time data.
+  Nine numeric Bambu references plus the P1S-overheight boundary exist, but
+  tight Orca calibration still requires the complete approved vendor chain.
+- The provisional public catalogue v1 is explicitly FDM-only and may include
+  only profiles with a bound machine identity. Never represent the generic
+  `120 x 120 x 150 mm` SLA fallback as a profile-derived printer envelope.
+- Publish catalogue maxima only when all three axes are explicit selected-
+  profile metadata; identify this with
+  `build_volume_limits_mm.max_source_kind: profile-explicit`. The unchanged
+  generic `1 mm` `min` is a compatibility floor, not machine metadata.
+- The owner-confirmed future SLA printer is the Elegoo Saturn 4 Ultra; do not
+  guess its dimensions. Current Prusa `--export-sla`/SL1 handling cannot
+  represent Elegoo `.goo`/`.ctb` artifacts or credible MSLA timing. A separate
+  future wave must use owner Chitubox/Elegoo Satellite profiles. The bounded
+  generic v1 selector/component/identity shape can add a truthful row without a
+  schema-version change; the current payload remains FDM-only.
 
 ## Related Env Keys
 - ORCA_MACHINE_PROFILE
@@ -61,6 +85,7 @@ Last synchronized: 2026-08-26
 - MAX_MATERIAL_USED_METERS
 - MAX_MATERIAL_USED_GRAMS
 - MAX_MATERIAL_USED_ML
+- MAX_MODEL_DIMENSION_MM
 - SLICE_STRICT_GCODE_METRICS
 - PYTHON_EXECUTABLE
 - VIRTUAL_ENV

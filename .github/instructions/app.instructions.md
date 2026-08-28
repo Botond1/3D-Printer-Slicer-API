@@ -18,7 +18,8 @@ Last synchronized: 2026-08-26
   `app/services/slice/profile-digest.js`, native version identity in
   `app/services/slice/engine-version.js`, filament selection/metadata in
   `app/services/slice/filament-profile.js`, strict FDM metrics in
-  `app/services/slice/gcode-metrics.js`, response, errors).
+  `app/services/slice/gcode-metrics.js`, startup catalogue in
+  `app/services/slice/profile-catalogue.js`, response, errors).
 - app/config/service-auth.js resolves immutable pricing/artifact/operations
   rings plus explicit `legacy`, finite `migration`, or final `principals` slice
   mode with shared compatibility and WooCommerce/LeadPilot rings.
@@ -37,6 +38,9 @@ Last synchronized: 2026-08-26
   /ready and /operations/readiness plus fresh probes for /health/detailed;
   app/services/observability provides redacted events and fixed-cardinality
   metrics.
+- app/routes/profile-catalogue.routes.js exposes the immutable startup
+  catalogue without authentication. Catalogue failure returns typed 503 and
+  never changes slice readiness/admission.
 
 ## Endpoint Rules
 - Keep upload field name as choosenFile.
@@ -76,21 +80,49 @@ Last synchronized: 2026-08-26
   guard-only HTTP 200/null path and the Orca mechanism's 0.00 g to 4.12 g
   correction. The combined local focused set passes 69/69; the final combined
   exact-image rerun remains pending.
-- Keep W8 live calibration `BLOCKED_OWNER_INPUT`: the retained P1S and new H2D
+- Keep W8 Orca calibration
+  `BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`: the retained P1S and H2D
   candidates are generic Marlin profiles, not verified native Bambu profiles.
-  Their child files own exact `layer_change_gcode='G92 E0'`. The incomplete
-  vendor chain remains a separate time/motion calibration lane and J2 owns bed
-  shape/Z; no vendor profile was imported. Repository evidence grants no
-  deployment or public-route authority.
+  J2 supplies only their `256 x 256 x 250 mm` and
+  `350 x 320 x 325 mm` physical envelopes. Nine numeric Bambu references plus
+  the `M03` P1S-boundary result exist; the runner fixes `--orient 0` and support
+  off, but no Orca measurement, deploy, public route, or automatic-pricing
+  acceptance is authorized.
 - Keep endpoint contracts stable:
   - POST /prusa/slice
   - POST /orca/slice
   - GET /pricing
+  - GET /profiles (public, strong ETag/304, body digest, non-critical 503)
   - GET /health and GET /ready (public)
   - GET /health/detailed, GET /operations/readiness, GET /operations/metrics (operations)
   - POST /pricing/FDM, POST /pricing/SLA, PATCH/DELETE /pricing/:technology/:material (pricing)
   - GET /admin/output-files and GET /admin/download/:fileName (artifact)
   - GET /admin/download/:fileName supports `ALL` token for ZIP bulk download
+- Keep `/profiles` bound to the production selection/snapshot/runtime/digest/
+  bounds chain. V1 is explicitly FDM-only, lists only machine-bound server-owned
+  presets, and binds every resolved envelope to printer and engine. Preserve
+  bounded generic `engine`, generic `slice_selector.endpoint` plus ordered
+  `parameters[{name,value}]`, ordered path-free
+  `profile_components[{role,basename,selector_parameter}]`, exact nullable
+  component-to-selector bindings, exact
+  `effective_profile_identity_schema: r3d-effective-slice-profile-v2`, and
+  `build_volume_limits_mm.max_source_kind: profile-explicit`; `min` is a generic
+  floor, not machine metadata. Keep all per-printer/per-engine preset rows and
+  fail closed on drift within a technology/printer/engine.
+  `machine_resolutions` may publish a technology/printer envelope only when all
+  represented engines agree; otherwise only that pair is excluded with null
+  envelope and `cross_engine_conflict`. `fleet_resolutions` must contain one
+  derivation per technology, repeat its excluded reasons, and use only resolved,
+  named machines. Never use component-wise smaller conflict values or a manual
+  maximum field. Current FDM P1S resolves to `256 x 256 x 250 mm` and H2D
+  dominates FDM at `350 x 320 x 325 mm`. Never advertise the generic
+  `120 x 120 x 150 mm` SLA fallback as a printer envelope. This generic shape
+  can add a later truthful SLA row and separate SLA fleet resolution without a
+  schema-version change.
+- Do not guess dimensions for the owner-confirmed Elegoo Saturn 4 Ultra. Current
+  Prusa `--export-sla`/SL1 handling is incompatible with its `.goo`/`.ctb`
+  artifacts and credible MSLA timing; a separate future wave must use owner
+  Chitubox/Elegoo Satellite profiles.
 
 ## Safety Rules
 - Preserve queue and rate-limit protections.
@@ -109,6 +141,9 @@ Last synchronized: 2026-08-26
   build semantic-equality gate and stable Orca `layer_gcode=''` /
   `use_relative_e_distances='1'` settings aligned with each selected repository
   child machine's exact `layer_change_gcode='G92 E0'` override.
+- Preserve P1S `256 x 256 x 250 mm`, H2D `350 x 320 x 325 mm`, zero profile
+  minima, the largest-supported FDM fallback, and
+  `MAX_MODEL_DIMENSION_MM >= 350`.
 - Preserve bounded/redacted auth events and exact per-audience CORS policies.
 - Preserve HTTP defaults/bounds: 60000 [1000,60000] headers ms; 600000 [60000,600000] request ms; 5000 [1000,60000] keep-alive ms; 2000 [16,2000] headers; 128 [1,1024] connections; 100 [1,1000] requests/socket.
 - Invalid HTTP envelope overrides fall back to defaults; effective headers timeout is capped at request timeout. VPS capacity and proxy timeouts remain UNVERIFIED.

@@ -4,7 +4,7 @@ applyTo: ".github/**"
 
 # GitHub Folder Instructions
 
-Last synchronized: 2026-08-25
+Last synchronized: 2026-08-26
 
 ## Scope
 - Keep Copilot instructions centralized in .github/copilot-instructions.md.
@@ -67,6 +67,13 @@ Last synchronized: 2026-08-25
   digest and corrected proxy topology on the authorized VPS; public caller,
   firewall, DNS/certificate/route, secret lifecycle, live rollback and full
   production acceptance remain unverified and separately authorized.
+- Protected main `0dedbe1e9e4c32a0373982a45bf788cdcdb4f024` passed the
+  read-only/no-deploy Source and Image workflows, but no Candidate Publication
+  or deployment exists for that J0/J1C state. Therefore J2's external route
+  rehearsal remains `BLOCKED / NOT RUN` and J2 performs no route mutation. The
+  latest prior I12 evidence was dark, but current live state was not re-read;
+  no repository result may claim the allowed/denied caller matrix, TLS renewal,
+  rollback, or final-dark state complete.
 
 ## Required Sync Targets
 When changing rules here, synchronize:

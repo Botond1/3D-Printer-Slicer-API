@@ -12,6 +12,8 @@ This document describes the application runtime inside app/.
   audience CORS + validated request ID + lifecycle observability + global error handler.
 - Upload flow: slice limiter, x-slicer-api-key authentication, root-scoped workspace allocation, route-level multer single-file upload on choosenFile, queueing, option validation, conversion/orientation, transform, native slicing, stats parsing, and pricing response.
 - Slicing engines: PrusaSlicer (FDM/SLA) and OrcaSlicer (FDM only).
+- Public profile catalogue: immutable startup generation for machine-bound,
+  server-owned FDM presets; strong ETag/body digest; non-critical typed 503.
 - Runtime folder contract: root-scoped input/, output/, configs/ only.
 
 ## Detailed JavaScript File Responsibilities
@@ -28,7 +30,9 @@ This document describes the application runtime inside app/.
   - Applies exact per-audience CORS while allowing requests without Origin,
     validates/propagates X-Request-Id, and observes request settlement.
   - Creates one bounded Node HTTP server before listening.
-  - Registers JSON and urlencoded body limits, Swagger endpoints, business routes, 404 handler, and global error handler.
+  - Resolves both engine versions, attempts non-critical profile-catalogue
+    initialization, then registers JSON/urlencoded limits, Swagger endpoints,
+    business routes, 404 handler, and global error handler.
 
 ### Configuration modules
 
@@ -37,11 +41,16 @@ This document describes the application runtime inside app/.
   - Defines the inclusive application concurrency range `1..3`; the default
     remains `MAX_CONCURRENT_SLICES=1`.
   - Defines extension groups, Orca process-profile defaults, and default pricing matrix.
+  - Uses `350 x 320 x 325 mm` as the largest-supported FDM fallback and keeps
+    the existing `1 mm` profile minima unchanged; shipped profiles must supply
+    exact upper machine metadata.
 - app/config/resource-policy.js
   - Treats an omitted `MAX_CONCURRENT_SLICES` as default `1` and accepts an
     explicit value only as a canonical positive decimal integer in `1..3`.
   - Rejects malformed, non-canonical, unsafe, or out-of-range explicit values
     during startup validation.
+  - Accepts `MAX_MODEL_DIMENSION_MM` only from `350` through `100000`; its
+    default remains `10000`.
 - app/config/service-auth.js
   - Requires pricing, artifact, and operations actives plus one complete
     `SLICE_SERVICE_AUTH_MODE`; default `legacy` requires shared active,
@@ -108,6 +117,11 @@ This document describes the application runtime inside app/.
   - Declares GET /pricing (public).
   - Declares pricing-scoped mutation routes and applies adminRateLimiter plus
     the injected pricing authenticator.
+- app/routes/profile-catalogue.routes.js
+  - Declares public GET /profiles.
+  - Returns the immutable serialized startup snapshot with a strong ETag,
+    supports weak/strong `If-None-Match` candidates and 304, and returns
+    no-store HTTP 503 `PROFILE_CATALOGUE_UNAVAILABLE` when initialization failed.
 - app/routes/system.routes.js
   - Declares public GET /health and minimal GET /ready.
   - Declares operations-scoped GET /health/detailed,
@@ -218,6 +232,40 @@ This document describes the application runtime inside app/.
   - Builds the deterministic effective machine/process and request-independent
     native-invocation identity, including stable relative-extrusion settings,
     while excluding request layer-height/infill.
+- app/services/slice/profile-catalogue.js
+  - Builds the immutable v1 managed-preset catalogue at startup through the
+    production selection, snapshot, runtime-profile, build-volume, filament,
+    and effective-digest chain.
+  - V1 lists only machine-bound server-owned FDM presets: Prusa P1S and Orca
+    P1S/H2D. Custom overrides and dynamic/unmapped materials remain outside v1.
+    The generic `120 x 120 x 150 mm` SLA fallback is never a machine envelope.
+  - Uses a bounded generic `engine`, generic `slice_selector.endpoint` plus
+    ordered `parameters[{name,value}]`, and ordered path-free
+    `profile_components[{role,basename,selector_parameter}]`. Nullable
+    `selector_parameter` binds machine/combined to `printerProfile`, process to
+    `processProfile`, and filament to no selector.
+  - Declares `effective_profile_identity_schema` as
+    `r3d-effective-slice-profile-v2`.
+    `build_volume_limits_mm.max_source_kind: profile-explicit` proves every
+    maximum axis came from explicit profile metadata; `min` is a generic floor.
+  - The owner-confirmed future SLA printer is the Elegoo Saturn 4 Ultra, but
+    current Prusa `--export-sla`/SL1 handling cannot represent its `.goo`/`.ctb`
+    artifacts or credible MSLA timing. Do not guess its dimensions; remediation
+    is a later owner-profiled Chitubox/Elegoo Satellite wave. A truthful row can
+    use the same v1 entry shape and a separate technology fleet row without a
+    schema-version change; none exists now.
+  - Preserves every per-printer/per-engine preset row. Presets inside one
+    technology/printer/engine must agree or catalogue construction fails.
+    `machine_resolutions` publishes a resolved technology/printer envelope only
+    when all represented engines agree; otherwise only that pair becomes
+    `excluded` with null envelope and `cross_engine_conflict`, while every source
+    row and other technology stays visible.
+    Never resolve a conflict with component-wise smaller values.
+  - Derives one `fleet_resolutions` row per technology only from its resolved
+    machines, names every real dominant machine, and lists excluded printers
+    with their reason. Current FDM P1S engines agree at `256 x 256 x 250 mm`;
+    H2D dominates FDM at `350 x 320 x 325 mm`. No manual `fleet_max` exists. Catalogue failure
+    never gates slicing.
 - app/services/slice/response.js
   - Composes successful slice response payloads and refuses success without a
     lowercase 64-hex `profiles.effective_profile_sha256` or machine-readable
@@ -248,6 +296,9 @@ This document describes the application runtime inside app/.
   - Provides structured error logging helper for processing failures.
 - app/docs/swagger-docs.js
   - Generates OpenAPI document used by /openapi.json and Swagger UI /docs.
+- app/docs/profile-catalogue-openapi.js
+  - Defines the public catalogue 200/304/503 contract, strong ETag/body digest,
+    machine-bound entry fields, and informational/non-critical semantics.
 - app/docs/slice-openapi.js
   - Defines slice success/error schemas, including `engine_version`, the
     effective-profile digest, four requested omitted runtime codes, the live
@@ -308,18 +359,24 @@ This document describes the application runtime inside app/.
   200/null path and the Orca mechanism's 0.00 g to 4.12 g correction. The
   combined local focused set passes 69/69; the final combined exact-image rerun
   remains pending.
-- Keep W8 live calibration `BLOCKED_OWNER_INPUT`: the retained P1S and new H2D
+- Keep W8 Orca calibration
+  `BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`: the retained P1S and H2D
   candidates identify as generic Marlin profiles, not verified native Bambu
-  profiles. Their child files now own exact `layer_change_gcode='G92 E0'`, but
-  the incomplete vendor chain remains a separate time/motion calibration lane
-  and J2 owns bed shape/Z. No vendor profile was imported, and no deploy or
-  public route is authorized by the repository contract.
+  profiles. J2 supplies only their `256 x 256 x 250 mm` and
+  `350 x 320 x 325 mm` physical envelopes. Nine numeric Bambu references plus
+  the `M03` P1S-boundary result exist; the calibration runner fixes
+  `--orient 0`, support off, and production machine/process `--load-settings`
+  plus separate `--load-filaments`, but no Orca measurement, deploy, public route,
+  or automatic-pricing acceptance is authorized.
 - No-Origin service requests are allowed; browser-origin protected requests
   must match only their exact audience allowlist.
 - /prusa/slice allows FDM and SLA based on layerHeight.
 - /orca/slice is FDM-only and profile compatibility aware.
 - /orca/slice resolves generated output from per-request isolated output directory before final filename alignment.
 - /health is liveness. /ready is public minimal readiness only.
+- /profiles is public and informational. Slice routes remain authoritative for
+  bounds; catalogue initialization failure returns typed 503 without changing
+  readiness or slice admission.
 - J1C capability readiness is proposal-only: keep `/health` cheap, place future
   native slicing capability on public `/ready`, and require separate startup-
   smoke, Docker/VPS, typed per-engine failure, anti-DoS, and recovery/hysteresis
@@ -339,6 +396,7 @@ Public endpoints:
 - GET /health -> handler
 - GET /ready -> minimal readiness handler
 - GET /pricing -> handler
+- GET /profiles -> immutable startup snapshot / conditional 304 / non-critical typed 503
 - GET /openapi.json -> handler
 - GET /docs -> swagger-ui middleware chain
 - GET / -> redirect to /docs
@@ -406,6 +464,13 @@ HTTP server defaults and inclusive bounds:
   runtime root selection.
 - Keep successful profile digests mandatory and keep the bounds/general OpenAPI
   422 branches disjoint.
+- Keep `/profiles` startup-only and request-cheap. Preserve its strong ETag,
+  canonical `catalogue_sha256`, exact managed preset set, per-printer/per-engine
+  envelopes, and no-manual-fleet-maximum shape. Do not make catalogue readiness
+  a prerequisite for slicing. Keep v1 FDM-only and never publish the generic
+  SLA fallback as a printer envelope. Preserve the engine-generic selector,
+  path-free component chain, digest-schema marker, and explicit-max provenance
+  so a later real SLA printer does not require a schema-version change.
 - Keep no-Origin service behavior and exact per-audience browser-origin allowlists.
 - Keep trust proxy fail closed and request-ID validation before observability/CORS.
 - Keep readiness diagnostics and metrics operations-scoped; never add

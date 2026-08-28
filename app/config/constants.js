@@ -84,17 +84,21 @@ const DEFAULT_PRICING = {
 };
 
 /**
- * Maximum printable build volumes in millimeters by technology.
+ * Largest supported build envelopes in millimeters by technology.
+ * Shipped printer profiles must override these values with their exact machine
+ * metadata; the fallback must never silently be narrower than a supported
+ * machine because that would reject printable customer models.
  * @type {{FDM: {x: number, y: number, z: number}, SLA: {x: number, y: number, z: number}}}
  */
 const MAX_BUILD_VOLUMES = {
-    FDM: { x: 250, y: 210, z: 210 },
+    FDM: { x: 350, y: 320, z: 325 },
     SLA: { x: 120, y: 120, z: 150 }
 };
 
 /**
- * Minimum printable build volumes in millimeters by technology.
- * These are conservative safety defaults and can be overridden by profile metadata.
+ * Existing minimum accepted model dimensions in millimeters by technology.
+ * J2 changes only the proven upper machine envelopes; changing this lower
+ * compatibility boundary requires a separate owner semantics decision.
  * @type {{FDM: {x: number, y: number, z: number}, SLA: {x: number, y: number, z: number}}}
  */
 const MIN_BUILD_VOLUMES = {

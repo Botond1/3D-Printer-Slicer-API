@@ -63,6 +63,96 @@ lifecycle evidence remain separate gates.
 - **Resource/state envelope:** actual-byte limits, validated final artifacts,
   stable job/artifact correlation, leased retention, and atomic pricing state.
 
+### J2 build-volume, profile-catalogue, network, and calibration candidate
+
+J2 starts from protected-main SHA
+`0dedbe1e9e4c32a0373982a45bf788cdcdb4f024`. The three shipped Prusa FDM
+profiles and the Orca P1S profile now resolve the physical P1S envelope as
+`256 x 256 x 250 mm`; the Orca H2D profile resolves
+`350 x 320 x 325 mm`. FDM's fallback is the largest supported envelope,
+`350 x 320 x 325 mm`, so missing height metadata cannot silently narrow a
+  supported machine. The existing `1,1,1 mm` lower compatibility boundary is
+  unchanged; changing it requires a separate owner semantics decision. The P1S fit
+contract accepts Z `230 mm` and rejects Z `251 mm` or `260 mm`.
+
+Public `GET /profiles` exposes one immutable catalogue generation built during
+startup from the same profile-selection, snapshot, runtime-derivation, bounds,
+filament-metadata, and digest chain used by slicing. Its strong `ETag` and body
+`catalogue_sha256` support conditional `If-None-Match` revalidation. Catalogue
+initialization failure returns typed HTTP `503`
+`PROFILE_CATALOGUE_UNAVAILABLE` but does not block server startup or slicing.
+The provisional v1 catalogue is explicitly FDM-only and contains only
+15 machine-bound, server-owned FDM rows. The generic
+`120 x 120 x 150 mm` SLA fallback is not a printer envelope and is never
+advertised; request overrides and materials without a server-owned filament
+profile are also outside the managed set.
+
+The v1 entry shape uses a bounded generic `engine`, a generic
+`slice_selector.endpoint` with ordered `parameters[{name,value}]`, and ordered
+path-free `profile_components[{role,basename,selector_parameter}]`. Nullable
+`selector_parameter` binds machine/combined components to `printerProfile`,
+process to `processProfile`, and filament to no selector. Each row declares
+`effective_profile_identity_schema: r3d-effective-slice-profile-v2`.
+`build_volume_limits_mm.max_source_kind: profile-explicit` means all three
+maximum axes came from explicit selected-profile metadata; `min` is the
+unchanged generic `1 mm` compatibility floor and is not machine metadata.
+
+The owner-confirmed future SLA printer is the Elegoo Saturn 4 Ultra. Its build
+envelope is intentionally not guessed: the current Prusa `--export-sla` path
+and SL1 metadata parser do not represent Elegoo `.goo`/`.ctb` artifacts or
+credible MSLA timing. SLA remediation is a separate future wave using the
+owner's Chitubox/Elegoo Satellite profiles. A later truthful SLA row can use the
+same v1 entry schema without a schema-version change; no SLA row or Elegoo
+dimension appears in the current payload.
+
+Every per-printer/per-engine preset row remains visible. Rows inside the same
+technology/printer/engine must agree on their envelope or catalogue construction
+fails. `machine_resolutions` publishes a technology/printer envelope only when
+all represented engines agree. On disagreement that pair is `excluded`,
+`resolved_build_volume_limits_mm` is null, and
+`reason: cross_engine_conflict` is repeated in its `fleet_resolutions` entry
+while all profile rows, technologies, and other machines remain available. Conflicts are never
+silently resolved by selecting the smaller values.
+
+Consumers can use the resolved P1S `256 x 256 mm` plate with `250 mm` Z for
+parts-per-plate calculations. `fleet_resolutions` has one derivation per
+technology. Its current FDM entry derives the guarantee only from resolved
+machines and attributes the dominant `350 x 320 x 325 mm` envelope to H2D; an
+excluded machine always narrows the eligible machine set and never widens the
+ceiling. The numeric ceiling shrinks when the excluded machine carried it.
+There is no separately maintained `fleet_max` field. The catalogue is
+informational; slice endpoints remain authoritative and continue to enforce
+bounds.
+
+The J2 Hostinger contract accepts one through four unique private IPv4 `/32`
+entries from a root-private file. The first rehearsal phase is exactly one
+LeadPilot address; later callers require a separate expanded phase. Host
+firewall rejection is a TCP reset with a fixed private
+`J2_ALLOWLIST_DENY` classification, while an unlisted source that reaches the
+router receives HTTP `403`; both are distinct from backend HTTP `401`
+`SLICE_SERVICE_AUTH_REQUIRED`. One root-private inherited FD9 lock spans the
+whole rehearsal; every action re-proves that lock and unchanged canonical,
+root-owned, non-writable ancestor chains. Terminal acceptance uses strict
+`--assert-router-dark`. Local tests prove logical fsync-cutpoint recovery, not
+real process/kernel/power-loss durability. The external orchestrator must prove the
+allowed/denied matrix, TLS issuance and renewal, and
+`dark -> active -> dark -> active -> dark` rollback. A completed rehearsal
+requires a proved final dark state; `*_rollback_uncertain` is `STOP/UNKNOWN`,
+not dark evidence. The live rehearsal is currently `BLOCKED / NOT RUN`:
+protected main has no published/deployed exact J0-capable image and no private
+external evidence. J2 made no route mutation. The latest prior I12 evidence was
+dark, but J2 did not re-read current live state; permanent activation is a later
+owner-controlled decision.
+
+Calibration has nine numeric Bambu Studio reference rows plus the `M03`
+P1S-overheight rejection boundary. The comparison fixes Orca at `--orient 0`,
+disables support in the runtime measurement profile, and reuses the production
+machine/process `--load-settings` plus separate `--load-filaments` policy. Orca measurement is
+still blocked on complete owner-approved Bambu vendor profiles and an available
+local Docker daemon; no automatic-pricing acceptance is claimed. See
+[`docs/kalibracio-2026-08.md`](docs/kalibracio-2026-08.md) and the
+[J2 evidence boundary](docs/codex/evidence/j2-bounds-network-calibration.md).
+
 ### J1 calibration harvest over the J0 W2/W3 candidate
 
 The J0 local candidate added a deterministic
@@ -173,17 +263,19 @@ containing both Orca corrections still awaits an exact-image rerun.
 
 This candidate is not deployed or a public-activation result. The retained P1S
 and new H2D candidates identify as generic Marlin profiles, not verified native
-Bambu profiles. A bounded audit parsed 11/11 supplied JSON files, matched 11/11
-declared hashes, and derived P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm,
-but the set is not self-contained: 11 include templates, H2D-compatible and
+Bambu profiles. A bounded historical audit parsed 11/11 supplied JSON files,
+matched 11/11 declared hashes, and derived the supplied P1S as
+256 x 256 x 250 mm and H2D as 350 x 320 x 325 mm, but the set is not
+self-contained: 11 include templates, H2D-compatible and
 0.1/0.3 BBL processes, vendor filament/parent chains, and exact Orca 2.3.1
 qualification remain missing. The owner authorized later repository inclusion,
 but no vendor profile was imported. This is a separate W8 time/motion
 calibration lane, not a J1C blocker. Production Orca now uses dedicated
 `--load-filaments`, and both repository-owned child machine profiles own exact
 `layer_change_gcode='G92 E0'`. Owner-supplied mechanism evidence produced
-4.12 g instead of 0.00 g. J2 separately owns the P1S/H2D bed-shape and Z
-correction; W8 live calibration remains `BLOCKED_OWNER_INPUT`.
+4.12 g instead of 0.00 g. J2 now supplies the repository physical envelopes as
+P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm. W8 live calibration remains
+`BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`.
 
 Capability readiness is a proposal only. Public `GET /health` remains cheap
 liveness, and future slicing-capability state belongs on public `GET /ready`.
@@ -380,6 +472,7 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 - `GET /health`
 - `GET /ready`
 - `GET /pricing`
+- `GET /profiles`
 - `GET /openapi.json`
 - `GET /docs`
 - `GET /`
@@ -439,6 +532,7 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 
 - `app/routes/slice.routes.js` - `POST /prusa/slice`, `POST /orca/slice` with limiter -> service auth -> workspace/Multer -> queue/native ordering.
 - `app/routes/pricing.routes.js` - public pricing read + admin pricing mutations.
+- `app/routes/profile-catalogue.routes.js` - public conditional `GET /profiles` with strong ETag and non-critical typed 503.
 - `app/routes/system.routes.js` - health endpoints and admin artifact listing/download endpoints.
 
 ### Services
@@ -462,6 +556,7 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 - `app/services/slice/orca-profile-inheritance.js` - bounded resolution of the versioned repository copy of the Orca v2.3.1 `Custom` parent chain.
 - `app/services/slice/profile-snapshot.js` - exact Prusa-byte and flattened Orca profile snapshots in job scratch.
 - `app/services/slice/profile-digest.js` - deterministic effective-profile and request-independent native-invocation identity excluding request layer-height/infill overrides.
+- `app/services/slice/profile-catalogue.js` - startup-built immutable managed-preset catalogue using the production profile preparation chain.
 - `app/services/slice/queue.js` - FIFO queue + per-client fairness + timeout enforcement.
 - `app/services/slice/transform.js` - transform planning/execution and bounds validation.
 - `app/services/slice/value-parsers.js` - safe parsing and profile filename sanitization.
@@ -472,6 +567,7 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 - `app/utils/client-ip.js` - Express trust-proxy-aware validated client IP normalization.
 - `app/utils/logger.js` - structured allowlisted processing-event emission.
 - `app/docs/swagger-docs.js` - OpenAPI generation for `/docs` and `/openapi.json`.
+- `app/docs/profile-catalogue-openapi.js` - public catalogue, ETag, 304, and non-critical 503 schema.
 
 ---
 
@@ -636,14 +732,14 @@ curl -X POST http://localhost:3000/orca/slice \
   },
   "build_volume_limits_mm": {
     "min": {
-      "x": 1,
-      "y": 1,
-      "z": 1
+      "x": 0,
+      "y": 0,
+      "z": 0
     },
     "max": {
       "x": 256,
       "y": 256,
-      "z": 210
+      "z": 250
     },
     "source_profile": "FDM_0.2mm.ini"
   },
@@ -705,6 +801,55 @@ field remains `errorCode`; no `error_code` alias is introduced.
 - `SLICE_QUEUE_CLIENT_LIMIT` -> HTTP `429`.
 - `SLICE_QUEUE_TIMEOUT` -> HTTP `503`.
 - `FILE_PROCESSING_TIMEOUT` -> HTTP `422`.
+
+---
+
+## 🗂️ Profile Catalogue API
+
+### `GET /profiles`
+
+Returns the immutable startup generation of the public informational profile
+catalogue. No credential is required. Each managed entry includes a bounded
+generic `engine`, printer identity, generic `slice_selector.endpoint` plus
+ordered `parameters[{name,value}]`, ordered path-free
+`profile_components[{role,basename,selector_parameter}]`, and an effective
+profile digest with identity schema
+`r3d-effective-slice-profile-v2`, verified engine version, resolved
+`build_volume_limits_mm`, and available filament diameter and density. Current
+v1 includes 15 machine-bound FDM entries: three Prusa P1S presets and PLA/PETG
+Orca presets for P1S and H2D at layer heights 0.1, 0.2, and 0.3 mm.
+
+Each `profile_components` item has nullable `selector_parameter`: Orca machine
+uses `printerProfile`, process uses `processProfile`, filament uses null, and
+the Prusa combined component uses `printerProfile`.
+
+Use the response's strong `ETag` with `If-None-Match`; an unchanged generation
+returns `304` without a body. `catalogue_sha256` hashes the canonical catalogue
+content inside the body. If startup catalogue construction failed, the route
+returns HTTP `503` with `PROFILE_CATALOGUE_UNAVAILABLE` and `Cache-Control:
+no-store`; slicing remains independent and available.
+
+Do not treat the catalogue as an authorization or acceptance decision. Keep all
+per-printer/per-engine profile rows. Read a machine envelope only from
+`machine_resolutions`: each technology/printer pair resolves when all represented
+engines agree, or is explicitly null with `cross_engine_conflict`. The pair is
+listed in its technology's `fleet_resolutions[].excluded_printers` and omitted
+from that derived ceiling; no smaller conflicting axis is selected. Current FDM
+P1S resolves to `256 x 256 x 250 mm`, while H2D is the dominant FDM machine at
+`350 x 320 x 325 mm`. The API publishes no manual fleet-maximum
+field, and slice endpoints retain final enforcement.
+`max_source_kind: profile-explicit` proves every profile-row maximum axis came
+from selected-profile metadata; the unchanged generic `1 mm` `min` is a
+compatibility floor, not machine metadata.
+
+V1 currently contains FDM rows only. It never publishes the generic
+`120 x 120 x 150 mm` SLA
+fallback as a machine envelope. The owner-confirmed Elegoo Saturn 4 Ultra needs
+a separate future `.goo`/`.ctb` and MSLA-timing remediation wave using
+owner-supplied Chitubox/Elegoo Satellite profiles; its dimensions are not
+guessed. The generic entry shape can add a later real machine-bound SLA row and
+an independent SLA entry in `fleet_resolutions` without a schema-version
+change, but the current payload contains no SLA row.
 
 ---
 
@@ -886,6 +1031,7 @@ No app-local runtime folders are used (`app/input`, `app/output`, `app/configs` 
   - `configs/prusa/SLA_0.05mm.ini`
 - Orca machine/process profiles (`.json`):
   - `configs/orca/Bambu_P1S_0.4_nozzle.json`
+  - `configs/orca/Bambu_H2D_0.4_nozzle.json`
   - `configs/orca/FDM_0.1mm.json`
   - `configs/orca/FDM_0.2mm.json`
   - `configs/orca/FDM_0.3mm.json`
@@ -949,6 +1095,11 @@ You can customize pricing, security, and slicing behavior without changing endpo
   PID/memory/CPU/log/stop settings. Defaults are repository safety defaults,
   not VPS capacity claims.
 - **Slicer Profiles:** Stored in `configs/prusa/*.ini` and `configs/orca/*.json`.
+- **Build-volume fallback:** shipped machine profiles carry their exact
+  envelope. FDM fallback is the largest supported machine
+  (`350 x 320 x 325 mm`), the existing profile minima remain `1 mm`, and
+  `MAX_MODEL_DIMENSION_MM` remains default `10000` with an accepted minimum of
+  `350`; a fallback must not silently reject a supported machine.
 - **Timeouts:** Internal 10-minute kill-switches prevent infinite loops during complex conversion/slicing operations and return `FILE_PROCESSING_TIMEOUT` when exceeded.
 - **Model Fidelity Policy:** Uploaded model data is never auto-healed or shape-corrected; invalid/non-printable source data is rejected with a clear error.
 - **Supply-Chain Integrity:** Docker build pins and verifies SHA256 checksums for downloaded PrusaSlicer and OrcaSlicer AppImages.

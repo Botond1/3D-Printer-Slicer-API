@@ -1,6 +1,6 @@
 # Testing Scripts - Local Claude Guide
 
-Last synchronized: 2026-08-25
+Last synchronized: 2026-08-26
 
 ## Scope
 
@@ -30,6 +30,9 @@ This folder contains API-level Python integration and workflow tests.
 - `operations/` - Public readiness and operations-scoped diagnostics
   - operations/operations_readiness_metrics_test_runner.py
 
+- `profiles/` - Public startup profile-catalogue validation
+  - profiles/profile_catalogue_test_runner.py
+
 ## Shared Helpers
 
 Located in tests/testing-scripts/common/:
@@ -49,6 +52,12 @@ slice mode or automatically read WooCommerce/LeadPilot variables. Supplying an
 authorized principal value under that runner-only input can exercise the same
 single header, but never add a second header or re-enable a server shared slot
 solely for a runner.
+
+`common/http_utils.py` also provides a bounded header-retaining JSON request
+for conditional GET checks. It keeps the final HTTP response block so the
+catalogue runner can verify ETag/304 without printing request credentials.
+All shared curl helpers pass authentication headers through the child stdin
+pipe (`-H @-`), never through process arguments or a retained temporary file.
 
 ## Reporting Contract
 
@@ -76,7 +85,7 @@ the manifest for the exact cleanup-consumer step.
 - PRICING_API_KEY is required for pricing lifecycle tests.
 - ARTIFACT_API_KEY is required for artifact/admin-output tests.
 - OPERATIONS_API_KEY is required for detailed health/readiness/metrics tests.
-- Never print credential values in reports.
+- Never print credential values in reports or place them in process arguments.
 
 ## Queue Capacity Qualification Contract
 
@@ -99,6 +108,43 @@ python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --
   `ops/hostinger/RUNBOOK.md`.
 - Default concurrency remains N=1. N=2/N=3 are not qualified or deployed at
   the I12 local-implementation checkpoint.
+
+## Profile Catalogue Contract
+
+Use:
+
+```text
+python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
+```
+
+- The required lane proves unauthenticated HTTP 200, exact FDM-only provisional
+  v1 shape, canonical `catalogue_sha256`, strong ETag, conditional 304, and all
+  per-printer/per-engine preset rows. It independently rederives technology-
+  scoped `machine_resolutions` and `fleet_resolutions`: current FDM P1S engines
+  agree at `256 x 256 x 250 mm`, H2D is the current FDM machine-attributed
+  maximum, and a mutated cross-engine conflict keeps all rows while excluding
+  only that technology/printer pair as null/`cross_engine_conflict`. The exclusion must be loud in its fleet view;
+  component-wise smaller resolution and manual maximum fields are forbidden.
+  Intra-engine preset drift must fail closed. The runner also proves the generic
+  `120 x 120 x 150 mm` SLA fallback is not advertised as a machine envelope.
+- It also proves a bounded generic `engine`, generic endpoint plus ordered
+  `slice_selector.parameters[{name,value}]`, ordered path-free
+  `profile_components[{role,basename,selector_parameter}]`, exact nullable
+  component-to-selector bindings, and exact
+  `effective_profile_identity_schema: r3d-effective-slice-profile-v2`, and
+  `build_volume_limits_mm.max_source_kind: profile-explicit`. Treat the generic
+  minimum as a floor, not machine metadata.
+- Do not fabricate Elegoo Saturn 4 Ultra dimensions. The generic v1 entry shape
+  can later admit a truthful SLA printer without a schema-version change, after
+  the owner-profiled Chitubox/Elegoo Satellite remediation wave.
+- Add `--verify-prusa-slice-parity` only when a runnable native API and
+  `SLICE_SERVICE_API_KEY` are available. That optional lane performs one
+  synthetic Prusa slice and requires its effective profile digest to equal the
+  matching catalogue entry.
+- The generated report is
+  `tests/testing-scripts/results/profile_catalogue_test_result.md`; read it
+  immediately after every run. A local source/unit result is not exact-image,
+  hosted, deployed, or production evidence.
 
 ## Local Rules
 
@@ -128,8 +174,10 @@ python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --
 - Keep the native Orca smoke split into its thin Docker orchestrator and
   side-effect-free fixture, container-script, and contract builders; preserve
   the bounded file/function guards and exact generated-script behavior.
-- Filament-profile identity and `material_used_g` are W8
-  `BLOCKED_OWNER_INPUT / NOT_STARTED`, not current test expectations.
+- Nine numeric Bambu references plus the `M03` P1S-boundary result are recorded,
+  but the matching Orca calibration is
+  `BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`. Do not treat the reference side or
+  the profile-catalogue runner as time/mass or automatic-pricing acceptance.
 - Queue timing and client start order are informational; fresh queue-state and
   exact artifact-inventory observations are authoritative. Staggered completion
   is used only as an N=1 serialization diagnostic.

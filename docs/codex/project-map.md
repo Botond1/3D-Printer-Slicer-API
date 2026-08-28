@@ -1,5 +1,113 @@
 # Verified project map
 
+## Current J2 bounds, catalogue, network, and calibration candidate
+
+Current classification:
+`J2_LOCAL_AGGREGATE_PASS;
+J2_HOSTED_BASELINE_SOURCE_IMAGE_PASS_NO_PUBLISH;
+J2_LIVE_ACTIVATION_REHEARSAL_BLOCKED_NOT_RUN;
+J2_NO_ROUTE_MUTATION;
+J2_REHEARSAL_TERMINAL_CONTRACT_DARK;
+J2_ORCA_CALIBRATION_BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`.
+
+J2 starts from protected-main baseline
+`0dedbe1e9e4c32a0373982a45bf788cdcdb4f024`. Its Source run `32996102492`
+and no-push Image run `32996102426` passed, but those runs qualify only the
+baseline. The current J2 source is committed locally, but has no exact-SHA
+hosted Source/Image result. No Candidate Publication, deployment, or live
+activation exists at this checkpoint.
+
+Direct executable-source map:
+
+```text
+shipped Prusa FDM + Orca P1S profiles -> 256 x 256 x 250 mm
+shipped Orca H2D profile             -> 350 x 320 x 325 mm
+FDM profile-resolution failure       -> largest supported envelope, H2D
+P1S Z boundary                       -> 230 mm accepted; 251/260 mm rejected
+selected printer + engine
+  -> production profile resolution/snapshot/runtime generation
+  -> resolved build_volume_limits_mm + engine_version + effective digest
+  -> immutable startup catalogue row
+catalogue entry shape
+  -> bounded generic engine + generic /.../slice endpoint
+  -> ordered slice_selector.parameters[{name,value}]
+  -> ordered path-free profile_components[{role,basename,selector_parameter}]
+  -> machine/combined -> printerProfile; process -> processProfile; filament -> null
+  -> effective_profile_identity_schema = r3d-effective-slice-profile-v2
+  -> max_source_kind = profile-explicit only when X/Y/Z max are explicit
+  -> unchanged generic 1 mm min is a compatibility floor, not machine metadata
+catalogue profiles
+  -> every per-printer/per-engine preset row stays visible
+  -> same technology/printer/engine preset drift fails catalogue construction
+machine_resolutions
+  -> grouped by technology/printer
+  -> all represented engines equal: resolved machine envelope
+  -> engine disagreement: excluded + null + cross_engine_conflict
+  -> no component-wise smaller-value resolution
+fleet_resolutions
+  -> one independent derivation per present technology
+  -> derived only from that technology's resolved machines
+  -> excluded_printers repeats every conflict reason
+  -> H2D is the current dominant resolved FDM machine
+  -> no separately maintained fleet_max field
+GET /profiles
+  -> public informational response + strong ETag/body SHA-256
+  -> 304 on matching If-None-Match
+  -> typed non-cacheable 503 when catalogue initialization is unavailable
+  -> never gates readiness or slicing
+one private source /32 -> LeadPilot-only first activation phase
+two through four private /32s -> later caller expansion
+  -> router deny 403 or host-firewall TCP reset/J2_ALLOWLIST_DENY
+  -> application principal failure remains a distinct 401
+  -> one inherited root-private FD9 flock spans the complete rehearsal
+  -> stable canonical/root-owned/non-writable ancestor chains around each action
+  -> strict --assert-router-dark terminal proof with an exact retained source
+  -> logical fsync-cutpoint recovery tested; real crash/power-loss NOT_VERIFIED
+  -> external orchestrator owns allowed/denied, TLS/renewal and rollback proof
+  -> completed rehearsal accepted only after proven terminal dark readback
+  -> *_rollback_uncertain is STOP/UNKNOWN, never dark evidence
+```
+
+The provisional `r3d-profile-catalogue-v1` is explicitly FDM-only and contains
+15 machine-bound rows: three Prusa P1S layer presets and twelve Orca P1S/H2D
+layer/material presets. Custom overrides and unmapped dynamic materials remain
+outside v1. The generic `120 x 120 x 150 mm` SLA fallback is never a machine
+envelope and is not advertised.
+
+P1S currently agrees across Orca and Prusa at `256 x 256 x 250 mm`. A future
+cross-engine mismatch preserves all profile rows but publishes that
+technology/printer pair as `excluded`, with null resolved envelope and
+`cross_engine_conflict`; only that machine is omitted from its technology's
+fleet derivation. This always narrows the eligible machine set and never widens
+the ceiling; the numeric ceiling shrinks when the excluded machine carried it.
+Bad data is never hidden with a smaller synthesized envelope.
+
+The owner-confirmed SLA target is the Elegoo Saturn 4 Ultra, but its dimensions
+are intentionally not guessed. Current Prusa `--export-sla` output and the SL1
+parser cannot represent Elegoo `.goo`/`.ctb` artifacts or credible MSLA timing.
+SLA remediation is a separate future wave using owner Chitubox/Elegoo Satellite
+profiles. The bounded generic v1 entry shape can add a later truthful
+machine-bound SLA row and independent SLA entry in `fleet_resolutions` without
+a schema-version change; the current payload has no SLA row.
+
+J2 performed no route mutation. The latest prior I12 evidence classified the
+route dark, but J2 did not re-read live state and does not claim a fresh dark
+observation.
+
+The anonymized calibration worksheet now records nine numeric Bambu Studio
+references and the `M03` P1S-boundary rejection. The Orca runner fixes
+`--orient 0`, proves `enable_support='0'` before digest and native execution,
+and reuses production machine/process `--load-settings` plus separate
+`--load-filaments` argument construction.
+The Orca measurement is blocked because the approved vendor profile chain and
+local Docker are unavailable. Generic repository profiles prove physical fit
+only, not vendor-faithful time or automatic pricing.
+
+See
+[`evidence/j2-bounds-network-calibration.md`](evidence/j2-bounds-network-calibration.md)
+for the local, hosted, and live evidence boundary and explicit `NOT VERIFIED`
+list.
+
 ## Current J1C corrective over the J1 calibration harvest
 
 Current local classification:
@@ -219,8 +327,9 @@ one x-slicer-api-key header
   only its exact repetition as the authorized substitution for one missing
   non-slice active is skipped during registration.
   External production activation is outside repository evidence and authority.
-- `GET /health` and `GET /pricing` remain public; W3 does not add authentication
-  to them. The intended public-route activation target is the principal-only
+- `GET /health`, `GET /pricing`, and J2's informational `GET /profiles` remain
+  public; W3 does not add application authentication to them. The intended
+  public-route activation target is the principal-only
   slice-auth mode. Before any router action, the dark gate must read back mode
   `principals`, both principal actives, and absent shared active/previous,
   expiry, and both principal previous slots for the initial activation; pass one
@@ -261,10 +370,12 @@ repository-owned child now owns exact `layer_change_gcode='G92 E0'`. Owner-
 supplied mechanism evidence shows the dedicated filament option changes native
 mass from 0.00 g to 4.12 g. No vendor profile was imported. The incomplete
 vendor chain remains a separate W8 motion/time calibration lane and is not a
-J1C blocker. J2 separately owns P1S 256 x 256 x 250 mm and H2D
-350 x 320 x 325 mm bed-shape/Z correction. The privacy-safe
-`scripts/sz-b2-orca-calibration.js` helper still embeds the superseded combined
-settings list; it is outside the production-engine correction and unqualified.
+J1C blocker. J2 corrects the physical envelopes to P1S
+`256 x 256 x 250 mm` and H2D `350 x 320 x 325 mm`. The privacy-safe
+`scripts/sz-b2-orca-calibration.js` helper now enforces `enable_support='0'`
+before digest/native work while the shared native policy retains `--orient 0`
+and the production machine/process versus filament flag separation;
+its Orca measurement remains blocked on the vendor chain and local Docker.
 
 Capability readiness is proposal-only. Public `/health` remains cheap liveness;
 future native capability state belongs on public `/ready`. Docker still checks
@@ -1074,6 +1185,7 @@ code order is authoritative.
 | HTTP contract | [`app/routes`](../../app/routes), [`app/middleware`](../../app/middleware), and [`swagger-docs.js`](../../app/docs/swagger-docs.js). |
 | HTTP server envelope | [`http-server.js`](../../app/services/http-server.js) validates and applies header/request/keep-alive timeouts, header/connection counts, and requests/socket before listen. |
 | Slice orchestration | [`app/services/slice.service.js`](../../app/services/slice.service.js) owns queue settlement and delegates to [`pipeline.js`](../../app/services/slice/pipeline.js), [`output-lifecycle.js`](../../app/services/slice/output-lifecycle.js), and [`response-lifecycle.js`](../../app/services/slice/response-lifecycle.js). |
+| Profile catalogue | [`profile-catalogue.js`](../../app/services/slice/profile-catalogue.js) builds one immutable startup generation from the production profile chain; [`profile-catalogue.routes.js`](../../app/routes/profile-catalogue.routes.js) serves public `GET /profiles`; [`profile-catalogue-openapi.js`](../../app/docs/profile-catalogue-openapi.js) defines its schema and typed unavailable response. |
 | Request workspace ownership | [`workspace.js`](../../app/services/slice/workspace.js) owns marked job allocation, containment, output-candidate custody, idempotent cleanup, and audit-only stale classification. |
 | Pricing | [`pricing.service.js`](../../app/services/pricing.service.js) facade plus [`pricing/repository.js`](../../app/services/pricing/repository.js) and [`pricing/catalog.js`](../../app/services/pricing/catalog.js). |
 | Admin artifacts | [`admin-output.service.js`](../../app/services/admin-output.service.js) validates extension, containment, lstat, and realpath. Its existing filesystem-checking `resolveValidatedOutputFile` helper is exported for tests; it is not a pure helper. |
@@ -1132,8 +1244,10 @@ code order is authoritative.
 
 Runtime route registration, not README lists, is canonical:
 
-- public liveness/pricing/slicing/docs routes are registered by
-  [`server.js`](../../app/server.js), [`slice.routes.js`](../../app/routes/slice.routes.js),
+- public liveness/readiness/pricing/profile-catalogue/docs routes and protected
+  slicing routes are registered by [`server.js`](../../app/server.js),
+  [`profile-catalogue.routes.js`](../../app/routes/profile-catalogue.routes.js),
+  [`slice.routes.js`](../../app/routes/slice.routes.js),
   [`pricing.routes.js`](../../app/routes/pricing.routes.js), and
   [`system.routes.js`](../../app/routes/system.routes.js);
 - protected pricing mutations apply `adminRateLimiter` then pricing audience
@@ -1146,7 +1260,8 @@ Runtime route registration, not README lists, is canonical:
   work. The explicit `SLICE_SERVICE_AUTH_MODE` admits only `legacy`, bounded
   `migration`, or the `principals` final state;
   WooCommerce and LeadPilot active/previous rotation and revocation are
-  repository-tested. `GET /health` and `GET /pricing` remain public. I12 verifies
+  repository-tested. `GET /health`, `GET /ready`, `GET /pricing`, and
+  `GET /profiles` remain public. I12 verifies
   one exact dark private binding, proxy topology and API/native egress denial;
   public caller/firewall/DNS/certificate and complete secret lifecycle remain
   `UNVERIFIED`;

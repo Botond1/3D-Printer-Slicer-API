@@ -8,6 +8,7 @@ const document = createSwaggerDocument({ FDM: {}, SLA: {} });
 
 const EXPECTED_METHODS = {
     '/pricing': ['get'],
+    '/profiles': ['get'],
     '/pricing/FDM': ['post'],
     '/pricing/SLA': ['post'],
     '/pricing/FDM/{material}': ['delete', 'patch'],
@@ -25,6 +26,7 @@ const EXPECTED_METHODS = {
 
 const EXPECTED_RESPONSE_KEYS = {
     'GET /pricing': ['200'],
+    'GET /profiles': ['200', '304', '503'],
     'POST /pricing/FDM': ['201', '400', '401', '409', '500'],
     'POST /pricing/SLA': ['201', '400', '401', '409', '500'],
     'PATCH /pricing/FDM/{material}': ['200', '400', '401', '500'],
@@ -84,9 +86,263 @@ test('OpenAPI protected operations declare exact audience-scoped x-api-key secur
         assert.equal(header.schema.type, 'string', operationKey);
     }
 
-    for (const operationKey of ['GET /pricing', 'GET /health', 'GET /ready']) {
+    for (const operationKey of ['GET /pricing', 'GET /profiles', 'GET /health', 'GET /ready']) {
         assert.equal(getOperation(operationKey).security, undefined, operationKey);
     }
+});
+
+test('profile catalogue v1 stays FDM-only now without a schema change for real SLA machines', () => {
+    const operation = getOperation('GET /profiles');
+    const responseSchema = operation.responses[200].content['application/json'].schema;
+    const entrySchema = responseSchema.properties.profiles.items;
+
+    assert.deepEqual(entrySchema.properties.technology.enum, ['FDM', 'SLA']);
+    assert.equal(entrySchema.properties.engine.enum, undefined);
+    assert.equal(entrySchema.properties.engine.pattern, '^[a-z][a-z0-9-]{0,31}$');
+    assert.equal(entrySchema.properties.printer.properties.id.enum, undefined);
+    assert.equal(
+        entrySchema.properties.slice_selector.properties.endpoint.pattern,
+        '^/[a-z][a-z0-9-]{0,31}/slice$'
+    );
+    const selectorParameters = entrySchema.properties.slice_selector.properties.parameters;
+    assert.equal(selectorParameters.type, 'array');
+    assert.equal(selectorParameters.minItems, 1);
+    assert.equal(selectorParameters.maxItems, 16);
+    assert.deepEqual(selectorParameters.items.required, ['name', 'value']);
+    assert.equal(
+        selectorParameters.items.properties.name.pattern,
+        '^[A-Za-z][A-Za-z0-9_-]{0,63}$'
+    );
+    assert.equal(entrySchema.properties.profile_components.minItems, 1);
+    assert.deepEqual(
+        entrySchema.properties.profile_components.items.required,
+        ['role', 'basename', 'selector_parameter']
+    );
+    assert.equal(
+        entrySchema.properties.profile_components.items.properties.selector_parameter.nullable,
+        true
+    );
+    assert.deepEqual(
+        entrySchema.properties.build_volume_limits_mm.properties.max_source_kind.enum,
+        ['profile-explicit']
+    );
+    assert.deepEqual(
+        entrySchema.properties.effective_profile_identity_schema.enum,
+        ['r3d-effective-slice-profile-v2']
+    );
+    assert.equal(entrySchema.properties.filament_diameter_mm.nullable, true);
+    assert.equal(entrySchema.properties.filament_density_g_cm3.nullable, true);
+    assert.match(operation.description, /current v1 rows are .*FDM presets/);
+    assert.match(operation.description, /Fallback-only SLA presets are never published/);
+    assert.match(operation.description, /same v1 entry schema/);
+});
+
+test('profile catalogue schema exposes technology-scoped loud conflicts and fleet maxima', () => {
+    const operation = getOperation('GET /profiles');
+    const responseSchema = operation.responses[200].content['application/json'].schema;
+    const entrySchema = responseSchema.properties.profiles.items;
+    const machineSchema = responseSchema.properties.machine_resolutions.items;
+    const fleetArraySchema = responseSchema.properties.fleet_resolutions;
+    const fleetSchema = fleetArraySchema.items;
+
+    assert.deepEqual(responseSchema.required, [
+        'schema', 'catalogue_sha256', 'semantics', 'profiles',
+        'machine_resolutions', 'fleet_resolutions'
+    ]);
+    assert.equal(responseSchema.additionalProperties, false);
+    assert.equal(entrySchema.additionalProperties, false);
+    assert.equal(responseSchema.properties.semantics.additionalProperties, false);
+    assert.equal(machineSchema.additionalProperties, false);
+    assert.equal(fleetSchema.additionalProperties, false);
+    assert.equal(fleetArraySchema.minItems, 1);
+    assert.equal(fleetArraySchema.maxItems, 2);
+    assert.equal(
+        operation.responses[503].content['application/json'].schema.additionalProperties,
+        false
+    );
+
+    const profileEnvelope = entrySchema.properties.build_volume_limits_mm;
+    assert.equal(profileEnvelope.additionalProperties, false);
+    assert.equal(profileEnvelope.properties.min.additionalProperties, false);
+    assert.equal(profileEnvelope.properties.max.additionalProperties, false);
+    for (const axis of ['x', 'y', 'z']) {
+        assert.deepEqual(profileEnvelope.properties.min.properties[axis], {
+            type: 'number', minimum: 0
+        });
+        assert.deepEqual(profileEnvelope.properties.max.properties[axis], {
+            type: 'number', minimum: 0, exclusiveMinimum: true
+        });
+    }
+
+    assert.deepEqual(machineSchema.required, [
+        'technology', 'printer', 'engines', 'status', 'reason',
+        'resolved_build_volume_limits_mm'
+    ]);
+    assert.deepEqual(machineSchema.properties.technology.enum, ['FDM', 'SLA']);
+    assert.deepEqual(machineSchema.properties.status.enum, ['resolved', 'excluded']);
+    assert.equal(machineSchema.properties.reason.nullable, true);
+    assert.deepEqual(
+        machineSchema.properties.reason.enum,
+        [null, 'cross_engine_conflict']
+    );
+    assert.equal(
+        machineSchema.properties.resolved_build_volume_limits_mm.nullable,
+        true
+    );
+    assert.match(
+        machineSchema.properties.resolved_build_volume_limits_mm.description,
+        /never selected/
+    );
+    assert.equal(machineSchema.oneOf.length, 2);
+    assert.deepEqual(machineSchema.oneOf[0].properties.status.enum, ['resolved']);
+    assert.deepEqual(machineSchema.oneOf[0].properties.reason.enum, [null]);
+    assert.equal(
+        machineSchema.oneOf[0].properties.resolved_build_volume_limits_mm.nullable,
+        false
+    );
+    assert.deepEqual(machineSchema.oneOf[1].properties.status.enum, ['excluded']);
+    assert.deepEqual(
+        machineSchema.oneOf[1].properties.reason.enum,
+        ['cross_engine_conflict']
+    );
+    assert.deepEqual(
+        machineSchema.oneOf[1].properties.resolved_build_volume_limits_mm.enum,
+        [null]
+    );
+
+    assert.deepEqual(fleetSchema.required, [
+        'technology', 'status', 'reason', 'maximum', 'excluded_printers'
+    ]);
+    assert.deepEqual(fleetSchema.properties.technology.enum, ['FDM', 'SLA']);
+    assert.deepEqual(fleetSchema.properties.status.enum, ['resolved', 'unresolved']);
+    assert.equal(fleetSchema.properties.reason.nullable, true);
+    assert.deepEqual(
+        fleetSchema.properties.reason.enum,
+        [null, 'no_resolved_machine', 'no_dominant_machine']
+    );
+    assert.equal(fleetSchema.properties.maximum.nullable, true);
+    assert.equal(fleetSchema.properties.maximum.additionalProperties, false);
+    assert.equal(
+        fleetSchema.properties.maximum.properties.build_volume_limits_mm
+            .additionalProperties,
+        false
+    );
+    assert.equal(
+        fleetSchema.properties.excluded_printers.items.additionalProperties,
+        false
+    );
+    assert.deepEqual(
+        fleetSchema.properties.excluded_printers.items.properties.reason.enum,
+        ['cross_engine_conflict']
+    );
+    assert.equal(fleetSchema.oneOf.length, 2);
+    assert.deepEqual(fleetSchema.oneOf[0].properties.status.enum, ['resolved']);
+    assert.deepEqual(fleetSchema.oneOf[0].properties.reason.enum, [null]);
+    assert.equal(fleetSchema.oneOf[0].properties.maximum.nullable, undefined);
+    assert.deepEqual(fleetSchema.oneOf[1].properties.status.enum, ['unresolved']);
+    assert.deepEqual(
+        fleetSchema.oneOf[1].properties.reason.enum,
+        ['no_resolved_machine', 'no_dominant_machine']
+    );
+    assert.deepEqual(fleetSchema.oneOf[1].properties.maximum.enum, [null]);
+    assert.match(operation.description, /Every per-printer, per-engine preset row remains visible/);
+    assert.match(operation.description, /cross-engine conflict is explicit/);
+    assert.match(operation.description, /separate SLA fleet resolution/);
+});
+
+test('profile catalogue v1 generic identity fields admit a future SLA engine shape', () => {
+    const entrySchema = getOperation('GET /profiles')
+        .responses[200].content['application/json'].schema.properties.profiles.items;
+    const futureIdentityOnly = {
+        engine: 'future-sla',
+        endpoint: '/future-sla/slice',
+        parameters: [{ name: 'printerProfile', value: 'owner-exported-profile.json' }],
+        components: [{
+            role: 'machine',
+            basename: 'owner-exported-profile.json',
+            selector_parameter: 'printerProfile'
+        }],
+        filament_diameter_mm: null,
+        filament_density_g_cm3: null
+    };
+
+    assert.match(futureIdentityOnly.engine, new RegExp(entrySchema.properties.engine.pattern));
+    assert.match(
+        futureIdentityOnly.endpoint,
+        new RegExp(entrySchema.properties.slice_selector.properties.endpoint.pattern)
+    );
+    for (const parameter of futureIdentityOnly.parameters) {
+        assert.match(
+            parameter.name,
+            new RegExp(entrySchema.properties.slice_selector.properties.parameters.items
+                .properties.name.pattern)
+        );
+        assert.match(
+            parameter.value,
+            new RegExp(entrySchema.properties.slice_selector.properties.parameters.items
+                .properties.value.pattern)
+        );
+    }
+    for (const component of futureIdentityOnly.components) {
+        assert.match(
+            component.role,
+            new RegExp(entrySchema.properties.profile_components.items.properties.role.pattern)
+        );
+        assert.match(
+            component.basename,
+            new RegExp(entrySchema.properties.profile_components.items.properties.basename.pattern)
+        );
+        assert.match(
+            component.selector_parameter,
+            new RegExp(entrySchema.properties.profile_components.items.properties
+                .selector_parameter.pattern)
+        );
+    }
+    assert.equal(futureIdentityOnly.filament_diameter_mm, null);
+    assert.equal(futureIdentityOnly.filament_density_g_cm3, null);
+    assert.equal(Object.hasOwn(futureIdentityOnly, 'build_volume_limits_mm'), false);
+});
+
+test('profile catalogue public strings match runtime bounds and path-free identity contracts', () => {
+    const entry = getOperation('GET /profiles')
+        .responses[200].content['application/json'].schema.properties.profiles.items.properties;
+
+    assert.deepEqual(
+        { minLength: entry.id.minLength, maxLength: entry.id.maxLength, pattern: entry.id.pattern },
+        {
+            minLength: 1,
+            maxLength: 256,
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$'
+        }
+    );
+    assert.deepEqual(
+        entry.printer.properties.id,
+        {
+            type: 'string', minLength: 1, maxLength: 64,
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+        }
+    );
+    assert.deepEqual(
+        entry.printer.properties.name,
+        {
+            type: 'string', minLength: 1, maxLength: 128,
+            pattern: '^[\\x20-\\x7e]{1,128}$'
+        }
+    );
+    assert.deepEqual(
+        entry.engine_version,
+        {
+            type: 'string', minLength: 1, maxLength: 128,
+            pattern: '^[\\x20-\\x7e]{1,128}$'
+        }
+    );
+    assert.deepEqual(
+        entry.build_volume_limits_mm.properties.source_profile,
+        {
+            type: 'string', minLength: 1, maxLength: 128,
+            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+        }
+    );
 });
 
 test('OpenAPI slice operations expose the exact scoped authentication contract', () => {

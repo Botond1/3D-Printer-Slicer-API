@@ -1,5 +1,170 @@
 # Hardening plan
 
+## J2 bounds, catalogue, network, and calibration checkpoint
+
+Status:
+`J2_LOCAL_AGGREGATE_PASS;
+J2_HOSTED_BASELINE_SOURCE_IMAGE_PASS_NO_PUBLISH;
+J2_LIVE_ACTIVATION_REHEARSAL_BLOCKED_NOT_RUN;
+J2_NO_ROUTE_MUTATION;
+J2_REHEARSAL_TERMINAL_CONTRACT_DARK;
+J2_ORCA_CALIBRATION_BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`.
+
+Implemented local candidate exits:
+
+1. Correct Prusa FDM and Orca P1S physical bounds to
+   `256 x 256 x 250 mm`, Orca H2D to `350 x 320 x 325 mm`, and the FDM
+   fallback to that largest supported H2D envelope. Keep fit enforcement on
+   the production per-selection bounds path and preserve the existing `1 mm`
+   lower compatibility boundary pending a separate owner semantics decision.
+   Prove P1S Z `230 mm`
+   accepted and Z `251 mm`/`260 mm` rejected.
+2. Build the public, unauthenticated `/profiles` catalogue once at startup from
+   the production resolve/snapshot/runtime/bounds/filament/digest chain. Bind
+   every provisional FDM row to printer and engine identities, selected
+   profiles, effective digest, and envelope. Preserve a bounded generic
+   `engine`, generic `slice_selector.endpoint` plus ordered
+   `parameters[{name,value}]`, ordered path-free
+   `profile_components[{role,basename,selector_parameter}]`, exact nullable
+   component-to-selector bindings, `r3d-effective-slice-profile-v2` identity
+   marker, and
+   `max_source_kind: profile-explicit` for profile-sourced X/Y/Z maxima; the
+   unchanged generic `1 mm` minimum is a compatibility floor, not machine
+   metadata. Keep every per-printer/
+   per-engine preset row visible. Fail catalogue construction on envelope drift
+   inside one technology/printer/engine. Publish a machine envelope only when
+   all represented engines agree; otherwise exclude only that machine with null
+   envelope and loud `cross_engine_conflict` in both machine and fleet views.
+   Never select a component-wise smaller conflict value. Derive one independent
+   fleet maximum per present technology only from its remaining resolved, named
+   machines. Keep the current 15-row payload FDM-only
+   and never advertise the generic `120 x 120 x 150 mm` SLA fallback as a machine
+   envelope. Emit a strong ETag/body digest and typed non-critical 503; never add
+   a manual fleet-max field.
+3. Render one through four unique private IPv4 `/32` sources, with exactly one
+   LeadPilot source in phase one and two through four only in a later phase.
+   Keep allowlist rejection visibly distinct from application HTTP 401:
+   router 403 or host-firewall TCP reset plus private `J2_ALLOWLIST_DENY`.
+4. Constrain activation to an external-orchestrator rehearsal. Repository-local
+   gates prepare the attempt but never self-promote. Hold one inherited
+   root-private FD9 lock across every action and external observation; re-prove
+   canonical/root-owned/non-writable ancestor chains and finish with strict
+   `--assert-router-dark`. Accept completion only after rollback and the final
+   dark state are proved. Treat any
+   `*_rollback_uncertain` result as `STOP/UNKNOWN`, never as dark evidence.
+   Unit tests prove logical fsync-cutpoint recovery only; real process/kernel/
+   power-loss durability remains external `NOT_VERIFIED`.
+5. Record nine numeric Bambu references plus the `M03` P1S-boundary result.
+   Keep native auto-orient disabled, force support off before calibration
+   digest/native work, and reuse the production machine/process
+   `--load-settings` plus separate `--load-filaments` invocation helper. Do not
+   infer vendor-faithful time or pricing from the
+   generic physical-envelope profiles.
+
+Remaining exits:
+
+1. pass the committed J2 source through hosted read-only Source/Image gates;
+2. separately publish and deploy an exact J0-capable immutable image before any
+   live rehearsal;
+3. provide private inputs and obtain external allowed/denied-source, TLS
+   issuance/renewal, rollback, and final-dark observations; stop as unknown if
+   rollback cannot be proved;
+4. obtain complete owner-approved P1S/H2D vendor-profile chains and rerun the
+   nine Orca numeric measurements plus the `M03` boundary with Docker;
+5. keep SLA outside the current FDM-only catalogue until a separate future wave
+   uses owner Chitubox/Elegoo Satellite profiles, establishes truthful
+   Elegoo Saturn 4 Ultra dimensions, and implements compatible `.goo`/`.ctb`
+   output/parsing plus MSLA timing. Do not guess values or publish the fallback
+   as a machine. The generic v1 entry contract can add that real SLA printer and
+   an independent SLA fleet entry without a schema-version change; the
+   remediation implementation remains future work;
+6. complete the mandatory J2.1 behavior-neutral decomposition below before any
+   further network/route, catalogue/schema, or SLA behavior change.
+
+The exact baseline `0dedbe1e9e4c32a0373982a45bf788cdcdb4f024` passed Source
+run `32996102492` and no-push Image run `32996102426`; that is baseline-only,
+not hosted J2 or deployment evidence. See
+[`evidence/j2-bounds-network-calibration.md`](evidence/j2-bounds-network-calibration.md).
+
+### Mandatory next internal slice: J2.1 behavior-neutral decomposition
+
+The P2 decomposition guardrail currently identifies three oversized owners:
+`scripts/i12-hostinger-operator-contract.js` at 2309 lines,
+`app/services/slice/profile-catalogue.js` at 595 lines, and
+`tests/testing-scripts/profiles/profile_catalogue_test_runner.py` at 986 lines.
+This debt is not corrected through a risky late refactor inside J2. J2.1 is the
+mandatory next internal behavior-neutral slice, and it must close before any
+later route/network, catalogue/schema, or SLA behavior change begins.
+
+Target module boundaries:
+
+1. Keep `scripts/i12-hostinger-operator-contract.js` as the existing CLI and
+   CommonJS export façade. Extract private allowlist parsing, bounded private-
+   input metadata/readback, router validation, rendering, and staging into
+   `scripts/i12-hostinger-operator/private-route-contract.js`. Extract active/
+   dark directory inspection, activation, disable, fsync, retained rollback,
+   and rollback-uncertain transaction handling into
+   `scripts/i12-hostinger-operator/activation-transaction.js`. The façade must
+   preserve its current CLI arguments, exit codes, stdout/stderr classifications,
+   export names/order, and fail-closed activation/rollback sequence. Shared
+   immutable route constants have one owner in the private-route module;
+   transaction code imports that contract and never imports the façade.
+2. Keep `app/services/slice/profile-catalogue.js` as the current service/export
+   façade. Extract schema name, semantics, bounded string contracts, and entry
+   identity validation into
+   `app/services/slice/profile-catalogue/public-contract.js`; extract preset
+   definitions, selector/component construction, entry assembly, canonical
+   content hashing, and deep-freeze construction into
+   `app/services/slice/profile-catalogue/preset-builder.js`; extract initialize/
+   status/snapshot state into
+   `app/services/slice/profile-catalogue/service-state.js`. Preserve the exact
+   façade exports and dependency-injection seams. The public OpenAPI schema,
+   15-row FDM payload, canonical JSON bytes, `catalogue_sha256`, ETag, ordered
+   selector/component arrays, typed 503, readiness independence, and future-SLA
+   v1 shape must remain unchanged.
+3. Keep
+   `tests/testing-scripts/profiles/profile_catalogue_test_runner.py` as the CLI
+   façade with the same arguments, exit code, console lines, report path, and
+   evidence classification. Move pure schema/digest/envelope/fleet validators
+   to
+   `tests/testing-scripts/profiles/profile_catalogue_schema_validators.py`; move
+   HTTP catalogue scenarios, optional Prusa digest parity, and the synthetic
+   fixture to
+   `tests/testing-scripts/profiles/profile_catalogue_http_scenarios.py`; move
+   report rendering/writing to
+   `tests/testing-scripts/profiles/profile_catalogue_report_writer.py`. Imports
+   must be one-way: validators import no peer module; scenarios import validators
+   and own the check record; the report writer consumes passed check records
+   without importing scenarios; the façade imports and wires all three.
+
+Execution and exit contract:
+
+1. Before extraction, inventory the façade export keys, CLI cases, route-state
+   classifications, catalogue fixture bytes/digests, Python checks, normalized
+   report output, and every existing mutation. Make this the pre/post parity
+   oracle; do not rewrite expected behavior to make the split pass.
+2. Extract one boundary at a time. After each move, run the existing focused
+   contract and mutation suites through the unchanged façade, then add only
+   import-direction and direct-module ownership tests. Every pre-split mutation
+   must retain a one-to-one post-split test and the same pass/fail boundary;
+   zero mutations may be dropped, merged away, or reclassified.
+3. For the catalogue, require exact deep equality of the OpenAPI operation and
+   payload, plus identical canonical JSON, `catalogue_sha256`, and ETag for a
+   fixed dependency fixture. For the operator, require identical rendered bytes,
+   file-state transitions, terminal-dark/rollback-uncertain classifications,
+   CLI output, and exit status. For Python, use a fixed clock to require exact
+   normalized report bytes and identical optional-parity state and process exit.
+4. Final J2.1 acceptance requires the focused mutation suites, full `npm test`,
+   `npm run check:syntax`, `npm run check:repository-safety`,
+   `npm run check:repository-safety:staged`, and the existing J2 privacy tests
+   plus staged-added-line privacy scan. Syntax/safety/privacy evidence must cover
+   every new module and the retained façades.
+5. Exit only with no public schema/payload/digest/ETag change, no route/render/
+   activation/rollback behavior change, no CLI/report/status/error/log change,
+   no credential or private-input exposure, no import cycle, and no duplicated
+   domain owner. Any parity drift blocks J2.1 and therefore blocks every later
+   network, catalogue, and SLA behavior wave.
+
 ## J1C corrective over the J1 calibration checkpoint
 
 Status:
@@ -152,10 +317,10 @@ Remaining gates:
    inclusion, but the missing include/process/filament chain and exact Orca
    2.3.1 qualification still forbid a partial import. This lane does not block
    J1C's production `--load-filaments` binding or exact child-owned
-   `layer_change_gcode='G92 E0'` corrections. The privacy-safe calibration
-   helper still embeds the superseded combined settings list and remains
-   unqualified until separately corrected. J2 separately owns P1S/H2D bed
-   shape and Z;
+   `layer_change_gcode='G92 E0'` corrections. J2 supplies only the corrected
+   P1S/H2D physical envelopes and makes the calibration helper force support
+   off; the Orca measurement remains blocked by the vendor profiles and local
+   Docker;
 4. treat capability readiness as a separate proposal wave. Keep public
    `/health` cheap liveness and place future native capability state on public
    `/ready`. Require at least Prusa and selected-filament Orca startup probes,
@@ -204,12 +369,15 @@ API image was not relabeled, rebuilt, or republished for this operator change.
 
 Remaining public-activation order:
 
-1. keep route activation blocked until hostname/DNS, approved caller/CIDR,
-   firewall, certificate continuity, monitoring and recovery evidence exist;
-2. validate certificate issuance/continuity and the no-clobber route path with
-   an authenticated synthetic caller before any customer traffic;
-3. obtain separate explicit route-activation authority and preserve the exact
-   dark rollback boundary during that change;
+1. keep route activation blocked until an exact J0-capable image is published
+   and deployed and hostname/DNS, approved private sources, firewall,
+   certificate continuity, monitoring and recovery inputs exist;
+2. run the J2 external-orchestrator rehearsal first with only the LeadPilot
+   `/32`; prove the allowed source, denied source, distinct deny classification,
+   TLS issuance/renewal, rollback, and the final dark readback. Treat rollback
+   uncertainty as `STOP/UNKNOWN`, not a successful dark terminal state;
+3. treat expansion to two through four callers as a later separately approved
+   phase, and preserve the exact dark rollback boundary during every attempt;
 4. measure real workload and N=2/N=3 capacity before increasing retained
    concurrency above one;
 5. reconcile the resulting evidence without claiming production completeness
@@ -615,8 +783,8 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `VERIFIED_REPOSITORY_AND_HOSTED; REAL_WORKLOAD_CAPACITY_OPEN` | S1a/S1b/S1c and S3a image controls | I4 supplies bounded resource/archive/artifact/pricing/container controls; I12 retains dark N=1 | I4 exact-SHA Source/Image and full suites passed. I12 proves small synthetic N=1 mechanics on the target host. Real customer models and N=2/N=3 remain unqualified; retained concurrency stays one. |
 | S3a - repository build/provenance and automatic-deploy separation | `VERIFIED_SIGNED_MAIN_CANDIDATE; MAIN_GOVERNANCE_AND_AUTOMATIC_REHEARSAL_VERIFIED` | S0.1; exact hosted I7/I8 and protected-main I10 evidence green | I8 provides build-once digest-bound GHCR publication and attestations; I10 provides strict protected-main Source/Image governance; I11 productizes manual main publication/recovery and automatic no-deploy rehearsal | I11 completed at main SHA `65706e381b907c6ba09a8eba504af3adaacac86b`: Source `32668796239`, Image `32668796232`, Candidate Publication `32669087688`, and automatic rehearsal `32669484893` succeeded. Human review and public production promotion are not inferred. |
-| S4 - service trust and topology | `DARK_HOST_VERIFIED; PUBLIC_ACTIVATION_CONTROLS_OPEN` | S1a/S1b/S1c/S2 security surfaces and S3a evidence | I5 supplies scoped trust; I6 selects the private-peer topology; I12 proves one exact dark host state | Exact dark digest, authenticated private peer, auth rejection, no API host/default route, API/native egress denial, and corrected socketless proxy topology are verified. Public caller/CIDR, firewall, DNS/certificate, route activation, monitoring, and complete production secret lifecycle remain `UNVERIFIED`. |
-| S3b - staging and promotion drill | `VERIFIED_EPHEMERAL_AND_AUTOMATED_FOUNDATION; PUBLIC_PRODUCTION_UNVERIFIED` | signed S3a candidate and S4/S5 repository controls | I9 read-only hosted rehearsal and I11 automatic publication-triggered rehearsal are verified; public production change remains separate | The no-deploy automatic rehearsal is green. I12 separately verifies a dark exact-digest host state and rollback-retained proxy cutover. Public caller/firewall/DNS/certificate/route, customer traffic, and live public rollback remain `UNVERIFIED_NOT_AUTHORIZED`. |
+| S4 - service trust and topology | `DARK_HOST_VERIFIED; J2_PUBLIC_REHEARSAL_BLOCKED_NOT_RUN` | S1a/S1b/S1c/S2 security surfaces and S3a evidence | I5 supplies scoped trust; I6 selects the private-peer topology; I12 proves one exact dark host state; J2 adds a local 1..4-source activation contract | Exact dark digest, authenticated private peer, auth rejection, no API host/default route, API/native egress denial, and corrected socketless proxy topology are verified historically. J2 requires a LeadPilot-only first phase, distinct network/application denial, external TLS/allowlist/rollback proof, and a proved terminal dark state; rollback uncertainty stops as unknown. The exact J0-capable deploy and live inputs are absent, so the rehearsal is not run. |
+| S3b - staging and promotion drill | `VERIFIED_EPHEMERAL_AND_AUTOMATED_FOUNDATION; J2_LIVE_ACTIVATION_BLOCKED` | signed S3a candidate and S4/S5 repository controls | I9 read-only hosted rehearsal and I11 automatic publication-triggered rehearsal are verified; J2 live route rehearsal remains separate | The no-deploy automatic rehearsal is green. I12 separately verifies a historical dark exact-digest host state and rollback-retained proxy cutover. J2 has no exact candidate publication/deploy and makes no live allowlist, TLS, route, rollback, or customer-traffic claim. |
 | S5 - topology/optional async worker decision | `PRIVATE_PEER_TOPOLOGY_VERIFIED_DARK; ASYNC_WORKER_DEFERRED` | I5 trust controls and S4 topology evidence | private-peer topology selected and dark-host verified; async API/worker deferred | Exact dark API/private-peer/egress and proxy gateway behavior are verified. Complete public caller, firewall, DNS/certificate, secret lifecycle and activation evidence without changing current endpoints. |
 
 ## Current S0.1 verification checkpoint
@@ -1035,3 +1203,4 @@ exception to those gates.
 | D-020 | I2 separates the verified tmpfs liveness root cause from the Swiper advisory. | Exact A/B/C and main-container evidence proves root-owned tmpfs mount roots caused startup `EACCES`; V2C independently produces zero `GHSA-hmx5-qpq5-p643` findings. Dynamic nonzero UID/GID plus kernel cross-check and mode `0700` fix liveness without root or world-writable state. | I2 repository image validation closed; external policy, provenance/promotion, S4/S3b, and production evidence remain required |
 | D-021 | Application defaults do not prove arbitrary host or proxy capacity. | I12 observes the target host and passes bounded small synthetic N=1 traffic, but does not qualify customer models, N=2/N=3, or final public proxy timeouts. | Retain N=1 and verify public timeouts plus real-workload capacity before increasing load. |
 | D-022 | I5's loopback-published topology could not combine ingress with egress denial; I6 replaces it. | I12 verifies the selected internal API/private peer with no API host port/default route, denied API/native egress, and a socketless dual-attached proxy whose default route is ingress. | Verify intended public caller, proxy CIDR, firewall, DNS/certificate, secret lifecycle and route rollback before activation. Async worker remains deferred. |
+| D-023 | J2 activation evidence must come from an external observer and must not collapse a network deny into application HTTP 401. | The repository contract distinguishes router 403 and host-firewall TCP reset/private `J2_ALLOWLIST_DENY` from application 401 and stages LeadPilot alone first. Success requires a proved final-dark state; `*_rollback_uncertain` is `STOP/UNKNOWN`. Live execution is blocked without an exact J0-capable deployed image and private inputs. | External orchestrator proves allowed/denied sources, TLS issuance/renewal, rollback, and final dark readback; later caller expansion remains separate. |

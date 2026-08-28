@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { buildSlicerCommandArgs } = require('../../../app/services/slice/engine');
 
 const {
     CONTAINER_SCRIPT,
@@ -303,14 +304,52 @@ test('container contract binds snapshots, engine version, profile digest, filame
     assert.match(compact, /calculateEffectiveProfileSha256\(\{/);
     assert.match(compact, /readOrcaFilamentProfileMetadata\(/);
     assert.match(compact, /parseEngineVersionOutput\('orca', help\)/);
+    assert.match(
+        compact,
+        /const \{ buildSlicerCommandArgs \} = require\('\/app\/services\/slice\/engine'\)/
+    );
     assert.match(compact, /resolveScratchPath: \(\.\.\.segments\)/);
     assert.match(compact, /assertScratchContainedPath: assertContained/);
     assert.match(
         compact,
-        /const settings = \[snapshots\.orcaMachineConfigFile, runtimeProcessProfile, snapshots\.orcaFilamentConfigFile\]/
+        /const slicerArgs = buildSlicerCommandArgs\( 'FDM', runtimeProcessProfile, desiredOutput, job\.infill, 'orca', snapshots\.orcaMachineConfigFile, snapshots\.orcaFilamentConfigFile \)/
     );
-    assert.match(compact, /'--arrange', '1', '--orient', '0'/);
+    assert.match(compact, /runOrca\(\[\.\.\.slicerArgs, job\.input\], job\.timeoutMs\)/);
+    assert.doesNotMatch(compact, /const settings =/);
+    assert.doesNotMatch(
+        compact,
+        /\[snapshots\.orcaMachineConfigFile, runtimeProcessProfile, snapshots\.orcaFilamentConfigFile\]/
+    );
+
+    const productionArgs = buildSlicerCommandArgs(
+        'FDM', 'runtime-process.json', path.join('calibration', 'result.gcode'), '20%',
+        'orca', 'machine.json', 'filament.json'
+    );
+    const settingsValue = productionArgs[productionArgs.indexOf('--load-settings') + 1];
+    assert.equal(settingsValue, 'machine.json;runtime-process.json');
+    assert.ok(!settingsValue.split(';').includes('filament.json'));
+    assert.deepEqual(
+        productionArgs.slice(
+            productionArgs.indexOf('--load-filaments'),
+            productionArgs.indexOf('--load-filaments') + 2
+        ),
+        ['--load-filaments', 'filament.json']
+    );
+    assert.deepEqual(
+        productionArgs.slice(
+            productionArgs.indexOf('--arrange'),
+            productionArgs.indexOf('--slice') + 2
+        ),
+        ['--arrange', '1', '--orient', '0', '--slice', '0']
+    );
     assert.doesNotMatch(compact, /'--orient', '1'/);
+    assert.match(compact, /calibrationProfile\.enable_support = '0'/);
+    assert.match(compact, /supportProof\.enable_support !== '0'/);
+    assert.ok(
+        compact.indexOf("calibrationProfile.enable_support = '0'")
+        < compact.indexOf('calculateEffectiveProfileSha256({')
+    );
+    assert.doesNotMatch(compact, /enable_support = '1'/);
     assert.match(compact, /process\.getuid\(\) === 0/);
 });
 

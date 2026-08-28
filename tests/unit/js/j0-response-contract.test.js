@@ -247,7 +247,7 @@ test('success response preserves selected profile metadata after snapshot-backed
         modelBoundsValidation: { dimensions: { x: 10, y: 30, z: 20 } },
         buildVolumeLimits: {
             min: { x: 0, y: 0, z: 0 },
-            max: { x: 256, y: 256, z: 256 },
+            max: { x: 256, y: 256, z: 250 },
             sourceProfile
         },
         stats: {
@@ -296,7 +296,7 @@ test('successful Orca slicing without a filament profile requires manual pricing
         modelBoundsValidation: { dimensions: { x: 10, y: 20, z: 30 } },
         buildVolumeLimits: {
             min: { x: 0, y: 0, z: 0 },
-            max: { x: 256, y: 256, z: 256 },
+            max: { x: 256, y: 256, z: 250 },
             sourceProfile: 'Bambu_P1S_0.4_nozzle.json'
         },
         stats: {
@@ -345,7 +345,7 @@ test('successful Prusa slicing without a native mass marker stays explicit and m
         modelBoundsValidation: { dimensions: { x: 10, y: 20, z: 30 } },
         buildVolumeLimits: {
             min: { x: 0, y: 0, z: 0 },
-            max: { x: 256, y: 256, z: 256 },
+            max: { x: 256, y: 256, z: 250 },
             sourceProfile: 'FDM_0.2mm.ini'
         },
         stats: {
