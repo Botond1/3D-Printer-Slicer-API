@@ -38,14 +38,15 @@ const PRIVATE_ROLLBACK_FILE_PATTERN = /^slicer-api-[a-z0-9][a-z0-9._-]{0,79}\.ym
 const PRIVATE_RUNTIME_IGNORE_PATTERN = '/ops/hostinger/.runtime-private/';
 const ACTIVE_ROUTER_IGNORE_PATTERN = '/ops/hostinger/dynamic/slicer-api.yml';
 const ALLOWLIST_MIDDLEWARE = 'slicer-api-source-allowlist';
-const ALLOWLIST_PLACEHOLDER = '__J2_SOURCE_RANGES__';
+const ALLOWLIST_PLACEHOLDER = '__J2_SOURCE_RANGE__';
 const ROUTER_RENDER_COMMENT = '# Render only through scripts/i12-hostinger-operator-contract.js. It replaces\n'
-    + '# the exact .invalid hostname and __J2_SOURCE_RANGES__ placeholder from private\n'
+    + '# the exact .invalid hostname and __J2_SOURCE_RANGE__ placeholder from private\n'
     + '# inputs.';
-const ALLOWLIST_PHASES = Object.freeze(['leadpilot-only', 'expanded']);
-const MAX_ALLOWLIST_ENTRIES = 4;
+const ALLOWLIST_PHASES = Object.freeze(['leadpilot-only']);
+const MAX_ALLOWLIST_ENTRIES = 1;
 const MAX_ALLOWLIST_FILE_BYTES = 256;
 const MAX_PRIVATE_INPUT_PATH_BYTES = 4096;
+const LIVE_DYNAMIC_RELEASE_MISMATCH = 'STOP_LIVE_DYNAMIC_RELEASE_MISMATCH';
 const PRIVATE_INPUT_BASENAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
 const RAW_IPV4_PATH_PATTERN = /(?:^|[^0-9])(?:[0-9]{1,3}[._-]){3}[0-9]{1,3}(?:[^0-9]|$)/;
 const ROOT_ROUTER_METADATA_POLICY = Object.freeze({
@@ -72,7 +73,7 @@ const TRAEFIK_COMMANDS = Object.freeze([
     '--global.checkNewVersion=false',
     '--global.sendAnonymousUsage=false',
     '--entryPoints.web.address=:8080',
-    '--entryPoints.web.http.redirections.entryPoint.to=websecure',
+    '--entryPoints.web.http.redirections.entryPoint.to=:443',
     '--entryPoints.web.http.redirections.entryPoint.scheme=https',
     '--entryPoints.web.http.redirections.entryPoint.permanent=true',
     '--entryPoints.websecure.address=:8443',
@@ -147,14 +148,12 @@ function canonicalIpv4Cidr(value) {
 }
 
 function validateAllowlistCidrs(cidrs, phase = null) {
-    if (!Array.isArray(cidrs) || cidrs.length < 1 || cidrs.length > MAX_ALLOWLIST_ENTRIES
+    if (!Array.isArray(cidrs) || cidrs.length !== MAX_ALLOWLIST_ENTRIES
         || cidrs.some((cidr) => !canonicalIpv4Cidr(cidr))
         || new Set(cidrs).size !== cidrs.length) {
         return 'j2_allowlist_cidr_invalid';
     }
     if (phase !== null && !ALLOWLIST_PHASES.includes(phase)) return 'j2_allowlist_phase_invalid';
-    if (phase === 'leadpilot-only' && cidrs.length !== 1) return 'j2_leadpilot_phase_count_invalid';
-    if (phase === 'expanded' && cidrs.length < 2) return 'j2_expanded_phase_count_invalid';
     return null;
 }
 
@@ -175,7 +174,7 @@ function parsePrivateAllowlist(source, phase) {
 
 function parseRenderedSourceRanges(block) {
     const lines = normalize(block).split('\n');
-    if (lines[0] !== '        sourceRange:' || lines.length < 2) return null;
+    if (lines[0] !== '        sourceRange:' || lines.length !== 2) return null;
     const cidrs = [];
     for (const line of lines.slice(1)) {
         const match = line.match(/^          - "([^"]+)"$/);
@@ -196,6 +195,34 @@ function validComposeVersion(value) {
 
 function validFirewallBackend(value) {
     return value === 'iptables';
+}
+
+function validateLiveDynamicSource(source, runtimeFs = fs) {
+    if (typeof source !== 'string'
+        || Buffer.byteLength(source, 'utf8') < 1
+        || Buffer.byteLength(source, 'utf8') > MAX_PRIVATE_INPUT_PATH_BYTES
+        || source.includes('\r') || source.includes('\n') || source.includes('\t')
+        || source.includes('\0') || !path.isAbsolute(source)
+        || path.resolve(source) !== source) {
+        return LIVE_DYNAMIC_RELEASE_MISMATCH;
+    }
+    const expected = path.join(PACK_ROOT, 'dynamic');
+    if (source !== expected || !runtimeFs || typeof runtimeFs.realpathSync !== 'function'
+        || typeof runtimeFs.lstatSync !== 'function') {
+        return LIVE_DYNAMIC_RELEASE_MISMATCH;
+    }
+    try {
+        const details = runtimeFs.lstatSync(source);
+        const actualReal = runtimeFs.realpathSync(source);
+        const expectedReal = runtimeFs.realpathSync(expected);
+        if (!details.isDirectory() || details.isSymbolicLink()
+            || actualReal !== source || expectedReal !== expected || actualReal !== expectedReal) {
+            return LIVE_DYNAMIC_RELEASE_MISMATCH;
+        }
+    } catch {
+        return LIVE_DYNAMIC_RELEASE_MISMATCH;
+    }
+    return null;
 }
 
 function validateComposeMountNetworkAndVolumeContract(service, networks, volumes) {
@@ -360,11 +387,12 @@ function validateRouterSource(source, expectedHost = DISABLED_HOST, disabled = t
         return 'traefik_router_service_mismatch';
     }
     if (occurrences(active, ALLOWLIST_MIDDLEWARE) !== 2 || occurrences(active, 'ipAllowList:') !== 1
-        || /ipStrategy|forwardedHeaders|remoteAddr|depth:|excludedIPs:/i.test(active)) {
+        || /ipWhiteList|ipStrategy|forwarded|x-forwarded-for|\bxff\b|remoteAddr|depth:|excludedIPs:/i.test(active)) {
         return 'traefik_allowlist_strategy_mismatch';
     }
     if (disabled) {
-        if (expectedCidrs !== null || rangeBlock !== `        sourceRange:\n          ${ALLOWLIST_PLACEHOLDER}`
+        if (expectedCidrs !== null
+            || rangeBlock !== `        sourceRange:\n          - "${ALLOWLIST_PLACEHOLDER}"`
             || occurrences(active, ALLOWLIST_PLACEHOLDER) !== 1) {
             return 'traefik_allowlist_template_mismatch';
         }
@@ -389,14 +417,14 @@ function validateRouterSource(source, expectedHost = DISABLED_HOST, disabled = t
 function renderRouterSource(template, hostname, cidrs) {
     const templateError = validateRouterSource(template);
     const inputError = validHostname(hostname) ? validateAllowlistCidrs(cidrs) : 'active_router_argument_invalid';
-    const markerLine = `          ${ALLOWLIST_PLACEHOLDER}`;
+    const markerLine = `          - "${ALLOWLIST_PLACEHOLDER}"`;
     if (templateError || inputError || occurrences(template, DISABLED_HOST) !== 1
         || exactLineCount(template, markerLine) !== 1) {
         return Object.freeze({ error: templateError || inputError || 'traefik_router_template_mismatch', source: null });
     }
     const source = template.replace(DISABLED_HOST, hostname).replace(
         markerLine,
-        cidrs.map((cidr) => `          - "${cidr}"`).join('\n')
+        `          - "${cidrs[0]}"`
     );
     const error = validateRouterSource(source, hostname, false, cidrs);
     return Object.freeze({ error, source: error ? null : source });
@@ -438,6 +466,11 @@ function validateRunbookSource(source) {
         'Prove candidate identity, health, redirect,\nprovider set, the exact two network attachments',
         'Compose `2.33.1` or newer', '`gw_priority: 1`', '`gw_priority: 0`',
         'non-internal `traefik-ingress`', 'actual default\nroute uses `traefik-ingress`',
+        'entrypoint redirect target must be the literal external port `:443`',
+        'container entrypoint name `websecure` and not the internal port `:8443`',
+        'Location authority with no explicit `:8443`',
+        '--check-live-dynamic-source "$live_dynamic_source" || exit 1',
+        'STOP_LIVE_DYNAMIC_RELEASE_MISMATCH',
         'compose_version="$(docker compose version --short)" || exit 1',
         'node scripts/i12-hostinger-operator-contract.js --check-compose-version "$compose_version" || exit 1',
         'scripts/i12-capacity-artifact-cleanup.js',
@@ -534,13 +567,20 @@ function validateRunbookSource(source) {
         'strict `--assert-router-dark` contract with the exact known single-link source',
         'separate `HEAD`/index Git contract',
         'release the full-rehearsal lock with `exec 9>&-`',
-        'only `.gitkeep` remains', 'one unique IPv4 `/32` per line',
+        'only `.gitkeep` remains',
+        'canonical format is exactly one unique IPv4 `/32` line',
+        'Only phase `leadpilot-only` exists.',
+        'A second address,\nanother phase, `/24`, or any prefix other than `/32` is forbidden.',
+        'machine-level perimeter control, not an application-level',
+        'approved address belongs to a shared host that currently carries',
+        'owner accepted that scope explicitly; the separate',
+        'no verified provider reservation. Rebuild, migration, or',
+        'No current control detects this event. The',
+        'consumer must notify the owner before any rebuild or migration',
         'dynamic directory must be root:root-owned\nmode `0700`',
         '`.gitkeep`, must be a root:root-owned mode\n`0600`, regular, non-link, single-link file containing exactly one LF',
         'current pinned Traefik runtime is root (`UID:GID 0:0`)',
         'future non-root\nruntime is a stop requiring a separately designed permission model',
-        'Phase `leadpilot-only` requires\nexactly one line',
-        'Phase `expanded` requires two through four lines',
         'opaque,\naddress-free ASCII basename of at most 96 safe characters',
         'no path\ncomponent may contain a dotted, dashed, or underscored raw IPv4 address',
         'mandatory external pre-spawn path gate',
@@ -548,6 +588,10 @@ function validateRunbookSource(source) {
         'STOP_DNS_ONLY_BOUNDARY_UNPROVEN', 'deliberately has no `ipStrategy`',
         '--check-firewall-backend "$firewall_backend" || exit 1',
         'STOP_DOCKER_FIREWALL_BACKEND_UNSUPPORTED', '`DOCKER-USER` chains',
+        'owner-observed starting state is an empty `DOCKER-USER` chain with inactive',
+        'Published Docker ports can bypass UFW',
+        'only while this Traefik serves exactly the one',
+        'second hostname is therefore a\nstop requiring a separately designed per-host boundary',
         'owner-supplied, verified public VPS IPv4 destination',
         'root-private operator input and out of repository, logs, and evidence',
         '`--ctorigdst <verified-public-VPS-IPv4>`',
@@ -567,6 +611,11 @@ function validateRunbookSource(source) {
         'Permanent route\nactivation is a separate owner-controlled stop'
     ]) {
         if (!source.includes(fragment)) return 'hostinger_runbook_contract_mismatch';
+    }
+    if (occurrences(source, ALLOWLIST_PLACEHOLDER) !== 1
+        || occurrences(source, '--check-live-dynamic-source "$live_dynamic_source" || exit 1') !== 1
+        || source.includes('__J2_SOURCE_RANGES__') || source.includes('Phase `expanded`')) {
+        return 'hostinger_runbook_contract_mismatch';
     }
     if (occurrences(source, '--rm --pull never --network none --read-only --cap-drop ALL') !== 3
         || occurrences(source, '--security-opt no-new-privileges') !== 5
@@ -2227,6 +2276,13 @@ function main(args = process.argv.slice(2)) {
         console.log('docker_firewall_backend_contract=PASS');
         return;
     }
+    if (args[0] === '--check-live-dynamic-source') {
+        const error = args.length === 2
+            ? validateLiveDynamicSource(args[1]) : LIVE_DYNAMIC_RELEASE_MISMATCH;
+        if (error) { console.error(error); process.exitCode = 2; return; }
+        console.log('live_dynamic_source_contract=PASS');
+        return;
+    }
     const values = parseRouterArguments(args);
     if (!values) { console.error('active_router_argument_invalid'); process.exitCode = 2; return; }
     const initialLock = verifyRouterRehearsalLock(PACK_ROOT);
@@ -2321,7 +2377,7 @@ if (require.main === module) main();
 module.exports = Object.freeze({
     ACTIVE_ROUTER_NAME, ALLOWLIST_MIDDLEWARE, ALLOWLIST_PHASES, ALLOWLIST_PLACEHOLDER,
     ACTIVE_ROUTER_IGNORE_PATTERN, BACKEND_URL, CAPACITY_PRODUCER_EXEC, DARK_DYNAMIC_ENTRY,
-    DISABLED_HOST, FILES,
+    DISABLED_HOST, FILES, LIVE_DYNAMIC_RELEASE_MISMATCH,
     MAX_ALLOWLIST_ENTRIES, MAX_ALLOWLIST_FILE_BYTES, MAX_FILE_BYTES, PACK_ROOT, TRAEFIK_COMMANDS,
     PRIVATE_ROLLBACK_DIRECTORY, PRIVATE_RUNTIME_DIRECTORY, PRIVATE_RUNTIME_IGNORE_PATTERN,
     PRIVATE_STAGING_DIRECTORY, REHEARSAL_LOCK_FD, REHEARSAL_LOCK_NAME,
@@ -2336,5 +2392,6 @@ module.exports = Object.freeze({
     validateActiveRouter, validateAllowlistCidrs, validateCapacityProducerSource,
     validateComposeSource, validateOperatorPack, validateDarkDynamicDirectory, validateRouterSource,
     validateRepositoryPrivateStorageContract, validateRouterStagingMetadata,
-    validateRunbookSource, verifyRouterRehearsalLock, validComposeVersion, validFirewallBackend
+    validateLiveDynamicSource, validateRunbookSource, verifyRouterRehearsalLock,
+    validComposeVersion, validFirewallBackend
 });

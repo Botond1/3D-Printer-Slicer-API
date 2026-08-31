@@ -270,25 +270,36 @@ advertised. The owner-confirmed future Elegoo Saturn 4 Ultra still requires a
 separate `.goo`/`.ctb` and MSLA-timing remediation wave; no dimension is
 guessed.
 
-The J2 Hostinger contract accepts one through four unique private IPv4 `/32`
-entries from a root-private file. The first rehearsal phase is exactly one
-LeadPilot address; later callers require a separate expanded phase. Host
+The Hostinger contract accepts exactly one canonical private IPv4 `/32` entry
+from a root-private file in the sole `leadpilot-only` phase. A second entry or
+broader prefix is rejected; the provider-shared `/24` must never replace the
+approved host address. Traefik evaluates the direct peer without `ipStrategy`
+or forwarded-header trust. This is machine-level allowance for every process on
+the shared caller host, not application identity. Because the address has no
+verified reservation, rebuild or migration requires advance consumer notice
+and owner re-verification before the new host is allowed. Host
 firewall rejection is a TCP reset with a fixed private
 `J2_ALLOWLIST_DENY` classification, while an unlisted source that reaches the
 router receives HTTP `403`; both are distinct from backend HTTP `401`
 `SLICE_SERVICE_AUTH_REQUIRED`. One root-private inherited FD9 lock spans the
 whole rehearsal; every action re-proves that lock and unchanged canonical,
-root-owned, non-writable ancestor chains. Terminal acceptance uses strict
+root-owned, non-writable ancestor chains plus exact equality between the running
+Traefik dynamic bind and the executing operator pack. HTTP redirects target
+external `:443`, not container-internal `:8443`. The `DOCKER-USER` second layer
+is valid only while the shared Traefik serves one hostname. Terminal acceptance uses strict
 `--assert-router-dark`. Local tests prove logical fsync-cutpoint recovery, not
 real process/kernel/power-loss durability. The external orchestrator must prove the
 allowed/denied matrix, TLS issuance and renewal, and
 `dark -> active -> dark -> active -> dark` rollback. A completed rehearsal
 requires a proved final dark state; `*_rollback_uncertain` is `STOP/UNKNOWN`,
-not dark evidence. The live rehearsal is currently `BLOCKED / NOT RUN`:
-protected main has no published/deployed exact J0-capable image and no private
-external evidence. J2 made no route mutation. The latest prior I12 evidence was
-dark, but J2 did not re-read current live state; permanent activation is a later
-owner-controlled decision.
+not dark evidence. Exact protected-main source
+`bf5e712071e3174a67fdb22ff3794003fa3ab32b` now has a signed,
+attested immutable candidate, but it is not deployed; its automatic no-deploy
+rehearsal stopped on the fixed previous-policy `configs/` compatibility guard.
+The live rehearsal therefore remains `BLOCKED / NOT RUN` pending the owner-run
+deploy and private external evidence. This repository correction makes no route
+mutation. The latest prior I12 evidence was dark, but this work does not re-read
+current live state; permanent activation is a later owner-controlled decision.
 
 Calibration has nine numeric Bambu Studio reference rows plus the `M03`
 P1S-overheight rejection boundary. The comparison fixes Orca at `--orient 0`,

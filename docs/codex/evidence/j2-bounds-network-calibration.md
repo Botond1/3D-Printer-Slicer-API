@@ -236,6 +236,16 @@ phase contains only the LeadPilot source and must end dark for reporting; a
 later caller expansion is a separate activation phase. A rollback-uncertain
 result stops as unknown instead of satisfying that terminal contract.
 
+## Later allowlist-contract supersession
+
+The one-through-four source and later-expansion statements above are preserved
+only as exact historical J2 evidence. The later owner decision recorded in
+[`hostinger-traefik-deploy-preparation.md`](hostinger-traefik-deploy-preparation.md)
+supersedes that executable policy: current rendering accepts exactly one
+canonical IPv4 `/32` under the sole `leadpilot-only` phase. A second source,
+expanded phase, or wider prefix fails closed. This note does not claim that the
+corrected middleware or any live host control has been installed.
+
 ## Privacy boundary
 
 Repository evidence uses only anonymous `M01`-`M10` labels, content hashes,

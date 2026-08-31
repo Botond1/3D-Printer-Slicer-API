@@ -17,6 +17,32 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
+## Current Hostinger Traefik deploy-preparation correction
+
+Current classification:
+`SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED_NO_DEPLOY;
+AUTOMATIC_EPHEMERAL_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY;
+HOSTINGER_TRAEFIK_DEPLOY_PREPARATION_LOCAL_GATES_PASS;
+LIVE_HOST_CONTROLS_NOT_VERIFIED`.
+
+Exact protected-main source
+`bf5e712071e3174a67fdb22ff3794003fa3ab32b` was published once by successful
+Candidate Publication run `33449382579`. Its signed immutable subject is
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:153987840361d60c365da7b105769bb112de807db39a737548b725ea857918ca`.
+The registry round trip, SLSA/SPDX verification, negative subject/repository
+probes, and bounded cleanup passed; no deploy occurred.
+
+Automatic no-deploy rehearsal `33450012850` separately failed closed at
+rehearsal-input materialization: the fixed previous source is an ancestor and
+production Compose is unchanged, but `configs/` changed. Therefore publication
+is verified while automatic staging/rollback rehearsal for this candidate is
+not. The local operator correction narrows the router to one canonical `/32`,
+direct-peer Traefik v3 `ipAllowList`, external redirect `:443`, exact live
+dynamic-bind/operator-release equality, and the accepted shared-machine,
+address-reassignment, and single-host `DOCKER-USER` risks. It performs no VPS,
+container, router, DNS, firewall, mounted-directory, or consumer mutation. See
+`docs/codex/evidence/hostinger-traefik-deploy-preparation.md`.
+
 ## Current J3B native-envelope and original-dimension corrective candidate
 
 J3's production-identical owner matrix passed on exact tree `58c0ccb`, including
@@ -150,12 +176,20 @@ declared and largest-passing fields, and per-engine machine/fleet resolution.
 The generic SLA fallback is never a machine; Elegoo values remain owner-profile
 future work.
 
-The dark route contract accepts one through four unique `/32` callers, with
-LeadPilot alone in phase one. Network denial is distinct from backend HTTP 401.
-All route actions require one inherited root-private rehearsal lock and stable
-root-owned protected ancestors; terminal acceptance requires strict dark
-assertion. J2 did not mutate the live route because the exact J0-capable deploy,
-private inputs, and external allowlist/TLS/rollback observations are absent.
+The current dark route contract accepts exactly one canonical IPv4 `/32` in its
+sole `leadpilot-only` phase. A second address, broader prefix (especially the
+provider-shared `/24`), `ipStrategy`, or forwarded-header identity fails closed;
+Traefik evaluates the direct TCP peer. Network denial remains distinct from
+backend HTTP 401. The allowlist trusts every process on the approved shared
+machine and silently loses that identity if its unreserved address is
+reassigned, so the consumer must report rebuilds or migrations before they
+happen. All route actions require one inherited root-private rehearsal lock,
+stable root-owned protected ancestors, and exact equality between the running
+Traefik dynamic-bind source and the executing operator pack. The HTTP redirect
+targets external `:443`, never internal `:8443`. The planned `DOCKER-USER`
+second layer is valid only while Traefik serves this single hostname. Terminal
+acceptance requires strict dark assertion. Repository preparation does not
+mutate the live route or prove the VPS firewall, mount, redirect, or allowlist.
 
 Calibration records nine numeric Bambu references plus the `M03` boundary. Its
 Orca runner enforces `--orient 0`, support off before digest/native work, and

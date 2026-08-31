@@ -1,12 +1,17 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const test = require('node:test');
 const {
+    ALLOWLIST_PLACEHOLDER,
     DISABLED_HOST,
+    LIVE_DYNAMIC_RELEASE_MISMATCH,
+    PACK_ROOT,
     loadOperatorPack,
     validateCapacityProducerSource,
     validateComposeSource,
+    validateLiveDynamicSource,
     validateRouterSource,
     validateRunbookSource
 } = require('../../../scripts/i12-hostinger-operator-contract');
@@ -29,6 +34,36 @@ function assertRejected(validator, source, label) {
     assert.equal(typeof result, 'string', `${label} must fail closed`);
     assert.match(result, /^[a-z][a-z0-9_]*$/, `${label} must return a stable reason code`);
 }
+
+test('live dynamic source release mutations fail closed', async (t) => {
+    const expected = path.join(PACK_ROOT, 'dynamic');
+    const differentRelease = path.join(path.dirname(PACK_ROOT), 'different-release', 'dynamic');
+    const cases = [
+        ['different release', differentRelease, undefined],
+        ['relative source', path.relative(PACK_ROOT, expected), undefined],
+        ['trailing separator alias', `${expected}${path.sep}`, undefined],
+        ['dot-dot alias', `${expected}${path.sep}..${path.sep}dynamic`, undefined],
+        ['realpath mismatch', expected, {
+            lstatSync: () => ({ isDirectory: () => true, isSymbolicLink: () => false }),
+            realpathSync: () => differentRelease
+        }],
+        ['non-directory source', expected, {
+            lstatSync: () => ({ isDirectory: () => false, isSymbolicLink: () => false }),
+            realpathSync: () => expected
+        }],
+        ['symlink source', expected, {
+            lstatSync: () => ({ isDirectory: () => true, isSymbolicLink: () => true }),
+            realpathSync: () => expected
+        }]
+    ];
+    assert.equal(validateLiveDynamicSource(expected), null);
+    for (const [label, source, runtimeFs] of cases) await t.test(label, () => {
+        assert.equal(
+            validateLiveDynamicSource(source, runtimeFs),
+            LIVE_DYNAMIC_RELEASE_MISMATCH
+        );
+    });
+});
 
 test('Compose mutations cannot widen publication, privilege, mount, or network scope', async (t) => {
     const compose = SOURCES.compose;
@@ -148,6 +183,12 @@ test('CLI-only static and ACME mutations fail closed', async (t) => {
     const compose = SOURCES.compose;
     const cases = [
         ['redirect removed', replaceRequired(compose, /^      - --entryPoints\.web\.http\.redirections\.entryPoint\.to=.*\n/m, '')],
+        ['redirect reverted to internal entrypoint', replaceRequired(
+            compose, /entryPoint\.to=:443/, 'entryPoint.to=websecure'
+        )],
+        ['redirect leaked internal port', replaceRequired(
+            compose, /entryPoint\.to=:443/, 'entryPoint.to=:8443'
+        )],
         ['redirect scheme weakened', replaceRequired(compose, /entryPoint\.scheme=https/, 'entryPoint.scheme=http')],
         ['redirect permanence weakened', replaceRequired(compose, /entryPoint\.permanent=true/, 'entryPoint.permanent=false')],
         ['file provider disabled', replaceRequired(compose, /providers\.file=true/, 'providers.file=false')],
@@ -228,6 +269,43 @@ test('router mutations cannot become a generic proxy or drift from the exact API
             (candidate) => validateRouterSource(candidate, DISABLED_HOST, true), source, label
         ));
     }
+});
+
+test('router allowlist mutations cannot widen the direct-peer single-/32 boundary', async (t) => {
+    const router = SOURCES.routerTemplate;
+    const cases = [
+        ['legacy IPWhiteList', replaceRequired(router, /ipAllowList:/, 'ipWhiteList:')],
+        ['ipStrategy depth', replaceRequired(
+            router,
+            '        sourceRange:',
+            '        ipStrategy:\n          depth: 1\n        sourceRange:'
+        )],
+        ['forwarded headers', replaceRequired(
+            router,
+            '        sourceRange:',
+            '        forwardedHeaders:\n          insecure: true\n        sourceRange:'
+        )],
+        ['X-Forwarded-For', replaceRequired(
+            router,
+            '        sourceRange:',
+            '        x-forwarded-for: true\n        sourceRange:'
+        )],
+        ['plural source ranges', replaceRequired(
+            router,
+            `          - "${ALLOWLIST_PLACEHOLDER}"`,
+            `          - "${ALLOWLIST_PLACEHOLDER}"\n          - "198.51.100.20/32"`
+        )],
+        ['shared /24', replaceRequired(
+            router, `"${ALLOWLIST_PLACEHOLDER}"`, '"192.0.2.0/24"'
+        )]
+    ];
+    for (const [label, source] of cases) await t.test(label, () => {
+        assertRejected(
+            (candidate) => validateRouterSource(candidate, DISABLED_HOST, true),
+            source,
+            label
+        );
+    });
 });
 
 test('runbook mutations cannot skip identity, hash, atomic activation, or safe rollback', async (t) => {

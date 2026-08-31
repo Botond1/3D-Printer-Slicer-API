@@ -227,6 +227,59 @@ for the schema and evidence boundary. J1/J2 orientation statements retained
 below describe their historical checkpoints; the J3B section above is the
 current candidate contract.
 
+## Current Hostinger Traefik deploy-preparation correction
+
+Current classification:
+`SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED_NO_DEPLOY;
+AUTOMATIC_EPHEMERAL_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY;
+HOSTINGER_TRAEFIK_DEPLOY_PREPARATION_LOCAL_GATES_PASS;
+LIVE_MOUNT_REDIRECT_ALLOWLIST_FIREWALL_NOT_VERIFIED`.
+
+Exact protected-main source
+`bf5e712071e3174a67fdb22ff3794003fa3ab32b` was published once through
+successful Candidate Publication run `33449382579`. The signed immutable
+subject is
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:153987840361d60c365da7b105769bb112de807db39a737548b725ea857918ca`.
+Registry readback, SLSA/SPDX verification, negative subject/repository probes,
+and bounded cleanup passed. This was publication only; the evidence explicitly
+records no deployed digest.
+
+The automatic no-deploy rehearsal run `33450012850` separately failed closed
+at input materialization. Its previous policy source is an ancestor and the
+production Compose file is unchanged, but `configs/` changed between that I8
+source and the new candidate, so the policy emitted
+`source_compatibility_verification_failure` before registry or runtime work.
+The publication remains verified; automatic staging/rollback rehearsal for the
+new candidate remains unverified.
+
+The corrective operator path is now:
+
+```text
+one owner-supplied canonical IPv4 /32
+  -> singular template placeholder + Traefik v3 router ipAllowList
+  -> direct TCP peer only; no ipStrategy or forwarded-header identity
+  -> HTTP redirect target literal external :443, never internal :8443
+running Traefik /etc/traefik/dynamic bind source
+  -> exactly one absolute canonical bind path
+  -> must equal this helper release's canonical ops/hostinger/dynamic
+  -> mismatch/missing/symlink/relative path: STOP_LIVE_DYNAMIC_RELEASE_MISMATCH
+owner-observed empty DOCKER-USER + inactive UFW
+  -> re-read before mutation; repository does not prove current host state
+  -> port-443 second layer is valid only while Traefik serves one hostname
+```
+
+The allowlist is explicitly machine-level trust for a shared host. Address
+reassignment is fail-open for a future holder and fail-closed for the intended
+caller without any configuration change; no repository control detects it.
+The consumer must announce migration in advance and the owner must rebind both
+live network layers before use. No real caller address is committed.
+
+This branch performs no deploy, container replacement, mounted-directory
+write, router activation, DNS/allowlist/firewall mutation, consumer change, or
+customer traffic. The live mount, redirect, middleware, firewall, TLS, and
+external caller behavior remain `NOT VERIFIED`. See
+[`evidence/hostinger-traefik-deploy-preparation.md`](evidence/hostinger-traefik-deploy-preparation.md).
+
 ## Historical J2 bounds, catalogue, network, and calibration candidate
 
 Current classification:

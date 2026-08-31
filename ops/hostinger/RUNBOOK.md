@@ -174,10 +174,12 @@ network merely to make a probe pass.
 
 Keep the J2 caller allowlist in a separate absolute, root:root-owned, mode
 `0600`, regular, non-link, single-link private file outside the repository. Its
-canonical format is one unique IPv4 `/32` per line, one final LF, no comments
-or blank lines, and at most four entries. Phase `leadpilot-only` requires
-exactly one line. Phase `expanded` requires two through four lines and is a
-later owner-authorized change; never pre-enable a future caller. Before any
+canonical format is exactly one unique IPv4 `/32` line, one final LF, and no
+comments or blank lines. Only phase `leadpilot-only` exists. A second address,
+another phase, `/24`, or any prefix other than `/32` is forbidden. In
+particular, never widen the approved host address to its provider's shared
+`/24`; that would admit unrelated tenants rather than identify the approved
+machine. Before any
 Node helper process is spawned, the external orchestrator must validate every
 expanded path argument in root-private state and with command logging disabled:
 the allowlist and every staging or rollback source/target must have an opaque,
@@ -189,6 +191,22 @@ remove a caller-supplied raw pathname from `/proc/<pid>/cmdline`. Under this
 required pre-spawn contract, the exact addresses and rendered router remain
 private operator state and must not enter source control, command traces,
 uploaded evidence, or shared logs.
+
+This allowlist is a machine-level perimeter control, not an application-level
+identity. The approved address belongs to a shared host that currently carries
+the consumer stack, a separate development stack, a shared Traefik, and another
+project. Any process already running there, or deployed there later, can reach
+the network perimeter. The owner accepted that scope explicitly; the separate
+application API key remains mandatory.
+
+The address has no verified provider reservation. Rebuild, migration, or
+reassignment can silently admit the address's next holder while excluding the
+legitimate consumer, with no repository or configuration change. The API key
+still protects the application, but the network layer has then stopped
+identifying the intended machine. No current control detects this event. The
+consumer must notify the owner before any rebuild or migration, and the owner
+must re-verify and replace the private allowlist and firewall source before the
+new host is allowed to call the service.
 
 ### Existing proxy recovery boundary
 
@@ -514,10 +532,34 @@ that only ports 80 and 443 are published, the dashboard is disabled, and the
 file-provider directory is read-only; Docker provider and Engine socket are absent,
 and the `letsencrypt` resolver still points to
 `/letsencrypt/acme.json` before continuing. The file provider is the only discovery mechanism.
+The entrypoint redirect target must be the literal external port `:443`, not the
+container entrypoint name `websecure` and not the internal port `:8443`. Prove
+that an HTTP request retains the requested hostname and path and returns a
+Location authority with no explicit `:8443`; a client that follows redirects
+must reach the public 443 listener.
 For the exact dynamic bind, require the recorded source, destination, bind type,
 propagation and effective `RW=false`; accept Docker's `Mode=""` or `Mode="ro"`
 projection only under that effective read-only proof. Keep the ACME volume
 strictly `RW=true` and `Mode="rw"`; never weaken either contract.
+
+The Compose bind is release-relative, so a running Traefik can otherwise keep
+watching an older release while a helper writes a newer release. Resolve the
+one live bind source directly from the running container, keep the resulting
+absolute path only in the root-private ledger, and require it to equal the
+canonical `ops/hostinger/dynamic` directory beside the helper being executed:
+
+```sh
+live_dynamic_sources="$(docker inspect --format '{{range .Mounts}}{{if and (eq .Type "bind") (eq .Destination "/etc/traefik/dynamic")}}{{println .Source}}{{end}}{{end}}' 3d-psa-traefik)" || exit 1
+[ "$(printf '%s\n' "$live_dynamic_sources" | awk 'NF { count += 1 } END { print count + 0 }')" -eq 1 ] || exit 1
+live_dynamic_source="$(printf '%s\n' "$live_dynamic_sources" | awk 'NF { print; exit }')" || exit 1
+node scripts/i12-hostinger-operator-contract.js --check-live-dynamic-source "$live_dynamic_source" || exit 1
+```
+
+Re-run that exact inspection and equality gate immediately before every render,
+validation, activation, disable, recovery, and terminal-dark helper call. Any
+missing, duplicate, relative, non-canonical, different-release, wrong-type, or
+writable bind is `STOP_LIVE_DYNAMIC_RELEASE_MISMATCH`; writing the apparent
+"current" release directory is never evidence that Traefik loaded it.
 Its exact backend resolves through Docker DNS on
 `slicer-api-private`; Traefik does not require Docker Engine API access or label
 discovery.
@@ -563,6 +605,19 @@ the accepted backend, capture root-private `iptables-save` and
 `ip6tables-save` recovery inputs, require both `DOCKER-USER` chains to exist,
 and inventory their exact pre-existing order. Never flush, replace, or broadly
 accept either chain.
+
+The owner-observed starting state is an empty `DOCKER-USER` chain with inactive
+UFW. Published Docker ports can bypass UFW, so under the observed topology
+`DOCKER-USER` is the only host network-layer enforcement point. Treat this as
+owner-supplied preflight data and re-read it immediately before mutation; do
+not infer it from the repository.
+
+This second layer is safe only while this Traefik serves exactly the one
+approved hostname. A destination-port 443 rule cannot distinguish HTTP Host or
+TLS SNI and would silently block every later HTTPS hostname on the shared
+Traefik. The presence or planned addition of a second hostname is therefore a
+stop requiring a separately designed per-host boundary; never carry this
+single-host `DOCKER-USER` rule forward unchanged.
 
 The external root-only orchestrator must build a new dedicated chain completely
 before adding one create-new, uniquely commented jump at the start of
@@ -693,7 +748,7 @@ of the exact staging directory whose basename matches
 the rollback subtree. Render the file directly
 from the root-private allowlist without printing any address. The renderer uses
 create-new mode `0600`, replaces only `slicer-api.invalid` and the exact
-`__J2_SOURCE_RANGES__` placeholder, fsyncs the file and parent, and validates
+`__J2_SOURCE_RANGE__` placeholder, fsyncs the file and parent, and validates
 the router-scoped middleware against the same private file. The renderer
 invocation below and every later router helper invocation must be a descendant
 of that still-locked shell:
@@ -731,8 +786,9 @@ Confirm the loaded file hash only through the helper's internal exact-byte
 comparison; do not copy it to shared evidence. Confirm the exact Host rule, `letsencrypt`
 certificate resolver, issued certificate, backend, HTTPS redirect, and
 authenticated synthetic request. A health probe alone is not acceptance.
-The first activation rehearsal admits only the LeadPilot `/32`; all future
-caller rows remain absent even if their addresses are already known.
+Every activation rehearsal admits exactly the sole approved `/32`. No future
+caller row or expansion phase exists in this contract; a second row is a hard
+stop even if its address is already known.
 
 ## 5. Disable and roll back without destroying state
 

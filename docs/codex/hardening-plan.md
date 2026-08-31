@@ -234,9 +234,10 @@ Implemented local candidate exits:
    and never advertise the generic `120 x 120 x 150 mm` SLA fallback as a machine
    envelope. Emit a strong ETag/body digest and typed non-critical 503; never add
    a manual fleet-max field.
-3. Render one through four unique private IPv4 `/32` sources, with exactly one
-   LeadPilot source in phase one and two through four only in a later phase.
-   Keep allowlist rejection visibly distinct from application HTTP 401:
+3. Render exactly one canonical private IPv4 `/32` source in the sole
+   `leadpilot-only` phase. Reject a second row, every broader prefix, forwarded
+   identity and `ipStrategy`; never widen the approved host to its provider-
+   shared `/24`. Keep allowlist rejection visibly distinct from application HTTP 401:
    router 403 or host-firewall TCP reset plus private `J2_ALLOWLIST_DENY`.
 4. Constrain activation to an external-orchestrator rehearsal. Repository-local
    gates prepare the attempt but never self-promote. Hold one inherited
@@ -563,18 +564,23 @@ API image was not relabeled, rebuilt, or republished for this operator change.
 
 Remaining public-activation order:
 
-1. keep route activation blocked until an exact J0-capable image is published
-   and deployed and hostname/DNS, approved private sources, firewall,
+1. retain the successfully published exact
+   `bf5e712071e3174a67fdb22ff3794003fa3ab32b` signed digest without
+   treating it as deployed; keep route activation blocked until that exact
+   digest is owner-deployed and hostname/DNS, approved private sources, firewall,
    certificate continuity, monitoring and recovery inputs exist;
 2. run the J2 external-orchestrator rehearsal first with only the LeadPilot
    `/32`; prove the allowed source, denied source, distinct deny classification,
    TLS issuance/renewal, rollback, and the final dark readback. Treat rollback
    uncertainty as `STOP/UNKNOWN`, not a successful dark terminal state;
-3. treat expansion to two through four callers as a later separately approved
-   phase, and preserve the exact dark rollback boundary during every attempt;
-4. measure real workload and N=2/N=3 capacity before increasing retained
+3. require the HTTP redirect to target external `:443` and prove the running
+   Traefik dynamic bind source equals the executing operator pack before every
+   router action; a different release is a hard stop;
+4. keep the host `DOCKER-USER` second layer single-host only; any second HTTPS
+   hostname requires a separately designed boundary rather than a 443-wide rule;
+5. measure real workload and N=2/N=3 capacity before increasing retained
    concurrency above one;
-5. reconcile the resulting evidence without claiming production completeness
+6. reconcile the resulting evidence without claiming production completeness
    for any unverified public, monitoring, backup or recovery control.
 
 See
@@ -976,9 +982,9 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1b - queue deadlines and abort contract | `VERIFIED` | S1a workspace ownership | integrated queue scheduling/deadline/counter/runtime lifecycle | Independent deadlines, request/shutdown AbortSignal propagation, typed `SLICE_QUEUE_SHUTDOWN`, single settlement, active-slot retention, and timer/listener/counter/workspace cleanup have deterministic local evidence. |
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `VERIFIED_REPOSITORY_AND_HOSTED; REAL_WORKLOAD_CAPACITY_OPEN` | S1a/S1b/S1c and S3a image controls | I4 supplies bounded resource/archive/artifact/pricing/container controls; I12 retains dark N=1 | I4 exact-SHA Source/Image and full suites passed. I12 proves small synthetic N=1 mechanics on the target host. Real customer models and N=2/N=3 remain unqualified; retained concurrency stays one. |
-| S3a - repository build/provenance and automatic-deploy separation | `VERIFIED_SIGNED_MAIN_CANDIDATE; MAIN_GOVERNANCE_AND_AUTOMATIC_REHEARSAL_VERIFIED` | S0.1; exact hosted I7/I8 and protected-main I10 evidence green | I8 provides build-once digest-bound GHCR publication and attestations; I10 provides strict protected-main Source/Image governance; I11 productizes manual main publication/recovery and automatic no-deploy rehearsal | I11 completed at main SHA `65706e381b907c6ba09a8eba504af3adaacac86b`: Source `32668796239`, Image `32668796232`, Candidate Publication `32669087688`, and automatic rehearsal `32669484893` succeeded. Human review and public production promotion are not inferred. |
-| S4 - service trust and topology | `DARK_HOST_VERIFIED; J2_PUBLIC_REHEARSAL_BLOCKED_NOT_RUN` | S1a/S1b/S1c/S2 security surfaces and S3a evidence | I5 supplies scoped trust; I6 selects the private-peer topology; I12 proves one exact dark host state; J2 adds a local 1..4-source activation contract | Exact dark digest, authenticated private peer, auth rejection, no API host/default route, API/native egress denial, and corrected socketless proxy topology are verified historically. J2 requires a LeadPilot-only first phase, distinct network/application denial, external TLS/allowlist/rollback proof, and a proved terminal dark state; rollback uncertainty stops as unknown. The exact J0-capable deploy and live inputs are absent, so the rehearsal is not run. |
-| S3b - staging and promotion drill | `VERIFIED_EPHEMERAL_AND_AUTOMATED_FOUNDATION; J2_LIVE_ACTIVATION_BLOCKED` | signed S3a candidate and S4/S5 repository controls | I9 read-only hosted rehearsal and I11 automatic publication-triggered rehearsal are verified; J2 live route rehearsal remains separate | The no-deploy automatic rehearsal is green. I12 separately verifies a historical dark exact-digest host state and rollback-retained proxy cutover. J2 has no exact candidate publication/deploy and makes no live allowlist, TLS, route, rollback, or customer-traffic claim. |
+| S3a - repository build/provenance and automatic-deploy separation | `BF5E712_SIGNED_CANDIDATE_PUBLISHED; AUTOMATIC_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY` | S0.1; exact hosted I7/I8 and protected-main I10 evidence green | I8 provides build-once digest-bound GHCR publication and attestations; I10 provides strict protected-main Source/Image governance; I11 productizes manual main publication/recovery and automatic no-deploy rehearsal | Historical I11 at main SHA `65706e381b907c6ba09a8eba504af3adaacac86b` completed publication and automatic rehearsal. New exact source `bf5e712071e3174a67fdb22ff3794003fa3ab32b` passed Candidate Publication run `33449382579`, but automatic run `33450012850` stopped before registry/runtime work because `configs/` differs from the fixed previous policy source. Publication is verified; candidate-specific staging/rollback rehearsal and production promotion are not. |
+| S4 - service trust and topology | `DARK_HOST_VERIFIED; PUBLIC_REHEARSAL_BLOCKED_NOT_RUN` | S1a/S1b/S1c/S2 security surfaces and S3a evidence | I5 supplies scoped trust; I6 selects the private-peer topology; I12 proves one exact dark host state; the deploy-preparation correction narrows activation to one canonical `/32`, external `:443`, and exact live-bind/operator-pack equality | Exact dark digest, authenticated private peer, auth rejection, no API host/default route, API/native egress denial, and corrected socketless proxy topology are verified historically. Current repository controls distinguish network/application denial and document machine-level trust, silent address-reassignment risk, and the single-host `DOCKER-USER` limit. External TLS/allowlist/rollback and final-dark proof remain required; live VPS behavior is not inferred. |
+| S3b - staging and promotion drill | `VERIFIED_HISTORICAL_FOUNDATION; BF5E712_AUTOMATIC_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY; J2_LIVE_ACTIVATION_BLOCKED` | signed S3a candidate and S4/S5 repository controls | Historical I9 read-only and I11 publication-triggered rehearsals are verified; the current exact candidate must independently pass its automatic no-deploy rehearsal before promotion; J2 live route rehearsal remains separate | Exact source `bf5e712071e3174a67fdb22ff3794003fa3ab32b` has a verified signed Candidate Publication, but automatic run `33450012850` stopped before registry/runtime work because `configs/` differs from the fixed previous policy source. The current candidate-specific staging/rollback rehearsal is therefore not verified. I12 separately verifies a historical dark exact-digest host state and rollback-retained proxy cutover; no deployment, live allowlist, TLS, route, rollback, or customer-traffic claim is made for this candidate. |
 | S5 - topology/optional async worker decision | `PRIVATE_PEER_TOPOLOGY_VERIFIED_DARK; ASYNC_WORKER_DEFERRED` | I5 trust controls and S4 topology evidence | private-peer topology selected and dark-host verified; async API/worker deferred | Exact dark API/private-peer/egress and proxy gateway behavior are verified. Complete public caller, firewall, DNS/certificate, secret lifecycle and activation evidence without changing current endpoints. |
 
 ## Current S0.1 verification checkpoint
@@ -1397,4 +1403,4 @@ exception to those gates.
 | D-020 | I2 separates the verified tmpfs liveness root cause from the Swiper advisory. | Exact A/B/C and main-container evidence proves root-owned tmpfs mount roots caused startup `EACCES`; V2C independently produces zero `GHSA-hmx5-qpq5-p643` findings. Dynamic nonzero UID/GID plus kernel cross-check and mode `0700` fix liveness without root or world-writable state. | I2 repository image validation closed; external policy, provenance/promotion, S4/S3b, and production evidence remain required |
 | D-021 | Application defaults do not prove arbitrary host or proxy capacity. | I12 observes the target host and passes bounded small synthetic N=1 traffic, but does not qualify customer models, N=2/N=3, or final public proxy timeouts. | Retain N=1 and verify public timeouts plus real-workload capacity before increasing load. |
 | D-022 | I5's loopback-published topology could not combine ingress with egress denial; I6 replaces it. | I12 verifies the selected internal API/private peer with no API host port/default route, denied API/native egress, and a socketless dual-attached proxy whose default route is ingress. | Verify intended public caller, proxy CIDR, firewall, DNS/certificate, secret lifecycle and route rollback before activation. Async worker remains deferred. |
-| D-023 | J2 activation evidence must come from an external observer and must not collapse a network deny into application HTTP 401. | The repository contract distinguishes router 403 and host-firewall TCP reset/private `J2_ALLOWLIST_DENY` from application 401 and stages LeadPilot alone first. Success requires a proved final-dark state; `*_rollback_uncertain` is `STOP/UNKNOWN`. Live execution is blocked without an exact J0-capable deployed image and private inputs. | External orchestrator proves allowed/denied sources, TLS issuance/renewal, rollback, and final dark readback; later caller expansion remains separate. |
+| D-023 | Activation evidence must come from an external observer and must not collapse a network deny into application HTTP 401. | The repository contract distinguishes router 403 and host-firewall TCP reset/private `J2_ALLOWLIST_DENY` from application 401, admits exactly one canonical `/32`, targets external `:443`, and stops if the live dynamic bind belongs to another release. Success requires a proved final-dark state; `*_rollback_uncertain` is `STOP/UNKNOWN`. | The external orchestrator proves allowed/denied sources, TLS issuance/renewal, rollback, final dark readback, current address ownership, and single-host firewall scope. No caller expansion is authorized. |

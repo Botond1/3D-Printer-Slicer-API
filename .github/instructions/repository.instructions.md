@@ -4,7 +4,7 @@ applyTo: "**"
 
 # Repository Wide Instructions
 
-Last synchronized: 2026-08-31
+Last synchronized: 2026-09-01
 
 ## Architecture
 - Backend stack is Node.js + Express + Python helper scripts.
@@ -120,21 +120,30 @@ Last synchronized: 2026-08-31
   separate owner image ID is not byte-identical-image evidence. Merge is
   authorized but not yet claimed complete; deploy and every external mutation
   remain unauthorized.
-- Hostinger public-route preparation accepts one through four unique private
-  IPv4 `/32` entries. Initial `leadpilot-only` phase requires exactly one;
-  expanded callers are separately authorized. Host-firewall TCP rejection and
+- Hostinger public-route preparation accepts exactly one canonical private IPv4
+  `/32` entry in the sole `leadpilot-only` phase. A second entry, broader
+  prefix, forwarded identity, or `ipStrategy` fails closed. This is
+  machine-level trust, and unreserved-address reassignment is a silent perimeter
+  failure unless the consumer reports rebuilds or migrations in advance.
+  Host-firewall TCP rejection and
   fixed private `J2_ALLOWLIST_DENY`, or router HTTP 403, must remain distinct
   from backend HTTP 401. The external orchestrator owns allowed/denied, TLS
   issuance/renewal, rollback, and final-dark proof. One inherited root-private
   FD9 lock must span the complete rehearsal; each action re-proves canonical,
-  root-owned, non-writable ancestors and terminal proof uses strict
+  root-owned, non-writable ancestors plus exact running dynamic-bind/operator-
+  pack equality, and terminal proof uses strict
   `--assert-router-dark`. Local evidence covers logical fsync cutpoints, not
-  real crash/power-loss durability. Any
-  `*_rollback_uncertain` result is `STOP/UNKNOWN`, not dark evidence. Current
-  live rehearsal is `BLOCKED / NOT RUN` until an exact J0-capable image is
-  published and deployed and private live evidence exists. J2 performs no
-  route mutation and does not freshly verify the prior I12 dark state;
-  repository gates cannot authorize permanent activation.
+  real crash/power-loss durability. Redirects target external `:443`, never
+  internal `:8443`; a `DOCKER-USER` 443 rule is valid only for one hosted name. Any
+  `*_rollback_uncertain` result is `STOP/UNKNOWN`, not dark evidence. Exact
+  protected-main source `bf5e712071e3174a67fdb22ff3794003fa3ab32b` has a
+  signed, attested immutable candidate,
+  but it is not deployed and its automatic no-deploy rehearsal stopped on the
+  fixed previous-policy `configs/` compatibility guard. Live route rehearsal
+  remains `BLOCKED / NOT RUN` until the owner deploys the exact digest and
+  supplies private evidence. This repository work performs no route mutation
+  and does not freshly verify the prior I12 dark state; repository gates cannot
+  authorize permanent activation.
 - No-Origin requests are allowed. Browser-origin protected calls use only their
   SLICE_, PRICING_, ARTIFACT_, or OPERATIONS_CORS_ALLOWED_ORIGINS list.
 - Protected x-api-key routes remain IP-rate-limited.
