@@ -36,6 +36,7 @@ const {
 
 const ENGINE_VERSIONS = Object.freeze({ prusa: '2.8.1-test', orca: '2.3.1-test' });
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'j2-profile-catalogue-'));
+const minimum = Object.freeze({ x: 1, y: 1, z: 1 });
 let snapshot;
 
 function createWorkspace() {
@@ -72,6 +73,23 @@ async function requestApp(app, headers = {}) {
     }
 }
 
+function assertNoPublicMaxProperty(value, location = 'catalogue') {
+    if (!value || typeof value !== 'object') return;
+    assert.equal(Object.hasOwn(value, 'max'), false, `${location} exposes an ambiguous .max`);
+    for (const [key, child] of Object.entries(value)) {
+        assertNoPublicMaxProperty(child, `${location}.${key}`);
+    }
+}
+
+function findProfile(engine, printerId, layerHeight = 0.2, material = null) {
+    return snapshot.body.profiles.find((profile) => (
+        profile.engine === engine
+        && profile.printer.id === printerId
+        && profile.layer_height_mm === layerHeight
+        && profile.material === material
+    ));
+}
+
 test.before(async () => {
     snapshot = await buildProfileCatalogue({ engineVersions: ENGINE_VERSIONS, createWorkspace });
 });
@@ -80,67 +98,80 @@ test.after(async () => {
     await fsPromises.rm(root, { recursive: true, force: true });
 });
 
-test('server-owned preset manifest is closed and excludes custom or dynamic materials', () => {
+test('server-owned manifest uses only P1S and explicitly named P1S-physics quote chains', () => {
     const definitions = createPresetDefinitions();
-    assert.equal(definitions.length, 15);
-    assert.equal(definitions.filter((item) => item.engine === 'prusa').length, 3);
+    assert.equal(definitions.length, 18);
+    assert.equal(definitions.filter((item) => item.engine === 'prusa').length, 6);
     assert.equal(definitions.filter((item) => item.engine === 'orca').length, 12);
+    assert.deepEqual(
+        [...new Set(definitions.map((item) => item.printer.id))].sort(),
+        ['H2D-QUOTE', 'P1S']
+    );
+    assert.equal(definitions.some((item) => (
+        item.profileOverrides.orcaMachineProfile === 'Bambu_H2D_0.4_nozzle.json'
+    )), false);
     assert.ok(definitions.every((item) => item.technology === 'FDM'));
     assert.deepEqual(
         [...new Set(definitions.filter((item) => item.engine === 'orca')
             .map((item) => item.material))].sort(),
         ['PETG', 'PLA']
     );
-    assert.ok(definitions.every((item) => item.profileOverrides.prusaProfile
-        || item.profileOverrides.orcaMachineProfile));
 });
 
-test('startup catalogue publishes deterministic digest, engine, bounds, and filament facts', async () => {
+test('v2 publishes explicit declared metadata and authoritative inclusive ceilings', () => {
+    assert.equal(snapshot.body.schema, 'r3d-profile-catalogue-v2');
     assert.match(snapshot.body.catalogue_sha256, /^[a-f0-9]{64}$/);
-    assert.equal(snapshot.etag, `"${snapshot.body.catalogue_sha256}"`);
-    assert.equal(snapshot.body.profiles.length, 15);
-    assert.equal(new Set(snapshot.body.profiles.map((entry) => entry.id)).size, 15);
+    assert.match(snapshot.etag, /^"[a-f0-9]{64}"$/);
+    assert.equal(snapshot.body.profiles.length, 18);
+    assert.equal(new Set(snapshot.body.profiles.map((entry) => entry.id)).size, 18);
     assert.ok(snapshot.body.profiles.every((entry) => entry.technology === 'FDM'));
-    assert.ok(snapshot.body.profiles.every((entry) => (
-        entry.effective_profile_identity_schema === DIGEST_SCHEMA
-        && entry.build_volume_limits_mm.max_source_kind === 'profile-explicit'
-    )));
-    assert.ok(!snapshot.body.profiles.some((entry) => {
-        const maximum = entry.build_volume_limits_mm.max;
-        return maximum.x === 120 && maximum.y === 120 && maximum.z === 150;
-    }));
+    assertNoPublicMaxProperty(snapshot.body);
+
+    const expectedLimitKeys = [
+        'declared_build_volume_dimensions_mm',
+        'declared_source_kind',
+        'largest_passing_dimensions_inclusive_mm',
+        'minimum_dimensions_inclusive_mm',
+        'source_profile'
+    ];
+    for (const profile of snapshot.body.profiles) {
+        assert.deepEqual(Object.keys(profile.build_volume_limits_mm).sort(), expectedLimitKeys);
+        assert.deepEqual(profile.build_volume_limits_mm.minimum_dimensions_inclusive_mm, minimum);
+        assert.equal(profile.build_volume_limits_mm.declared_source_kind, 'profile-explicit');
+        assert.equal(profile.effective_profile_identity_schema, DIGEST_SCHEMA);
+        assert.match(profile.effective_profile_sha256, /^[a-f0-9]{64}$/);
+    }
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /not an admission limit/i);
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /exact boundary value/i);
+    assert.match(snapshot.body.semantics.fleet_derivation, /engine-scoped/i);
     assert.match(snapshot.body.semantics.scope, /Fallback-only SLA presets are never machine entries/);
-    assert.match(snapshot.body.semantics.scope, /same v1 entry schema/);
     assert.match(snapshot.body.semantics.scope, /ABS and TPU/);
     assert.equal(Object.isFrozen(snapshot.body), true);
     assert.equal(Object.isFrozen(snapshot.body.profiles[0].printer), true);
     assert.equal(Object.isFrozen(snapshot.body.machine_resolutions[0]), true);
-    assert.equal(Object.isFrozen(snapshot.body.fleet_resolutions[0].maximum), true);
+    assert.equal(Object.isFrozen(snapshot.body.fleet_resolutions[0]), true);
+});
 
-    const p1sPla = snapshot.body.profiles.find((entry) => (
-        entry.engine === 'orca'
-        && entry.layer_height_mm === 0.2
-        && entry.material === 'PLA'
-        && entry.profile_components.some((component) => (
-            component.role === 'machine'
-            && component.basename === 'Bambu_P1S_0.4_nozzle.json'
-        ))
-    ));
-    assert.ok(p1sPla);
-    assert.equal(p1sPla.engine_version, ENGINE_VERSIONS.orca);
-    assert.deepEqual(p1sPla.printer, { id: 'P1S', name: 'Bambu Lab P1S' });
-    assert.match(p1sPla.effective_profile_sha256, /^[a-f0-9]{64}$/);
-    assert.deepEqual(p1sPla.build_volume_limits_mm.max, { x: 256, y: 256, z: 250 });
-    assert.equal(p1sPla.build_volume_limits_mm.max_source_kind, 'profile-explicit');
-    assert.equal(p1sPla.effective_profile_identity_schema, DIGEST_SCHEMA);
-    assert.deepEqual(p1sPla.slice_selector, {
-        endpoint: '/orca/slice',
-        parameters: [
-            { name: 'printerProfile', value: 'Bambu_P1S_0.4_nozzle.json' },
-            { name: 'processProfile', value: 'FDM_0.2mm.json' }
-        ]
-    });
-    assert.deepEqual(p1sPla.profile_components, [
+test('P1S declared dimensions remain physical while admission ceilings are engine-specific', () => {
+    const prusa = findProfile('prusa', 'P1S');
+    const orca = findProfile('orca', 'P1S', 0.2, 'PLA');
+    for (const profile of [prusa, orca]) {
+        assert.deepEqual(
+            profile.build_volume_limits_mm.declared_build_volume_dimensions_mm,
+            { x: 256, y: 256, z: 250 }
+        );
+    }
+    assert.deepEqual(
+        prusa.build_volume_limits_mm.largest_passing_dimensions_inclusive_mm,
+        { x: 256, y: 256, z: 249.9 }
+    );
+    assert.deepEqual(
+        orca.build_volume_limits_mm.largest_passing_dimensions_inclusive_mm,
+        { x: 253.9, y: 253.9, z: 249.9 }
+    );
+    assert.equal(orca.engine_version, ENGINE_VERSIONS.orca);
+    assert.equal(orca.material_scope, 'exact');
+    assert.deepEqual(orca.profile_components, [
         {
             role: 'machine',
             basename: 'Bambu_P1S_0.4_nozzle.json',
@@ -153,45 +184,51 @@ test('startup catalogue publishes deterministic digest, engine, bounds, and fila
         },
         { role: 'filament', basename: 'PLA_generic.json', selector_parameter: null }
     ]);
-    assert.equal(p1sPla.filament_diameter_mm, 1.75);
-    assert.equal(p1sPla.filament_density_g_cm3, 1.24);
-
-    const h2dPetg = snapshot.body.profiles.find((entry) => (
-        entry.engine === 'orca'
-        && entry.material === 'PETG'
-        && entry.profile_components.some((component) => (
-            component.role === 'machine'
-            && component.basename === 'Bambu_H2D_0.4_nozzle.json'
-        ))
-    ));
-    assert.deepEqual(h2dPetg.build_volume_limits_mm.max, { x: 350, y: 320, z: 325 });
-    assert.deepEqual(h2dPetg.printer, { id: 'H2D', name: 'Bambu Lab H2D' });
-
-    const prusaFdm = snapshot.body.profiles.find((entry) => (
-        entry.engine === 'prusa' && entry.technology === 'FDM'
-    ));
-    assert.equal(prusaFdm.material, null);
-    assert.equal(prusaFdm.material_scope, 'request-independent');
-    assert.equal(prusaFdm.filament_diameter_mm, 1.75);
-    assert.equal(prusaFdm.filament_density_g_cm3, null);
-    assert.deepEqual(prusaFdm.slice_selector, {
-        endpoint: '/prusa/slice',
-        parameters: [{
-            name: 'printerProfile', value: `FDM_${prusaFdm.layer_height_mm}mm.ini`
-        }]
-    });
-    assert.deepEqual(prusaFdm.profile_components, [{
-        role: 'combined',
-        basename: `FDM_${prusaFdm.layer_height_mm}mm.ini`,
-        selector_parameter: 'printerProfile'
-    }]);
-
-    for (const directory of ['jobs', 'scratch']) {
-        assert.deepEqual(await fsPromises.readdir(path.join(root, directory)), []);
-    }
+    assert.equal(orca.filament_diameter_mm, 1.75);
+    assert.equal(orca.filament_density_g_cm3, 1.24);
+    assert.equal(prusa.material_scope, 'request-independent');
+    assert.equal(prusa.filament_diameter_mm, 1.75);
+    assert.equal(prusa.filament_density_g_cm3, null);
 });
 
-test('selector parameters are uniquely derived from the ordered profile component chain', () => {
+test('quote rows expose exact selectors and provisional enlarged native ceilings', () => {
+    const prusa = findProfile('prusa', 'H2D-QUOTE');
+    const orca = findProfile('orca', 'H2D-QUOTE', 0.2, 'PLA');
+    assert.deepEqual(prusa.slice_selector, {
+        endpoint: '/prusa/slice',
+        parameters: [{
+            name: 'printerProfile',
+            value: 'FDM_P1S_H2D_SIZE_QUOTING_0.2mm.ini'
+        }]
+    });
+    assert.deepEqual(orca.slice_selector, {
+        endpoint: '/orca/slice',
+        parameters: [
+            {
+                name: 'printerProfile',
+                value: 'Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json'
+            },
+            { name: 'processProfile', value: 'FDM_0.2mm.json' }
+        ]
+    });
+    for (const profile of [prusa, orca]) {
+        assert.equal(profile.printer.name, 'H2D-sized quote (P1S physics)');
+        assert.deepEqual(
+            profile.build_volume_limits_mm.declared_build_volume_dimensions_mm,
+            { x: 350, y: 320, z: 325 }
+        );
+    }
+    assert.deepEqual(
+        prusa.build_volume_limits_mm.largest_passing_dimensions_inclusive_mm,
+        { x: 350, y: 320, z: 324.9 }
+    );
+    assert.deepEqual(
+        orca.build_volume_limits_mm.largest_passing_dimensions_inclusive_mm,
+        { x: 347.9, y: 317.9, z: 324.9 }
+    );
+});
+
+test('selector parameters remain uniquely derived from the ordered component chain', () => {
     for (const entry of snapshot.body.profiles) {
         const expectedParameters = entry.profile_components
             .filter((component) => component.selector_parameter !== null)
@@ -206,51 +243,134 @@ test('selector parameters are uniquely derived from the ordered profile componen
             entry.id
         );
     }
-
-    assert.throws(
-        () => buildSliceSelector(
-            { engine: 'future-sla' },
-            [
-                { role: 'machine', basename: 'machine.json', selector_parameter: 'profile' },
-                { role: 'process', basename: 'process.json', selector_parameter: 'profile' }
-            ]
-        ),
-        /duplicate selector parameter/
-    );
 });
 
-test('runtime publication rejects path-bearing and non-printable public identities', () => {
-    const entry = snapshot.body.profiles[0];
-    assert.throws(
-        () => validateCatalogueEntryIdentity({
-            ...entry,
-            build_volume_limits_mm: {
-                ...entry.build_volume_limits_mm,
-                source_profile: '../private.ini'
-            }
-        }),
-        /build-volume source profile violates/
-    );
-    assert.throws(
-        () => validateCatalogueEntryIdentity({
-            ...entry,
-            engine_version: 'version\nprivate'
-        }),
-        /engine version violates/
-    );
+test('machine and fleet resolutions preserve per-engine admission authority', () => {
+    assert.deepEqual(snapshot.body.machine_resolutions, [
+        {
+            technology: 'FDM',
+            printer: { id: 'H2D-QUOTE', name: 'H2D-sized quote (P1S physics)' },
+            engine: 'orca',
+            status: 'resolved',
+            reason: null,
+            minimum_dimensions_inclusive_mm: minimum,
+            largest_passing_dimensions_inclusive_mm: { x: 347.9, y: 317.9, z: 324.9 }
+        },
+        {
+            technology: 'FDM',
+            printer: { id: 'P1S', name: 'Bambu Lab P1S' },
+            engine: 'orca',
+            status: 'resolved',
+            reason: null,
+            minimum_dimensions_inclusive_mm: minimum,
+            largest_passing_dimensions_inclusive_mm: { x: 253.9, y: 253.9, z: 249.9 }
+        },
+        {
+            technology: 'FDM',
+            printer: { id: 'H2D-QUOTE', name: 'H2D-sized quote (P1S physics)' },
+            engine: 'prusa',
+            status: 'resolved',
+            reason: null,
+            minimum_dimensions_inclusive_mm: minimum,
+            largest_passing_dimensions_inclusive_mm: { x: 350, y: 320, z: 324.9 }
+        },
+        {
+            technology: 'FDM',
+            printer: { id: 'P1S', name: 'Bambu Lab P1S' },
+            engine: 'prusa',
+            status: 'resolved',
+            reason: null,
+            minimum_dimensions_inclusive_mm: minimum,
+            largest_passing_dimensions_inclusive_mm: { x: 256, y: 256, z: 249.9 }
+        }
+    ]);
+    assert.deepEqual(snapshot.body.fleet_resolutions, [
+        {
+            technology: 'FDM',
+            engine: 'orca',
+            status: 'resolved',
+            reason: null,
+            printers: [{ id: 'H2D-QUOTE', name: 'H2D-sized quote (P1S physics)' }],
+            minimum_dimensions_inclusive_mm: minimum,
+            largest_passing_dimensions_inclusive_mm: { x: 347.9, y: 317.9, z: 324.9 },
+            excluded_printers: []
+        },
+        {
+            technology: 'FDM',
+            engine: 'prusa',
+            status: 'resolved',
+            reason: null,
+            printers: [{ id: 'H2D-QUOTE', name: 'H2D-sized quote (P1S physics)' }],
+            minimum_dimensions_inclusive_mm: minimum,
+            largest_passing_dimensions_inclusive_mm: { x: 350, y: 320, z: 324.9 },
+            excluded_printers: []
+        }
+    ]);
 });
 
-test('catalogue refuses fallback-equal and partial machine envelopes before publication', async () => {
+test('same-engine preset drift fails for both declared and largest-passing dimensions', () => {
+    for (const [field, delta] of [
+        ['declared_build_volume_dimensions_mm', 0.1],
+        ['largest_passing_dimensions_inclusive_mm', -0.1]
+    ]) {
+        const profiles = structuredClone(snapshot.body.profiles);
+        const changed = profiles.find((profile) => (
+            profile.printer.id === 'H2D-QUOTE' && profile.engine === 'prusa'
+        ));
+        changed.build_volume_limits_mm[field].x += delta;
+        assert.throws(
+            () => deriveMachineAndFleetResolutions(profiles),
+            /FDM printer H2D-QUOTE engine prusa has inconsistent preset envelopes/
+        );
+    }
+});
+
+test('v2 dimensional publication is fail-closed for missing and oversized values', async () => {
+    const controlled = [
+        {
+            min: { ...minimum },
+            max: { x: 10, y: 10, z: 10 },
+            declaredMax: { x: 10, y: 10 },
+            largestPassingDimensionsInclusive: { x: 10, y: 10, z: 10 },
+            sourceProfile: 'controlled.ini',
+            explicitMaxAxes: { x: true, y: true, z: true }
+        },
+        {
+            min: { ...minimum },
+            max: { x: 11, y: 10, z: 10 },
+            declaredMax: { x: 10, y: 10, z: 10 },
+            largestPassingDimensionsInclusive: { x: 11, y: 10, z: 10 },
+            sourceProfile: 'controlled.ini',
+            explicitMaxAxes: { x: true, y: true, z: true }
+        }
+    ];
+    for (const limits of controlled) {
+        await assert.rejects(
+            buildProfileCatalogue({
+                engineVersions: ENGINE_VERSIONS,
+                createWorkspace,
+                dependencies: { resolveBuildVolumeLimits() { return limits; } }
+            }),
+            /exact object contract|invalid machine envelope/
+        );
+    }
+});
+
+test('catalogue still refuses fallback-only and partial explicit machine metadata', async () => {
     for (const controlledLimits of [
         {
-            min: { x: 1, y: 1, z: 1 },
+            min: { ...minimum },
             max: { x: 120, y: 120, z: 150 },
+            declaredMax: { x: 120, y: 120, z: 150 },
+            largestPassingDimensionsInclusive: { x: 120, y: 120, z: 150 },
             sourceProfile: 'fallback-only.ini',
             explicitMaxAxes: { x: false, y: false, z: false }
         },
         {
-            min: { x: 1, y: 1, z: 1 },
-            max: { x: 256, y: 256, z: 325 },
+            min: { ...minimum },
+            max: { x: 256, y: 256, z: 324.9 },
+            declaredMax: { x: 256, y: 256, z: 325 },
+            largestPassingDimensionsInclusive: { x: 256, y: 256, z: 324.9 },
             sourceProfile: 'partial.ini',
             explicitMaxAxes: { x: true, y: true, z: false }
         }
@@ -271,122 +391,27 @@ test('catalogue refuses fallback-equal and partial machine envelopes before publ
     }
 });
 
-test('machine envelopes resolve only after every engine agrees and fleet maximum names a machine', () => {
-    const fdmProfiles = snapshot.body.profiles.filter((entry) => entry.technology === 'FDM');
-    const p1sProfiles = fdmProfiles.filter((entry) => entry.printer.id === 'P1S');
-    assert.ok(p1sProfiles.length > 0);
-    assert.ok(p1sProfiles.every((entry) => (
-        entry.build_volume_limits_mm.max.x === 256
-        && entry.build_volume_limits_mm.max.y === 256
-        && entry.build_volume_limits_mm.max.z === 250
-    )));
-
-    assert.deepEqual(snapshot.body.machine_resolutions, [
-        {
-            technology: 'FDM',
-            printer: { id: 'H2D', name: 'Bambu Lab H2D' },
-            engines: ['orca'],
-            status: 'resolved',
-            reason: null,
-            resolved_build_volume_limits_mm: {
-                min: { x: 1, y: 1, z: 1 },
-                max: { x: 350, y: 320, z: 325 }
-            }
-        },
-        {
-            technology: 'FDM',
-            printer: { id: 'P1S', name: 'Bambu Lab P1S' },
-            engines: ['orca', 'prusa'],
-            status: 'resolved',
-            reason: null,
-            resolved_build_volume_limits_mm: {
-                min: { x: 1, y: 1, z: 1 },
-                max: { x: 256, y: 256, z: 250 }
-            }
-        }
-    ]);
-    assert.deepEqual(snapshot.body.fleet_resolutions, [{
-        technology: 'FDM',
-        status: 'resolved',
-        reason: null,
-        maximum: {
-            printers: [{ id: 'H2D', name: 'Bambu Lab H2D' }],
-            build_volume_limits_mm: {
-                min: { x: 1, y: 1, z: 1 },
-                max: { x: 350, y: 320, z: 325 }
-            }
-        },
-        excluded_printers: []
-    }]);
-    assert.equal(Object.hasOwn(snapshot.body, 'fleet_max'), false);
-    assert.match(snapshot.body.semantics.fleet_derivation, /never resolved by selecting/);
-});
-
-test('cross-engine conflict keeps every profile row, excludes only that machine, and stays loud', () => {
-    const profiles = structuredClone(snapshot.body.profiles);
-    for (const profile of profiles) {
-        if (profile.printer.id === 'P1S' && profile.engine === 'orca') {
-            profile.build_volume_limits_mm.max.x = 250;
-        }
-    }
-    const originalProfileIds = snapshot.body.profiles.map((profile) => profile.id);
-    const { machineResolutions, fleetResolutions } = deriveMachineAndFleetResolutions(profiles);
-
-    assert.deepEqual(profiles.map((profile) => profile.id), originalProfileIds);
-    assert.equal(profiles.filter((profile) => profile.printer.id === 'P1S').length, 9);
-    assert.deepEqual(
-        [...new Set(profiles.filter((profile) => profile.printer.id === 'P1S')
-            .map((profile) => profile.build_volume_limits_mm.max.x))].sort((a, b) => a - b),
-        [250, 256]
-    );
-    assert.deepEqual(
-        machineResolutions.find((machine) => machine.printer.id === 'P1S'),
-        {
-            technology: 'FDM',
-            printer: { id: 'P1S', name: 'Bambu Lab P1S' },
-            engines: ['orca', 'prusa'],
-            status: 'excluded',
-            reason: 'cross_engine_conflict',
-            resolved_build_volume_limits_mm: null
-        }
-    );
-    assert.deepEqual(fleetResolutions, [{
-        technology: 'FDM',
-        status: 'resolved',
-        reason: null,
-        maximum: {
-            printers: [{ id: 'H2D', name: 'Bambu Lab H2D' }],
-            build_volume_limits_mm: {
-                min: { x: 1, y: 1, z: 1 },
-                max: { x: 350, y: 320, z: 325 }
-            }
-        },
-        excluded_printers: [{
-            printer: { id: 'P1S', name: 'Bambu Lab P1S' },
-            reason: 'cross_engine_conflict'
-        }]
-    }]);
-    assert.equal(
-        machineResolutions.some((machine) => (
-            machine.printer.id === 'P1S'
-            && machine.resolved_build_volume_limits_mm?.max.x === 250
-        )),
-        false,
-        'a smaller cross-engine component must never become the resolved envelope'
-    );
-});
-
-test('same-engine preset envelope drift fails catalogue derivation instead of hiding the row', () => {
-    const profiles = structuredClone(snapshot.body.profiles);
-    const changed = profiles.find((profile) => (
-        profile.printer.id === 'P1S' && profile.engine === 'orca'
-    ));
-    changed.build_volume_limits_mm.max.y -= 1;
+test('entry validation rejects ambiguous fields and non-explicit declared provenance', () => {
+    const entry = structuredClone(snapshot.body.profiles[0]);
+    entry.build_volume_limits_mm.max = { x: 1, y: 1, z: 1 };
     assert.throws(
-        () => deriveMachineAndFleetResolutions(profiles),
-        /FDM printer P1S engine orca has inconsistent preset envelopes/
+        () => validateCatalogueEntryIdentity(entry),
+        /build-volume limits violates its exact object contract/
     );
-    assert.equal(profiles.length, snapshot.body.profiles.length);
+
+    const wrongProvenance = structuredClone(snapshot.body.profiles[0]);
+    wrongProvenance.build_volume_limits_mm.declared_source_kind = 'fallback';
+    assert.throws(
+        () => validateCatalogueEntryIdentity(wrongProvenance),
+        /declared build-volume source kind is invalid/
+    );
+
+    const nonPrintableVersion = structuredClone(snapshot.body.profiles[0]);
+    nonPrintableVersion.engine_version = 'version\nprivate';
+    assert.throws(
+        () => validateCatalogueEntryIdentity(nonPrintableVersion),
+        /engine version violates/
+    );
 });
 
 test('duplicate public profile ids fail catalogue derivation before publication', () => {
@@ -398,119 +423,43 @@ test('duplicate public profile ids fail catalogue derivation before publication'
     );
 });
 
-test('v1 resolves mixed synthetic FDM and SLA fleets independently by technology', () => {
-    const syntheticFdm = structuredClone(snapshot.body.profiles[0]);
-    syntheticFdm.id = 'future-fdm:FDM:SCHEMA-MACHINE:0.2';
-    syntheticFdm.engine = 'future-fdm';
-    syntheticFdm.technology = 'FDM';
-    syntheticFdm.printer = { id: 'SCHEMA-MACHINE', name: 'Synthetic schema machine' };
-    syntheticFdm.build_volume_limits_mm.max = { x: 10, y: 10, z: 10 };
-
-    const syntheticSla = structuredClone(syntheticFdm);
-    syntheticSla.id = 'future-sla:SLA:SCHEMA-MACHINE:0.05';
-    syntheticSla.engine = 'future-sla';
-    syntheticSla.technology = 'SLA';
-    syntheticSla.build_volume_limits_mm.max = { x: 20, y: 20, z: 20 };
-
-    const mixed = deriveMachineAndFleetResolutions([
-        ...structuredClone(snapshot.body.profiles), syntheticFdm, syntheticSla
-    ]);
-    const syntheticMachines = mixed.machineResolutions.filter((machine) => (
-        machine.printer.id === 'SCHEMA-MACHINE'
-    ));
-    assert.deepEqual(syntheticMachines.map((machine) => ({
-        technology: machine.technology,
-        maximum: machine.resolved_build_volume_limits_mm.max
-    })), [
-        { technology: 'FDM', maximum: { x: 10, y: 10, z: 10 } },
-        { technology: 'SLA', maximum: { x: 20, y: 20, z: 20 } }
-    ]);
-    assert.deepEqual(mixed.fleetResolutions.map((fleet) => ({
-        technology: fleet.technology,
-        printers: fleet.maximum.printers,
-        maximum: fleet.maximum.build_volume_limits_mm.max
-    })), [
-        {
-            technology: 'FDM',
-            printers: [{ id: 'H2D', name: 'Bambu Lab H2D' }],
-            maximum: { x: 350, y: 320, z: 325 }
-        },
-        {
-            technology: 'SLA',
-            printers: [{ id: 'SCHEMA-MACHINE', name: 'Synthetic schema machine' }],
-            maximum: { x: 20, y: 20, z: 20 }
-        }
-    ]);
-
-    const conflictingSla = structuredClone(syntheticSla);
-    conflictingSla.id = 'future-sla-alt:SLA:SCHEMA-MACHINE:0.05';
-    conflictingSla.engine = 'future-sla-alt';
-    conflictingSla.build_volume_limits_mm.max.x = 19;
-    const isolated = deriveMachineAndFleetResolutions([
-        ...structuredClone(snapshot.body.profiles), syntheticFdm, syntheticSla, conflictingSla
-    ]);
-    assert.deepEqual(isolated.fleetResolutions[0], mixed.fleetResolutions[0]);
-    assert.deepEqual(isolated.fleetResolutions[1], {
-        technology: 'SLA',
-        status: 'unresolved',
-        reason: 'no_resolved_machine',
-        maximum: null,
-        excluded_printers: [{
-            printer: { id: 'SCHEMA-MACHINE', name: 'Synthetic schema machine' },
-            reason: 'cross_engine_conflict'
-        }]
-    });
-});
-
-test('conflict on the largest machine narrows the fleet ceiling to a remaining real machine', () => {
-    const h2dOrca = structuredClone(snapshot.body.profiles.find((profile) => (
-        profile.printer.id === 'H2D'
-    )));
-    const h2dSecondEngine = structuredClone(h2dOrca);
-    h2dSecondEngine.id = `${h2dOrca.id}:future-engine`;
-    h2dSecondEngine.engine = 'future-engine';
-    h2dSecondEngine.build_volume_limits_mm.max.x -= 1;
-    const p1s = structuredClone(snapshot.body.profiles.find((profile) => (
-        profile.printer.id === 'P1S'
-    )));
-    const derived = deriveMachineAndFleetResolutions([h2dOrca, h2dSecondEngine, p1s]);
-
-    assert.deepEqual(derived.machineResolutions.find((machine) => (
-        machine.printer.id === 'H2D'
-    )).resolved_build_volume_limits_mm, null);
-    assert.deepEqual(derived.fleetResolutions[0].maximum, {
-        printers: [{ id: 'P1S', name: 'Bambu Lab P1S' }],
-        build_volume_limits_mm: {
-            min: { x: 1, y: 1, z: 1 },
-            max: { x: 256, y: 256, z: 250 }
-        }
-    });
-    assert.deepEqual(derived.fleetResolutions[0].excluded_printers, [{
-        printer: { id: 'H2D', name: 'Bambu Lab H2D' },
-        reason: 'cross_engine_conflict'
-    }]);
-});
-
-test('incomparable resolved machines expose an unresolved fleet instead of synthesizing maxima', () => {
-    const h2d = structuredClone(snapshot.body.profiles.find((profile) => (
-        profile.printer.id === 'H2D'
-    )));
-    const p1s = structuredClone(snapshot.body.profiles.find((profile) => (
-        profile.printer.id === 'P1S'
-    )));
-    h2d.build_volume_limits_mm.max.y = 200;
-    p1s.build_volume_limits_mm.max.y = 300;
-    const derived = deriveMachineAndFleetResolutions([h2d, p1s]);
+test('incomparable same-engine machines publish unresolved fleet without synthetic ceiling', () => {
+    const quote = structuredClone(findProfile('orca', 'H2D-QUOTE', 0.2, 'PLA'));
+    const p1s = structuredClone(findProfile('orca', 'P1S', 0.2, 'PLA'));
+    quote.build_volume_limits_mm.largest_passing_dimensions_inclusive_mm.y = 200;
+    const derived = deriveMachineAndFleetResolutions([quote, p1s]);
     assert.deepEqual(derived.fleetResolutions, [{
         technology: 'FDM',
+        engine: 'orca',
         status: 'unresolved',
         reason: 'no_dominant_machine',
-        maximum: null,
+        printers: [],
+        minimum_dimensions_inclusive_mm: null,
+        largest_passing_dimensions_inclusive_mm: null,
         excluded_printers: []
     }]);
 });
 
-test('same startup inputs produce the same catalogue generation', async () => {
+test('selector and public identity contracts reject ambiguity and paths', () => {
+    assert.throws(
+        () => buildSliceSelector(
+            { engine: 'future-sla' },
+            [
+                { role: 'machine', basename: 'machine.json', selector_parameter: 'profile' },
+                { role: 'process', basename: 'process.json', selector_parameter: 'profile' }
+            ]
+        ),
+        /duplicate selector parameter/
+    );
+    const pathEntry = structuredClone(snapshot.body.profiles[0]);
+    pathEntry.build_volume_limits_mm.source_profile = '../private.ini';
+    assert.throws(
+        () => validateCatalogueEntryIdentity(pathEntry),
+        /build-volume source profile violates/
+    );
+});
+
+test('same startup inputs produce the same generation and resolution mutations change digest', async () => {
     const second = await buildProfileCatalogue({ engineVersions: ENGINE_VERSIONS, createWorkspace });
     assert.equal(second.body.catalogue_sha256, snapshot.body.catalogue_sha256);
     assert.equal(second.serializedBody, snapshot.serializedBody);
@@ -524,25 +473,17 @@ test('same startup inputs produce the same catalogue generation', async () => {
     assert.equal(hashCatalogueContent(content), snapshot.body.catalogue_sha256);
     assert.notEqual(hashCatalogueContent({
         ...content,
-        machine_resolutions: content.machine_resolutions.map((machine) => (
-            machine.printer.id === 'P1S'
-                ? { ...machine, status: 'excluded' }
-                : machine
-        ))
-    }), snapshot.body.catalogue_sha256);
-    assert.notEqual(hashCatalogueContent({
-        ...content,
         fleet_resolutions: content.fleet_resolutions.map((fleet) => ({
             ...fleet,
-            excluded_printers: [{
-                printer: { id: 'MUTATED', name: 'Digest mutation' },
-                reason: 'cross_engine_conflict'
-            }]
+            largest_passing_dimensions_inclusive_mm: {
+                ...fleet.largest_passing_dimensions_inclusive_mm,
+                x: fleet.largest_passing_dimensions_inclusive_mm.x - 0.1
+            }
         }))
     }), snapshot.body.catalogue_sha256);
 });
 
-test('one failed preset waits for all in-flight work before exact workspace cleanup', async () => {
+test('one failed preset waits for in-flight work before exact workspace cleanup', async () => {
     let selectionCalls = 0;
     let delayedWorkSettled = false;
     let cleanupObservedSettledWork = false;
@@ -633,7 +574,7 @@ test('every managed preset digest matches the production slice preparation chain
     }
 });
 
-test('catalogue service failure is non-critical and leaves slicing state independent', async () => {
+test('catalogue service failure stays non-critical and runtime ceilings remain independent', async () => {
     const statusEvents = [];
     const unavailable = createProfileCatalogueService({
         build: async () => { throw new Error('controlled catalogue failure'); },
@@ -655,7 +596,7 @@ test('catalogue service failure is non-critical and leaves slicing state indepen
         resolveBuildVolumeLimits(
             'prusa', 'FDM', selection.baseConfigFile, null, selection.baseConfigFile
         ).max,
-        { x: 256, y: 256, z: 250 }
+        { x: 256, y: 256, z: 249.9 }
     );
 
     const available = createProfileCatalogueService({ build: async () => snapshot });
@@ -664,41 +605,41 @@ test('catalogue service failure is non-critical and leaves slicing state indepen
         status: 'ready'
     });
     assert.equal(available.getSnapshot(), snapshot);
+    assert.equal(available.getStatus(), 'ready');
 });
 
-test('public GET /profiles supports strong and weak conditional ETags', async () => {
-    const service = { getSnapshot: () => snapshot };
-    const response = await requestApp(createApp(service));
+test('GET /profiles retains ETag and typed unavailable behavior for v2', async () => {
+    const response = await requestApp(createApp({ getSnapshot: () => snapshot }));
     assert.equal(response.status, 200);
     assert.equal(response.headers.etag, snapshot.etag);
     assert.equal(response.headers['access-control-expose-headers'], 'ETag');
     assert.equal(response.headers['cache-control'], 'public, max-age=0, must-revalidate');
+    assert.equal(response.body.schema, 'r3d-profile-catalogue-v2');
     assert.equal(response.body.catalogue_sha256, snapshot.body.catalogue_sha256);
     assert.deepEqual(response.body.profiles, snapshot.body.profiles);
     assert.deepEqual(response.body.machine_resolutions, snapshot.body.machine_resolutions);
     assert.deepEqual(response.body.fleet_resolutions, snapshot.body.fleet_resolutions);
 
-    const unchanged = await requestApp(createApp(service), { 'If-None-Match': snapshot.etag });
+    const unchanged = await requestApp(
+        createApp({ getSnapshot: () => snapshot }),
+        { 'If-None-Match': snapshot.etag }
+    );
     assert.equal(unchanged.status, 304);
     assert.equal(unchanged.text, '');
+    assert.equal(matchesIfNoneMatch(`"stale", W/${snapshot.etag}`, snapshot.etag), true);
+    assert.equal(matchesIfNoneMatch('*', snapshot.etag), true);
     assert.equal(
-        (await requestApp(createApp(service), {
-            'If-None-Match': `"stale", W/${snapshot.etag}`
-        })).status,
-        304
-    );
-    assert.equal(
-        (await requestApp(createApp(service), { 'If-None-Match': '"stale"' })).status,
+        (await requestApp(
+            createApp({ getSnapshot: () => snapshot }),
+            { 'If-None-Match': '"stale"' }
+        )).status,
         200
     );
-    assert.equal(matchesIfNoneMatch('*', snapshot.etag), true);
-});
 
-test('unavailable catalogue returns typed 503 without authentication', async () => {
-    const response = await requestApp(createApp({ getSnapshot: () => null }));
-    assert.equal(response.status, 503);
-    assert.equal(response.headers['cache-control'], 'no-store');
-    assert.deepEqual(response.body, {
+    const unavailable = await requestApp(createApp({ getSnapshot: () => null }));
+    assert.equal(unavailable.status, 503);
+    assert.equal(unavailable.headers['cache-control'], 'no-store');
+    assert.deepEqual(unavailable.body, {
         success: false,
         error: 'Profile catalogue is unavailable.',
         errorCode: 'PROFILE_CATALOGUE_UNAVAILABLE'

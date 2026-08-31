@@ -51,6 +51,45 @@ function getOperation(operationKey) {
     return document.paths[routePath][method];
 }
 
+test('slice success and bounds responses share the schema-v2 original-dimension invariant', () => {
+    for (const operationKey of ['POST /prusa/slice', 'POST /orca/slice']) {
+        const operation = getOperation(operationKey);
+        const successTransform = operation.responses[200]
+            .content['application/json'].schema.properties.model_transform;
+        const boundsTransform = operation.responses[422]
+            .content['application/json'].schema.oneOf[0].properties.model_transform;
+
+        for (const transform of [successTransform, boundsTransform]) {
+            assert.deepEqual(transform.properties.transform_schema.enum, [2], operationKey);
+            assert.ok(transform.required.includes('original_dimensions_available'), operationKey);
+            assert.ok(transform.required.includes('original_dimensions_mm'), operationKey);
+            assert.equal(transform.properties.original_dimensions_available.type, 'boolean', operationKey);
+            assert.equal(transform.properties.original_dimensions_mm.nullable, true, operationKey);
+            assert.deepEqual(
+                Object.fromEntries(['x', 'y', 'z'].map((axis) => [
+                    axis,
+                    transform.properties.original_dimensions_mm.properties[axis].minimum
+                ])),
+                { x: 0, y: 0, z: 0 },
+                operationKey
+            );
+            assert.deepEqual(
+                transform.oneOf.map((branch) => ({
+                    available: branch.properties.original_dimensions_available.enum,
+                    nullable: branch.properties.original_dimensions_mm.nullable === true,
+                    nullOnly: branch.properties.original_dimensions_mm.enum || null
+                })),
+                [
+                    { available: [true], nullable: false, nullOnly: null },
+                    { available: [false], nullable: true, nullOnly: [null] }
+                ],
+                operationKey
+            );
+        }
+        assert.strictEqual(boundsTransform, successTransform, operationKey);
+    }
+});
+
 test('OpenAPI document exposes the current structured paths and methods', () => {
     assert.equal(document.openapi, '3.0.0');
     assert.deepEqual(Object.keys(document.paths).sort(), Object.keys(EXPECTED_METHODS).sort());
@@ -91,7 +130,7 @@ test('OpenAPI protected operations declare exact audience-scoped x-api-key secur
     }
 });
 
-test('profile catalogue v1 stays FDM-only now without a schema change for real SLA machines', () => {
+test('profile catalogue v2 stays generic for a future real SLA machine and names inclusive ceilings', () => {
     const operation = getOperation('GET /profiles');
     const responseSchema = operation.responses[200].content['application/json'].schema;
     const entrySchema = responseSchema.properties.profiles.items;
@@ -122,9 +161,22 @@ test('profile catalogue v1 stays FDM-only now without a schema change for real S
         entrySchema.properties.profile_components.items.properties.selector_parameter.nullable,
         true
     );
-    assert.deepEqual(
-        entrySchema.properties.build_volume_limits_mm.properties.max_source_kind.enum,
-        ['profile-explicit']
+    const buildVolume = entrySchema.properties.build_volume_limits_mm;
+    assert.deepEqual(buildVolume.required, [
+        'minimum_dimensions_inclusive_mm',
+        'declared_build_volume_dimensions_mm',
+        'largest_passing_dimensions_inclusive_mm',
+        'source_profile', 'declared_source_kind'
+    ]);
+    assert.equal(Object.hasOwn(buildVolume.properties, 'max'), false);
+    assert.deepEqual(buildVolume.properties.declared_source_kind.enum, ['profile-explicit']);
+    assert.match(
+        buildVolume.properties.declared_build_volume_dimensions_mm.description,
+        /not an admission limit/i
+    );
+    assert.match(
+        buildVolume.properties.largest_passing_dimensions_inclusive_mm.description,
+        /exact boundary value is accepted/i
     );
     assert.deepEqual(
         entrySchema.properties.effective_profile_identity_schema.enum,
@@ -132,12 +184,14 @@ test('profile catalogue v1 stays FDM-only now without a schema change for real S
     );
     assert.equal(entrySchema.properties.filament_diameter_mm.nullable, true);
     assert.equal(entrySchema.properties.filament_density_g_cm3.nullable, true);
-    assert.match(operation.description, /current v1 rows are .*FDM presets/);
+    assert.deepEqual(responseSchema.properties.schema.enum, ['r3d-profile-catalogue-v2']);
+    assert.match(operation.description, /current v2 rows are .*FDM presets/);
+    assert.match(operation.description, /H2D-sized quoting chain with P1S physics/);
     assert.match(operation.description, /Fallback-only SLA presets are never published/);
-    assert.match(operation.description, /same v1 entry schema/);
+    assert.match(operation.description, /same v2 entry schema/);
 });
 
-test('profile catalogue schema exposes technology-scoped loud conflicts and fleet maxima', () => {
+test('profile catalogue schema exposes engine-scoped machine and non-synthetic fleet ceilings', () => {
     const operation = getOperation('GET /profiles');
     const responseSchema = operation.responses[200].content['application/json'].schema;
     const entrySchema = responseSchema.properties.profiles.items;
@@ -155,7 +209,7 @@ test('profile catalogue schema exposes technology-scoped loud conflicts and flee
     assert.equal(machineSchema.additionalProperties, false);
     assert.equal(fleetSchema.additionalProperties, false);
     assert.equal(fleetArraySchema.minItems, 1);
-    assert.equal(fleetArraySchema.maxItems, 2);
+    assert.equal(fleetArraySchema.maxItems, 32);
     assert.equal(
         operation.responses[503].content['application/json'].schema.additionalProperties,
         false
@@ -163,94 +217,75 @@ test('profile catalogue schema exposes technology-scoped loud conflicts and flee
 
     const profileEnvelope = entrySchema.properties.build_volume_limits_mm;
     assert.equal(profileEnvelope.additionalProperties, false);
-    assert.equal(profileEnvelope.properties.min.additionalProperties, false);
-    assert.equal(profileEnvelope.properties.max.additionalProperties, false);
+    const minimum = profileEnvelope.properties.minimum_dimensions_inclusive_mm;
+    const declared = profileEnvelope.properties.declared_build_volume_dimensions_mm;
+    const largest = profileEnvelope.properties.largest_passing_dimensions_inclusive_mm;
+    assert.equal(minimum.additionalProperties, false);
+    assert.equal(declared.additionalProperties, false);
+    assert.equal(largest.additionalProperties, false);
     for (const axis of ['x', 'y', 'z']) {
-        assert.deepEqual(profileEnvelope.properties.min.properties[axis], {
+        assert.deepEqual(minimum.properties[axis], {
             type: 'number', minimum: 0
         });
-        assert.deepEqual(profileEnvelope.properties.max.properties[axis], {
+        assert.deepEqual(declared.properties[axis], {
+            type: 'number', minimum: 0, exclusiveMinimum: true
+        });
+        assert.deepEqual(largest.properties[axis], {
             type: 'number', minimum: 0, exclusiveMinimum: true
         });
     }
 
     assert.deepEqual(machineSchema.required, [
-        'technology', 'printer', 'engines', 'status', 'reason',
-        'resolved_build_volume_limits_mm'
+        'technology', 'printer', 'engine', 'status', 'reason',
+        'minimum_dimensions_inclusive_mm',
+        'largest_passing_dimensions_inclusive_mm'
     ]);
     assert.deepEqual(machineSchema.properties.technology.enum, ['FDM', 'SLA']);
-    assert.deepEqual(machineSchema.properties.status.enum, ['resolved', 'excluded']);
+    assert.equal(machineSchema.properties.engine.pattern, '^[a-z][a-z0-9-]{0,31}$');
+    assert.deepEqual(machineSchema.properties.status.enum, ['resolved']);
     assert.equal(machineSchema.properties.reason.nullable, true);
-    assert.deepEqual(
-        machineSchema.properties.reason.enum,
-        [null, 'cross_engine_conflict']
-    );
-    assert.equal(
-        machineSchema.properties.resolved_build_volume_limits_mm.nullable,
-        true
-    );
-    assert.match(
-        machineSchema.properties.resolved_build_volume_limits_mm.description,
-        /never selected/
-    );
-    assert.equal(machineSchema.oneOf.length, 2);
-    assert.deepEqual(machineSchema.oneOf[0].properties.status.enum, ['resolved']);
-    assert.deepEqual(machineSchema.oneOf[0].properties.reason.enum, [null]);
-    assert.equal(
-        machineSchema.oneOf[0].properties.resolved_build_volume_limits_mm.nullable,
-        false
-    );
-    assert.deepEqual(machineSchema.oneOf[1].properties.status.enum, ['excluded']);
-    assert.deepEqual(
-        machineSchema.oneOf[1].properties.reason.enum,
-        ['cross_engine_conflict']
-    );
-    assert.deepEqual(
-        machineSchema.oneOf[1].properties.resolved_build_volume_limits_mm.enum,
-        [null]
-    );
+    assert.deepEqual(machineSchema.properties.reason.enum, [null]);
+    assert.match(machineSchema.description, /different native engines are never merged/i);
 
     assert.deepEqual(fleetSchema.required, [
-        'technology', 'status', 'reason', 'maximum', 'excluded_printers'
+        'technology', 'engine', 'status', 'reason', 'printers',
+        'minimum_dimensions_inclusive_mm',
+        'largest_passing_dimensions_inclusive_mm', 'excluded_printers'
     ]);
     assert.deepEqual(fleetSchema.properties.technology.enum, ['FDM', 'SLA']);
+    assert.equal(fleetSchema.properties.engine.pattern, '^[a-z][a-z0-9-]{0,31}$');
     assert.deepEqual(fleetSchema.properties.status.enum, ['resolved', 'unresolved']);
     assert.equal(fleetSchema.properties.reason.nullable, true);
     assert.deepEqual(
         fleetSchema.properties.reason.enum,
         [null, 'no_resolved_machine', 'no_dominant_machine']
     );
-    assert.equal(fleetSchema.properties.maximum.nullable, true);
-    assert.equal(fleetSchema.properties.maximum.additionalProperties, false);
+    assert.equal(fleetSchema.properties.minimum_dimensions_inclusive_mm.nullable, true);
     assert.equal(
-        fleetSchema.properties.maximum.properties.build_volume_limits_mm
-            .additionalProperties,
-        false
+        fleetSchema.properties.largest_passing_dimensions_inclusive_mm.nullable,
+        true
     );
-    assert.equal(
-        fleetSchema.properties.excluded_printers.items.additionalProperties,
-        false
-    );
-    assert.deepEqual(
-        fleetSchema.properties.excluded_printers.items.properties.reason.enum,
-        ['cross_engine_conflict']
-    );
+    assert.equal(fleetSchema.properties.excluded_printers.maxItems, 0);
     assert.equal(fleetSchema.oneOf.length, 2);
     assert.deepEqual(fleetSchema.oneOf[0].properties.status.enum, ['resolved']);
     assert.deepEqual(fleetSchema.oneOf[0].properties.reason.enum, [null]);
-    assert.equal(fleetSchema.oneOf[0].properties.maximum.nullable, undefined);
+    assert.equal(fleetSchema.oneOf[0].properties.printers.minItems, 1);
     assert.deepEqual(fleetSchema.oneOf[1].properties.status.enum, ['unresolved']);
     assert.deepEqual(
         fleetSchema.oneOf[1].properties.reason.enum,
         ['no_resolved_machine', 'no_dominant_machine']
     );
-    assert.deepEqual(fleetSchema.oneOf[1].properties.maximum.enum, [null]);
+    assert.equal(fleetSchema.oneOf[1].properties.printers.maxItems, 0);
+    assert.deepEqual(
+        fleetSchema.oneOf[1].properties.largest_passing_dimensions_inclusive_mm.enum,
+        [null]
+    );
     assert.match(operation.description, /Every per-printer, per-engine preset row remains visible/);
-    assert.match(operation.description, /cross-engine conflict is explicit/);
-    assert.match(operation.description, /separate SLA fleet resolution/);
+    assert.match(operation.description, /cross-engine values are never merged/);
+    assert.match(operation.description, /separate per-engine SLA fleet resolutions/);
 });
 
-test('profile catalogue v1 generic identity fields admit a future SLA engine shape', () => {
+test('profile catalogue v2 generic identity fields admit a future SLA engine shape', () => {
     const entrySchema = getOperation('GET /profiles')
         .responses[200].content['application/json'].schema.properties.profiles.items;
     const futureIdentityOnly = {

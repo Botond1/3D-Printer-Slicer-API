@@ -1,8 +1,13 @@
 'use strict';
 
 const { roundDimensions } = require('./common');
+const {
+    MODEL_INFO_MEASUREMENT_STATUSES,
+    isModelMeasurement,
+    isPositiveModelMeasurement
+} = require('./model-stats');
 
-const TRANSFORM_SCHEMA = 1;
+const TRANSFORM_SCHEMA = 2;
 const ORIENTATION_METADATA_SCHEMA = 1;
 const ORIENTATION_MODES = Object.freeze(['auto', 'preserve']);
 const ORIENTATION_OUTCOMES = Object.freeze([
@@ -197,6 +202,44 @@ function roundModelDimensions(modelInfo) {
     return roundDimensions(dimensions);
 }
 
+function assertModelMeasurement(measurement) {
+    if (
+        measurement?.status === MODEL_INFO_MEASUREMENT_STATUSES.UNAVAILABLE
+        && measurement.modelInfo === null
+    ) return measurement;
+    if (
+        measurement?.status === MODEL_INFO_MEASUREMENT_STATUSES.MEASURED
+        && isModelMeasurement(measurement)
+    ) return measurement;
+    throw new Error('Transform contract model measurement has an unexpected shape.');
+}
+
+function buildOriginalDimensionsContract(measurementCandidate) {
+    const measurement = assertModelMeasurement(measurementCandidate);
+    if (measurement.status === MODEL_INFO_MEASUREMENT_STATUSES.UNAVAILABLE) {
+        return {
+            originalDimensionsAvailable: false,
+            originalDimensionsMm: null
+        };
+    }
+    return {
+        originalDimensionsAvailable: true,
+        originalDimensionsMm: roundDimensions({
+            x: measurement.modelInfo.x,
+            y: measurement.modelInfo.y,
+            z: measurement.modelInfo.z
+        })
+    };
+}
+
+function roundRequiredModelMeasurement(measurementCandidate) {
+    const measurement = assertModelMeasurement(measurementCandidate);
+    if (!isPositiveModelMeasurement(measurement)) {
+        throw new Error('Transform contract load-bearing model dimensions are unavailable.');
+    }
+    return roundModelDimensions(measurement.modelInfo);
+}
+
 function parseOrientationMetadata(candidate, expectedMode) {
     if (
         !candidate
@@ -235,9 +278,9 @@ function buildModelTransformContract(context) {
         transformOptions,
         transformPlan,
         orientation,
-        originalModelInfo,
-        orientedModelInfo,
-        finalModelInfo
+        originalModelMeasurement,
+        orientedModelMeasurement,
+        finalModelMeasurement
     } = context;
     const normalizedOrientation = createOrientationState(
         orientation.mode,
@@ -247,6 +290,7 @@ function buildModelTransformContract(context) {
     const automaticMatrix = normalizedOrientation.automaticRotationMatrix;
     const requestedMatrix = rotationMatrixFromEulerDegrees(transformPlan.rotationDeg);
     const totalMatrix = multiplyRotationMatrices(requestedMatrix, automaticMatrix);
+    const originalDimensions = buildOriginalDimensionsContract(originalModelMeasurement);
 
     return {
         transform_schema: TRANSFORM_SCHEMA,
@@ -270,9 +314,10 @@ function buildModelTransformContract(context) {
         rotation_deg: roundRotation(rotationMatrixToEulerDegrees(totalMatrix)),
         automatic_rotation_matrix: roundRotationMatrix(automaticMatrix),
         rotation_matrix: roundRotationMatrix(totalMatrix),
-        original_dimensions_mm: roundModelDimensions(originalModelInfo),
-        oriented_dimensions_mm: roundModelDimensions(orientedModelInfo),
-        final_dimensions_mm: roundModelDimensions(finalModelInfo)
+        original_dimensions_available: originalDimensions.originalDimensionsAvailable,
+        original_dimensions_mm: originalDimensions.originalDimensionsMm,
+        oriented_dimensions_mm: roundRequiredModelMeasurement(orientedModelMeasurement),
+        final_dimensions_mm: roundRequiredModelMeasurement(finalModelMeasurement)
     };
 }
 

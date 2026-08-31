@@ -64,7 +64,8 @@ const INERT_WORKSPACE = Object.freeze({
 const MODEL_TRANSFORM_KEYS = [
     'automatic_orientation_applied', 'automatic_rotation_deg', 'automatic_rotation_matrix',
     'final_dimensions_mm', 'keep_proportions', 'orientation_mode', 'orientation_outcome',
-    'oriented_dimensions_mm', 'original_dimensions_mm', 'requested_rotation_deg',
+    'oriented_dimensions_mm', 'original_dimensions_available', 'original_dimensions_mm',
+    'requested_rotation_deg',
     'requested_size', 'rotation_deg', 'rotation_matrix', 'scale_factors', 'scale_percent',
     'size_unit', 'transform_schema'
 ].sort();
@@ -77,10 +78,14 @@ function preserveContext(dimensions) {
     };
 }
 
-test('all shipped Prusa FDM layers publish the exact P1S 256x256x250 build envelope', () => {
+test('all shipped Prusa FDM layers keep declared P1S dimensions and enforce one inclusive ceiling', () => {
     for (const layer of ['0.1', '0.2', '0.3']) {
         const limits = resolvePrusaLimits(layer);
-        assert.deepEqual(limits.max, { x: 256, y: 256, z: 250 }, layer);
+        assert.deepEqual(limits.declaredMax, { x: 256, y: 256, z: 250 }, layer);
+        assert.deepEqual(limits.largestPassingDimensionsInclusive, {
+            x: 256, y: 256, z: 249.9
+        }, layer);
+        assert.deepEqual(limits.max, { x: 256, y: 256, z: 249.9 }, layer);
         assert.deepEqual(limits.explicitMaxAxes, { x: true, y: true, z: true }, layer);
         assert.equal(limits.sourceProfile, `FDM_${layer}mm.ini`);
     }
@@ -95,14 +100,20 @@ test('W1 boundary matrix accepts 230mm Z and rejects actual Z and X/Y overflow',
             `${layer}: Z=230 must be accepted`
         );
         assert.equal(
-            validateModelDimensionsAgainstLimits({ x: 256, y: 256, z: 250 }, limits).isValid,
+            validateModelDimensionsAgainstLimits({ x: 256, y: 256, z: 249.9 }, limits).isValid,
             true,
-            `${layer}: the exact P1S boundary must be accepted`
+            `${layer}: the conservative inclusive P1S boundary must be accepted`
         );
+
+        const zCeilingOverflow = validateModelDimensionsAgainstLimits(
+            { x: 20, y: 20, z: 250 }, limits
+        );
+        assert.equal(zCeilingOverflow.isValid, false, `${layer}: Z=250 must be rejected`);
+        assert.deepEqual(zCeilingOverflow.tooLarge, ['Z: 250mm > 249.9mm']);
 
         const zOverflow = validateModelDimensionsAgainstLimits({ x: 20, y: 20, z: 251 }, limits);
         assert.equal(zOverflow.isValid, false, `${layer}: Z=251 must be rejected`);
-        assert.deepEqual(zOverflow.tooLarge, ['Z: 251mm > 250mm']);
+        assert.deepEqual(zOverflow.tooLarge, ['Z: 251mm > 249.9mm']);
 
         const planarOverflow = validateModelDimensionsAgainstLimits({ x: 257, y: 258, z: 20 }, limits);
         assert.equal(planarOverflow.isValid, false, `${layer}: planar overflow must be rejected`);
@@ -135,7 +146,8 @@ test('W1 public error payload reports MODEL_OUT_OF_PRINTER_BOUNDS with the real 
         assert.equal(rejected.status, 422);
         assert.equal(rejected.response.errorCode, 'MODEL_OUT_OF_PRINTER_BOUNDS');
         assert.deepEqual(Object.keys(rejected.response.model_transform).sort(), MODEL_TRANSFORM_KEYS);
-        assert.equal(rejected.response.model_transform.transform_schema, 1);
+        assert.equal(rejected.response.model_transform.transform_schema, 2);
+        assert.equal(rejected.response.model_transform.original_dimensions_available, true);
         assert.deepEqual(rejected.response.model_transform.final_dimensions_mm, {
             x: dimensions.x,
             y: dimensions.y,
@@ -143,7 +155,7 @@ test('W1 public error payload reports MODEL_OUT_OF_PRINTER_BOUNDS with the real 
         });
         assert.deepEqual(rejected.response.build_volume_limits_mm, {
             min: { x: 1, y: 1, z: 1 },
-            max: { x: 256, y: 256, z: 250 },
+            max: { x: 256, y: 256, z: 249.9 },
             source_profile: 'FDM_0.2mm.ini'
         });
     }
@@ -173,6 +185,7 @@ test('K2 preserve makes 20x255x255 a full-contract P1S bounds error but 20x240x2
         assert.equal(rejected.response.model_transform.orientation_mode, 'preserve', engine);
         assert.equal(rejected.response.model_transform.orientation_outcome, 'preserved', engine);
         assert.equal(rejected.response.model_transform.automatic_orientation_applied, false, engine);
+        assert.equal(rejected.response.model_transform.original_dimensions_available, true, engine);
         assert.deepEqual(rejected.response.model_transform.original_dimensions_mm, { x: 20, y: 255, z: 255 }, engine);
         assert.deepEqual(rejected.response.model_transform.oriented_dimensions_mm, { x: 20, y: 255, z: 255 }, engine);
         assert.deepEqual(rejected.response.model_transform.final_dimensions_mm, { x: 20, y: 255, z: 255 }, engine);
@@ -192,29 +205,31 @@ test('K2 preserve makes 20x255x255 a full-contract P1S bounds error but 20x240x2
     }
 });
 
-test('Orca placeholder profiles expose owner-confirmed P1S and H2D envelopes', () => {
+test('Orca keeps physical dimensions separate from P1S and enlarged quote admission ceilings', () => {
     const p1sLimits = resolveOrcaLimits('Bambu_P1S_0.4_nozzle.json');
-    assert.deepEqual(p1sLimits.max, {
+    assert.deepEqual(p1sLimits.declaredMax, {
         x: 256,
         y: 256,
         z: 250
     });
+    assert.deepEqual(p1sLimits.max, { x: 253.9, y: 253.9, z: 249.9 });
     assert.deepEqual(p1sLimits.explicitMaxAxes, { x: true, y: true, z: true });
     assert.equal(
-        validateModelDimensionsAgainstLimits({ x: 256, y: 256, z: 250 }, p1sLimits).isValid,
+        validateModelDimensionsAgainstLimits({ x: 253.9, y: 253.9, z: 249.9 }, p1sLimits).isValid,
         true
     );
     assert.equal(
-        validateModelDimensionsAgainstLimits({ x: 20, y: 20, z: 251 }, p1sLimits).isValid,
+        validateModelDimensionsAgainstLimits({ x: 254, y: 20, z: 20 }, p1sLimits).isValid,
         false
     );
-    const h2dLimits = resolveOrcaLimits('Bambu_H2D_0.4_nozzle.json');
-    assert.deepEqual(h2dLimits.max, {
+    const quoteLimits = resolveOrcaLimits('Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json');
+    assert.deepEqual(quoteLimits.declaredMax, {
         x: 350,
         y: 320,
         z: 325
     });
-    assert.deepEqual(h2dLimits.explicitMaxAxes, { x: true, y: true, z: true });
+    assert.deepEqual(quoteLimits.max, { x: 347.9, y: 317.9, z: 324.9 });
+    assert.deepEqual(quoteLimits.explicitMaxAxes, { x: true, y: true, z: true });
 });
 
 test('explicit-axis provenance distinguishes complete, partial, and fallback envelopes', () => {
@@ -233,7 +248,8 @@ test('explicit-axis provenance distinguishes complete, partial, and fallback env
             'utf8'
         );
         const partial = resolveBuildVolumeLimits('prusa', 'FDM', partialProfile, null);
-        assert.deepEqual(partial.max, { x: 120, y: 120, z: 325 });
+        assert.deepEqual(partial.declaredMax, { x: 120, y: 120, z: 325 });
+        assert.deepEqual(partial.max, { x: 120, y: 120, z: 324.9 });
         assert.deepEqual(partial.explicitMaxAxes, { x: true, y: true, z: false });
     } finally {
         fs.rmSync(temporaryRoot, { recursive: true, force: true });
@@ -252,7 +268,8 @@ test('upper fallbacks cover supported machines while the existing lower boundary
         path.join(PRUSA_DIR, 'missing-profile.ini'),
         null
     );
-    assert.deepEqual(fallback.max, { x: 350, y: 320, z: 325 });
+    assert.deepEqual(fallback.declaredMax, { x: 350, y: 320, z: 325 });
+    assert.deepEqual(fallback.max, { x: 350, y: 320, z: 324.9 });
     assert.deepEqual(fallback.explicitMaxAxes, { x: false, y: false, z: false });
     assert.equal(
         validateModelDimensionsAgainstLimits({ x: 0.5, y: 0.5, z: 0.5 }, fallback).isValid,

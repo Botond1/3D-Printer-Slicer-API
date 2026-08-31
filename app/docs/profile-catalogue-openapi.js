@@ -55,16 +55,10 @@ function dimensionSchema({ strictlyPositive = false } = {}) {
     };
 }
 
-function resolvedBuildVolumeSchema(nullable = false) {
+function nullableDimensionSchema() {
     return {
-        type: 'object',
-        nullable,
-        required: ['min', 'max'],
-        additionalProperties: false,
-        properties: {
-            min: dimensionSchema(),
-            max: dimensionSchema({ strictlyPositive: true })
-        }
+        ...dimensionSchema(),
+        nullable: true
     };
 }
 
@@ -72,68 +66,53 @@ function machineResolutionSchema() {
     return {
         type: 'object',
         required: [
-            'technology', 'printer', 'engines', 'status', 'reason',
-            'resolved_build_volume_limits_mm'
+            'technology', 'printer', 'engine', 'status', 'reason',
+            'minimum_dimensions_inclusive_mm',
+            'largest_passing_dimensions_inclusive_mm'
         ],
         additionalProperties: false,
-        description: 'Technology-scoped machine envelope derived from every published per-engine row for that technology. A cross-engine conflict is explicit and excludes only this printer-technology pair from its fleet derivation; values are never silently minimized.',
+        description: 'One engine-scoped machine admission envelope. Presets for the same technology, printer, and engine must agree exactly or catalogue initialization fails; envelopes from different native engines are never merged.',
         properties: {
             technology: technologySchema(),
             printer: printerIdentitySchema(),
-            engines: {
-                type: 'array',
-                minItems: 1,
-                maxItems: 16,
-                uniqueItems: true,
-                description: 'Sorted unique engine identifiers represented by this printer.',
-                items: {
-                    type: 'string', minLength: 1, maxLength: 32,
-                    pattern: '^[a-z][a-z0-9-]{0,31}$'
-                }
+            engine: {
+                type: 'string', minLength: 1, maxLength: 32,
+                pattern: '^[a-z][a-z0-9-]{0,31}$'
             },
-            status: { type: 'string', enum: ['resolved', 'excluded'] },
+            status: { type: 'string', enum: ['resolved'] },
             reason: {
                 type: 'string',
                 nullable: true,
-                enum: [null, 'cross_engine_conflict'],
-                description: 'Null only when status is resolved; cross_engine_conflict only when status is excluded.'
+                enum: [null]
             },
-            resolved_build_volume_limits_mm: {
-                ...resolvedBuildVolumeSchema(true),
-                description: 'Resolved envelope when every engine agrees, otherwise null. A smaller conflicting value is never selected.'
-            }
-        },
-        oneOf: [
-            {
-                title: 'Resolved machine envelope',
-                properties: {
-                    status: { type: 'string', enum: ['resolved'] },
-                    reason: { type: 'string', nullable: true, enum: [null] },
-                    resolved_build_volume_limits_mm: resolvedBuildVolumeSchema()
-                }
+            minimum_dimensions_inclusive_mm: {
+                ...dimensionSchema(),
+                description: 'Inclusive lower bound enforced by the slice endpoint.'
             },
-            {
-                title: 'Excluded cross-engine conflict',
-                properties: {
-                    status: { type: 'string', enum: ['excluded'] },
-                    reason: { type: 'string', enum: ['cross_engine_conflict'] },
-                    resolved_build_volume_limits_mm: {
-                        type: 'object', nullable: true, enum: [null]
-                    }
-                }
+            largest_passing_dimensions_inclusive_mm: {
+                ...dimensionSchema({ strictlyPositive: true }),
+                description: 'Authoritative configured inclusive upper admission boundary for this native engine. An exact boundary value is accepted; candidate-image measurement evidence is recorded separately.'
             }
-        ]
+        }
     };
 }
 
 function fleetResolutionSchema() {
     return {
         type: 'object',
-        required: ['technology', 'status', 'reason', 'maximum', 'excluded_printers'],
+        required: [
+            'technology', 'engine', 'status', 'reason', 'printers',
+            'minimum_dimensions_inclusive_mm',
+            'largest_passing_dimensions_inclusive_mm', 'excluded_printers'
+        ],
         additionalProperties: false,
-        description: 'One technology-scoped fleet maximum derived only from resolved machine envelopes in that technology; this is not a separately maintained max field.',
+        description: 'One technology-and-engine-scoped fleet envelope derived from authoritative configured machine ceilings. A result is resolved only when one complete machine envelope contains every other envelope; axes are never combined into a synthetic maximum.',
         properties: {
             technology: technologySchema(),
+            engine: {
+                type: 'string', minLength: 1, maxLength: 32,
+                pattern: '^[a-z][a-z0-9-]{0,31}$'
+            },
             status: { type: 'string', enum: ['resolved', 'unresolved'] },
             reason: {
                 type: 'string',
@@ -141,38 +120,28 @@ function fleetResolutionSchema() {
                 enum: [null, 'no_resolved_machine', 'no_dominant_machine'],
                 description: 'Null only when status is resolved.'
             },
-            maximum: {
-                type: 'object',
-                nullable: true,
-                required: ['printers', 'build_volume_limits_mm'],
-                additionalProperties: false,
-                description: 'A machine-attributed fleet maximum, or null when no resolved machine dominates all other resolved machines.',
-                properties: {
-                    printers: {
-                        type: 'array',
-                        minItems: 1,
-                        maxItems: 256,
-                        uniqueItems: true,
-                        description: 'All machines sharing the same dominant envelope, in deterministic order.',
-                        items: printerIdentitySchema()
-                    },
-                    build_volume_limits_mm: resolvedBuildVolumeSchema()
-                }
-            },
-            excluded_printers: {
+            printers: {
                 type: 'array',
                 maxItems: 256,
                 uniqueItems: true,
-                description: 'Machines excluded from fleet derivation because their per-engine envelopes conflict.',
-                items: {
-                    type: 'object',
-                    required: ['printer', 'reason'],
-                    additionalProperties: false,
-                    properties: {
-                        printer: printerIdentitySchema(),
-                        reason: { type: 'string', enum: ['cross_engine_conflict'] }
-                    }
-                }
+                description: 'Machines sharing the dominant complete envelope, or an empty array when unresolved.',
+                items: printerIdentitySchema()
+            },
+            minimum_dimensions_inclusive_mm: {
+                ...nullableDimensionSchema(),
+                description: 'Inclusive lower boundary of the dominant envelope, or null when unresolved.'
+            },
+            largest_passing_dimensions_inclusive_mm: {
+                ...dimensionSchema({ strictlyPositive: true }),
+                nullable: true,
+                description: 'Authoritative inclusive upper boundary of the dominant envelope, or null when unresolved.'
+            },
+            excluded_printers: {
+                type: 'array',
+                maxItems: 0,
+                uniqueItems: true,
+                description: 'Reserved compatibility field. Same-engine preset disagreement fails catalogue initialization, so v2 never excludes a machine silently.',
+                items: { type: 'object', additionalProperties: false }
             }
         },
         oneOf: [
@@ -181,19 +150,14 @@ function fleetResolutionSchema() {
                 properties: {
                     status: { type: 'string', enum: ['resolved'] },
                     reason: { type: 'string', nullable: true, enum: [null] },
-                    maximum: {
-                        type: 'object',
-                        required: ['printers', 'build_volume_limits_mm'],
-                        additionalProperties: false,
-                        properties: {
-                            printers: {
-                                type: 'array', minItems: 1, maxItems: 256,
-                                uniqueItems: true,
-                                items: printerIdentitySchema()
-                            },
-                            build_volume_limits_mm: resolvedBuildVolumeSchema()
-                        }
-                    }
+                    printers: {
+                        type: 'array', minItems: 1, maxItems: 256,
+                        uniqueItems: true, items: printerIdentitySchema()
+                    },
+                    minimum_dimensions_inclusive_mm: dimensionSchema(),
+                    largest_passing_dimensions_inclusive_mm: dimensionSchema({
+                        strictlyPositive: true
+                    })
                 }
             },
             {
@@ -204,7 +168,13 @@ function fleetResolutionSchema() {
                         type: 'string',
                         enum: ['no_resolved_machine', 'no_dominant_machine']
                     },
-                    maximum: { type: 'object', nullable: true, enum: [null] }
+                    printers: { type: 'array', maxItems: 0 },
+                    minimum_dimensions_inclusive_mm: {
+                        type: 'object', nullable: true, enum: [null]
+                    },
+                    largest_passing_dimensions_inclusive_mm: {
+                        type: 'object', nullable: true, enum: [null]
+                    }
                 }
             }
         ]
@@ -311,16 +281,31 @@ function catalogueEntrySchema() {
             },
             build_volume_limits_mm: {
                 type: 'object',
-                required: ['min', 'max', 'source_profile', 'max_source_kind'],
+                required: [
+                    'minimum_dimensions_inclusive_mm',
+                    'declared_build_volume_dimensions_mm',
+                    'largest_passing_dimensions_inclusive_mm',
+                    'source_profile', 'declared_source_kind'
+                ],
                 additionalProperties: false,
                 properties: {
-                    min: dimensionSchema(),
-                    max: dimensionSchema({ strictlyPositive: true }),
+                    minimum_dimensions_inclusive_mm: {
+                        ...dimensionSchema(),
+                        description: 'Inclusive minimum dimensions enforced by the slice endpoint.'
+                    },
+                    declared_build_volume_dimensions_mm: {
+                        ...dimensionSchema({ strictlyPositive: true }),
+                        description: 'Physical/profile-declared build-volume metadata. This is not an admission limit.'
+                    },
+                    largest_passing_dimensions_inclusive_mm: {
+                        ...dimensionSchema({ strictlyPositive: true }),
+                        description: 'Authoritative configured validation ceiling for this native engine. An exact boundary value is accepted; candidate-image measurement evidence is recorded separately.'
+                    },
                     source_profile: basenameSchema(),
-                    max_source_kind: {
+                    declared_source_kind: {
                         type: 'string',
                         enum: ['profile-explicit'],
-                        description: 'All max X/Y/Z axes were parsed from the selected machine-bound profile metadata. This does not describe the generic minimum floor.'
+                        description: 'All declared X/Y/Z axes were parsed from the selected machine-bound profile metadata. This does not certify the native largest-passing boundary.'
                     }
                 }
             },
@@ -340,7 +325,7 @@ function createProfileCataloguePaths() {
             get: {
                 tags: ['Profiles'],
                 summary: 'Get the startup profile catalogue.',
-                description: 'Public informational catalogue whose current v1 rows are machine-bound server-owned FDM presets. Every per-printer, per-engine preset row remains visible. Machine envelopes are resolved independently per technology only when all represented engines agree; a cross-engine conflict is explicit and excludes only that printer-technology pair from its technology fleet maximum. Slice endpoints remain authoritative and keep enforcing build-volume limits. Fallback-only SLA presets are never published as machine entries; a later real machine-bound SLA profile fits the same v1 entry schema and adds its separate SLA fleet resolution within the same v1 response. Custom overrides and dynamic materials are outside this catalogue, and catalogue availability never gates slicing.',
+                description: 'Public informational catalogue whose current v2 rows are machine-bound server-owned FDM presets. Every per-printer, per-engine preset row remains visible, with physical/profile-declared dimensions separated from the authoritative configured inclusive admission ceiling. Machine and fleet envelopes are resolved independently for each technology and native engine; cross-engine values are never merged or silently minimized. H2D-QUOTE is explicitly a H2D-sized quoting chain with P1S physics, not a production H2D G-code profile. Slice endpoints remain authoritative and keep enforcing the published largest-passing ceiling. Fallback-only SLA presets are never published as machine entries; a later real machine-bound SLA profile fits the same v2 entry schema and adds separate per-engine SLA fleet resolutions. Custom overrides and dynamic materials are outside this catalogue, and catalogue availability never gates slicing.',
                 parameters: [{
                     name: 'If-None-Match',
                     in: 'header',
@@ -367,7 +352,7 @@ function createProfileCataloguePaths() {
                                     properties: {
                                         schema: {
                                             type: 'string',
-                                            enum: ['r3d-profile-catalogue-v1']
+                                            enum: ['r3d-profile-catalogue-v2']
                                         },
                                         catalogue_sha256: {
                                             type: 'string', pattern: '^[a-f0-9]{64}$'
@@ -376,7 +361,8 @@ function createProfileCataloguePaths() {
                                             type: 'object',
                                             required: [
                                                 'authority', 'enforcement', 'availability',
-                                                'freshness', 'fleet_derivation', 'scope'
+                                                'freshness', 'build_volume_dimensions',
+                                                'fleet_derivation', 'scope'
                                             ],
                                             additionalProperties: false,
                                             properties: {
@@ -391,6 +377,9 @@ function createProfileCataloguePaths() {
                                                 },
                                                 freshness: {
                                                     type: 'string', minLength: 1, maxLength: 512
+                                                },
+                                                build_volume_dimensions: {
+                                                    type: 'string', minLength: 1, maxLength: 1024
                                                 },
                                                 fleet_derivation: {
                                                     type: 'string', minLength: 1, maxLength: 1024
@@ -411,9 +400,9 @@ function createProfileCataloguePaths() {
                                             items: machineResolutionSchema()
                                         },
                                         fleet_resolutions: {
-                                            type: 'array', minItems: 1, maxItems: 2,
+                                            type: 'array', minItems: 1, maxItems: 32,
                                             uniqueItems: true,
-                                            description: 'Exactly one deterministic fleet resolution for each technology present in profiles.',
+                                            description: 'Exactly one deterministic fleet resolution for each technology-and-engine pair present in profiles.',
                                             items: fleetResolutionSchema()
                                         }
                                     }

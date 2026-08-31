@@ -96,6 +96,17 @@ const NULLABLE_DIMENSIONS_SCHEMA = Object.freeze({
     }
 });
 
+const MEASURED_DIMENSIONS_SCHEMA = Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    required: ['x', 'y', 'z'],
+    properties: {
+        x: { type: 'number', minimum: 0 },
+        y: { type: 'number', minimum: 0 },
+        z: { type: 'number', minimum: 0 }
+    }
+});
+
 const ROTATION_DEGREES_SCHEMA = Object.freeze({
     type: 'object',
     additionalProperties: false,
@@ -152,6 +163,7 @@ const MODEL_TRANSFORM_SCHEMA = Object.freeze({
         'rotation_deg',
         'automatic_rotation_matrix',
         'rotation_matrix',
+        'original_dimensions_available',
         'original_dimensions_mm',
         'oriented_dimensions_mm',
         'final_dimensions_mm'
@@ -159,7 +171,7 @@ const MODEL_TRANSFORM_SCHEMA = Object.freeze({
     properties: {
         transform_schema: {
             type: 'integer',
-            enum: [1],
+            enum: [2],
             description: 'Version of the model-transform response contract.'
         },
         size_unit: { type: 'string', enum: ['mm', 'inch'] },
@@ -197,9 +209,14 @@ const MODEL_TRANSFORM_SCHEMA = Object.freeze({
             ...ROTATION_MATRIX_SCHEMA,
             description: 'Authoritative total rotation for column vectors: R_total = R_requested * R_automatic, where R_requested = Rz * Ry * Rx. Native slicer rotation is disabled.'
         },
+        original_dimensions_available: {
+            type: 'boolean',
+            description: 'True exactly when original_dimensions_mm contains a real successful pre-orientation measurement; false exactly when it is null.'
+        },
         original_dimensions_mm: {
-            ...DIMENSIONS_SCHEMA,
-            description: 'Submitted model dimensions after format conversion and before orientation or requested transforms.'
+            ...MEASURED_DIMENSIONS_SCHEMA,
+            nullable: true,
+            description: 'Submitted model dimensions after format conversion and before orientation or requested transforms, or null when that provenance-only measurement was unavailable. Oriented dimensions are never substituted.'
         },
         oriented_dimensions_mm: {
             ...DIMENSIONS_SCHEMA,
@@ -209,7 +226,23 @@ const MODEL_TRANSFORM_SCHEMA = Object.freeze({
             ...DIMENSIONS_SCHEMA,
             description: 'Final dimensions passed to the native slicer after all server-side transforms.'
         }
-    }
+    },
+    oneOf: [
+        {
+            title: 'Original dimensions measured',
+            properties: {
+                original_dimensions_available: { type: 'boolean', enum: [true] },
+                original_dimensions_mm: MEASURED_DIMENSIONS_SCHEMA
+            }
+        },
+        {
+            title: 'Original dimensions unavailable',
+            properties: {
+                original_dimensions_available: { type: 'boolean', enum: [false] },
+                original_dimensions_mm: { type: 'object', nullable: true, enum: [null] }
+            }
+        }
+    ]
 });
 
 const SUCCESS_SCHEMA = Object.freeze({

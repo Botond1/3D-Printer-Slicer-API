@@ -19,15 +19,32 @@ Last synchronized: 2026-08-31
 - Keep queueing and rate-limiting active for CPU-heavy slicing work.
 - Keep Orca output mapping deterministic via per-request isolated output directory handling.
 - Preserve slice route order: limiter -> x-slicer-api-key authentication -> root-scoped workspace/Multer -> queue -> native processing.
-- Preserve exact P1S `256 x 256 x 250 mm` and H2D
-  `350 x 320 x 325 mm` machine envelopes. FDM fallback equals the largest
-  supported H2D envelope; the existing `1 mm` profile minima remain unchanged;
-  configured
-  `MAX_MODEL_DIMENSION_MM` cannot be below `350`.
+- Preserve the physical/profile-declared P1S `256 x 256 x 250 mm` and enlarged
+  quote-bed `350 x 320 x 325 mm` dimensions separately from native admission.
+  Runtime bounds and the public catalogue consume the largest value proved to
+  pass, inclusively: P1S Prusa `256 x 256 x 249.9 mm` and Orca
+  `253.9 x 253.9 x 249.9 mm`. Prusa's native X/Y edge beyond the declared
+  profile remains `UNESTABLISHED`. H2D-QUOTE provisional seeds remain Prusa
+  `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm` until the exact
+  candidate-image sweep confirms or replaces them. The FDM fallback and
+  configured `MAX_MODEL_DIMENSION_MM >= 350` remain compatibility constraints;
+  the existing `1 mm` profile minima remain unchanged.
 - Preserve strict `orientationMode=auto|preserve`, with only omission defaulting
-  to `auto`. Success and `MODEL_OUT_OF_PRINTER_BOUNDS` require the same
-  complete `transform_schema: 1` payload. Its authoritative rotation-only
-  matrix is `R_requested * R_automatic`; object height equals final Z.
+  to `auto`. Success and the full K2 `MODEL_OUT_OF_PRINTER_BOUNDS` HTTP 422
+  response require the same complete `transform_schema: 2` payload.
+  `original_dimensions_available` is mandatory: `true` iff
+  `original_dimensions_mm` is an object from a real measurement and `false`
+  iff it is null; never substitute oriented dimensions. Oriented and final
+  dimensions are load-bearing and must be positive, otherwise return controlled
+  HTTP 422 `MODEL_DIMENSIONS_UNAVAILABLE`. The authoritative rotation-only
+  matrix is `R_requested * R_automatic`; successful object height always equals
+  final Z. Canonical measured data also requires `height_mm == z`: malformed
+  tagged original data degrades to false/null, while malformed oriented/final
+  data returns the controlled 422.
+- Preserve bounded native stdout independently from stderr on command failure.
+  Full K2 native mapping still requires an explicit placement/print-volume
+  diagnostic from either stream. A Prusa exit-zero/no-artifact result is only a
+  placement safety-net rejection when that explicit diagnostic is present.
 - Preserve exactly one supported source per outer ZIP. Multi-object 3MF scenes
   are concatenated into one compound STL, passed as one STL argument, and not
   sent through split-to-objects. Orca may keep `--arrange 1` for placement but
@@ -63,17 +80,18 @@ Last synchronized: 2026-08-31
 - Keep `/profiles` unauthenticated, startup-built, immutable, informational,
   and independent of slicing availability. Preserve the strong ETag,
   conditional 304, body `catalogue_sha256`, typed non-critical 503, and the
-  current exact 15-row machine-bound FDM-only v1 set. Never publish the generic
-  `120 x 120 x 150 mm` SLA fallback as a machine envelope. Keep every
-  per-printer/per-engine preset row; fail on envelope drift within one
-  technology/printer/engine. Resolve a technology/printer pair only when all
-  represented engines agree. Otherwise publish only that pair as excluded with
-  null envelope and `cross_engine_conflict`, repeat it in its technology's
-  `fleet_resolutions[].excluded_printers`, and never select component-wise
-  smaller values. Derive one fleet maximum per technology only from its
-  remaining resolved, named machines. Current FDM P1S resolves to
-  `256 x 256 x 250 mm` and H2D dominates FDM at `350 x 320 x 325 mm`; never add a
-  manual `fleet_max`.
+  exact 18-row machine-bound FDM-only `r3d-profile-catalogue-v2` set. Every row
+  must expose physical/profile-declared
+  `declared_build_volume_dimensions_mm` separately from the authoritative,
+  exact-boundary-inclusive `largest_passing_dimensions_inclusive_mm`. The
+  latter is the admission authority consumed by both the API and clients.
+  Preserve `declared_source_kind: profile-explicit` and
+  `minimum_dimensions_inclusive_mm`; the minimum remains a compatibility floor,
+  not machine metadata. Keep every per-printer/per-engine preset row and fail on
+  drift within one technology/printer/engine. Resolve machine and fleet
+  envelopes per technology and engine; never merge Prusa and Orca ceilings,
+  silently minimize them, or add a manual `fleet_max`. Never publish the
+  generic `120 x 120 x 150 mm` SLA fallback as a machine envelope.
 - The future SLA printer is the owner-confirmed Elegoo Saturn 4 Ultra, but its
   dimensions must not be guessed. Current Prusa `--export-sla`/SL1 handling is
   incompatible with Elegoo `.goo`/`.ctb` artifacts and credible MSLA timing.
@@ -82,10 +100,15 @@ Last synchronized: 2026-08-31
   `slice_selector.parameters[{name,value}]`, ordered path-free
   `profile_components[{role,basename,selector_parameter}]`, exact nullable
   component-to-selector bindings, the exact
-  `r3d-effective-slice-profile-v2` identity marker, and
-  `max_source_kind: profile-explicit` so a later truthful SLA row and its
-  independent SLA fleet resolution can use v1 without a schema-version change.
-  The unchanged generic `1 mm` `min` is a compatibility floor, not machine metadata.
+  `r3d-effective-slice-profile-v2` identity marker. A later truthful SLA row
+  and its independent per-engine SLA fleet resolution can use catalogue v2
+  without another schema-version change.
+- Keep H2D-QUOTE on both engines as a P1S-derived, enlarged-bed quoting chain.
+  It is quoting-only, not machine-accurate and never proof of production H2D
+  G-code. The plugin consumer calls only `POST /prusa/slice`, so Prusa coverage
+  is required. Exact H2D-QUOTE ceilings remain
+  `PENDING_LOCAL_EXACT_IMAGE_SWEEP`; provisional seed values must never be
+  described as measured.
 - Hostinger public-route preparation accepts one through four unique private
   IPv4 `/32` entries. Initial `leadpilot-only` phase requires exactly one;
   expanded callers are separately authorized. Host-firewall TCP rejection and
@@ -127,10 +150,11 @@ Last synchronized: 2026-08-31
   `engine_version` and lowercase `profiles.effective_profile_sha256`. Keep
   Prusa section/key identity case-sensitive and reject exact duplicate
   qualified keys like the native Boost parser.
-- OpenAPI includes the four requested omitted runtime codes plus the already-
-  live `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. Keep the bounds
-  branch disjoint and require both dimension payloads plus the complete
-  versioned `model_transform`. Keep the complete live
+- OpenAPI includes the four requested omitted runtime codes plus the controlled
+  `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. Keep the bounds branch
+  disjoint and require both dimension payloads plus the complete schema-v2 K2
+  `model_transform`, including orientation and original-availability fields.
+  Keep the complete live
   slice-500 enum: `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
   `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 - Resolve both selected engines' versions atomically from bounded `--help`

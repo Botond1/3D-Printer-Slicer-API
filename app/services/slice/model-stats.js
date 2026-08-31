@@ -14,6 +14,59 @@ const {
     parseGcodeMetricsStrict
 } = require('./gcode-metrics');
 
+const MODEL_INFO_MEASUREMENT_STATUSES = Object.freeze({
+    MEASURED: 'measured',
+    UNAVAILABLE: 'unavailable'
+});
+
+function createUnavailableModelMeasurement() {
+    return Object.freeze({
+        status: MODEL_INFO_MEASUREMENT_STATUSES.UNAVAILABLE,
+        modelInfo: null
+    });
+}
+
+function createMeasuredModelMeasurement(modelInfo) {
+    const normalized = {
+        x: Number(modelInfo?.x),
+        y: Number(modelInfo?.y),
+        z: Number(modelInfo?.z)
+    };
+    normalized.height_mm = Object.hasOwn(modelInfo || {}, 'height_mm')
+        ? Number(modelInfo.height_mm)
+        : normalized.z;
+    if (
+        Object.values(normalized).some((value) => !Number.isFinite(value) || value < 0)
+        || normalized.height_mm !== normalized.z
+    ) {
+        throw new Error('Measured model information is invalid.');
+    }
+    return Object.freeze({
+        status: MODEL_INFO_MEASUREMENT_STATUSES.MEASURED,
+        modelInfo: Object.freeze(normalized)
+    });
+}
+
+function isModelMeasurement(measurement) {
+    if (
+        measurement?.status !== MODEL_INFO_MEASUREMENT_STATUSES.MEASURED
+        || !measurement.modelInfo
+        || typeof measurement.modelInfo !== 'object'
+    ) return false;
+    const values = ['x', 'y', 'z', 'height_mm'].map(
+        (field) => measurement.modelInfo[field]
+    );
+    return values.every((value) => Number.isFinite(value) && value >= 0)
+        && measurement.modelInfo.height_mm === measurement.modelInfo.z;
+}
+
+function isPositiveModelMeasurement(measurement) {
+    return isModelMeasurement(measurement)
+        && ['x', 'y', 'z', 'height_mm'].every(
+            (field) => measurement.modelInfo[field] > 0
+        );
+}
+
 /**
  * Strict G-code metrics are the default and only an explicit `false` selects
  * the historical tolerant parser during a controlled drift investigation.
@@ -52,36 +105,32 @@ async function readBoundedText(filePath, maximumBytes) {
 /**
  * Read model dimensions from `prusa-slicer --info` output.
  * @param {string} filePath Path to mesh file.
- * @returns {Promise<{x: number, y: number, z: number, height_mm: number}>} Parsed size metrics.
+ * @returns {Promise<
+ *   {status: 'measured', modelInfo: {x: number, y: number, z: number, height_mm: number}}
+ *   | {status: 'unavailable', modelInfo: null}
+ * >} Explicit measurement result. A parsed zero-sized model remains distinct from an unavailable measurement.
  */
 async function getModelInfo(filePath, signal) {
     throwIfAborted(signal);
     try {
         const { stdout } = await runCommand('prusa-slicer', ['--info', filePath], { signal });
         throwIfAborted(signal);
-        let x = 0;
-        let y = 0;
-        let z = 0;
-
         const matchX = /size_x\s*=\s*([0-9.]+)/i.exec(stdout);
         const matchY = /size_y\s*=\s*([0-9.]+)/i.exec(stdout);
         const matchZ = /size_z\s*=\s*([0-9.]+)/i.exec(stdout);
-
-        if (matchX) x = Number(matchX[1]);
-        if (matchY) y = Number(matchY[1]);
-        if (matchZ) z = Number(matchZ[1]);
+        if (!matchX || !matchY || !matchZ) return createUnavailableModelMeasurement();
+        const [x, y, z] = [matchX, matchY, matchZ].map((match) => Number(match[1]));
         const policy = resolveResourcePolicy();
         if (![x, y, z].every((value) => Number.isFinite(value) && value >= 0 && value <= policy.MAX_MODEL_DIMENSION_MM)) {
-            return { x: 0, y: 0, z: 0, height_mm: 0 };
+            return createUnavailableModelMeasurement();
         }
-
-        return { x, y, z, height_mm: z };
+        return createMeasuredModelMeasurement({ x, y, z, height_mm: z });
     } catch (err) {
         if (isAbortError(err, signal)) {
             throwIfAborted(signal);
             throw err;
         }
-        return { x: 0, y: 0, z: 0, height_mm: 0 };
+        return createUnavailableModelMeasurement();
     }
 }
 
@@ -344,7 +393,12 @@ function validateSliceStats(stats, technology, policy = resolveResourcePolicy())
 }
 
 module.exports = {
+    MODEL_INFO_MEASUREMENT_STATUSES,
+    createMeasuredModelMeasurement,
+    createUnavailableModelMeasurement,
     getModelInfo,
+    isModelMeasurement,
+    isPositiveModelMeasurement,
     parseOutputDetailed,
     validateSliceStats,
     readBoundedText,

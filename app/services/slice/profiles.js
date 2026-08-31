@@ -10,6 +10,9 @@ const {
     DEFAULTS,
     ORCA_PROCESS_PROFILE_BY_LAYER,
     MAX_BUILD_VOLUMES,
+    P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    PENDING_EXACT_CANDIDATE_SWEEP_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE,
     MIN_BUILD_VOLUMES
 } = require('../../config/constants');
 const { PRUSA_CONFIGS_DIR, ORCA_CONFIGS_DIR } = require('../../config/paths');
@@ -269,6 +272,38 @@ function resolveBuildVolumeLimits(
     if (publicSourceProfileFile) {
         limits.sourceProfile = path.basename(publicSourceProfileFile);
     }
+    const declaredMax = { ...limits.max };
+    const knownProfileLimits = P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[engine]
+        || Object.freeze({});
+    const provisionalProfileLimits =
+        PENDING_EXACT_CANDIDATE_SWEEP_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[engine]
+        || Object.freeze({});
+    const configuredLargestPassing = knownProfileLimits[limits.sourceProfile]
+        || provisionalProfileLimits[limits.sourceProfile]
+        || null;
+    let largestPassing = configuredLargestPassing
+        ? { ...configuredLargestPassing }
+        : { ...declaredMax };
+    if (!configuredLargestPassing && technology === 'FDM') {
+        const derate = FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE[engine];
+        if (derate) {
+            largestPassing = Object.fromEntries(['x', 'y', 'z'].map((axis) => [
+                axis,
+                roundToThree(declaredMax[axis] - derate[axis])
+            ]));
+        }
+    }
+    for (const axis of ['x', 'y', 'z']) {
+        if (!Number.isFinite(largestPassing[axis])
+            || largestPassing[axis] <= limits.min[axis]
+            || largestPassing[axis] > declaredMax[axis]) {
+            throw new Error(`Largest-passing ${axis.toUpperCase()} dimension is invalid.`);
+        }
+    }
+    limits.declaredMax = declaredMax;
+    limits.largestPassingDimensionsInclusive = { ...largestPassing };
+    // Runtime validation intentionally consumes only the largest passing value.
+    limits.max = { ...largestPassing };
     return limits;
 }
 

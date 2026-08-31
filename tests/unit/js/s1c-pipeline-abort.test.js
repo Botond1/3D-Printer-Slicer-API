@@ -101,7 +101,10 @@ test('genuine non-abort orientation and metadata failures retain their safe fall
         [0, 1, 0],
         [0, 0, 1]
     ]);
-    assert.deepEqual(await getModelInfo('model.stl'), { x: 0, y: 0, z: 0, height_mm: 0 });
+    assert.deepEqual(await getModelInfo('model.stl'), {
+        status: 'unavailable',
+        modelInfo: null
+    });
 });
 
 test('an oriented output without trusted sidecar metadata is ignored', async (t) => {
@@ -206,6 +209,32 @@ function outputContext(output, workspace, signal) {
     };
 }
 
+function schemaTwoPreserveTransform() {
+    const zero = { x: 0, y: 0, z: 0 };
+    const dimensions = { x: 20, y: 30, z: 40 };
+    const identity = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    return {
+        transform_schema: 2,
+        size_unit: 'mm',
+        keep_proportions: true,
+        requested_size: { x: null, y: null, z: null },
+        scale_percent: 100,
+        scale_factors: { x: 1, y: 1, z: 1 },
+        orientation_mode: 'preserve',
+        orientation_outcome: 'preserved',
+        automatic_orientation_applied: false,
+        automatic_rotation_deg: { ...zero },
+        requested_rotation_deg: { ...zero },
+        rotation_deg: { ...zero },
+        automatic_rotation_matrix: identity.map((row) => [...row]),
+        rotation_matrix: identity.map((row) => [...row]),
+        original_dimensions_available: true,
+        original_dimensions_mm: { ...dimensions },
+        oriented_dimensions_mm: { ...dimensions },
+        final_dimensions_mm: { ...dimensions }
+    };
+}
+
 test('abort after native return prevents parsing and artifact promotion', async (t) => {
     const { output } = await outputFixture(t);
     const reason = new Error('post-native abort'); reason.name = 'AbortError';
@@ -227,6 +256,51 @@ test('abort after native return prevents parsing and artifact promotion', async 
     assert.equal(observedSignal, controller.signal);
     assert.equal(parses, 0);
     assert.equal(promotions, 0);
+});
+
+test('Prusa exit-zero missing output maps explicit placement text to full K2 only', async (t) => {
+    const { output } = await outputFixture(t);
+    const controller = new AbortController();
+    const { runSlicerAndParseStats } = loadOutputLifecycle(async () => {
+        throw new Error('must not parse');
+    });
+    const workspace = {
+        assertContainedPath(candidate) { return candidate; },
+        async promoteOutputCandidate() { throw new Error('must not promote'); }
+    };
+    const buildVolumeLimits = {
+        min: { x: 0.1, y: 0.1, z: 0.1 },
+        max: { x: 253.9, y: 253.9, z: 249.9 },
+        sourceProfile: 'Bambu_P1S_0.4_nozzle.json'
+    };
+    const context = {
+        ...outputContext(output, workspace, controller.signal),
+        modelTransform: schemaTwoPreserveTransform(),
+        buildVolumeLimits
+    };
+    runImpl = async () => ({
+        stdout: 'plate 1: Nothing to be sliced; no object is fully inside the print volume',
+        stderr: 'warning: unrelated native note'
+    });
+
+    let placementError;
+    await assert.rejects(runSlicerAndParseStats(context), (error) => {
+        placementError = error;
+        return error.code === 'NATIVE_MODEL_OUT_OF_PRINTER_BOUNDS';
+    });
+    const { buildNativeBoundsResponse } = require('../../../app/services/slice/native-bounds');
+    const response = buildNativeBoundsResponse(placementError);
+    assert.equal(response.errorCode, 'MODEL_OUT_OF_PRINTER_BOUNDS');
+    assert.deepEqual(response.model_transform, context.modelTransform);
+    assert.deepEqual(response.build_volume_limits_mm.max, buildVolumeLimits.max);
+
+    runImpl = async () => ({
+        stdout: 'unrelated successful diagnostic',
+        stderr: 'warning: unrelated native note'
+    });
+    await assert.rejects(runSlicerAndParseStats(context), (error) => (
+        error.code === 'ENOENT' && buildNativeBoundsResponse(error) === null
+    ));
 });
 
 test('abort racing with promotion cannot become a successful artifact response', async (t) => {

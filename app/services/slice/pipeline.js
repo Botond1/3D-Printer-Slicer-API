@@ -5,7 +5,10 @@ const path = require('node:path');
 const { extractFirstSupportedFromZip } = require('./zip');
 const { parseSliceOptions } = require('./options');
 const { convertInputToStl, tryOptimizeOrientation } = require('./input-processing');
-const { getModelInfo } = require('./model-stats');
+const {
+    MODEL_INFO_MEASUREMENT_STATUSES,
+    getModelInfo
+} = require('./model-stats');
 const { applyTransformAndValidateModel } = require('./transform');
 const { handleProcessingError } = require('./errors');
 const { buildSliceSuccessResponse } = require('./response');
@@ -52,7 +55,7 @@ async function prepareProcessableModel(inputFile, technology, orientationMode, w
     processableFile = await convertInputToStl(processableFile, workspace, signal);
     await assertBoundedModelFile(processableFile, workspace);
     throwIfAborted(signal);
-    const originalModelInfo = await getModelInfo(processableFile, signal);
+    const originalModelMeasurement = await getModelInfo(processableFile, signal);
     throwIfAborted(signal);
     const preOrientationFile = processableFile;
     const orientationResult = await tryOptimizeOrientation(
@@ -66,14 +69,18 @@ async function prepareProcessableModel(inputFile, technology, orientationMode, w
     await assertBoundedModelFile(processableFile, workspace);
     throwIfAborted(signal);
     workspace.assertContainedPath(processableFile);
-    const orientedModelInfo = processableFile === preOrientationFile
-        ? originalModelInfo
+    const canReuseOriginalMeasurement = (
+        processableFile === preOrientationFile
+        && originalModelMeasurement.status === MODEL_INFO_MEASUREMENT_STATUSES.MEASURED
+    );
+    const orientedModelMeasurement = canReuseOriginalMeasurement
+        ? originalModelMeasurement
         : await getModelInfo(processableFile, signal);
     throwIfAborted(signal);
     return {
         processableFile,
-        originalModelInfo,
-        orientedModelInfo,
+        originalModelMeasurement,
+        orientedModelMeasurement,
         orientation: orientationResult.orientation
     };
 }
@@ -107,8 +114,8 @@ async function prepareModelOrResponse(
     res,
     request,
     processableFile,
-    originalModelInfo,
-    orientedModelInfo,
+    originalModelMeasurement,
+    orientedModelMeasurement,
     orientation,
     profileSnapshots,
     selectedProfiles,
@@ -127,15 +134,14 @@ async function prepareModelOrResponse(
     );
     const model = await applyTransformAndValidateModel(
         processableFile,
-        orientedModelInfo,
+        orientedModelMeasurement,
         request.transformOptions,
         buildVolumeLimits,
         workspace,
         signal,
         {
             orientation,
-            originalModelInfo,
-            orientedModelInfo
+            originalModelMeasurement
         }
     );
     throwIfAborted(signal);
@@ -201,8 +207,8 @@ async function prepareSliceJob(res, request, workspace, signal) {
         res,
         request,
         source.processableFile,
-        source.originalModelInfo,
-        source.orientedModelInfo,
+        source.originalModelMeasurement,
+        source.orientedModelMeasurement,
         source.orientation,
         profileSnapshots,
         profiles,
@@ -231,6 +237,8 @@ async function executePreparedSlice(req, res, job, workspace, signal) {
         ...targets,
         processableFile: model.processableFile,
         effectiveModelInfo: model.effectiveModelInfo,
+        modelTransform: model.modelTransform,
+        buildVolumeLimits,
         workspace,
         signal
     });

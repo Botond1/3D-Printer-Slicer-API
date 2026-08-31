@@ -124,6 +124,18 @@ function requireEngineVersion(value) {
     return value;
 }
 
+function isExactMeasuredDimensions(value) {
+    if (
+        !value
+        || typeof value !== 'object'
+        || Array.isArray(value)
+        || Object.getPrototypeOf(value) !== Object.prototype
+    ) return false;
+    const keys = Object.keys(value).sort();
+    if (keys.length !== 3 || keys.some((key, index) => key !== ['x', 'y', 'z'][index])) return false;
+    return keys.every((key) => Number.isFinite(value[key]) && value[key] >= 0);
+}
+
 /**
  * Resolve profile payload mapper based on selected slicing engine.
  * @param {'prusa'|'orca'} engine Engine key.
@@ -146,7 +158,7 @@ function resolveProfileMapper(engine) {
  * baseConfigFile: string,
  * effectiveProfileSha256: string,
  * engineVersion: string,
- * modelTransform: {transform_schema: 1, final_dimensions_mm: {x: number, y: number, z: number}},
+ * modelTransform: {transform_schema: 2, original_dimensions_available: boolean, original_dimensions_mm: {x: number, y: number, z: number}|null, final_dimensions_mm: {x: number, y: number, z: number}},
  * buildVolumeLimits: {min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string},
  * stats: {print_time_seconds: number, print_time_readable: string, material_used_m: number, material_used_g: number|null, object_height_mm: number, estimated_price_huf: number|null}
  * }} context Response context.
@@ -163,8 +175,16 @@ function buildSliceSuccessResponse(context) {
         stats
     } = context;
 
-    if (!modelTransform || modelTransform.transform_schema !== 1) {
+    if (!modelTransform || modelTransform.transform_schema !== 2) {
         throw new Error('Versioned model transform metadata is unavailable.');
+    }
+    const originalDimensionsAvailable = modelTransform.original_dimensions_available;
+    const originalDimensions = modelTransform.original_dimensions_mm;
+    const originalDimensionsContractValid = originalDimensionsAvailable === true
+        ? isExactMeasuredDimensions(originalDimensions)
+        : originalDimensionsAvailable === false && originalDimensions === null;
+    if (!originalDimensionsContractValid) {
+        throw new Error('Original model dimension availability is inconsistent.');
     }
     const finalHeight = modelTransform.final_dimensions_mm?.z;
     if (

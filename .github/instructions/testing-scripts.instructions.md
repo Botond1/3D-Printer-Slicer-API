@@ -13,6 +13,7 @@ Last synchronized: 2026-08-31
 - slicing/full_api_prusa_sl1_test_runner.py
 - slicing/unsupported_upload_test_runner.py
 - slicing/orientation_visibility_test_runner.py
+- slicing/native_envelope_sweep_runner.py
 - admin/admin_output_files_test_runner.py
 - pricing/pricing_cycle_test_runner.py
 - rate_limit/rate_limit_regression_test_runner.py
@@ -34,6 +35,10 @@ Last synchronized: 2026-08-31
 
 ## Environment Inputs
 - SLICER_BASE_URL
+- `SLICER_NATIVE_INFO_COMMAND_JSON` optionally supplies a bounded JSON argv
+  template for the orientation/envelope native-info precondition. It must
+  address the generated fixture through admitted placeholders, runs with no
+  shell and no service credentials, and reports only a command-source label.
 - `SLICE_SERVICE_API_KEY` is the current runner input for matrix, queue, and
   unsupported-upload requests; send its authorized value only in
   `x-slicer-api-key`. The helper does not infer server slice mode or
@@ -48,29 +53,31 @@ Last synchronized: 2026-08-31
   stdin-backed curl authentication helper so the value never enters process
   arguments or a retained temporary file.
 
-The profile-catalogue runner must prove public 200, exact FDM-only v1 shape,
-canonical body digest, strong ETag/304, and every per-printer/per-engine preset
-row. It must independently rederive `machine_resolutions` and
-`fleet_resolutions` per technology: FDM P1S engines currently agree at
-`256 x 256 x 250 mm`; a mutated cross-engine conflict keeps all rows, publishes only that technology/printer pair as
-excluded/null/`cross_engine_conflict`, repeats the exclusion in the fleet view,
-and never selects component-wise smaller values. H2D remains the current
-machine-attributed maximum at `350 x 320 x 325 mm`; a conflicting largest
-machine must narrow the ceiling to a remaining resolved real machine. It must
-reject intra-engine preset drift and any manual maximum field. It must prove the
-generic
-`120 x 120 x 150 mm` SLA fallback is absent as a machine envelope and must not
-fabricate Elegoo Saturn 4 Ultra dimensions. A mixed synthetic FDM/SLA contract
-must prove that each technology resolves independently in the same v1 schema.
-It must also prove bounded generic
-`engine`, generic endpoint plus ordered
+The profile-catalogue runner must prove public 200, exact FDM-only
+`r3d-profile-catalogue-v2` shape, canonical body digest, strong ETag/304, and
+all 18 per-printer/per-engine preset rows. It must separately validate physical/
+profile-declared `declared_build_volume_dimensions_mm` and the exact-boundary,
+inclusive admission authority
+`largest_passing_dimensions_inclusive_mm`. Machine and fleet resolutions are
+engine-scoped; never merge Prusa and Orca ceilings or synthesize a component-
+wise minimum. Reject preset drift inside one technology/printer/engine and any
+manual fleet maximum. Prove `declared_source_kind: profile-explicit`, bounded
+generic `engine`, generic endpoint plus ordered
 `slice_selector.parameters[{name,value}]`, ordered path-free
 `profile_components[{role,basename,selector_parameter}]`, exact nullable
-component-to-selector bindings, exact
-`effective_profile_identity_schema: r3d-effective-slice-profile-v2`, and
-`build_volume_limits_mm.max_source_kind: profile-explicit`; `min` is not machine
-metadata. This shape can later admit a real SLA row without a
-schema-version change. Its optional
+component-to-selector bindings, and exact
+`effective_profile_identity_schema: r3d-effective-slice-profile-v2`.
+`minimum_dimensions_inclusive_mm` remains a compatibility floor, not machine
+metadata. The owner-accepted P1S ceiling is Prusa
+`256 x 256 x 249.9 mm` and Orca `253.9 x 253.9 x 249.9 mm`; Prusa's native X/Y
+edge beyond its declared profile is `UNESTABLISHED`. H2D-QUOTE must exist on
+both engines with P1S physics and quote-only semantics. Its Prusa
+`350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm` values remain
+provisional seeds under `PENDING_LOCAL_EXACT_IMAGE_SWEEP`, never measured
+results. The generic `120 x 120 x 150 mm` SLA fallback must remain absent as a
+machine envelope, and Elegoo Saturn 4 Ultra dimensions must not be fabricated.
+The v2 entry shape can later admit a truthful SLA row without another schema
+change. The runner's optional
 `--verify-prusa-slice-parity` lane runs only with an available native API and
 slice key, and must bind the live success digest to the matching catalogue
 entry. Always read `results/profile_catalogue_test_result.md` after execution;
@@ -104,18 +111,48 @@ but the matching Orca calibration is
 `BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`. Do not treat the reference side or
 the profile-catalogue runner as time/mass or automatic-pricing acceptance.
 
-The focused J3 owner-VPS entry point is
+The focused J3B owner-VPS entry point is
 `slicing/orientation_visibility_test_runner.py`. It uses generated privacy-safe
-`20 x 255 x 255 mm` and all-axes-distinct `20 x 240 x 245 mm` fixtures and
-covers both engines, both orientation modes, request-rotation composition,
-success, and bounds-error parity. P1S `20 x 255 x 255 mm` in `preserve` mode is
-an expected HTTP 422. Require `transform_schema: 1`, exact mode/outcome,
-rotation matrices, all three dimension stages, and success height equal to
-final Z. Run only with separately authorized exact-container/VPS inputs; the
-owner will execute this lane. Read its generated markdown report and do not
-promote local unit evidence to container, hosted, deployed, or live proof. The
-report path is `results/orientation_visibility_test_result.md` relative to the
-testing-scripts folder.
+fixtures with valid outward non-zero facet normals, including
+`20 x 255 x 255 mm`, `20 x 240 x 245 mm`, and all-axes-distinct
+`18 x 130 x 240 mm`. Its 37-case HTTP matrix retains every section-0 row,
+including `20 x 240 x 245 mm` auto with zero request transform, exact automatic
+replay on `18 x 130 x 240 mm`, preserve plus X90 on that fixture, and invalid
+`sideways`. Every normal row
+must first pass immediate native `prusa-slicer --info` dimension validation.
+The deliberately zero-normal regression is a separate row and must never be
+reported as a normal-fixture service defect. Cover both engines, both
+orientation modes, request-rotation composition, success, and full K2 bounds
+parity. P1S `20 x 255 x 255 mm` in `preserve` mode is an expected HTTP 422.
+Require `transform_schema: 2`, exact mode/outcome and matrices, mandatory
+`original_dimensions_available`, the true/object or false/null invariant with
+no oriented fallback, positive oriented/final dimensions, and canonical
+`height_mm == z`; success height also equals final Z. A malformed tagged
+original measurement degrades to false/null, while a malformed load-bearing
+oriented/final measurement must be controlled HTTP 422
+`MODEL_DIMENSIONS_UNAVAILABLE`; an explicit native
+placement/volume refusal must be full K2 HTTP 422
+`MODEL_OUT_OF_PRINTER_BOUNDS`. J3 itself passed the owner exact-container matrix
+on `58c0ccb`; J3B remains `PENDING_OWNER` and must run only with separately
+authorized exact-container/VPS inputs. Read
+`results/orientation_visibility_test_result.md`; never promote local unit
+evidence to container, hosted, deployed, or live proof.
+
+The J3B native envelope entry point is
+`slicing/native_envelope_sweep_runner.py`. Sweep X, Y, and Z for P1S and
+H2D-QUOTE on both engines and repeat the X/Y corner probe. Keep policy
+prevalidation and native rejection distinct. Before requests, require the exact
+catalogue-v2 `/profiles` phase guard: measurement A must expose declared
+admission for H2D-QUOTE, while final-admission B must expose the published
+largest-passing limits for all four engine/profile selectors. Every accepted
+success and full K2 rejection must carry the exact expected response `max` and
+`source_profile`; Prusa must report the actual layer-height INI selected by the
+request, while Orca reports its stable machine profile rather than the process
+profile. Fail closed on phase, selector, shape, or value drift. Read
+`results/native_envelope_sweep_measurement_result.md` after measurement and
+`results/native_envelope_sweep_result.md` after final admission. H2D-QUOTE
+remains `PENDING_LOCAL_EXACT_IMAGE_SWEEP` until that exact candidate-image lane
+confirms or replaces its provisional constants.
 
 Operations checks must prove public /ready is minimal, protected diagnostics
 return OPERATIONS_AUTH_REQUIRED without a key, and all outputs stay bounded and

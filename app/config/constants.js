@@ -96,6 +96,55 @@ const MAX_BUILD_VOLUMES = {
 };
 
 /**
+ * Owner-accepted P1S validation ceilings. These values are admission-only and
+ * never rewrite the physical dimensions stored in the slicer profile.
+ */
+const P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM = Object.freeze({
+    prusa: Object.freeze({
+        'FDM_0.1mm.ini': Object.freeze({ x: 256, y: 256, z: 249.9 }),
+        'FDM_0.2mm.ini': Object.freeze({ x: 256, y: 256, z: 249.9 }),
+        'FDM_0.3mm.ini': Object.freeze({ x: 256, y: 256, z: 249.9 })
+    }),
+    orca: Object.freeze({
+        'Bambu_P1S_0.4_nozzle.json': Object.freeze({ x: 253.9, y: 253.9, z: 249.9 })
+    })
+});
+
+/**
+ * PROVISIONAL SEEDS PENDING EXACT CANDIDATE SWEEP.
+ *
+ * The Prusa seed preserves the declared planar size and uses the strictest
+ * offered-layer Z multiple. The Orca seed applies the owner-observed P1S
+ * planar clearance delta to the enlarged quote bed. Neither enlarged entry is
+ * measurement evidence. Replace or explicitly confirm these exact constants
+ * after the candidate-image X/Y/Z sweep.
+ */
+const PENDING_EXACT_CANDIDATE_SWEEP_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM =
+Object.freeze({
+    prusa: Object.freeze({
+        'FDM_P1S_H2D_SIZE_QUOTING_0.1mm.ini': Object.freeze({ x: 350, y: 320, z: 324.9 }),
+        'FDM_P1S_H2D_SIZE_QUOTING_0.2mm.ini': Object.freeze({ x: 350, y: 320, z: 324.9 }),
+        'FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini': Object.freeze({ x: 350, y: 320, z: 324.9 })
+    }),
+    orca: Object.freeze({
+        'Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json': Object.freeze({
+            x: 347.9,
+            y: 317.9,
+            z: 324.9
+        })
+    })
+});
+
+/**
+ * Validation-only fallback derates for non-catalogued FDM profiles. Known
+ * server-owned profiles always use one of the explicit tables above.
+ */
+const FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE = Object.freeze({
+    prusa: Object.freeze({ x: 0, y: 0, z: 0.1 }),
+    orca: Object.freeze({ x: 2.1, y: 2.1, z: 0.1 })
+});
+
+/**
  * Existing minimum accepted model dimensions in millimeters by technology.
  * J2 changes only the proven upper machine envelopes; changing this lower
  * compatibility boundary requires a separate owner semantics decision.
@@ -139,6 +188,9 @@ module.exports = {
     ORCA_PROCESS_PROFILE_BY_LAYER,
     DEFAULT_PRICING,
     MAX_BUILD_VOLUMES,
+    P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    PENDING_EXACT_CANDIDATE_SWEEP_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE,
     MIN_BUILD_VOLUMES,
     EXTENSIONS,
     PORT

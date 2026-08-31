@@ -4,7 +4,7 @@ applyTo: "configs/**"
 
 # Configs Folder Instructions
 
-Last synchronized: 2026-08-26
+Last synchronized: 2026-08-31
 
 ## Scope
 - pricing.json is runtime pricing source of truth.
@@ -15,18 +15,22 @@ Last synchronized: 2026-08-26
 - orca/upstream/Custom/**/*.json are the versioned runtime source for the pinned
   OrcaSlicer v2.3.1 `Custom` parent chain; Docker build requires canonical
   semantic equality with the exact native files.
-- Shipped Prusa FDM and Orca P1S profiles resolve
-  `256 x 256 x 250 mm`; the Orca H2D child resolves
-  `350 x 320 x 325 mm`.
+- Shipped Prusa FDM and Orca P1S profiles declare
+  `256 x 256 x 250 mm`; the historical Orca H2D placeholder declares
+  `350 x 320 x 325 mm`. Declared profile metadata is separate from native
+  admission.
+- Three Prusa `FDM_P1S_H2D_SIZE_QUOTING_*` profiles and Orca
+  `Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json` declare the H2D-size bed while
+  retaining P1S-derived physics for quoting only.
 
 ## Rules
 - Keep configs at repository root in configs/.
 - Keep pricing schema shape intact for FDM and SLA objects.
 - Do not rename profile files unless profile resolution logic is updated as well.
-- Do not let physical bed/height metadata vary by layer height. Exact profile
-  metadata remains authoritative; FDM fallback is the largest supported H2D
-  envelope and the existing `1 mm` profile minima remain unchanged pending a
-  separate owner semantics decision.
+- Do not let physical bed/height metadata vary by layer height. Preserve that
+  declared metadata, but use only the configured inclusive largest-passing
+  value for upper admission. FDM fallback remains a broad compatibility
+  envelope and the existing `1 mm` profile minima remain unchanged.
 - Preserve Prusa INI section/key case and reject exact duplicate qualified keys.
 - Keep selected profiles and allowlisted Orca parents canonical regular files so
   bounded exact Prusa-byte or flattened-Orca job-scratch snapshots precede
@@ -63,19 +67,24 @@ Last synchronized: 2026-08-26
 - Correct physical envelopes do not qualify generic Marlin motion/time data.
   Nine numeric Bambu references plus the P1S-overheight boundary exist, but
   tight Orca calibration still requires the complete approved vendor chain.
-- The provisional public catalogue v1 is explicitly FDM-only and may include
+- Keep H2D-QUOTE on both engines. It is not hardware-faithful H2D estimation or
+  production H2D G-code; the plugin consumer depends on the Prusa route. Until
+  exact-image measurement, Prusa `350 x 320 x 324.9 mm` and Orca
+  `347.9 x 317.9 x 324.9 mm` are provisional seeds only.
+- Public catalogue v2 is explicitly FDM-only and may include
   only profiles with a bound machine identity. Never represent the generic
   `120 x 120 x 150 mm` SLA fallback as a profile-derived printer envelope.
-- Publish catalogue maxima only when all three axes are explicit selected-
-  profile metadata; identify this with
-  `build_volume_limits_mm.max_source_kind: profile-explicit`. The unchanged
-  generic `1 mm` `min` is a compatibility floor, not machine metadata.
+- Publish explicit physical/profile metadata as
+  `declared_build_volume_dimensions_mm` with
+  `declared_source_kind: profile-explicit`; admission uses only the precisely
+  named inclusive `largest_passing_dimensions_inclusive_mm`. The unchanged
+  generic `1 mm` `minimum_dimensions_inclusive_mm` is a compatibility floor.
 - The owner-confirmed future SLA printer is the Elegoo Saturn 4 Ultra; do not
   guess its dimensions. Current Prusa `--export-sla`/SL1 handling cannot
   represent Elegoo `.goo`/`.ctb` artifacts or credible MSLA timing. A separate
   future wave must use owner Chitubox/Elegoo Satellite profiles. The bounded
-  generic v1 selector/component/identity shape can add a truthful row without a
-  schema-version change; the current payload remains FDM-only.
+  generic v2 selector/component/identity shape can add a truthful row with
+  separate per-engine resolution; the current payload remains FDM-only.
 
 ## Related Env Keys
 - ORCA_MACHINE_PROFILE

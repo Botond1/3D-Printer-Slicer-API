@@ -23,6 +23,7 @@ const {
 } = require('../../../app/services/slice/orientation-contract');
 const { applyTransformAndValidateModel } = require('../../../app/services/slice/transform');
 const { buildSliceSuccessResponse } = require('../../../app/services/slice/response');
+const { createMeasuredModelMeasurement } = require('../../../app/services/slice/model-stats');
 
 const IDENTITY = identityRotationMatrix();
 const RX_90 = [
@@ -54,6 +55,7 @@ const TRANSFORM_KEYS = [
     'orientation_mode',
     'orientation_outcome',
     'oriented_dimensions_mm',
+    'original_dimensions_available',
     'original_dimensions_mm',
     'requested_rotation_deg',
     'requested_size',
@@ -140,9 +142,9 @@ function buildContract({
             predictedSizeMm: { ...oriented }
         },
         orientation,
-        originalModelInfo: original,
-        orientedModelInfo: oriented,
-        finalModelInfo: final
+        originalModelMeasurement: createMeasuredModelMeasurement(original),
+        orientedModelMeasurement: createMeasuredModelMeasurement(oriented),
+        finalModelMeasurement: createMeasuredModelMeasurement(final)
     });
 }
 
@@ -260,7 +262,8 @@ test('sidecar metadata parser accepts only the exact schema, mode, outcome, and 
 test('K1 model_transform exposes the exact versioned visibility contract', () => {
     const contract = buildContract();
     assert.deepEqual(Object.keys(contract).sort(), TRANSFORM_KEYS);
-    assert.equal(contract.transform_schema, 1);
+    assert.equal(contract.transform_schema, 2);
+    assert.equal(contract.original_dimensions_available, true);
     assert.equal(contract.orientation_mode, 'auto');
     assert.equal(contract.orientation_outcome, 'applied');
     assert.equal(contract.automatic_orientation_applied, true);
@@ -302,9 +305,9 @@ test('K2 preserve bounds failure carries the same complete model_transform contr
         transformOptions: NO_TRANSFORM_OPTIONS,
         transformPlan: { ...NO_TRANSFORM_PLAN, predictedSizeMm: { x: 20, y: 255, z: 255 } },
         orientation,
-        originalModelInfo: dimensions,
-        orientedModelInfo: dimensions,
-        finalModelInfo: dimensions
+        originalModelMeasurement: createMeasuredModelMeasurement(dimensions),
+        orientedModelMeasurement: createMeasuredModelMeasurement(dimensions),
+        finalModelMeasurement: createMeasuredModelMeasurement(dimensions)
     }));
 });
 

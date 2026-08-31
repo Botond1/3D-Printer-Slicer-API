@@ -15,6 +15,7 @@ This folder contains API-level Python integration and workflow tests.
   - slicing/full_api_prusa_sl1_test_runner.py
   - slicing/unsupported_upload_test_runner.py
   - slicing/orientation_visibility_test_runner.py
+  - slicing/native_envelope_sweep_runner.py
 
 - `admin/` — Admin endpoint validations
   - admin/admin_output_files_test_runner.py
@@ -118,24 +119,28 @@ Use:
 python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
 ```
 
-- The required lane proves unauthenticated HTTP 200, exact FDM-only provisional
-  v1 shape, canonical `catalogue_sha256`, strong ETag, conditional 304, and all
-  per-printer/per-engine preset rows. It independently rederives technology-
-  scoped `machine_resolutions` and `fleet_resolutions`: current FDM P1S engines
-  agree at `256 x 256 x 250 mm`, H2D is the current FDM machine-attributed
-  maximum, and a mutated cross-engine conflict keeps all rows while excluding
-  only that technology/printer pair as null/`cross_engine_conflict`. The exclusion must be loud in its fleet view;
-  component-wise smaller resolution and manual maximum fields are forbidden.
-  Intra-engine preset drift must fail closed. The runner also proves the generic
+- The required lane proves unauthenticated HTTP 200, exact FDM-only
+  `r3d-profile-catalogue-v2` shape, canonical `catalogue_sha256`, strong ETag,
+  conditional 304, and all 18 per-printer/per-engine preset rows. It validates
+  the separate `declared_build_volume_dimensions_mm` metadata and authoritative
+  inclusive `largest_passing_dimensions_inclusive_mm`, and independently
+  rederives engine-scoped `machine_resolutions` and `fleet_resolutions` without
+  cross-engine merging or component-wise synthesis. Preset drift inside one
+  technology/printer/engine must fail catalogue construction. The runner also proves the generic
   `120 x 120 x 150 mm` SLA fallback is not advertised as a machine envelope.
 - It also proves a bounded generic `engine`, generic endpoint plus ordered
   `slice_selector.parameters[{name,value}]`, ordered path-free
   `profile_components[{role,basename,selector_parameter}]`, exact nullable
   component-to-selector bindings, and exact
   `effective_profile_identity_schema: r3d-effective-slice-profile-v2`, and
-  `build_volume_limits_mm.max_source_kind: profile-explicit`. Treat the generic
-  minimum as a floor, not machine metadata.
-- Do not fabricate Elegoo Saturn 4 Ultra dimensions. The generic v1 entry shape
+  `declared_source_kind: profile-explicit`. Treat
+  `minimum_dimensions_inclusive_mm` as a floor, not machine metadata.
+- The owner-accepted P1S ceiling is Prusa `256 x 256 x 249.9 mm` and Orca
+  `253.9 x 253.9 x 249.9 mm`. H2D-QUOTE is present on both engines with
+  P1S-derived quote-only physics. Its Prusa `350 x 320 x 324.9 mm` and Orca
+  `347.9 x 317.9 x 324.9 mm` values remain provisional seeds until the exact
+  candidate image sweep confirms or replaces them.
+- Do not fabricate Elegoo Saturn 4 Ultra dimensions. The generic v2 entry shape
   can later admit a truthful SLA printer without a schema-version change, after
   the owner-profiled Chitubox/Elegoo Satellite remediation wave.
 - Add `--verify-prusa-slice-parity` only when a runnable native API and
@@ -147,7 +152,7 @@ python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
   immediately after every run. A local source/unit result is not exact-image,
   hosted, deployed, or production evidence.
 
-## J3 orientation-visibility owner-VPS contract
+## J3B orientation/original-measurement owner-VPS contract
 
 Use the focused entry point:
 
@@ -158,22 +163,71 @@ python tests/testing-scripts/slicing/orientation_visibility_test_runner.py
 - Run it only against the separately owner-authorized exact container/VPS
   candidate. Repository-local unit results do not establish native or deployed
   behavior.
-- The runner uses privacy-safe generated asymmetric fixtures, including
-  `20 x 255 x 255 mm` and a second all-axes-distinct
-  `20 x 240 x 245 mm` model. It covers both engines, `auto`/`preserve`, request
-  rotation composition, success, and `MODEL_OUT_OF_PRINTER_BOUNDS` parity.
+- Normal rows use privacy-safe generated asymmetric fixtures with valid
+  outward non-zero facet normals, including
+  `20 x 255 x 255 mm`, `20 x 240 x 245 mm`, and all-axes-distinct
+  `18 x 130 x 240 mm`. The 37-case HTTP matrix retains every section-0 row:
+  among them are `20 x 240 x 245 mm` auto with zero request transform, exact
+  `18 x 130 x 240 mm` automatic replay, preserve plus requested X90 on that
+  fixture, and invalid `sideways`. It covers both engines, `auto`/`preserve`,
+  request rotation composition, success, and `MODEL_OUT_OF_PRINTER_BOUNDS`
+  parity.
+- Every normal fixture must pass `prusa-slicer --info` immediately before the
+  row. The deliberate zero-normal regression is separate: it must succeed on
+  the sliceable path with `original_dimensions_available:false` and
+  `original_dimensions_mm:null`; its preserve diagnostic row proves controlled
+  `MODEL_DIMENSIONS_UNAVAILABLE` rather than a bare 500.
+- The native-info probe defaults to the host executable. Exact-container use may
+  provide only a bounded fixture-addressing JSON argv template through
+  `--native-info-command-json` or `SLICER_NATIVE_INFO_COMMAND_JSON`; execution is
+  no-shell with a credential-free child environment, and the report stores only
+  the `host-default`/`configured`/`invalid` source label.
 - For P1S, `20 x 255 x 255 mm` in `preserve` mode is an expected HTTP 422
   bounds result, not success. Bounds acceptance requires the same complete
   versioned transform contract as success.
-- Every accepted payload must prove `transform_schema: 1`, exact orientation
-  mode/outcome, rotation matrices, original/oriented/final dimensions, and
+- Every accepted payload must prove `transform_schema: 2`, exact orientation
+  mode/outcome, rotation matrices, the true/object or false/null original-
+  availability invariant, canonical measured `height_mm == z`, positive
+  oriented/final dimensions, and
   `stats.object_height_mm == model_transform.final_dimensions_mm.z` on
-  success. Never infer a rotation only from swapped dimensions.
+  success. A malformed tagged original measurement degrades to false/null;
+  malformed tagged oriented/final measurements return controlled 422. Never
+  infer a rotation only from swapped dimensions.
 - Keep credentials in the existing stdin-backed request path and keep reports
   free of filenames, paths, keys, customer data, and private network identity.
   Always read
   `tests/testing-scripts/results/orientation_visibility_test_result.md` after
   execution.
+
+## J3B native-envelope sweep contract
+
+Use:
+
+```text
+python tests/testing-scripts/slicing/native_envelope_sweep_runner.py
+```
+
+- Normal sweep fixtures use outward non-zero facet normals and the same exact
+  native `prusa-slicer --info` precondition. Sweep both axes and Z for P1S and
+  H2D-QUOTE on both engines, repeat the combined X/Y corner probe, and retain
+  prevalidation versus native-rejection evidence as distinct outcomes.
+- The `native-measurement` (A) and `final-admission` (B) phases are fail-closed
+  behind an exact catalogue-v2 `/profiles` guard. A requires declared admission
+  on the H2D-QUOTE selectors; B requires the published largest-passing limits
+  on all four engine/profile selectors. Every HTTP point must echo the exact
+  expected `build_volume_limits_mm.max` and `source_profile`. Prusa's source is
+  the selected layer-height INI; Orca's is its stable machine profile, never the
+  process profile.
+- P1S accepted evidence is Prusa `256/256/249.9` and Orca
+  `253.9/253.9/249.9`. Prusa's native edge beyond the declared physical profile
+  remains `UNESTABLISHED`; policy rejection at `256.1` is not a native edge.
+- H2D-QUOTE exact-image values remain `PENDING_LOCAL_EXACT_IMAGE_SWEEP` until
+  the measurement lane runs. The provisional Prusa `350/320/324.9` and Orca
+  `347.9/317.9/324.9` values are seeds, never measured results.
+- Read `results/native_envelope_sweep_measurement_result.md` after the native-
+  measurement phase and `results/native_envelope_sweep_result.md` after final
+  admission. A source/unit run is not exact-image, hosted, deployed, or VPS
+  evidence.
 
 ## Local Rules
 

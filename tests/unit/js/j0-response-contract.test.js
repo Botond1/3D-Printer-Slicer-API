@@ -8,11 +8,17 @@ const originalPythonExecutable = process.env.PYTHON_EXECUTABLE;
 process.env.PYTHON_EXECUTABLE = process.execPath;
 const modelStatsPath = path.resolve(__dirname, '../../../app/services/slice/model-stats.js');
 const originalModelStatsModule = require.cache[modelStatsPath];
+const modelStats = require(modelStatsPath);
 require.cache[modelStatsPath] = {
     id: modelStatsPath,
     filename: modelStatsPath,
     loaded: true,
-    exports: { getModelInfo: async () => ({ x: 1, y: 1, z: 1, height_mm: 1 }) }
+    exports: {
+        ...modelStats,
+        getModelInfo: async () => modelStats.createMeasuredModelMeasurement({
+            x: 1, y: 1, z: 1, height_mm: 1
+        })
+    }
 };
 test.after(() => {
     if (originalPythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;
@@ -52,6 +58,7 @@ const MODEL_TRANSFORM_REQUIRED = [
     'rotation_deg',
     'automatic_rotation_matrix',
     'rotation_matrix',
+    'original_dimensions_available',
     'original_dimensions_mm',
     'oriented_dimensions_mm',
     'final_dimensions_mm'
@@ -85,9 +92,9 @@ function createModelTransform({
             predictedSizeMm: { ...oriented }
         },
         orientation: createOrientationState(mode, outcome, automaticMatrix),
-        originalModelInfo: original,
-        orientedModelInfo: oriented,
-        finalModelInfo: final
+        originalModelMeasurement: modelStats.createMeasuredModelMeasurement(original),
+        orientedModelMeasurement: modelStats.createMeasuredModelMeasurement(oriented),
+        finalModelMeasurement: modelStats.createMeasuredModelMeasurement(final)
     });
 }
 
@@ -158,7 +165,7 @@ test('OpenAPI exposes engine identity, W2 digest, requested omissions, and live 
     assert.ok(success.properties.stats.required.includes('material_used_g'));
     assert.ok(success.properties.stats.required.includes('object_height_mm'));
     assert.deepEqual(success.properties.model_transform.required, MODEL_TRANSFORM_REQUIRED);
-    assert.deepEqual(success.properties.model_transform.properties.transform_schema.enum, [1]);
+    assert.deepEqual(success.properties.model_transform.properties.transform_schema.enum, [2]);
     assert.deepEqual(success.properties.model_transform.properties.orientation_mode.enum, ['auto', 'preserve']);
     assert.deepEqual(success.properties.model_transform.properties.orientation_outcome.enum, [
         'applied', 'unchanged', 'preserved', 'fallback_unmodified'
@@ -303,7 +310,8 @@ test('live bounds validation always emits dimensions with MODEL_OUT_OF_PRINTER_B
     assert.equal(result.response.errorCode, 'MODEL_OUT_OF_PRINTER_BOUNDS');
     assert.deepEqual(result.response.model_dimensions_mm, { x: 260, y: 20, z: 30 });
     assert.deepEqual(Object.keys(result.response.model_transform).sort(), [...MODEL_TRANSFORM_REQUIRED].sort());
-    assert.equal(result.response.model_transform.transform_schema, 1);
+    assert.equal(result.response.model_transform.transform_schema, 2);
+    assert.equal(result.response.model_transform.original_dimensions_available, true);
     assert.equal(result.response.model_transform.orientation_mode, 'auto');
     assert.equal(result.response.model_transform.orientation_outcome, 'unchanged');
     assert.deepEqual(result.response.model_transform.original_dimensions_mm, { x: 260, y: 20, z: 30 });

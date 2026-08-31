@@ -205,6 +205,20 @@ test('9 late abort cannot target a settled command PID', async () => {
     assert.equal(signal.listenerCount, 0);
 });
 
+test('failed commands preserve bounded stdout beside an unrelated stderr warning', async () => {
+    const f = fixture();
+    const result = f.runner('native-tool');
+    const error = new Error('native failure');
+    f.callback()(error, 'placement diagnostic on stdout', 'unrelated warning');
+
+    await assert.rejects(result, (observed) => {
+        assert.equal(observed, error);
+        assert.equal(observed.stdout, 'placement diagnostic on stdout');
+        assert.equal(observed.stderr, 'unrelated warning');
+        return true;
+    });
+});
+
 test('22 native telemetry stays bounded and never includes command output', async () => {
     const originalLog = console.log;
     const originalInfo = console.info;

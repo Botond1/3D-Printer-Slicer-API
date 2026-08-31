@@ -1,12 +1,86 @@
 # Hardening plan
 
-## J3 orientation-visibility implementation checkpoint
+## J3B native-envelope and original-dimension corrective checkpoint
+
+Status:
+`J3_OWNER_CONTAINER_MATRIX_VERIFIED_EXACT_58C0CCB;
+J3B_SCHEMA_OWNER_APPROVED;
+J3B_SOURCE_IMPLEMENTATION_PRESENT;
+J3B_LOCAL_VALIDATION_IN_PROGRESS;
+J3B_H2D_EXACT_IMAGE_SWEEP_PENDING;
+J3B_OWNER_VPS_MATRIX_PENDING;
+J3B_NO_MERGE_NO_DEPLOY_NO_ROUTE_MUTATION`.
+
+Authorized implementation exits:
+
+1. Emit `transform_schema: 2` on success and the full K2 HTTP 422
+   `MODEL_OUT_OF_PRINTER_BOUNDS` response. Both shapes include mandatory
+   `original_dimensions_available` and nullable `original_dimensions_mm`, with
+   true iff a real measurement object exists and false iff null. Never use an
+   oriented fallback. Treat a measurement tag as canonical only when its finite
+   non-negative `height_mm == z`; a malformed tagged original degrades to
+   false/null.
+2. Treat oriented and final dimensions as load-bearing. Missing, non-finite, or
+   non-positive values, malformed tags, and `height_mm != z` return controlled
+   HTTP 422 `MODEL_DIMENSIONS_UNAVAILABLE`; successful object height remains
+   unconditionally equal to final Z.
+3. Map only explicit native placement/print-volume diagnostics to the full K2
+   bounds 422, including orientation mode and outcome. Preserve bounded failed-
+   command stdout separately from stderr. Apply the same safety net to Prusa
+   exit-zero/no-artifact only when retained output contains the explicit
+   diagnostic; preserve internal/missing-artifact classification otherwise.
+4. Publish `r3d-profile-catalogue-v2` with physical/profile-declared
+   `declared_build_volume_dimensions_mm` separate from the authoritative,
+   exact-boundary-inclusive `largest_passing_dimensions_inclusive_mm`. Derive
+   machine and fleet envelopes independently per engine.
+5. Preserve owner-accepted P1S admission: Prusa
+   `256 x 256 x 249.9 mm`, Orca `253.9 x 253.9 x 249.9 mm`. Keep Prusa's native
+   X/Y edge beyond its declared physical profile `UNESTABLISHED`.
+6. Provide H2D-QUOTE on both engines by deriving from P1S physics and enlarging
+   only the declared bed to `350 x 320 x 325 mm`. It is quoting-only, not a
+   machine-accurate H2D profile and not production H2D G-code. The plugin uses
+   only `POST /prusa/slice`, so Prusa coverage is mandatory.
+7. Require valid outward non-zero facet normals plus immediate native
+   `prusa-slicer --info` validation for every normal fixture. Keep the deliberate
+   zero-normal regression as a separate row.
+8. Keep all 37 orientation HTTP cases, including `20 x 240 x 245` auto with
+   zero request transform, exact `18 x 130 x 240` auto replay, preserve+X90, and
+   invalid `sideways`. Admit an exact-container native-info command only as a
+   bounded no-shell JSON argv template and report only its source label.
+9. Guard both envelope phases through exact `/profiles`: measurement A must see
+   the declared-admission catalogue and final-admission B the published
+   largest-passing catalogue. Require exact K2/success response `max` and actual
+   bounds `source_profile`; Prusa follows the selected layer profile, while
+   Orca retains the machine rather than process profile.
+
+Remaining exits:
+
+1. Run the exact candidate-image H2D-QUOTE X/Y/Z and corner sweep on both
+   engines. Until it passes, the Prusa `350 x 320 x 324.9 mm` and Orca
+   `347.9 x 317.9 x 324.9 mm` numbers are only
+   `PENDING_LOCAL_EXACT_IMAGE_SWEEP` provisional seeds, not measured ceilings.
+2. Complete the local focused/aggregate, syntax, repository-safety, and evidence
+   gates without shortening the matrix.
+3. The owner reruns the full corrective matrix on the VPS, including the
+   zero-normal row, P1S ceiling cases, and enlarged-envelope sweeps. Keep it
+   `PENDING_OWNER` until the generated reports are read.
+4. Preserve zero-customer-exposure truth: the plugin has no production
+   deployment/traffic and LeadPilot slicing is not enabled.
+5. The owner chose one merge and one deploy for J2+J3+J3B after verification.
+   This plan authorizes neither merge nor deploy, and grants no registry,
+   public-route, DNS/allowlist, consumer-repository, or customer-traffic action.
+
+The current J3B owner brief explicitly authorizes this corrective schema and
+catalogue wave; the historical J2.1 sequencing note below is not a blocker for
+this already-authorized work. See
+[`evidence/j3b-native-envelope-and-original-dimensions.md`](evidence/j3b-native-envelope-and-original-dimensions.md).
+
+## Historical J3 orientation-visibility implementation checkpoint
 
 Status:
 `J3_SCHEMA_OWNER_APPROVED;
 J3_LOCAL_SOURCE_TESTS_VERIFIED;
-J3_ORCA_FLAG_OWNER_VERIFIED_INPUT;
-J3_CONTAINER_VPS_MATRIX_PENDING_OWNER;
+J3_OWNER_CONTAINER_MATRIX_VERIFIED_EXACT_58C0CCB;
 J3_NO_DEPLOY_NO_ROUTE_MUTATION`.
 
 Local source-verified exits:
@@ -17,7 +91,7 @@ Local source-verified exits:
    `INVALID_ORIENTATION_MODE`.
 2. Measure source dimensions after safe conversion and before service
    orientation, then measure oriented and final geometry separately. Emit one
-   complete `transform_schema: 1` contract on success and
+   complete historical first-version transform contract on success and
    `MODEL_OUT_OF_PRINTER_BOUNDS` with orientation mode/outcome, applied flag,
    automatic/requested/total Euler summaries and matrices, and all three
    dimension stages.
@@ -41,8 +115,8 @@ Local source-verified exits:
    single-token `--allow-rotations=0` so whole-compound arrange yaw cannot occur
    after the authoritative matrix. Prusa adds no native rotation. The owner
    measured the exact 2.3.1 AppImage: the equals form produced real G-code with
-   6.25 g; the split form failed with `No such file: 0`. Classify this only as
-   `OWNER_VERIFIED_INPUT` until the final candidate matrix runs.
+   6.25 g; the split form failed with `No such file: 0`. The owner later passed
+   the complete J3 container matrix on exact tree `58c0ccb`.
 8. Provide the privacy-safe owner-VPS runner
    `tests/testing-scripts/slicing/orientation_visibility_test_runner.py` with
    asymmetric `20 x 255 x 255 mm` and all-axes-distinct
@@ -56,10 +130,9 @@ Local source-verified exits:
 
 Remaining exits:
 
-1. The owner must run the full Prusa/Orca, auto/preserve, request-rotation,
-   success/bounds matrix against the exact VPS container and read the generated
-   report. Until then container/native end-to-end behavior is
-   `PENDING_OWNER / NOT VERIFIED`.
+1. The owner passed the full historical J3 Prusa/Orca, auto/preserve,
+   request-rotation, success/bounds matrix on exact tree `58c0ccb`. J3B's
+   corrective rerun remains a separate pending exit above.
 2. Any hosted exact-SHA Source/Image result remains `NOT VERIFIED` unless it is
    separately run and recorded.
 3. Keep deploy, registry write, public-route activation, customer traffic, and
@@ -68,7 +141,7 @@ Remaining exits:
 See
 [`evidence/j3-orientation-visibility.md`](evidence/j3-orientation-visibility.md).
 
-## J2 bounds, catalogue, network, and calibration checkpoint
+## Historical J2 bounds, catalogue, network, and calibration checkpoint
 
 Status:
 `J2_LOCAL_AGGREGATE_PASS;
@@ -77,6 +150,10 @@ J2_LIVE_ACTIVATION_REHEARSAL_BLOCKED_NOT_RUN;
 J2_NO_ROUTE_MUTATION;
 J2_REHEARSAL_TERMINAL_CONTRACT_DARK;
 J2_ORCA_CALIBRATION_BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`.
+
+The earlier catalogue and declared-envelope admission exits below are retained
+as historical J2 planning evidence. The authorized J3B checkpoint above supersedes
+them for current schema and admission behavior.
 
 Implemented local candidate exits:
 
@@ -95,17 +172,17 @@ Implemented local candidate exits:
    `parameters[{name,value}]`, ordered path-free
    `profile_components[{role,basename,selector_parameter}]`, exact nullable
    component-to-selector bindings, `r3d-effective-slice-profile-v2` identity
-   marker, and
-   `max_source_kind: profile-explicit` for profile-sourced X/Y/Z maxima; the
+   marker, and a historical explicit-profile source marker for profile-sourced
+   X/Y/Z maxima; the
    unchanged generic `1 mm` minimum is a compatibility floor, not machine
    metadata. Keep every per-printer/
    per-engine preset row visible. Fail catalogue construction on envelope drift
    inside one technology/printer/engine. Publish a machine envelope only when
    all represented engines agree; otherwise exclude only that machine with null
-   envelope and loud `cross_engine_conflict` in both machine and fleet views.
+   envelope and a loud cross-engine-conflict marker in both views.
    Never select a component-wise smaller conflict value. Derive one independent
    fleet maximum per present technology only from its remaining resolved, named
-   machines. Keep the current 15-row payload FDM-only
+   machines. Keep the historical fixed payload FDM-only
    and never advertise the generic `120 x 120 x 150 mm` SLA fallback as a machine
    envelope. Emit a strong ETag/body digest and typed non-critical 503; never add
    a manual fleet-max field.
@@ -143,8 +220,8 @@ Remaining exits:
    uses owner Chitubox/Elegoo Satellite profiles, establishes truthful
    Elegoo Saturn 4 Ultra dimensions, and implements compatible `.goo`/`.ctb`
    output/parsing plus MSLA timing. Do not guess values or publish the fallback
-   as a machine. The generic v1 entry contract can add that real SLA printer and
-   an independent SLA fleet entry without a schema-version change; the
+   as a machine. Catalogue v2 can add that real SLA printer and an independent
+   per-engine SLA fleet resolution without another schema-version change; the
    remediation implementation remains future work;
 6. complete the mandatory J2.1 behavior-neutral decomposition below before any
    further network/route, catalogue/schema, or SLA behavior change.
@@ -186,10 +263,11 @@ Target module boundaries:
    `app/services/slice/profile-catalogue/preset-builder.js`; extract initialize/
    status/snapshot state into
    `app/services/slice/profile-catalogue/service-state.js`. Preserve the exact
-   façade exports and dependency-injection seams. The public OpenAPI schema,
-   15-row FDM payload, canonical JSON bytes, `catalogue_sha256`, ETag, ordered
-   selector/component arrays, typed 503, readiness independence, and future-SLA
-   v1 shape must remain unchanged.
+   façade exports and dependency-injection seams. When this decomposition runs
+   after J3B, preserve the public catalogue-v2 OpenAPI schema, 18-row FDM
+   payload, declared-versus-largest-passing fields, per-engine resolutions,
+   canonical JSON bytes, `catalogue_sha256`, ETag, ordered selector/component
+   arrays, typed 503, readiness independence, and future-SLA v2 shape.
 3. Keep
    `tests/testing-scripts/profiles/profile_catalogue_test_runner.py` as the CLI
    façade with the same arguments, exit code, console lines, report path, and
