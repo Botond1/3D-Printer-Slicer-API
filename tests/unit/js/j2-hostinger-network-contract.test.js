@@ -667,23 +667,76 @@ test('private router storage rejects ignore drift, tracked state, path crossing,
         }
     });
 
-    await t.test('staging directory symlink or reparse point', () => {
-        const fixture = createPrivateStorageRepository('j2-storage-link-');
-        const outside = path.join(fixture.repositoryRoot, 'outside-staging');
-        const target = path.join(fixture.staging, 'slicer-api-link.yml.tmp');
+    for (const [kind, targetParentName, suffix, linkedParentName] of [
+        ['staging', 'staging', '.yml.tmp', 'staging'],
+        ['staging', 'staging', '.yml.tmp', 'rollback'],
+        ['rollback', 'rollback', '.yml.disabled', 'staging'],
+        ['rollback', 'rollback', '.yml.disabled', 'rollback']
+    ]) await t.test(`${kind} target rejects ${linkedParentName} directory link`, () => {
+        const fixture = createPrivateStorageRepository(
+            `j2-${kind}-${linkedParentName}-storage-link-`
+        );
+        const outside = path.join(fixture.repositoryRoot, `outside-${linkedParentName}`);
+        const target = path.join(fixture[targetParentName], `slicer-api-link${suffix}`);
+        const linkedParent = fixture[linkedParentName];
         try {
             fs.mkdirSync(outside);
-            fs.rmSync(fixture.staging, { recursive: true, force: true });
-            fs.symlinkSync(outside, fixture.staging, process.platform === 'win32' ? 'junction' : 'dir');
+            fs.rmSync(linkedParent, { recursive: true, force: true });
+            fs.symlinkSync(
+                outside, linkedParent, process.platform === 'win32' ? 'junction' : 'dir'
+            );
             assert.equal(withPrivateRouterMetadata(
                 fixture, [], () => inspectPrivateRouterStorageTarget(
-                    target, 'staging', fixture.packRoot
+                    target, kind, fixture.packRoot
                 ).error
             ), 'router_private_storage_metadata_unsafe');
         } finally {
             fs.rmSync(fixture.repositoryRoot, { recursive: true, force: true });
         }
     });
+
+    for (const [name, changedParentName, ignoreDrift] of [
+        ['staging identity change across repository validation', 'staging', false],
+        ['rollback identity change across repository validation', 'rollback', false],
+        ['storage identity change is not masked by repository drift', 'staging', true]
+    ]) {
+        await t.test(name, () => {
+            const fixture = createPrivateStorageRepository(
+                `j2-${changedParentName}-identity-change-`
+            );
+            const target = path.join(fixture.staging, 'slicer-api-identity-change.yml.tmp');
+            const originalLstatSync = fs.lstatSync;
+            const protectedDirectories = [
+                fixture.dynamic, fixture.runtimeRoot, fixture.staging, fixture.rollback
+            ].map((entry) => path.resolve(entry));
+            const changedParent = path.resolve(fixture[changedParentName]);
+            let changedParentReads = 0;
+            try {
+                if (ignoreDrift) fs.writeFileSync(
+                    path.join(fixture.repositoryRoot, '.gitignore'),
+                    `${ACTIVE_ROUTER_IGNORE_PATTERN}\n`, 'utf8'
+                );
+                fs.lstatSync = function patchedLstatSync(candidate, ...args) {
+                    const stat = originalLstatSync.call(fs, candidate, ...args);
+                    const resolved = path.resolve(candidate);
+                    if (!protectedDirectories.includes(resolved)) return stat;
+                    const overrides = { uid: 0, gid: 0, mode: 0o700 };
+                    if (resolved === changedParent && ++changedParentReads >= 2) {
+                        overrides.ino = stat.ino === 0 ? 1 : 0;
+                    }
+                    return metadataView(stat, overrides);
+                };
+                const error = inspectPrivateRouterStorageTarget(
+                    target, 'staging', fixture.packRoot
+                ).error;
+                assert.equal(changedParentReads, 2);
+                assert.equal(error, 'router_private_storage_metadata_unsafe');
+            } finally {
+                fs.lstatSync = originalLstatSync;
+                fs.rmSync(fixture.repositoryRoot, { recursive: true, force: true });
+            }
+        });
+    }
 });
 
 test('rendered router binds one router-scoped IPAllowList with no forwarded-IP strategy', () => {

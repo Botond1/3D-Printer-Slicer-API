@@ -1006,6 +1006,41 @@ function privateStoragePath(packRoot, kind) {
     return child ? path.join(path.resolve(packRoot), PRIVATE_RUNTIME_DIRECTORY, child) : null;
 }
 
+function inspectPrivateRouterStorageDirectories(root, parent) {
+    const runtimeRoot = path.join(root, PRIVATE_RUNTIME_DIRECTORY);
+    const stagingRoot = path.join(runtimeRoot, PRIVATE_STAGING_DIRECTORY);
+    const rollbackRoot = path.join(runtimeRoot, PRIVATE_ROLLBACK_DIRECTORY);
+    const dynamicRoot = path.join(root, 'dynamic');
+    try {
+        const packStat = fs.lstatSync(root);
+        const runtimeStat = fs.lstatSync(runtimeRoot);
+        const stagingStat = fs.lstatSync(stagingRoot);
+        const rollbackStat = fs.lstatSync(rollbackRoot);
+        const dynamicStat = fs.lstatSync(dynamicRoot);
+        const parentStat = parent === stagingRoot ? stagingStat : rollbackStat;
+        if (!packStat.isDirectory() || packStat.isSymbolicLink()
+            || !secureRouterDirectoryMetadata(runtimeStat, ROOT_ROUTER_METADATA_POLICY)
+            || !secureRouterDirectoryMetadata(stagingStat, ROOT_ROUTER_METADATA_POLICY)
+            || !secureRouterDirectoryMetadata(rollbackStat, ROOT_ROUTER_METADATA_POLICY)
+            || !secureRouterDirectoryMetadata(dynamicStat, ROOT_ROUTER_METADATA_POLICY)
+            || fs.realpathSync(root) !== root
+            || fs.realpathSync(runtimeRoot) !== runtimeRoot
+            || fs.realpathSync(stagingRoot) !== stagingRoot
+            || fs.realpathSync(rollbackRoot) !== rollbackRoot
+            || fs.realpathSync(dynamicRoot) !== dynamicRoot
+            || runtimeStat.dev !== stagingStat.dev || stagingStat.dev !== rollbackStat.dev
+            || rollbackStat.dev !== dynamicStat.dev) {
+            return Object.freeze({ error: 'router_private_storage_metadata_unsafe' });
+        }
+        return Object.freeze({
+            error: null, packStat, runtimeRoot, runtimeStat, stagingStat, rollbackStat,
+            parentStat, dynamicStat
+        });
+    } catch {
+        return Object.freeze({ error: 'router_private_storage_unavailable' });
+    }
+}
+
 function inspectPrivateRouterStorageTarget(target, kind, packRoot = PACK_ROOT) {
     const root = path.resolve(packRoot);
     if (typeof target !== 'string' || !path.isAbsolute(target)
@@ -1038,33 +1073,29 @@ function inspectPrivateRouterStorageTarget(target, kind, packRoot = PACK_ROOT) {
         || !filePattern.test(path.basename(resolved))) {
         return Object.freeze({ error: 'router_private_storage_path_invalid' });
     }
+    const before = inspectPrivateRouterStorageDirectories(root, parent);
+    if (before.error) return before;
     const repositoryError = validateRepositoryPrivateStorageContract(root, resolved);
-    if (repositoryError) return Object.freeze({ error: repositoryError });
-    const runtimeRoot = path.join(root, PRIVATE_RUNTIME_DIRECTORY);
-    const dynamicRoot = path.join(root, 'dynamic');
-    try {
-        const packStat = fs.lstatSync(root);
-        const runtimeStat = fs.lstatSync(runtimeRoot);
-        const parentStat = fs.lstatSync(parent);
-        const dynamicStat = fs.lstatSync(dynamicRoot);
-        if (!packStat.isDirectory() || packStat.isSymbolicLink()
-            || fs.realpathSync(root) !== root
-            || !secureRouterDirectoryMetadata(runtimeStat, ROOT_ROUTER_METADATA_POLICY)
-            || !secureRouterDirectoryMetadata(parentStat, ROOT_ROUTER_METADATA_POLICY)
-            || !secureRouterDirectoryMetadata(dynamicStat, ROOT_ROUTER_METADATA_POLICY)
-            || fs.realpathSync(runtimeRoot) !== runtimeRoot
-            || fs.realpathSync(parent) !== parent
-            || fs.realpathSync(dynamicRoot) !== dynamicRoot
-            || runtimeStat.dev !== parentStat.dev || parentStat.dev !== dynamicStat.dev) {
-            return Object.freeze({ error: 'router_private_storage_metadata_unsafe' });
-        }
-        return Object.freeze({
-            error: null, kind: resolvedKind, resolved, parent, runtimeRoot,
-            runtimeStat, parentStat, dynamicStat
-        });
-    } catch {
-        return Object.freeze({ error: 'router_private_storage_unavailable' });
+    const after = inspectPrivateRouterStorageDirectories(root, parent);
+    if (after.error) return after;
+    if (!sameSecureRouterDirectoryState(before.packStat, after.packStat, null)
+        || !sameSecureRouterDirectoryState(
+            before.runtimeStat, after.runtimeStat, ROOT_ROUTER_METADATA_POLICY
+        ) || !sameSecureRouterDirectoryState(
+            before.stagingStat, after.stagingStat, ROOT_ROUTER_METADATA_POLICY
+        ) || !sameSecureRouterDirectoryState(
+            before.rollbackStat, after.rollbackStat, ROOT_ROUTER_METADATA_POLICY
+        ) || !sameSecureRouterDirectoryState(
+            before.dynamicStat, after.dynamicStat, ROOT_ROUTER_METADATA_POLICY
+        )) {
+        return Object.freeze({ error: 'router_private_storage_metadata_unsafe' });
     }
+    if (repositoryError) return Object.freeze({ error: repositoryError });
+    return Object.freeze({
+        error: null, kind: resolvedKind, resolved, parent,
+        runtimeRoot: after.runtimeRoot, runtimeStat: after.runtimeStat,
+        parentStat: after.parentStat, dynamicStat: after.dynamicStat
+    });
 }
 
 function readBoundedRegular(target, root = PACK_ROOT) {
