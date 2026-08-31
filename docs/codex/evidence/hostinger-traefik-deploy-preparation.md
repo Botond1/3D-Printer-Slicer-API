@@ -117,8 +117,9 @@ After that controlled setup, all final local gates passed:
 | Diff whitespace | pass |
 | Privacy scan | no supplied/live IPv4 value; added literals are RFC 5737 fixtures only |
 
-The exact first implementation commit is recorded by the following
-evidence-only commit after the implementation tree is frozen.
+Implementation commit `0121502609191347e67b44c1f51155d2c7ba9d8c` is the
+exact frozen 18-file deploy-preparation tree. The following evidence-only
+commit records that identity without changing the implementation.
 
 ## NOT VERIFIED
 
