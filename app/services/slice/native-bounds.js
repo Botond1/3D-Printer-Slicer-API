@@ -39,12 +39,17 @@ function combinedNativeOutput(err) {
  */
 function isNativePlacementRejection(err) {
     const combined = combinedNativeOutput(err);
+    const lastLayerExceedsBuildHeight = (
+        combined.includes('itself fits the build volume')
+        && combined.includes('last layer exceeds the maximum build volume height')
+    );
     return (
         combined.includes('nothing to be sliced')
         && combined.includes('no object is fully inside the print volume')
     ) || combined.includes('does not fit inside the print volume')
         || combined.includes('does not fit on the print bed')
-        || combined.includes('outside the print volume');
+        || combined.includes('outside the print volume')
+        || lastLayerExceedsBuildHeight;
 }
 
 /**

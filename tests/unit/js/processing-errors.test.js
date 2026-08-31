@@ -99,7 +99,7 @@ test('Orca preset mismatch maps live to ORCA_PROFILE_INCOMPATIBLE (422)', () => 
     );
 });
 
-function schemaTwoModelTransform() {
+function schemaTwoModelTransform(dimensions = { x: 254, y: 100, z: 20 }) {
     return {
         transform_schema: 2,
         size_unit: 'mm',
@@ -117,8 +117,8 @@ function schemaTwoModelTransform() {
         rotation_matrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
         original_dimensions_available: false,
         original_dimensions_mm: null,
-        oriented_dimensions_mm: { x: 254, y: 100, z: 20 },
-        final_dimensions_mm: { x: 254, y: 100, z: 20 }
+        oriented_dimensions_mm: { ...dimensions },
+        final_dimensions_mm: { ...dimensions }
     };
 }
 
@@ -166,6 +166,34 @@ test('stdout placement diagnostic plus unrelated stderr warning still maps to fu
     });
 });
 
+test('exact native last-layer height rejection maps command failure to full K2', () => {
+    const modelTransform = schemaTwoModelTransform({ x: 60, y: 60, z: 325 });
+    const nativeError = Object.assign(new Error('Native command failed.'), {
+        stdout: '',
+        stderr: 'While the object z325.stl itself fits the build volume, its last layer exceeds '
+            + 'the maximum build volume height. You might want to reduce the size of your model '
+            + 'or change current print settings and retry.'
+    });
+    const wrapped = wrapNativePlacementRejection(nativeError, {
+        modelTransform,
+        buildVolumeLimits: {
+            min: { x: 0.1, y: 0.1, z: 0.1 },
+            max: { x: 350, y: 320, z: 325 },
+            sourceProfile: 'FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini'
+        }
+    });
+    const result = invokeProcessingError(wrapped);
+
+    assertProcessingMapping(result, 422, 'MODEL_OUT_OF_PRINTER_BOUNDS');
+    assert.deepEqual(result.body.model_dimensions_mm, { x: 60, y: 60, z: 325 });
+    assert.deepEqual(result.body.model_transform, modelTransform);
+    assert.deepEqual(result.body.build_volume_limits_mm, {
+        min: { x: 0.1, y: 0.1, z: 0.1 },
+        max: { x: 350, y: 320, z: 325 },
+        source_profile: 'FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini'
+    });
+});
+
 test('native placement diagnostic requires complete schema-v2 context before mapping', () => {
     const nativeError = new Error('Object does not fit inside the print volume');
     const wrapped = wrapNativePlacementRejection(nativeError, {
@@ -200,6 +228,18 @@ test('native placement matcher excludes unrelated native failures', () => {
             stdout: 'All objects are outside the print volume.'
         }),
         true
+    );
+    assert.equal(
+        isNativePlacementRejection({
+            stderr: 'While the object z325.stl itself fits the build volume, validation failed.'
+        }),
+        false
+    );
+    assert.equal(
+        isNativePlacementRejection({
+            stderr: 'The last layer exceeds the maximum build volume height.'
+        }),
+        false
     );
 });
 

@@ -209,9 +209,8 @@ function outputContext(output, workspace, signal) {
     };
 }
 
-function schemaTwoPreserveTransform() {
+function schemaTwoPreserveTransform(dimensions = { x: 20, y: 30, z: 40 }) {
     const zero = { x: 0, y: 0, z: 0 };
-    const dimensions = { x: 20, y: 30, z: 40 };
     const identity = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
     return {
         transform_schema: 2,
@@ -258,7 +257,73 @@ test('abort after native return prevents parsing and artifact promotion', async 
     assert.equal(promotions, 0);
 });
 
-test('Prusa exit-zero missing output maps explicit placement text to full K2 only', async (t) => {
+test('Prusa exit-zero missing output maps exact last-layer height rejection to full H2D K2', async (t) => {
+    const { output } = await outputFixture(t);
+    const controller = new AbortController();
+    const { runSlicerAndParseStats } = loadOutputLifecycle(async () => {
+        throw new Error('must not parse');
+    });
+    const workspace = {
+        assertContainedPath(candidate) { return candidate; },
+        async promoteOutputCandidate() { throw new Error('must not promote'); }
+    };
+    const buildVolumeLimits = {
+        min: { x: 0.1, y: 0.1, z: 0.1 },
+        max: { x: 350, y: 320, z: 325 },
+        sourceProfile: 'FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini'
+    };
+    const context = {
+        ...outputContext(output, workspace, controller.signal),
+        layerHeight: 0.3,
+        effectiveModelInfo: { height_mm: 325 },
+        modelTransform: schemaTwoPreserveTransform({ x: 60, y: 60, z: 325 }),
+        buildVolumeLimits
+    };
+    const { buildNativeBoundsResponse } = require('../../../app/services/slice/native-bounds');
+    runImpl = async () => ({
+        stdout: '',
+        stderr: 'While the object z325.stl itself fits the build volume, its last layer exceeds '
+            + 'the maximum build volume height. You might want to reduce the size of your model '
+            + 'or change current print settings and retry.'
+    });
+
+    let placementError;
+    await assert.rejects(runSlicerAndParseStats(context), (error) => {
+        placementError = error;
+        return error.code === 'NATIVE_MODEL_OUT_OF_PRINTER_BOUNDS';
+    });
+    const response = buildNativeBoundsResponse(placementError);
+    assert.equal(response.errorCode, 'MODEL_OUT_OF_PRINTER_BOUNDS');
+    assert.deepEqual(response.model_dimensions_mm, { x: 60, y: 60, z: 325 });
+    assert.deepEqual(response.model_transform, context.modelTransform);
+    assert.deepEqual(response.build_volume_limits_mm, {
+        min: buildVolumeLimits.min,
+        max: buildVolumeLimits.max,
+        source_profile: buildVolumeLimits.sourceProfile
+    });
+
+    for (const nativeResult of [
+        {
+            stdout: '',
+            stderr: 'While the object z325.stl itself fits the build volume, validation failed.'
+        },
+        {
+            stdout: '',
+            stderr: 'The last layer exceeds the maximum build volume height.'
+        },
+        {
+            stdout: 'unrelated successful diagnostic',
+            stderr: 'warning: unrelated native note'
+        }
+    ]) {
+        runImpl = async () => nativeResult;
+        await assert.rejects(runSlicerAndParseStats(context), (error) => (
+            error.code === 'ENOENT' && buildNativeBoundsResponse(error) === null
+        ));
+    }
+});
+
+test('Prusa exit-zero missing output preserves prior explicit placement mapping', async (t) => {
     const { output } = await outputFixture(t);
     const controller = new AbortController();
     const { runSlicerAndParseStats } = loadOutputLifecycle(async () => {
@@ -293,14 +358,6 @@ test('Prusa exit-zero missing output maps explicit placement text to full K2 onl
     assert.equal(response.errorCode, 'MODEL_OUT_OF_PRINTER_BOUNDS');
     assert.deepEqual(response.model_transform, context.modelTransform);
     assert.deepEqual(response.build_volume_limits_mm.max, buildVolumeLimits.max);
-
-    runImpl = async () => ({
-        stdout: 'unrelated successful diagnostic',
-        stderr: 'warning: unrelated native note'
-    });
-    await assert.rejects(runSlicerAndParseStats(context), (error) => (
-        error.code === 'ENOENT' && buildNativeBoundsResponse(error) === null
-    ));
 });
 
 test('abort racing with promotion cannot become a successful artifact response', async (t) => {
