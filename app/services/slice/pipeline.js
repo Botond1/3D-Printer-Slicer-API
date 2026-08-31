@@ -42,7 +42,7 @@ async function appendOriginalExtensionToUpload(inputFile, originalExt, workspace
     return destination;
 }
 
-async function prepareProcessableModel(inputFile, technology, workspace, signal) {
+async function prepareProcessableModel(inputFile, technology, orientationMode, workspace, signal) {
     throwIfAborted(signal);
     let processableFile = workspace.assertContainedPath(inputFile);
     if (path.extname(processableFile).toLowerCase() === '.zip') {
@@ -52,13 +52,30 @@ async function prepareProcessableModel(inputFile, technology, workspace, signal)
     processableFile = await convertInputToStl(processableFile, workspace, signal);
     await assertBoundedModelFile(processableFile, workspace);
     throwIfAborted(signal);
-    processableFile = await tryOptimizeOrientation(processableFile, technology, workspace, signal);
+    const originalModelInfo = await getModelInfo(processableFile, signal);
+    throwIfAborted(signal);
+    const preOrientationFile = processableFile;
+    const orientationResult = await tryOptimizeOrientation(
+        processableFile,
+        technology,
+        orientationMode,
+        workspace,
+        signal
+    );
+    processableFile = orientationResult.processableFile;
     await assertBoundedModelFile(processableFile, workspace);
     throwIfAborted(signal);
     workspace.assertContainedPath(processableFile);
-    const originalModelInfo = await getModelInfo(processableFile, signal);
+    const orientedModelInfo = processableFile === preOrientationFile
+        ? originalModelInfo
+        : await getModelInfo(processableFile, signal);
     throwIfAborted(signal);
-    return { processableFile, originalModelInfo };
+    return {
+        processableFile,
+        originalModelInfo,
+        orientedModelInfo,
+        orientation: orientationResult.orientation
+    };
 }
 
 async function assertBoundedModelFile(filePath, workspace, policy = resolveResourcePolicy()) {
@@ -91,6 +108,8 @@ async function prepareModelOrResponse(
     request,
     processableFile,
     originalModelInfo,
+    orientedModelInfo,
+    orientation,
     profileSnapshots,
     selectedProfiles,
     workspace,
@@ -108,11 +127,16 @@ async function prepareModelOrResponse(
     );
     const model = await applyTransformAndValidateModel(
         processableFile,
-        originalModelInfo,
+        orientedModelInfo,
         request.transformOptions,
         buildVolumeLimits,
         workspace,
-        signal
+        signal,
+        {
+            orientation,
+            originalModelInfo,
+            orientedModelInfo
+        }
     );
     throwIfAborted(signal);
     if (!model.isValid) return { response: res.status(model.status).json(model.response) };
@@ -154,7 +178,13 @@ async function prepareSliceJob(res, request, workspace, signal) {
     throwIfAborted(signal);
     const inputFile = await appendOriginalExtensionToUpload(request.inputFile, request.originalExt, workspace);
     throwIfAborted(signal);
-    const source = await prepareProcessableModel(inputFile, request.technology, workspace, signal);
+    const source = await prepareProcessableModel(
+        inputFile,
+        request.technology,
+        request.orientationMode,
+        workspace,
+        signal
+    );
     throwIfAborted(signal);
     const profiles = resolveProfilesOrResponse(
         res,
@@ -172,6 +202,8 @@ async function prepareSliceJob(res, request, workspace, signal) {
         request,
         source.processableFile,
         source.originalModelInfo,
+        source.orientedModelInfo,
+        source.orientation,
         profileSnapshots,
         profiles,
         workspace,
@@ -206,9 +238,7 @@ async function executePreparedSlice(req, res, job, workspace, signal) {
     const responsePayload = buildSliceSuccessResponse({
         ...request,
         ...profiles,
-        transformPlan: model.transformPlan,
-        originalModelInfo: source.originalModelInfo,
-        modelBoundsValidation: model.modelBoundsValidation,
+        modelTransform: model.modelTransform,
         buildVolumeLimits,
         stats,
         engineVersion,

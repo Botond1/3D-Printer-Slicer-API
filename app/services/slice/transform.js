@@ -10,6 +10,11 @@ const { resolvePythonHelper } = require('./helper-paths');
 const { getModelInfo } = require('./model-stats');
 const { validateModelDimensionsAgainstLimits } = require('./profiles');
 const { roundDimensions } = require('./common');
+const {
+    buildModelTransformContract,
+    createOrientationState,
+    identityRotationMatrix
+} = require('./orientation-contract');
 
 /**
  * Check whether all base model dimensions are positive.
@@ -203,24 +208,28 @@ function resolveTransformedPath(inputPath, workspace, suffixFactory = () => rand
 /**
  * Apply optional transform and validate final model bounds against build-volume limits.
  * @param {string} processableFile STL candidate path.
- * @param {{x: number|string, y: number|string, z: number|string, height_mm?: number}} originalModelInfo Original model metadata.
+ * @param {{x: number|string, y: number|string, z: number|string, height_mm?: number}} orientedModelInfo Post-orientation model metadata.
  * @param {{unit: 'mm'|'inch', keepProportions: boolean, requestedTargetSize: {x: number | null, y: number | null, z: number | null}, targetSizeMm: {x: number | null, y: number | null, z: number | null}, scalePercent: number | null, rotationDeg: {x: number, y: number, z: number}}} transformOptions Parsed transform options.
  * @param {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string}} buildVolumeLimits Printer limits.
  * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {AbortSignal} [signal] Request cancellation signal.
+ * @param {{orientation?: Readonly<Record<string, unknown>>, originalModelInfo?: Record<string, number>, orientedModelInfo?: Record<string, number>}} [transformContext] Orientation provenance used by the versioned response contract.
  * @returns {Promise<
- *   {isValid: true, processableFile: string, transformPlan: {requiresTransform: boolean, scale: {x: number, y: number, z: number}, rotationDeg: {x: number, y: number, z: number}, requestedUnit: 'mm'|'inch', keepProportions: boolean, requestedTargetSize: {x: number | null, y: number | null, z: number | null}, predictedSizeMm: {x: number, y: number, z: number}}, effectiveModelInfo: {x: number, y: number, z: number, height_mm: number}, modelBoundsValidation: {isValid: true, dimensions: {x: number, y: number, z: number}}}
- *   | {isValid: false, status: number, response: {success: false, error: string, errorCode: string, model_dimensions_mm?: {x: number, y: number, z: number}, build_volume_limits_mm?: {min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, source_profile: string}}}
+ *   {isValid: true, processableFile: string, transformPlan: Record<string, unknown>, modelTransform: Record<string, unknown>, effectiveModelInfo: {x: number, y: number, z: number, height_mm: number}, modelBoundsValidation: {isValid: true, dimensions: {x: number, y: number, z: number}}}
+ *   | {isValid: false, status: number, response: {success: false, error: string, errorCode: string, model_dimensions_mm?: {x: number, y: number, z: number}, model_transform?: Record<string, unknown>, build_volume_limits_mm?: {min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, source_profile: string}}}
  * >} Validation result.
  */
 async function applyTransformAndValidateModel(
     processableFile,
-    originalModelInfo,
+    orientedModelInfo,
     transformOptions,
     buildVolumeLimits,
-    workspace, signal
+    workspace,
+    signal,
+    transformContext = {}
 ) {
     throwIfAborted(signal);
-    const transformPlanResult = buildModelTransformPlan(originalModelInfo, transformOptions);
+    const transformPlanResult = buildModelTransformPlan(orientedModelInfo, transformOptions);
     if (!transformPlanResult.isValid) {
         return {
             isValid: false,
@@ -241,7 +250,7 @@ async function applyTransformAndValidateModel(
 
     throwIfAborted(signal);
     const effectiveModelInfo = transformPlan.requiresTransform
-        ? await getModelInfo(transformedFilePath, signal) : originalModelInfo;
+        ? await getModelInfo(transformedFilePath, signal) : orientedModelInfo;
     throwIfAborted(signal);
 
     const hasKnownFinalDimensions = [effectiveModelInfo.x, effectiveModelInfo.y, effectiveModelInfo.z]
@@ -259,6 +268,19 @@ async function applyTransformAndValidateModel(
     }
 
     const modelBoundsValidation = validateModelDimensionsAgainstLimits(effectiveModelInfo, buildVolumeLimits);
+    const orientation = transformContext.orientation || createOrientationState(
+        'auto',
+        'unchanged',
+        identityRotationMatrix()
+    );
+    const modelTransform = buildModelTransformContract({
+        transformOptions,
+        transformPlan,
+        orientation,
+        originalModelInfo: transformContext.originalModelInfo || orientedModelInfo,
+        orientedModelInfo: transformContext.orientedModelInfo || orientedModelInfo,
+        finalModelInfo: effectiveModelInfo
+    });
     if (!modelBoundsValidation.isValid) {
         const issues = [
             ...modelBoundsValidation.tooSmall,
@@ -273,6 +295,7 @@ async function applyTransformAndValidateModel(
                 error: `Model dimensions are outside selected printer limits. ${issues}`,
                 errorCode: 'MODEL_OUT_OF_PRINTER_BOUNDS',
                 model_dimensions_mm: roundDimensions(modelBoundsValidation.dimensions),
+                model_transform: modelTransform,
                 build_volume_limits_mm: {
                     min: roundDimensions(buildVolumeLimits.min),
                     max: roundDimensions(buildVolumeLimits.max),
@@ -286,6 +309,7 @@ async function applyTransformAndValidateModel(
         isValid: true,
         processableFile: transformedFilePath,
         transformPlan,
+        modelTransform,
         effectiveModelInfo,
         modelBoundsValidation
     };

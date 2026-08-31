@@ -15,6 +15,7 @@ const {
 } = require(path.join(REPO_ROOT, 'app/services/slice/value-parsers'));
 const {
     parseSliceOptions,
+    parseOrientationMode,
     validateMaterialForTechnology
 } = require(path.join(REPO_ROOT, 'app/services/slice/options'));
 
@@ -111,6 +112,7 @@ test('slice option defaults retain the Prusa FDM contract', () => {
         material: 'PLA',
         infillPercentage: '20%',
         technology: 'FDM',
+        orientationMode: 'auto',
         transformOptions: {
             unit: 'mm',
             keepProportions: true,
@@ -127,6 +129,44 @@ test('slice option defaults retain the Prusa FDM contract', () => {
     });
 });
 
+test('orientation mode defaults only when omitted and accepts only exact enum strings', () => {
+    assert.deepEqual(parseOrientationMode({}), { isValid: true, value: 'auto' });
+    assert.deepEqual(parseOrientationMode({ orientationMode: 'auto' }), {
+        isValid: true,
+        value: 'auto'
+    });
+    assert.deepEqual(parseOrientationMode({ orientationMode: 'preserve' }), {
+        isValid: true,
+        value: 'preserve'
+    });
+    assert.equal(parseSliceOptions({ orientation_mode: 'preserve' }, null, 'prusa').options.orientationMode, 'auto');
+
+    for (const value of [
+        undefined,
+        null,
+        '',
+        ' ',
+        '\tauto',
+        'auto ',
+        'AUTO',
+        'Preserve',
+        0,
+        false,
+        {},
+        [],
+        new String('auto')
+    ]) {
+        assert.deepEqual(parseOrientationMode({ orientationMode: value }), {
+            isValid: false,
+            response: {
+                success: false,
+                error: 'Invalid orientationMode. Allowed values: auto, preserve.',
+                errorCode: 'INVALID_ORIENTATION_MODE'
+            }
+        }, `orientationMode=${String(value)}`);
+    }
+});
+
 test('slice options normalize transforms, infill, and a valid Prusa profile', () => {
     const result = parseSliceOptions({
         layerHeight: '0.2',
@@ -137,11 +177,13 @@ test('slice options normalize transforms, infill, and a valid Prusa profile', ()
         keepProportions: 'false',
         rotationX: '-90',
         rotationY: '1,5',
+        orientationMode: 'preserve',
         printerProfile: 'FDM_0.2mm.ini'
     }, null, 'prusa');
 
     assert.equal(result.isValid, true);
     assert.equal(result.options.infillPercentage, '100%');
+    assert.equal(result.options.orientationMode, 'preserve');
     assert.deepEqual(result.options.transformOptions, {
         unit: 'inch',
         keepProportions: false,

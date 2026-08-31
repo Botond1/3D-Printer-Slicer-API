@@ -17,6 +17,35 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
+## Current J3 orientation-visibility implementation candidate
+
+J3 starts from J2 commit
+`9b28b95cfa9f931092044300ebfca912421bac32`. The owner-approved request
+contract is strict `orientationMode=auto|preserve`, with omission defaulting to
+`auto` and any other present value returning `INVALID_ORIENTATION_MODE`.
+
+Success and `MODEL_OUT_OF_PRINTER_BOUNDS` carry the same complete
+`model_transform` with `transform_schema: 1`, orientation mode/outcome,
+requested/automatic/total rotations, and original/oriented/final dimensions.
+The rotation-only authoritative matrix composes as
+`R_total = R_requested * R_automatic`; it excludes centering, grounding,
+scaling, and translation. Original dimensions are measured after safe source
+conversion and before service orientation, oriented dimensions after that
+orientation, and final dimensions after request sizing/rotation.
+`stats.object_height_mm` equals `final_dimensions_mm.z`.
+
+An outer ZIP admits exactly one supported source. A multi-object 3MF is
+concatenated into one compound STL, passed as one STL argument, and never sent
+through a split-to-objects operation. Disconnected shells retain their relative
+placement, so this API has no independent multi-object packing capability.
+Orca therefore retains `--arrange 1` and `--orient 0` but
+adds exactly one `--allow-rotations=0` token to disable unreported whole-
+compound yaw. The exact Orca 2.3.1 flag behavior is owner-supplied evidence;
+the complete container/VPS HTTP matrix remains `PENDING_OWNER`. J3 does not
+authorize deploy, registry write, route activation, or consumer-repository
+changes. See
+`docs/codex/evidence/j3-orientation-visibility.md`.
+
 ## Current J2 bounds, catalogue, and dark-route candidate
 
 J2 starts at protected-main baseline

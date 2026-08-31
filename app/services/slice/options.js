@@ -17,6 +17,33 @@ const {
     normalizeAxisDimensions,
     sanitizeProfileFileName
 } = require('./value-parsers');
+const { ORIENTATION_MODES } = require('./orientation-contract');
+
+/**
+ * Parse the explicit automatic-or-preserve orientation policy.
+ * @param {Record<string, unknown>} body Request payload.
+ * @returns {{isValid: true, value: 'auto'|'preserve'} | {isValid: false, response: {success: false, error: string, errorCode: string}}} Parse result.
+ */
+function parseOrientationMode(body) {
+    const input = body || {};
+    if (!Object.hasOwn(input, 'orientationMode')) {
+        return { isValid: true, value: 'auto' };
+    }
+
+    const raw = input.orientationMode;
+    const value = typeof raw === 'string' ? raw : null;
+    if (!value || !ORIENTATION_MODES.includes(value)) {
+        return {
+            isValid: false,
+            response: {
+                success: false,
+                error: 'Invalid orientationMode. Allowed values: auto, preserve.',
+                errorCode: 'INVALID_ORIENTATION_MODE'
+            }
+        };
+    }
+    return { isValid: true, value };
+}
 
 /**
  * Parse and validate layer-height numeric value.
@@ -340,6 +367,14 @@ function parseTransformOptions(body) {
 function parseSliceOptions(body, forcedTechnology, engine = 'prusa') {
     const input = body || {};
 
+    const orientationModeResult = parseOrientationMode(input);
+    if (!orientationModeResult.isValid) {
+        return {
+            isValid: false,
+            response: orientationModeResult.response
+        };
+    }
+
     const layerHeight = normalizeLayerHeight(input.layerHeight || `${DEFAULTS.DEFAULT_LAYER_HEIGHT}`);
     if (!layerHeight) {
         return {
@@ -403,6 +438,7 @@ function parseSliceOptions(body, forcedTechnology, engine = 'prusa') {
             material,
             infillPercentage,
             technology,
+            orientationMode: orientationModeResult.value,
             transformOptions: transformOptionsResult.options,
             profileOverrides: profileOverridesResult.profileOverrides
         }
@@ -411,5 +447,6 @@ function parseSliceOptions(body, forcedTechnology, engine = 'prusa') {
 
 module.exports = {
     parseSliceOptions,
+    parseOrientationMode,
     validateMaterialForTechnology
 };

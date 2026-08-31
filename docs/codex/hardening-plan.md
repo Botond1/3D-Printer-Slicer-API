@@ -1,5 +1,70 @@
 # Hardening plan
 
+## J3 orientation-visibility implementation checkpoint
+
+Status:
+`J3_SCHEMA_OWNER_APPROVED;
+J3_LOCAL_IMPLEMENTATION_CANDIDATE;
+J3_ORCA_FLAG_OWNER_VERIFIED_INPUT;
+J3_CONTAINER_VPS_MATRIX_PENDING_OWNER;
+J3_NO_DEPLOY_NO_ROUTE_MUTATION`.
+
+Implemented candidate exits:
+
+1. Accept optional multipart `orientationMode`; only exact `auto` and
+   `preserve` are valid. Omission defaults to `auto` so unaware callers retain
+   historical behavior. Every other present value returns HTTP 400
+   `INVALID_ORIENTATION_MODE`.
+2. Measure source dimensions after safe conversion and before service
+   orientation, then measure oriented and final geometry separately. Emit one
+   complete `transform_schema: 1` contract on success and
+   `MODEL_OUT_OF_PRINTER_BOUNDS` with orientation mode/outcome, applied flag,
+   automatic/requested/total Euler summaries and matrices, and all three
+   dimension stages.
+3. Make the 3x3 matrix authoritative for rotation only:
+   `R_total = R_requested * R_automatic`, with requested X/Y/Z represented by
+   `Rz * Ry * Rx`. Exclude centering, grounding, scaling, and translation.
+   Require success `stats.object_height_mm` to equal final Z.
+4. Produce orientation metadata through an exclusive, bounded, versioned
+   workspace sidecar and accept it only after path/type/identity/shape/schema/
+   finite-proper-matrix validation. Report `fallback_unmodified` with identity
+   rather than inventing an automatic rotation after optimizer failure.
+5. Preserve `auto` and `preserve` semantics across Prusa and Orca. `preserve`
+   skips automatic rotation but retains normalization/grounding and explicit
+   request transforms.
+6. Close K3 from source before changing Orca: outer ZIP inspection admits
+   exactly one supported source file; a multi-geometry 3MF is concatenated into
+   one compound STL; one STL argument reaches the slicer and no split-to-objects
+   operation is requested. Disconnected shells retain relative placement, so
+   no independent multi-object packing capability is removed.
+7. Retain Orca `--arrange 1` placement and `--orient 0`, and emit exactly one
+   single-token `--allow-rotations=0` so whole-compound arrange yaw cannot occur
+   after the authoritative matrix. Prusa adds no native rotation. The owner
+   measured the exact 2.3.1 AppImage: the equals form produced real G-code with
+   6.25 g; the split form failed with `No such file: 0`. Classify this only as
+   `OWNER_VERIFIED_INPUT` until the final candidate matrix runs.
+8. Provide the privacy-safe owner-VPS runner
+   `tests/testing-scripts/slicing/orientation_visibility_test_runner.py` with
+   asymmetric `20 x 255 x 255 mm` and all-axes-distinct
+   `20 x 240 x 245 mm` fixtures. The P1S preserve-mode
+   `20 x 255 x 255 mm` case is expected HTTP 422, not success.
+
+Remaining exits:
+
+1. Root must finalize exact local test counts, syntax/safety results, and the
+   code-bearing J3 SHA; no numbers are asserted in this draft.
+2. The owner must run the full Prusa/Orca, auto/preserve, request-rotation,
+   success/bounds matrix against the exact VPS container and read the generated
+   report. Until then container/native end-to-end behavior is
+   `PENDING_OWNER / NOT VERIFIED`.
+3. Any hosted exact-SHA Source/Image result remains `NOT VERIFIED` unless it is
+   separately run and recorded.
+4. Keep deploy, registry write, public-route activation, customer traffic, and
+   consumer-repository changes outside J3 authority.
+
+See
+[`evidence/j3-orientation-visibility.md`](evidence/j3-orientation-visibility.md).
+
 ## J2 bounds, catalogue, network, and calibration checkpoint
 
 Status:

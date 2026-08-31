@@ -23,6 +23,10 @@ const {
     validateModelDimensionsAgainstLimits
 } = require('../../../app/services/slice/profiles');
 const { applyTransformAndValidateModel } = require('../../../app/services/slice/transform');
+const {
+    createOrientationState,
+    identityRotationMatrix
+} = require('../../../app/services/slice/orientation-contract');
 
 const REPO_ROOT = path.resolve(__dirname, '../../..');
 const PRUSA_DIR = path.join(REPO_ROOT, 'configs', 'prusa');
@@ -57,6 +61,21 @@ const NO_TRANSFORM = Object.freeze({
 const INERT_WORKSPACE = Object.freeze({
     assertContainedPath(candidate) { return candidate; }
 });
+const MODEL_TRANSFORM_KEYS = [
+    'automatic_orientation_applied', 'automatic_rotation_deg', 'automatic_rotation_matrix',
+    'final_dimensions_mm', 'keep_proportions', 'orientation_mode', 'orientation_outcome',
+    'oriented_dimensions_mm', 'original_dimensions_mm', 'requested_rotation_deg',
+    'requested_size', 'rotation_deg', 'rotation_matrix', 'scale_factors', 'scale_percent',
+    'size_unit', 'transform_schema'
+].sort();
+
+function preserveContext(dimensions) {
+    return {
+        orientation: createOrientationState('preserve', 'preserved', identityRotationMatrix()),
+        originalModelInfo: dimensions,
+        orientedModelInfo: dimensions
+    };
+}
 
 test('all shipped Prusa FDM layers publish the exact P1S 256x256x250 build envelope', () => {
     for (const layer of ['0.1', '0.2', '0.3']) {
@@ -115,11 +134,61 @@ test('W1 public error payload reports MODEL_OUT_OF_PRINTER_BOUNDS with the real 
         assert.equal(rejected.isValid, false);
         assert.equal(rejected.status, 422);
         assert.equal(rejected.response.errorCode, 'MODEL_OUT_OF_PRINTER_BOUNDS');
+        assert.deepEqual(Object.keys(rejected.response.model_transform).sort(), MODEL_TRANSFORM_KEYS);
+        assert.equal(rejected.response.model_transform.transform_schema, 1);
+        assert.deepEqual(rejected.response.model_transform.final_dimensions_mm, {
+            x: dimensions.x,
+            y: dimensions.y,
+            z: dimensions.z
+        });
         assert.deepEqual(rejected.response.build_volume_limits_mm, {
             min: { x: 1, y: 1, z: 1 },
             max: { x: 256, y: 256, z: 250 },
             source_profile: 'FDM_0.2mm.ini'
         });
+    }
+});
+
+test('K2 preserve makes 20x255x255 a full-contract P1S bounds error but 20x240x245 fits', async () => {
+    const oversized = { x: 20, y: 255, z: 255, height_mm: 255 };
+    const fitting = { x: 20, y: 240, z: 245, height_mm: 245 };
+    for (const [engine, limits] of [
+        ['prusa', resolvePrusaLimits('0.2')],
+        ['orca', resolveOrcaLimits('Bambu_P1S_0.4_nozzle.json')]
+    ]) {
+        const rejected = await applyTransformAndValidateModel(
+            'model.stl',
+            oversized,
+            NO_TRANSFORM,
+            limits,
+            INERT_WORKSPACE,
+            undefined,
+            preserveContext(oversized)
+        );
+        assert.equal(rejected.isValid, false, engine);
+        assert.equal(rejected.status, 422, engine);
+        assert.equal(rejected.response.errorCode, 'MODEL_OUT_OF_PRINTER_BOUNDS', engine);
+        assert.deepEqual(rejected.response.model_dimensions_mm, { x: 20, y: 255, z: 255 }, engine);
+        assert.deepEqual(Object.keys(rejected.response.model_transform).sort(), MODEL_TRANSFORM_KEYS, engine);
+        assert.equal(rejected.response.model_transform.orientation_mode, 'preserve', engine);
+        assert.equal(rejected.response.model_transform.orientation_outcome, 'preserved', engine);
+        assert.equal(rejected.response.model_transform.automatic_orientation_applied, false, engine);
+        assert.deepEqual(rejected.response.model_transform.original_dimensions_mm, { x: 20, y: 255, z: 255 }, engine);
+        assert.deepEqual(rejected.response.model_transform.oriented_dimensions_mm, { x: 20, y: 255, z: 255 }, engine);
+        assert.deepEqual(rejected.response.model_transform.final_dimensions_mm, { x: 20, y: 255, z: 255 }, engine);
+
+        const accepted = await applyTransformAndValidateModel(
+            'model.stl',
+            fitting,
+            NO_TRANSFORM,
+            limits,
+            INERT_WORKSPACE,
+            undefined,
+            preserveContext(fitting)
+        );
+        assert.equal(accepted.isValid, true, engine);
+        assert.equal(accepted.modelTransform.orientation_outcome, 'preserved', engine);
+        assert.deepEqual(accepted.modelTransform.final_dimensions_mm, { x: 20, y: 240, z: 245 }, engine);
     }
 });
 

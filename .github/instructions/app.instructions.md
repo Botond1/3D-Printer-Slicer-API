@@ -4,7 +4,7 @@ applyTo: "app/**"
 
 # App Folder Instructions
 
-Last synchronized: 2026-08-26
+Last synchronized: 2026-08-31
 
 ## Responsibilities
 - app/server.js handles bootstrap, middleware, routes, docs, and static output serving.
@@ -19,7 +19,9 @@ Last synchronized: 2026-08-26
   `app/services/slice/engine-version.js`, filament selection/metadata in
   `app/services/slice/filament-profile.js`, strict FDM metrics in
   `app/services/slice/gcode-metrics.js`, startup catalogue in
-  `app/services/slice/profile-catalogue.js`, response, errors).
+  `app/services/slice/profile-catalogue.js`, versioned orientation and total-
+  rotation identity in `app/services/slice/orientation-contract.js`, response,
+  errors).
 - app/config/service-auth.js resolves immutable pricing/artifact/operations
   rings plus explicit `legacy`, finite `migration`, or final `principals` slice
   mode with shared compatibility and WooCommerce/LeadPilot rings.
@@ -51,18 +53,31 @@ Last synchronized: 2026-08-26
   `profiles.effective_profile_sha256` plus actual-selected-executable
   `engine_version`. Public profile fields and bounds `source_profile` keep
   original selected basenames, never randomized snapshot names.
+- Keep multipart `orientationMode` strict: omission defaults to `auto`; the
+  only present values are exact `auto` and `preserve`; every other value returns
+  HTTP 400 `INVALID_ORIENTATION_MODE`.
+- Success and `MODEL_OUT_OF_PRINTER_BOUNDS` require the same complete
+  `model_transform` with `transform_schema: 1`, orientation mode/outcome,
+  requested/automatic/total rotations, and original/oriented/final dimensions.
+  Compose its rotation-only matrix as
+  `R_total = R_requested * R_automatic`; never include centering, grounding,
+  scaling, or translation. Original is after safe conversion and before
+  service orientation. Keep `stats.object_height_mm` equal to final Z.
 - Keep OpenAPI's four requested omissions plus the already-live
   `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. The disjoint
-  `MODEL_OUT_OF_PRINTER_BOUNDS` branch requires both dimension payloads. Keep
+  `MODEL_OUT_OF_PRINTER_BOUNDS` branch requires both dimension payloads and the
+  complete versioned transform payload. Keep
   the complete live slice-500 enum: `SLICE_OUTPUT_UNPARSED`,
   `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
   and `INTERNAL_SERVER_ERROR`.
 - Atomically verify both selected engine versions from bounded `--help` output
   before listen; requests read the all-success initialized map. The startup
   module has exact-image proof and uses a telemetry-disabled runner that cannot
-  alter slice-native lifecycle metrics/events. Keep Orca invocation at `--arrange 1` /
-  `--orient 0` after preprocessing/bounds checks: arrangement places already-
-  rotated geometry onto the build plate, while auto-orient stays disabled.
+  alter slice-native lifecycle metrics/events. Keep Orca invocation at
+  `--arrange 1`, `--orient 0`, and exactly one single-token
+  `--allow-rotations=0` after preprocessing/bounds checks: arrangement retains
+  translation/placement, while native auto-orient and unreported whole-
+  compound yaw stay disabled.
   Focused command/digest contracts and final exact-image HTTP transform/final-
   dimensions E2E pass for both principals; the exact local code/image identity
   is recorded in the J0 evidence document.
@@ -153,6 +168,10 @@ Last synchronized: 2026-08-26
 - Preserve admin download safety guards for both single-file and ALL-token ZIP responses.
 - Preserve ALL-token ZIP resource limits using MAX_ZIP_ENTRIES and MAX_ZIP_UNCOMPRESSED_BYTES.
 - Preserve Orca per-request isolated output directory handling.
+- Preserve exactly one supported outer ZIP source. A multi-object 3MF is
+  concatenated into one compound STL, passed as one STL argument, and not sent
+  through split-to-objects; it is not an independent multi-object packing
+  surface.
 - Preserve error code names used by clients.
 - Do not auto-heal invalid geometry.
 - Preserve public minimal readiness and operations-only detailed reasons/metrics.

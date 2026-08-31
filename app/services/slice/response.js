@@ -146,10 +146,7 @@ function resolveProfileMapper(engine) {
  * baseConfigFile: string,
  * effectiveProfileSha256: string,
  * engineVersion: string,
- * transformOptions: {unit: 'mm'|'inch', scalePercent: number | null},
- * transformPlan: {keepProportions: boolean, requestedTargetSize: {x: number | null, y: number | null, z: number | null}, scale: {x: number, y: number, z: number}, rotationDeg: {x: number, y: number, z: number}},
- * originalModelInfo: {x: number, y: number, z: number},
- * modelBoundsValidation: {dimensions: {x: number, y: number, z: number}},
+ * modelTransform: {transform_schema: 1, final_dimensions_mm: {x: number, y: number, z: number}},
  * buildVolumeLimits: {min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string},
  * stats: {print_time_seconds: number, print_time_readable: string, material_used_m: number, material_used_g: number|null, object_height_mm: number, estimated_price_huf: number|null}
  * }} context Response context.
@@ -161,13 +158,24 @@ function buildSliceSuccessResponse(context) {
         technology,
         material,
         infillPercentage,
-        transformOptions,
-        transformPlan,
-        originalModelInfo,
-        modelBoundsValidation,
+        modelTransform,
         buildVolumeLimits,
         stats
     } = context;
+
+    if (!modelTransform || modelTransform.transform_schema !== 1) {
+        throw new Error('Versioned model transform metadata is unavailable.');
+    }
+    const finalHeight = modelTransform.final_dimensions_mm?.z;
+    if (
+        !Number.isFinite(finalHeight)
+        || !Number.isFinite(stats.object_height_mm)
+        || roundToThree(stats.object_height_mm) !== finalHeight
+    ) {
+        const error = new Error('Object height does not match final model dimensions.');
+        error.code = 'INVALID_SLICE_STATS';
+        throw error;
+    }
 
     const profiles = resolveProfileMapper(engine)(context);
     const requiresManualPricing = (technology === 'FDM' &&
@@ -187,24 +195,7 @@ function buildSliceSuccessResponse(context) {
         material,
         infill: infillPercentage,
         profiles,
-        model_transform: {
-            size_unit: transformOptions.unit,
-            keep_proportions: transformPlan.keepProportions,
-            requested_size: {
-                x: transformPlan.requestedTargetSize.x === null ? null : roundToThree(transformPlan.requestedTargetSize.x),
-                y: transformPlan.requestedTargetSize.y === null ? null : roundToThree(transformPlan.requestedTargetSize.y),
-                z: transformPlan.requestedTargetSize.z === null ? null : roundToThree(transformPlan.requestedTargetSize.z)
-            },
-            scale_percent: transformOptions.scalePercent,
-            scale_factors: roundDimensions(transformPlan.scale),
-            rotation_deg: roundDimensions(transformPlan.rotationDeg),
-            original_dimensions_mm: roundDimensions({
-                x: originalModelInfo.x,
-                y: originalModelInfo.y,
-                z: originalModelInfo.z
-            }),
-            final_dimensions_mm: roundDimensions(modelBoundsValidation.dimensions)
-        },
+        model_transform: modelTransform,
         build_volume_limits_mm: {
             min: roundDimensions(buildVolumeLimits.min),
             max: roundDimensions(buildVolumeLimits.max),
@@ -213,6 +204,7 @@ function buildSliceSuccessResponse(context) {
         hourly_rate: hourlyRate,
         stats: {
             ...stats,
+            object_height_mm: finalHeight,
             estimated_price_huf: totalPrice
         }
     };

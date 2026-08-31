@@ -61,7 +61,10 @@ test('pre-aborted converter, orientation, and model-info calls launch no command
     const { convertInputToStl, tryOptimizeOrientation } = require(INPUT_PATH);
     const { getModelInfo } = require(MODEL_PATH);
     await assert.rejects(convertInputToStl('model.obj', workspace, controller.signal), (error) => error === reason);
-    await assert.rejects(tryOptimizeOrientation('model.stl', 'FDM', workspace, controller.signal), (error) => error === reason);
+    await assert.rejects(
+        tryOptimizeOrientation('model.stl', 'FDM', 'auto', workspace, controller.signal),
+        (error) => error === reason
+    );
     await assert.rejects(getModelInfo('model.stl', controller.signal), (error) => error === reason);
     assert.equal(launches, 0);
 });
@@ -72,7 +75,7 @@ test('orientation and model-info fallbacks rethrow active abort instead of swall
     const { tryOptimizeOrientation } = require(INPUT_PATH);
     const { getModelInfo } = require(MODEL_PATH);
     for (const invoke of [
-        (signal) => tryOptimizeOrientation('model.stl', 'FDM', workspace, signal),
+        (signal) => tryOptimizeOrientation('model.stl', 'FDM', 'auto', workspace, signal),
         (signal) => getModelInfo('model.stl', signal)
     ]) {
         const reason = new Error('active abort'); reason.name = 'AbortError';
@@ -88,8 +91,61 @@ test('genuine non-abort orientation and metadata failures retain their safe fall
     const workspace = { assertContainedPath(candidate) { return candidate; } };
     const { tryOptimizeOrientation } = require(INPUT_PATH);
     const { getModelInfo } = require(MODEL_PATH);
-    assert.equal(await tryOptimizeOrientation('model.stl', 'FDM', workspace), 'model.stl');
+    const fallback = await tryOptimizeOrientation('model.stl', 'FDM', 'auto', workspace);
+    assert.equal(fallback.processableFile, 'model.stl');
+    assert.equal(fallback.orientation.mode, 'auto');
+    assert.equal(fallback.orientation.outcome, 'fallback_unmodified');
+    assert.equal(fallback.orientation.automaticOrientationApplied, false);
+    assert.deepEqual(fallback.orientation.automaticRotationMatrix, [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1]
+    ]);
     assert.deepEqual(await getModelInfo('model.stl'), { x: 0, y: 0, z: 0, height_mm: 0 });
+});
+
+test('an oriented output without trusted sidecar metadata is ignored', async (t) => {
+    resetModules();
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), 's1c-orientation-metadata-'));
+    t.after(() => fsp.rm(root, { recursive: true, force: true }));
+    const modelPath = path.join(root, 'model.stl');
+    await fsp.writeFile(modelPath, 'solid original');
+    runImpl = async (_executable, args) => {
+        await fsp.writeFile(args[2], 'solid untrusted-rotated-output');
+        return { stdout: '', stderr: '' };
+    };
+    const workspace = { assertContainedPath(candidate) { return candidate; } };
+    const { tryOptimizeOrientation } = require(INPUT_PATH);
+
+    const result = await tryOptimizeOrientation(modelPath, 'FDM', 'auto', workspace);
+    assert.equal(result.processableFile, modelPath);
+    assert.equal(result.orientation.outcome, 'fallback_unmodified');
+    assert.equal(result.orientation.automaticOrientationApplied, false);
+});
+
+test('fallback_unmodified sidecar keeps the original STL as the slicer input', async (t) => {
+    resetModules();
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), 's1c-orientation-fallback-'));
+    t.after(() => fsp.rm(root, { recursive: true, force: true }));
+    const modelPath = path.join(root, 'model.stl');
+    await fsp.writeFile(modelPath, 'solid original');
+    runImpl = async (_executable, args) => {
+        await fsp.writeFile(args[2], 'solid helper-fallback-copy');
+        await fsp.writeFile(args[5], JSON.stringify({
+            orientation_metadata_schema: 1,
+            orientation_mode: 'auto',
+            orientation_outcome: 'fallback_unmodified',
+            rotation_matrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+        }));
+        return { stdout: '', stderr: '' };
+    };
+    const workspace = { assertContainedPath(candidate) { return candidate; } };
+    const { tryOptimizeOrientation } = require(INPUT_PATH);
+
+    const result = await tryOptimizeOrientation(modelPath, 'FDM', 'auto', workspace);
+    assert.equal(result.processableFile, modelPath);
+    assert.equal(result.orientation.outcome, 'fallback_unmodified');
+    assert.equal(result.orientation.automaticOrientationApplied, false);
 });
 
 test('orientation abort stops preprocessing before model-info, transform, or slicing', async (t) => {
@@ -103,17 +159,21 @@ test('orientation abort stops preprocessing before model-info, transform, or sli
     const launches = [];
     runImpl = async (executable, args) => {
         launches.push([executable, ...args]);
+        if (executable === 'prusa-slicer') {
+            return { stdout: 'size_x = 10\nsize_y = 20\nsize_z = 30\n', stderr: '' };
+        }
         controller.abort(reason);
         throw reason;
     };
     const workspace = { assertContainedPath(candidate) { return path.resolve(candidate); } };
     const { prepareProcessableModel } = require(PIPELINE_PATH);
     await assert.rejects(
-        prepareProcessableModel(modelPath, 'FDM', workspace, controller.signal),
+        prepareProcessableModel(modelPath, 'FDM', 'auto', workspace, controller.signal),
         (error) => error === reason
     );
-    assert.equal(launches.length, 1);
-    assert.equal(path.basename(launches[0][1]), 'orient.py');
+    assert.equal(launches.length, 2);
+    assert.deepEqual(launches[0].slice(0, 2), ['prusa-slicer', '--info']);
+    assert.equal(path.basename(launches[1][1]), 'orient.py');
 });
 
 async function outputFixture(t) {

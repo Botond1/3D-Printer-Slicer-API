@@ -4,9 +4,19 @@ Finds a stable orientation that minimizes print height and exports an
 orientation-adjusted STL model.
 """
 
-import sys
+import json
+import os
 import shutil
+import sys
 import trimesh
+
+
+ORIENTATION_METADATA_SCHEMA = 1
+IDENTITY_ROTATION_MATRIX = [
+    [1.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0],
+    [0.0, 0.0, 1.0],
+]
 
 
 def _pose_score(mesh, technology, stability_probability=0.0):
@@ -33,20 +43,80 @@ def _place_on_build_plate(mesh):
     min_z = mesh.bounds[0][2]
     mesh.apply_translation([0, 0, -min_z])
 
-def optimize_orientation(input_path, output_path, technology='FDM'):
+
+def _rotation_matrix(transform):
+    """Return the proper 3x3 rotation component of a homogeneous transform."""
+    return [
+        [float(transform[row][column]) for column in range(3)]
+        for row in range(3)
+    ]
+
+
+def _is_identity_rotation(matrix, tolerance=1e-7):
+    """Return whether a rotation matrix is effectively the identity."""
+    return all(
+        abs(matrix[row][column] - IDENTITY_ROTATION_MATRIX[row][column]) <= tolerance
+        for row in range(3)
+        for column in range(3)
+    )
+
+
+def _write_orientation_metadata(metadata_path, mode, outcome, rotation_matrix):
+    """Create bounded machine-readable orientation metadata beside the output STL."""
+    if metadata_path is None:
+        return
+    payload = {
+        "orientation_metadata_schema": ORIENTATION_METADATA_SCHEMA,
+        "orientation_mode": mode,
+        "orientation_outcome": outcome,
+        "rotation_matrix": rotation_matrix,
+    }
+    encoded = json.dumps(payload, separators=(",", ":"), allow_nan=False)
+    serialized = encoded + "\n"
+    if len(serialized.encode("utf-8")) > 4096:
+        raise ValueError("Orientation metadata exceeds the allowed size.")
+    descriptor = os.open(metadata_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            descriptor = None
+            handle.write(serialized)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except Exception:
+        if descriptor is not None:
+            os.close(descriptor)
+        try:
+            os.remove(metadata_path)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def optimize_orientation(
+    input_path,
+    output_path,
+    technology='FDM',
+    orientation_mode='auto',
+    metadata_path=None,
+):
     """Optimize model orientation for printing.
 
     Args:
         input_path: Path to source STL file.
         output_path: Destination STL output path.
         technology: Printing technology label (FDM or SLA).
+        orientation_mode: Automatic stable-pose selection or submitted-pose preservation.
+        metadata_path: Optional exclusive-create JSON metadata destination.
 
     Returns:
-        None. Writes oriented STL output to disk.
+        None. Writes oriented STL output and optional metadata to disk.
 
     Raises:
         SystemExit: If optimization fails after fallback copy.
     """
+    if orientation_mode not in {'auto', 'preserve'}:
+        raise ValueError("orientation_mode must be auto or preserve")
+
     print(f"[PYTHON ORIENT] Analyzing orientation for {technology}: {input_path}")
     
     try:
@@ -61,20 +131,41 @@ def optimize_orientation(input_path, output_path, technology='FDM'):
         original_height = mesh.extents[2]
         print(f"[PYTHON ORIENT] Original Z-Height: {original_height:.2f}mm")
 
+        if orientation_mode == 'preserve':
+            _place_on_build_plate(mesh)
+            mesh.export(output_path)
+            _write_orientation_metadata(
+                metadata_path,
+                orientation_mode,
+                'preserved',
+                IDENTITY_ROTATION_MATRIX,
+            )
+            print(f"[PYTHON ORIENT] Preserved submitted orientation: {output_path}")
+            return
+
         # 3. Compute stable poses
+        pose_computation_failed = False
         try:
             poses, probabilities = mesh.compute_stable_poses(n_samples=12, threshold=0.01)
         except Exception as e:
             print(f"[PYTHON ORIENT] Warning: Could not compute stable poses ({e}). Keeping original.")
             poses = []
             probabilities = []
+            pose_computation_failed = True
 
         best_pose = None
         min_score = float('inf')
 
         if len(poses) == 0:
             print("[PYTHON ORIENT] No stable poses found (maybe a sphere?). keeping original.")
+            _place_on_build_plate(mesh)
             mesh.export(output_path)
+            _write_orientation_metadata(
+                metadata_path,
+                orientation_mode,
+                'fallback_unmodified' if pose_computation_failed else 'unchanged',
+                IDENTITY_ROTATION_MATRIX,
+            )
             return
 
         print(f"[PYTHON ORIENT] Found {len(poses)} stable orientations. Evaluating...")
@@ -94,14 +185,22 @@ def optimize_orientation(input_path, output_path, technology='FDM'):
                 best_pose = tf
 
         # 5. Apply the best orientation
+        applied_rotation = IDENTITY_ROTATION_MATRIX
         if best_pose is not None:
-            print(f"[PYTHON ORIENT] Applying optimal orientation (Z: {min_score:.2f}mm)")
+            print(f"[PYTHON ORIENT] Applying optimal orientation (score: {min_score:.2f})")
+            applied_rotation = _rotation_matrix(best_pose)
             mesh.apply_transform(best_pose)
         
         _place_on_build_plate(mesh)
         
         # 6. Final export
         mesh.export(output_path)
+        _write_orientation_metadata(
+            metadata_path,
+            orientation_mode,
+            'unchanged' if _is_identity_rotation(applied_rotation) else 'applied',
+            applied_rotation,
+        )
         print(f"[PYTHON ORIENT] Success! Saved to {output_path}")
 
     except Exception as e:
@@ -112,11 +211,19 @@ def optimize_orientation(input_path, output_path, technology='FDM'):
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python3 orient.py input.stl output.stl [FDM/SLA]")
+        print("Usage: python3 orient.py input.stl output.stl [FDM/SLA] [auto/preserve] [metadata.json]")
         sys.exit(1)
     
     tech = "FDM"
     if len(sys.argv) > 3:
         tech = sys.argv[3]
 
-    optimize_orientation(sys.argv[1], sys.argv[2], tech)
+    mode = "auto"
+    if len(sys.argv) > 4:
+        mode = sys.argv[4]
+
+    metadata = None
+    if len(sys.argv) > 5:
+        metadata = sys.argv[5]
+
+    optimize_orientation(sys.argv[1], sys.argv[2], tech, mode, metadata)

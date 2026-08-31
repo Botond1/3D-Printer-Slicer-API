@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Copilot Instructions
 
-Last synchronized: 2026-08-26
+Last synchronized: 2026-08-31
 
 ## Architecture Notice
 This project uses both GitHub Copilot and Claude as primary agentic tools.
@@ -14,6 +14,45 @@ If architecture/domain rules change in this file, synchronize changes in:
 
 ## Goal
 Provide a stable and secure slicing API with strict fail-fast validation and production-safe queue controls.
+
+## J3 Orientation-Visibility Implementation Candidate
+
+- J3 starts from J2 commit `9b28b95cfa9f931092044300ebfca912421bac32`.
+  Its owner-approved request field is strict `orientationMode=auto|preserve`;
+  omission defaults to `auto` for compatibility, and every other present value
+  returns HTTP 400 `INVALID_ORIENTATION_MODE`.
+- Success and `MODEL_OUT_OF_PRINTER_BOUNDS` now share the complete versioned
+  `model_transform` contract with `transform_schema: 1`, orientation mode and
+  outcome, requested/automatic/total rotations, and original/oriented/final
+  dimensions. The authoritative rotation is rotation-only and composes as
+  `R_total = R_requested * R_automatic`; it does not encode centering,
+  grounding, scaling, or translation. `original_dimensions_mm` is measured
+  after safe source conversion and before service orientation,
+  `oriented_dimensions_mm` after orientation, and `final_dimensions_mm` after
+  request sizing/rotation. `stats.object_height_mm` must equal
+  `model_transform.final_dimensions_mm.z`.
+- `orientation_outcome` is one of `applied`, `unchanged`, `preserved`, or
+  `fallback_unmodified`. Bounds wording must branch on the outcome: only
+  `applied` may say the model does not fit even after automatic rotation;
+  `unchanged` says automatic evaluation kept the pose, `preserved` refers to
+  the submitted pose, and `fallback_unmodified` must disclose that automatic
+  orientation was unavailable.
+- An outer ZIP admits exactly one supported source file. If that file is a 3MF
+  scene, its internal geometries are concatenated into one compound STL before
+  native slicing. The API passes one STL argv and requests no split-to-objects
+  operation, so disconnected shells retain their relative placement rather
+  than becoming independently packable objects. Orca keeps `--arrange 1` for
+  placement and
+  `--orient 0`, while exactly one single-token `--allow-rotations=0` disables
+  only whole-compound arrange yaw. Prusa receives the already transformed
+  geometry and adds no native rotation.
+- The exact Orca 2.3.1 AppImage flag shape is `OWNER_VERIFIED_INPUT`:
+  `--allow-rotations=0` produced real G-code with 6.25 g, while the split
+  `--allow-rotations 0` form failed with `No such file: 0`. This is not a
+  current local or container run. The owner-VPS full HTTP matrix remains
+  `PENDING_OWNER`; J3 performs no deploy, registry write, route activation, or
+  consumer-repository change. See
+  `docs/codex/evidence/j3-orientation-visibility.md`.
 
 ## J2 Bounds, Catalogue, Network, and Calibration Checkpoint
 
@@ -436,6 +475,7 @@ After every test run, read the generated markdown report under tests/testing-scr
 
 Focused test runners:
 - tests/testing-scripts/slicing/unsupported_upload_test_runner.py
+- tests/testing-scripts/slicing/orientation_visibility_test_runner.py
 - tests/testing-scripts/admin/admin_output_files_test_runner.py
 - tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
 - tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py

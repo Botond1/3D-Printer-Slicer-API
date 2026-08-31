@@ -73,8 +73,17 @@ test('converter, orientation, model-info, and transform commands preserve exact 
     const calls = [];
     const restoreModules = installCommandMock(async (executable, args, options) => {
         calls.push({ executable, args: [...args], signal: options?.signal });
-        if (path.basename(args[0] || '') === 'scale_model.py' || ['mesh2stl.py', 'cad2stl.py', 'orient.py'].includes(path.basename(args[0] || ''))) {
+        const helper = path.basename(args[0] || '');
+        if (helper === 'scale_model.py' || ['mesh2stl.py', 'cad2stl.py', 'orient.py'].includes(helper)) {
             await fsp.writeFile(args[2], 'solid inert');
+        }
+        if (helper === 'orient.py') {
+            await fsp.writeFile(args[5], JSON.stringify({
+                orientation_metadata_schema: 1,
+                orientation_mode: 'auto',
+                orientation_outcome: 'unchanged',
+                rotation_matrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+            }));
         }
         return { stdout: 'size_x = 10\nsize_y = 20\nsize_z = 30\n', stderr: '' };
     });
@@ -90,7 +99,9 @@ test('converter, orientation, model-info, and transform commands preserve exact 
     const meshStl = await convertInputToStl(mesh, workspace, signal);
     const cad = path.join(root, 'part.step'); await fsp.writeFile(cad, 'x');
     await convertInputToStl(cad, workspace, signal);
-    await tryOptimizeOrientation(meshStl, 'FDM', workspace, signal);
+    const orientationResult = await tryOptimizeOrientation(meshStl, 'FDM', 'auto', workspace, signal);
+    assert.equal(orientationResult.processableFile, meshStl.replace(/\.stl$/i, '_oriented.stl'));
+    assert.equal(orientationResult.orientation.outcome, 'unchanged');
     await getModelInfo(meshStl, signal);
     const transformOptions = { unit: 'mm', keepProportions: true,
         requestedTargetSize: { x: null, y: null, z: null }, targetSizeMm: { x: null, y: null, z: null },
@@ -103,7 +114,8 @@ test('converter, orientation, model-info, and transform commands preserve exact 
         [process.execPath, [resolvePythonHelper('mesh2stl.py'), mesh, `${mesh}.stl`]],
         [process.execPath, [resolvePythonHelper('cad2stl.py'), cad, `${cad}.stl`]],
         [process.execPath, [resolvePythonHelper('orient.py'), meshStl,
-            meshStl.replace(/\.stl$/i, '_oriented.stl'), 'FDM']],
+            meshStl.replace(/\.stl$/i, '_oriented.stl'), 'FDM', 'auto',
+            `${meshStl.replace(/\.stl$/i, '_oriented.stl')}.orientation.json`]],
         ['prusa-slicer', ['--info', meshStl]],
         [process.execPath, [resolvePythonHelper('scale_model.py'), meshStl, transformedPath,
             '2', '2', '2', '0', '0', '0']],
@@ -127,18 +139,23 @@ test('Prusa and Orca slicer executable/argument arrays remain exact', () => {
     assert.equal(resolveSlicerExecutable('orca'), 'orca-slicer');
     assert.deepEqual(orcaPolicy.settingsPrecedence, ['machine', 'process']);
     assert.equal(orcaPolicy.filamentOption, '--load-filaments');
+    assert.equal(orcaPolicy.allowRotations, '0');
     assert.equal(orca[1], orcaPolicy.settingsPrecedence
         .map((role) => ({ machine: 'machine.json', process: 'process.json' })[role])
         .join(';'));
     assert.deepEqual(orca, ['--load-settings', 'machine.json;process.json',
         '--load-filaments', 'filament.json', '--arrange', '1', '--orient', '0',
-        '--slice', '0', '--outputdir', 'stage']);
+        '--allow-rotations=0', '--slice', '0', '--outputdir', 'stage']);
+    assert.deepEqual(orca.filter((value) => value.startsWith('--allow-rotations')), [
+        '--allow-rotations=0'
+    ]);
+    assert.equal(orca.includes('--allow-rotations'), false);
     assert.deepEqual(
         buildSlicerCommandArgs(
             'FDM', 'process.json', path.join('stage', 'result.gcode'), '20%', 'orca', 'machine.json'
         ),
         ['--load-settings', 'machine.json;process.json', '--arrange', '1', '--orient', '0',
-            '--slice', '0', '--outputdir', 'stage']
+            '--allow-rotations=0', '--slice', '0', '--outputdir', 'stage']
     );
 });
 
@@ -230,12 +247,12 @@ test('Prusa and Orca execution append only the processable model to exact engine
     const expectedOrca = [
         '--load-settings', 'machine.json;process.json',
         '--load-filaments', filamentProfile,
-        '--arrange', '1', '--orient', '0', '--slice', '0',
+        '--arrange', '1', '--orient', '0', '--allow-rotations=0', '--slice', '0',
         '--outputdir', path.join(root, 'orca'), 'model.stl'
     ];
     const expectedOrcaManual = [
         '--load-settings', 'machine.json;process.json',
-        '--arrange', '1', '--orient', '0', '--slice', '0',
+        '--arrange', '1', '--orient', '0', '--allow-rotations=0', '--slice', '0',
         '--outputdir', path.join(root, 'orca-manual'), 'model.stl'
     ];
     assert.deepEqual(calls.map(({ executable, args }) => [executable, args]), [

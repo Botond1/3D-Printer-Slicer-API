@@ -135,7 +135,7 @@ test('profile identity binds the request-independent native invocation policy', 
 
     const orcaPolicy = resolveSlicerInvocationPolicy('orca', 'FDM');
     assert.deepEqual(orcaPolicy, {
-        arrange: '1', orient: '0', slice: '0',
+        arrange: '1', orient: '0', allowRotations: '0', slice: '0',
         settingsPrecedence: ['machine', 'process'], filamentOption: '--load-filaments'
     });
     assert.notDeepEqual(orcaPolicy, {

@@ -1,5 +1,85 @@
 # Verified project map
 
+## Current J3 orientation-visibility implementation candidate
+
+Current classification:
+`J3_SCHEMA_OWNER_APPROVED;
+J3_LOCAL_IMPLEMENTATION_CANDIDATE;
+J3_ORCA_FLAG_OWNER_VERIFIED_INPUT;
+J3_CONTAINER_VPS_MATRIX_PENDING_OWNER;
+J3_NO_DEPLOY_NO_ROUTE_MUTATION`.
+
+J3 starts from J2 commit
+`9b28b95cfa9f931092044300ebfca912421bac32`. Final local gate counts and the
+code-bearing J3 SHA remain pending root finalization; no exact-image, hosted,
+deployed, or public-route result is claimed here.
+
+Direct executable-source map:
+
+```text
+multipart request
+  -> orientationMode omitted: auto
+  -> exact auto|preserve accepted
+  -> every other present value: HTTP 400 INVALID_ORIENTATION_MODE
+supported direct/CAD/ZIP source
+  -> outer ZIP: exactly one supported source file
+  -> one 3MF Scene: concatenate all internal geometries into one compound STL
+  -> pass one STL argv and request no split-to-objects operation
+  -> disconnected shells retain relative placement; no independent plate objects
+converted source dimensions
+  -> original_dimensions_mm before service orientation/request transforms
+orientationMode=auto
+  -> stable-pose optimizer + exact versioned sidecar
+  -> applied | unchanged | fallback_unmodified
+orientationMode=preserve
+  -> no automatic rotation; normalization/grounding only
+  -> preserved + identity automatic matrix
+oriented model
+  -> oriented_dimensions_mm
+  -> requested sizing in oriented axes
+  -> requested rotation X then Y then Z; R_requested = Rz * Ry * Rx
+  -> R_total = R_requested * R_automatic
+  -> final_dimensions_mm after request sizing/rotation
+  -> stats.object_height_mm = final_dimensions_mm.z on success
+model_transform
+  -> transform_schema = 1
+  -> automatic + requested + total Euler summaries and proper 3x3 matrices
+  -> rotation matrices exclude scaling, centering, grounding, and translation
+  -> identical complete contract on success and MODEL_OUT_OF_PRINTER_BOUNDS
+Orca native invocation
+  -> --arrange 1: retain translation/placement
+  -> --orient 0: disable native auto-orient
+  -> exactly one --allow-rotations=0 token: disable whole-compound arrange yaw
+Prusa native invocation
+  -> receives preprocessed geometry; no native rotation step
+```
+
+The ZIP decision closes K3 without removing an existing packing capability:
+[`zip.js`](../../app/services/slice/zip.js) accepts exactly one supported outer
+source, [`mesh2stl.py`](../../app/mesh2stl.py) concatenates a 3MF scene into one
+mesh, and [`pipeline.js`](../../app/services/slice/pipeline.js) passes one
+processable file to the native command without a split-to-objects request.
+Disconnected shells therefore retain their relative placement as one compound
+object; an independently arranged plate would require a separate split/import
+path that the API does not expose. Orca arrangement can still translate that compound onto
+the plate, but its unreported Z-axis rotation is disabled so
+[`orientation-contract.js`](../../app/services/slice/orientation-contract.js)
+can remain authoritative for the full rotation path.
+
+The exact Orca 2.3.1 AppImage flag measurement is owner-supplied:
+`--allow-rotations=0` produced real G-code with 6.25 g, whereas
+`--allow-rotations 0` failed with `No such file: 0`. Classify this only as
+`OWNER_VERIFIED_INPUT`; it is not a local run by this implementation and does
+not prove the final candidate image or HTTP response. The owner will run
+[`orientation_visibility_test_runner.py`](../../tests/testing-scripts/slicing/orientation_visibility_test_runner.py)
+on the VPS. That complete two-engine matrix remains `PENDING_OWNER`.
+
+See
+[`evidence/j3-orientation-visibility.md`](evidence/j3-orientation-visibility.md)
+for the schema and evidence boundary. J1/J2 orientation statements retained
+below describe their historical checkpoints; this J3 section is the current
+candidate contract.
+
 ## Current J2 bounds, catalogue, network, and calibration candidate
 
 Current classification:

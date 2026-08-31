@@ -1,6 +1,6 @@
 # Testing Scripts - Local Claude Guide
 
-Last synchronized: 2026-08-26
+Last synchronized: 2026-08-31
 
 ## Scope
 
@@ -14,6 +14,7 @@ This folder contains API-level Python integration and workflow tests.
   - slicing/full_api_prusa_fdm_test_runner.py
   - slicing/full_api_prusa_sl1_test_runner.py
   - slicing/unsupported_upload_test_runner.py
+  - slicing/orientation_visibility_test_runner.py
 
 - `admin/` — Admin endpoint validations
   - admin/admin_output_files_test_runner.py
@@ -146,6 +147,34 @@ python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
   immediately after every run. A local source/unit result is not exact-image,
   hosted, deployed, or production evidence.
 
+## J3 orientation-visibility owner-VPS contract
+
+Use the focused entry point:
+
+```text
+python tests/testing-scripts/slicing/orientation_visibility_test_runner.py
+```
+
+- Run it only against the separately owner-authorized exact container/VPS
+  candidate. Repository-local unit results do not establish native or deployed
+  behavior.
+- The runner uses privacy-safe generated asymmetric fixtures, including
+  `20 x 255 x 255 mm` and a second all-axes-distinct
+  `20 x 240 x 245 mm` model. It covers both engines, `auto`/`preserve`, request
+  rotation composition, success, and `MODEL_OUT_OF_PRINTER_BOUNDS` parity.
+- For P1S, `20 x 255 x 255 mm` in `preserve` mode is an expected HTTP 422
+  bounds result, not success. Bounds acceptance requires the same complete
+  versioned transform contract as success.
+- Every accepted payload must prove `transform_schema: 1`, exact orientation
+  mode/outcome, rotation matrices, original/oriented/final dimensions, and
+  `stats.object_height_mm == model_transform.final_dimensions_mm.z` on
+  success. Never infer a rotation only from swapped dimensions.
+- Keep credentials in the existing stdin-backed request path and keep reports
+  free of filenames, paths, keys, customer data, and private network identity.
+  Always read
+  `tests/testing-scripts/results/orientation_visibility_test_result.md` after
+  execution.
+
 ## Local Rules
 
 - Prefer existing runner patterns over adding ad-hoc scripts.
@@ -162,7 +191,7 @@ python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
   `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`. The current Python matrix
   helper does not yet prove
   actual-binary version, digest/snapshot/flattened-parent lineage, or Orca
-  `--arrange 1` / `--orient 0`; its result alone is not complete J0 response-
+  `--arrange 1` / `--orient 0` / `--allow-rotations=0`; its result alone is not complete J0 response-
   contract evidence. Focused contracts cover the corrected placement/orientation
   and digest policy, and final exact-image evidence covers startup version
   resolution plus the HTTP transform/final-dimensions E2E for both principals.

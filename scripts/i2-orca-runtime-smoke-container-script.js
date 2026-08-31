@@ -149,8 +149,12 @@ async function prepareSliceInvocation() {
         'FDM', runtimeProcessProfile, desiredOutput, '20%', 'orca', snapshots.orcaMachineConfigFile);
     const arrangeIndex = slicerArgs.indexOf('--arrange');
     const orientIndex = slicerArgs.indexOf('--orient');
+    const allowRotationArgs = slicerArgs.filter(
+        (value) => typeof value === 'string' && value.startsWith('--allow-rotations')
+    );
     if (arrangeIndex < 0 || slicerArgs[arrangeIndex + 1] !== '1' ||
-        orientIndex < 0 || slicerArgs[orientIndex + 1] !== '0') exit(29);
+        orientIndex < 0 || slicerArgs[orientIndex + 1] !== '0' ||
+        allowRotationArgs.length !== 1 || allowRotationArgs[0] !== '--allow-rotations=0') exit(29);
     return slicerArgs;
 }
 

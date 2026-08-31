@@ -4,7 +4,7 @@ applyTo: "**"
 
 # Repository Wide Instructions
 
-Last synchronized: 2026-08-26
+Last synchronized: 2026-08-31
 
 ## Architecture
 - Backend stack is Node.js + Express + Python helper scripts.
@@ -24,6 +24,15 @@ Last synchronized: 2026-08-26
   supported H2D envelope; the existing `1 mm` profile minima remain unchanged;
   configured
   `MAX_MODEL_DIMENSION_MM` cannot be below `350`.
+- Preserve strict `orientationMode=auto|preserve`, with only omission defaulting
+  to `auto`. Success and `MODEL_OUT_OF_PRINTER_BOUNDS` require the same
+  complete `transform_schema: 1` payload. Its authoritative rotation-only
+  matrix is `R_requested * R_automatic`; object height equals final Z.
+- Preserve exactly one supported source per outer ZIP. Multi-object 3MF scenes
+  are concatenated into one compound STL, passed as one STL argument, and not
+  sent through split-to-objects. Orca may keep `--arrange 1` for placement but
+  must use `--orient 0` plus exactly one single-token
+  `--allow-rotations=0` to prevent unreported native rotation.
 
 ## Security
 - Normal startup requires pricing, artifact, and operations active keys plus one
@@ -120,15 +129,17 @@ Last synchronized: 2026-08-26
   qualified keys like the native Boost parser.
 - OpenAPI includes the four requested omitted runtime codes plus the already-
   live `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. Keep the bounds
-  branch disjoint and require both dimension payloads. Keep the complete live
+  branch disjoint and require both dimension payloads plus the complete
+  versioned `model_transform`. Keep the complete live
   slice-500 enum: `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
   `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 - Resolve both selected engines' versions atomically from bounded `--help`
   output before listen; publish neither unless both pass. The startup module has
-  exact-image proof. Keep Orca invocation at `--arrange 1` / `--orient 0` after
-  preprocessing/bounds checks: arrangement places the already-rotated model
-  onto the build plate, while auto-orient stays disabled and cannot replace the
-  requested rotation. Focused command/digest contracts and final exact-image
+  exact-image proof. Keep Orca invocation at `--arrange 1`, `--orient 0`, and
+  one `--allow-rotations=0` after preprocessing/bounds checks: arrangement
+  translates the already-rotated compound model onto the build plate, while
+  auto-orient and arrange yaw stay disabled and cannot replace or extend the
+  reported rotation. Focused command/digest contracts and final exact-image
   HTTP transform/final-dimensions E2E pass for both principals; the exact local
   code/image identity is recorded in the J0 evidence document.
 - Bambu reference numbers are available for nine measurable cases plus one

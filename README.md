@@ -55,13 +55,69 @@ lifecycle evidence remain separate gates.
 ## ✨ Core Features
 
 - 🔄 **Model-focused input processing:** direct 3D, CAD, and ZIP uploads with exactly one supported model source file.
-- ⚖️ **Auto-orientation:** Python-based orientation optimization before slicing.
+- ⚖️ **Visible orientation control:** backward-compatible `auto` optimization or
+  explicit `preserve`, with versioned total-rotation provenance on success and
+  bounds failure.
 - 🧮 **Pricing engine:** dynamic hourly-rate calculation from persisted pricing map.
 - 🚦 **Queue + rate protection:** bounded queue and endpoint rate limiting for CPU-heavy requests.
 - 🧨 **ZIP safety checks:** entry/size/path validation and encrypted ZIP rejection.
 - 🧵 **Dual slicer routing:** Prusa and Orca engines behind dedicated endpoints.
 - **Resource/state envelope:** actual-byte limits, validated final artifacts,
   stable job/artifact correlation, leased retention, and atomic pricing state.
+
+### J3 orientation visibility and total-rotation candidate
+
+Both slice endpoints accept the optional multipart field
+`orientationMode=auto|preserve`. Omission defaults to `auto`, retaining the
+historical stable-pose optimization for existing callers. A present value is
+strict: whitespace, alternate case, blank, null-like, numeric, array, or object
+forms return HTTP `400 INVALID_ORIENTATION_MODE`.
+
+Every successful response and every
+`MODEL_OUT_OF_PRINTER_BOUNDS` response carries the same complete
+`model_transform` contract with `transform_schema: 1`. It exposes orientation
+mode/outcome, whether automatic orientation applied a non-identity rotation,
+requested/automatic/total Euler summaries and matrices, and three distinct
+dimension stages:
+
+- `original_dimensions_mm`: after safe source-format conversion, before
+  service orientation or request transforms;
+- `oriented_dimensions_mm`: after `auto` orientation or `preserve`
+  normalization, before requested sizing/rotation;
+- `final_dimensions_mm`: after requested sizing/rotation, as passed to the
+  native slicer.
+
+The authoritative `rotation_matrix` is rotation-only. For column vectors it is
+`R_total = R_requested * R_automatic`, with the requested matrix built as
+`Rz * Ry * Rx`; it intentionally excludes scaling, centering, grounding, and
+translation. `rotation_deg` is a canonical Euler summary of that total matrix,
+not a replacement for it. On success, `stats.object_height_mm` is the final
+pre-native height and equals `model_transform.final_dimensions_mm.z`.
+`orientation_outcome` is `applied`, `unchanged`, `preserved`, or
+`fallback_unmodified`. Bounds wording must use both mode and outcome: only
+`applied` supports “does not fit even after automatic rotation”; `unchanged`
+means automatic evaluation kept the pose, `preserved` identifies the submitted
+pose, and `fallback_unmodified` must disclose that automatic orientation was
+unavailable.
+
+The outer ZIP path accepts exactly one supported source file. If that source
+is a multi-geometry 3MF scene, conversion concatenates its geometries into one
+compound STL. The API passes one STL argument and requests no split-to-objects
+operation, so disconnected shells retain their relative placement instead of
+becoming independently packable objects. Orca therefore keeps `--arrange 1`
+for translation/placement
+and `--orient 0`, but adds exactly one single-token
+`--allow-rotations=0` so no later whole-compound yaw escapes the authoritative
+matrix. Prusa receives the already transformed geometry and performs no native
+rotation.
+
+The exact Orca 2.3.1 flag result is owner-supplied input:
+`--allow-rotations=0` produced real G-code with 6.25 g, while the split
+`--allow-rotations 0` form failed with `No such file: 0`. This is
+`OWNER_VERIFIED_INPUT`, not a current local/container proof. The complete
+two-engine HTTP matrix remains `PENDING_OWNER` on the VPS. This candidate does
+not deploy, publish an image, activate a route, or modify a consumer repository.
+See the [J3 evidence boundary](docs/codex/evidence/j3-orientation-visibility.md).
 
 ### J2 build-volume, profile-catalogue, network, and calibration candidate
 
@@ -545,10 +601,15 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 - `app/services/slice.service.js` - end-to-end slicing orchestrator and queue error mapping.
 - `app/services/slice/command.js` - subprocess execution via `execFile` with timeout and optional debug logs.
 - `app/services/slice/common.js` - output naming, isolated Orca output dirs, cleanup utilities.
-- `app/services/slice/engine.js` - slicer argument construction, including Orca's fixed `--arrange 1` / `--orient 0` placement/orientation policy.
+- `app/services/slice/engine.js` - slicer argument construction, including
+  Orca's fixed `--arrange 1`, `--orient 0`, and one-token
+  `--allow-rotations=0` placement/orientation policy.
 - `app/services/slice/engine-version.js` - atomic pre-listen resolution of both actual slicer versions from bounded `--help` output.
 - `app/services/slice/errors.js` - error classification and API error responses.
 - `app/services/slice/input-processing.js` - conversion/orientation preprocessing pipeline.
+- `app/services/slice/orientation-contract.js` - strict orientation metadata,
+  proper-matrix validation, total rotation composition, and versioned response
+  contract.
 - `app/services/slice/model-stats.js` - metadata/stat parsing from slicer outputs.
 - `app/services/slice/number-utils.js` - shared numeric parser helpers.
 - `app/services/slice/options.js` - strict request option validation/parsing.
@@ -594,6 +655,7 @@ Optional fields:
 - `targetSizeX`, `targetSizeY`, `targetSizeZ` (target dimensions in selected unit)
 - `scalePercent` (uniform scale; cannot be combined with `targetSizeX/Y/Z`)
 - `rotationX`, `rotationY`, `rotationZ` (degrees)
+- `orientationMode` (`auto` or `preserve`; omission defaults to `auto`)
 - `printerProfile` (profile override filename)
 - `processProfile` (Orca only process profile override filename)
 
@@ -629,6 +691,7 @@ curl -X POST http://localhost:3000/prusa/slice \
   -F "layerHeight=0.2" \
   -F "material=PLA" \
   -F "infill=20" \
+  -F "orientationMode=preserve" \
   -F "sizeUnit=mm" \
   -F "keepProportions=true" \
   -F "targetSizeZ=120"
@@ -641,7 +704,8 @@ Uses `orca-slicer`.
 - Forced `FDM` processing
 - Allowed `layerHeight`: `0.1`, `0.2`, `0.3`
 - Rejects SLA-only materials
-- Runs with Orca arrange/orient flow and machine+process+optional-filament profile order
+- Runs with Orca `--arrange 1`, `--orient 0`, and one-token
+  `--allow-rotations=0`, plus machine+process+optional-filament profile order
   - Machine profile file is resolved from `.env` via `ORCA_MACHINE_PROFILE` (default: `Bambu_P1S_0.4_nozzle.json`)
 - Process profile file is selected by `layerHeight` (`0.1/0.2/0.3`) and can be overridden via `.env`:
   - `ORCA_PROCESS_PROFILE_0_1`
@@ -663,6 +727,8 @@ Uses `orca-slicer`.
   - `processProfile` → process profile from `configs/orca`
 - Output artifacts are resolved through a per-request isolated output directory before final filename alignment.
 - Supports same size preprocessing options as Prusa endpoint (`sizeUnit`, `keepProportions`, `targetSizeX/Y/Z`, `scalePercent`, rotations)
+- Supports `orientationMode=auto|preserve` with strict validation and default
+  `auto`
 - Validates final model size against selected machine profile build-volume limits
 
 Example:
@@ -701,6 +767,7 @@ curl -X POST http://localhost:3000/orca/slice \
     "effective_profile_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },
   "model_transform": {
+    "transform_schema": 1,
     "size_unit": "mm",
     "keep_proportions": true,
     "requested_size": {
@@ -714,12 +781,40 @@ curl -X POST http://localhost:3000/orca/slice \
       "y": 1.5,
       "z": 1.5
     },
+    "orientation_mode": "auto",
+    "orientation_outcome": "unchanged",
+    "automatic_orientation_applied": false,
+    "automatic_rotation_deg": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "requested_rotation_deg": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
     "rotation_deg": {
       "x": 0,
       "y": 0,
       "z": 0
     },
+    "automatic_rotation_matrix": [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1]
+    ],
+    "rotation_matrix": [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1]
+    ],
     "original_dimensions_mm": {
+      "x": 80,
+      "y": 60,
+      "z": 80
+    },
+    "oriented_dimensions_mm": {
       "x": 80,
       "y": 60,
       "z": 80
@@ -732,9 +827,9 @@ curl -X POST http://localhost:3000/orca/slice \
   },
   "build_volume_limits_mm": {
     "min": {
-      "x": 0,
-      "y": 0,
-      "z": 0
+      "x": 1,
+      "y": 1,
+      "z": 1
     },
     "max": {
       "x": 256,
@@ -749,7 +844,7 @@ curl -X POST http://localhost:3000/orca/slice \
     "print_time_readable": "1h 30m",
     "material_used_m": 12.45,
     "material_used_g": null,
-    "object_height_mm": 45.2,
+    "object_height_mm": 120,
     "estimated_price_huf": null
   }
 }
@@ -774,6 +869,7 @@ curl -X POST http://localhost:3000/orca/slice \
 - `INVALID_KEEP_PROPORTIONS`
 - `INVALID_SIZE_OPTIONS`
 - `INVALID_ROTATION_OPTIONS`
+- `INVALID_ORIENTATION_MODE`
 - `CONFLICTING_SIZE_OPTIONS`
 - `INVALID_PROFILE_NAME`
 - `PROFILE_NOT_FOUND`
@@ -790,8 +886,11 @@ curl -X POST http://localhost:3000/orca/slice \
 
 For `MODEL_OUT_OF_PRINTER_BOUNDS`, the JSON response always includes
 `model_dimensions_mm` with `x`, `y`, and `z`, plus
-`build_volume_limits_mm` with `min`, `max`, and `source_profile`. The public
-field remains `errorCode`; no `error_code` alias is introduced.
+`build_volume_limits_mm` with `min`, `max`, and `source_profile`, plus the same
+complete `transform_schema: 1` `model_transform` used by success. Consumers can
+branch on `orientation_mode` and `orientation_outcome` without inferring state
+from dimensions. The public field remains `errorCode`; no `error_code` alias is
+introduced.
 
 ### Queue and rate-limit response semantics
 
@@ -1086,7 +1185,10 @@ You can customize pricing, security, and slicing behavior without changing endpo
   manual-pricing result. SLA resin is bounded by `MAX_MATERIAL_USED_ML`
   (default `100000`).
 - **ZIP Safety Limits:** ZIP upload inspection and admin `ALL` bulk export are guarded by max entries (`MAX_ZIP_ENTRIES`, default `500`) and max cumulative size (`MAX_ZIP_UNCOMPRESSED_BYTES`, default `500MB`).
-- **ZIP Content Rule:** ZIP uploads must contain exactly one supported source file; unsupported or suspicious ZIP contents are rejected and cleaned up.
+- **ZIP Content Rule:** ZIP uploads must contain exactly one supported source
+  file; unsupported or suspicious ZIP contents are rejected and cleaned up. A
+  multi-geometry 3MF source is converted to one compound STL, not independent
+  packable plate objects.
 - **Body Parser Limits:** JSON/form payload size is capped (`JSON_BODY_LIMIT`, `FORM_BODY_LIMIT`, default `1mb`).
 - **Artifact Retention:** Owned managed outputs are bounded by TTL, count, and
   aggregate bytes; active downloads and unknown/unsafe entries are preserved.
@@ -1187,6 +1289,9 @@ implied.
 ## 🧪 Test publication policy
 
 - `tests/testing-scripts/` is intended to be public and versioned.
+- `tests/testing-scripts/slicing/orientation_visibility_test_runner.py` is the
+  owner-VPS entry point for the J3 two-engine orientation matrix; its local
+  presence is not container or deployed evidence.
 - `tests/testing-files/` sample payloads are intentionally excluded from repository publication.
 - `tests/testing-scripts/results/` generated reports are runtime artifacts and are ignored.
 

@@ -340,8 +340,14 @@ test('container contract binds snapshots, engine version, profile digest, filame
             productionArgs.indexOf('--arrange'),
             productionArgs.indexOf('--slice') + 2
         ),
-        ['--arrange', '1', '--orient', '0', '--slice', '0']
+        ['--arrange', '1', '--orient', '0', '--allow-rotations=0', '--slice', '0']
     );
+    assert.deepEqual(
+        productionArgs.filter((value) => value.startsWith('--allow-rotations')),
+        ['--allow-rotations=0']
+    );
+    assert.equal(productionArgs.includes('--allow-rotations'), false);
+    assert.equal(productionArgs.filter((value) => value === '--allow-rotations=0').length, 1);
     assert.doesNotMatch(compact, /'--orient', '1'/);
     assert.match(compact, /calibrationProfile\.enable_support = '0'/);
     assert.match(compact, /supportProof\.enable_support !== '0'/);

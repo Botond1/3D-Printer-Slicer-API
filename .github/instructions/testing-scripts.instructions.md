@@ -4,7 +4,7 @@ applyTo: "tests/testing-scripts/**"
 
 # Testing Scripts Instructions
 
-Last synchronized: 2026-08-26
+Last synchronized: 2026-08-31
 
 ## Test Entry Points
 - slicing/full_api_test_runner.py
@@ -12,6 +12,7 @@ Last synchronized: 2026-08-26
 - slicing/full_api_prusa_fdm_test_runner.py
 - slicing/full_api_prusa_sl1_test_runner.py
 - slicing/unsupported_upload_test_runner.py
+- slicing/orientation_visibility_test_runner.py
 - admin/admin_output_files_test_runner.py
 - pricing/pricing_cycle_test_runner.py
 - rate_limit/rate_limit_regression_test_runner.py
@@ -84,7 +85,8 @@ profile basenames; bounds failures require both dimension payloads. OpenAPI
 slice-500 assertions must retain `INTERNAL_PROCESSING_ERROR`,
 `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 The current Python matrix helper does not yet establish actual-binary version, digest/
-snapshot/flattened-parent lineage, or Orca `--arrange 1` / `--orient 0`; do not
+snapshot/flattened-parent lineage, or Orca `--arrange 1` / `--orient 0` /
+`--allow-rotations=0`; do not
 classify its result alone as complete J0 proof. Focused contracts cover the
 corrected placement/orientation and digest policy, and final exact-image
 evidence covers startup version resolution plus the HTTP transform/final-
@@ -101,6 +103,19 @@ Nine numeric Bambu references plus the `M03` P1S-boundary result are recorded,
 but the matching Orca calibration is
 `BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`. Do not treat the reference side or
 the profile-catalogue runner as time/mass or automatic-pricing acceptance.
+
+The focused J3 owner-VPS entry point is
+`slicing/orientation_visibility_test_runner.py`. It uses generated privacy-safe
+`20 x 255 x 255 mm` and all-axes-distinct `20 x 240 x 245 mm` fixtures and
+covers both engines, both orientation modes, request-rotation composition,
+success, and bounds-error parity. P1S `20 x 255 x 255 mm` in `preserve` mode is
+an expected HTTP 422. Require `transform_schema: 1`, exact mode/outcome,
+rotation matrices, all three dimension stages, and success height equal to
+final Z. Run only with separately authorized exact-container/VPS inputs; the
+owner will execute this lane. Read its generated markdown report and do not
+promote local unit evidence to container, hosted, deployed, or live proof. The
+report path is `results/orientation_visibility_test_result.md` relative to the
+testing-scripts folder.
 
 Operations checks must prove public /ready is minimal, protected diagnostics
 return OPERATIONS_AUTH_REQUIRED without a key, and all outputs stay bounded and

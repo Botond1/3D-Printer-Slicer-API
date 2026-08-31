@@ -1,6 +1,6 @@
 # App Folder - Local Claude Guide
 
-Last synchronized: 2026-08-26
+Last synchronized: 2026-08-31
 
 ## Scope
 
@@ -10,7 +10,7 @@ This document describes the application runtime inside app/.
 
 - HTTP stack: bounded Node HTTP server + Express + helmet + method-aware
   audience CORS + validated request ID + lifecycle observability + global error handler.
-- Upload flow: slice limiter, x-slicer-api-key authentication, root-scoped workspace allocation, route-level multer single-file upload on choosenFile, queueing, option validation, conversion/orientation, transform, native slicing, stats parsing, and pricing response.
+- Upload flow: slice limiter, x-slicer-api-key authentication, root-scoped workspace allocation, route-level multer single-file upload on choosenFile, queueing, strict option validation, conversion, versioned orientation capture, transform/bounds validation, native slicing, stats parsing, and pricing response.
 - Slicing engines: PrusaSlicer (FDM/SLA) and OrcaSlicer (FDM only).
 - Public profile catalogue: immutable startup generation for machine-bound,
   server-owned FDM presets; strong ETag/body digest; non-critical typed 503.
@@ -172,9 +172,10 @@ This document describes the application runtime inside app/.
     and Orca. Prusa export flags, Orca's machine/process `--load-settings`
     order, and the selected filament's dedicated `--load-filaments` option are
     composed from that same hash-fed policy; Orca sends
-    `--arrange 1` / `--orient 0` after preprocessing/
-    bounds checks. Arrangement places already-rotated geometry onto the build
-    plate, while auto-orient remains disabled.
+    `--arrange 1`, `--orient 0`, and exactly one single-token
+    `--allow-rotations=0` after preprocessing/bounds checks. Arrangement keeps
+    translation/placement while whole-compound yaw and native auto-orient are
+    disabled, so no post-contract rotation is omitted.
 - app/services/slice/engine-version.js
   - Resolves both selected executables' bounded `--help` output atomically before
     listen, publishes only the all-success initialized map, and evicts failures.
@@ -192,7 +193,10 @@ This document describes the application runtime inside app/.
     derived from length.
 - app/services/slice/input-processing.js
   - Converts supported model/CAD inputs to STL via Python scripts.
-  - Runs orientation optimization with graceful fallback.
+  - Runs `auto` orientation or `preserve` normalization and accepts only the
+    bounded, exact-shape, versioned orientation sidecar from the owned workspace.
+  - Converts a missing/invalid optimizer result to explicit
+    `fallback_unmodified` identity rather than claiming a rotation.
 - app/services/slice/model-stats.js
   - Reads model dimensions and parses slicer outputs for print-time/material
     length and nullable direct grams. `SLICE_STRICT_GCODE_METRICS` defaults to
@@ -205,8 +209,16 @@ This document describes the application runtime inside app/.
 - app/services/slice/number-utils.js
   - Shared positive-integer parsing plus bounded canonical concurrency parsing.
 - app/services/slice/options.js
-  - Validates request fields: layerHeight, material, infill, size/scale/rotation, unit, and profile overrides.
+  - Validates request fields: layerHeight, material, infill, size/scale/rotation,
+    unit, profile overrides, and strict `orientationMode=auto|preserve`.
+    Omission alone defaults to `auto`; malformed or differently cased present
+    values return `INVALID_ORIENTATION_MODE`.
   - Enforces engine/technology layer constraints and material-technology compatibility.
+- app/services/slice/orientation-contract.js
+  - Validates proper 3x3 rotation matrices and the versioned orientation
+    sidecar; owns orientation modes/outcomes and `transform_schema: 1`.
+  - Composes the authoritative rotation-only matrix as
+    `R_total = R_requested * R_automatic` and emits canonical Euler summaries.
 - app/services/slice/profiles.js
   - Resolves Prusa and Orca machine/process/filament profile selection.
   - Validates profile existence.
@@ -270,6 +282,8 @@ This document describes the application runtime inside app/.
   - Composes successful slice response payloads and refuses success without a
     lowercase 64-hex `profiles.effective_profile_sha256` or machine-readable
     actual-selected-executable `engine_version`.
+  - Requires the complete versioned `model_transform` and enforces
+    `stats.object_height_mm === model_transform.final_dimensions_mm.z`.
   - Encapsulates pricing and profile payload mapper strategies for engine/technology-specific response shaping.
 - app/services/slice/queue.js
   - Implements the bounded FIFO queue with canonical
@@ -282,11 +296,18 @@ This document describes the application runtime inside app/.
     and active ownership, and releases the quarantine subscriber exactly once
     after drain.
 - app/services/slice/transform.js
-  - Builds transform plan (scale/rotation), applies model transform via Python script, and validates final bounds against build-volume limits.
+  - Builds the scale/request-rotation plan, applies it through Python, and
+    validates final bounds against build-volume limits.
+  - Builds one complete `model_transform` for both success and
+    `MODEL_OUT_OF_PRINTER_BOUNDS`, including orientation and
+    original/oriented/final dimensions.
 - app/services/slice/value-parsers.js
   - Normalizes numeric/boolean/unit inputs and sanitizes profile override filenames.
 - app/services/slice/zip.js
   - Performs ZIP guard checks (entry count, cumulative uncompressed size, path safety, encryption rejection, exact single supported source file requirement).
+  - Never creates a multi-source plate: one 3MF source may contain multiple
+    geometries, but `mesh2stl.py` concatenates them into one compound STL, the
+    command passes one STL argument, and no split-to-objects operation is used.
 
 ### Utilities and docs generation
 
@@ -300,18 +321,20 @@ This document describes the application runtime inside app/.
   - Defines the public catalogue 200/304/503 contract, strong ETag/body digest,
     machine-bound entry fields, and informational/non-critical semantics.
 - app/docs/slice-openapi.js
-  - Defines slice success/error schemas, including `engine_version`, the
-    effective-profile digest, four requested omitted runtime codes, the live
-    `MODEL_DIMENSIONS_UNAVAILABLE` general branch, and the disjoint bounds branch
-    requiring both dimension payloads. The slice-500 enum is the complete live
-    set: `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`,
+  - Defines strict `orientationMode`, the complete `transform_schema: 1`
+    response schema, `engine_version`, and the effective-profile digest.
+  - Keeps `MODEL_DIMENSIONS_UNAVAILABLE` in the general branch and requires
+    model dimensions, build limits, and the same complete `model_transform` in
+    the disjoint `MODEL_OUT_OF_PRINTER_BOUNDS` branch. The slice-500 enum is the
+    complete live set: `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`,
     `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 
 ## Python Helper Scripts in app/
 
 - app/cad2stl.py: CAD-to-STL conversion.
 - app/mesh2stl.py: mesh normalization to STL.
-- app/orient.py: orientation optimization for printability.
+- app/orient.py: `auto`/`preserve` orientation preprocessing plus exclusive,
+  bounded, versioned rotation-matrix sidecar output.
 - app/scale_model.py: scale/rotation transform execution.
 
 ## Endpoint Behavior Notes
@@ -328,17 +351,28 @@ This document describes the application runtime inside app/.
   `profiles.effective_profile_sha256`. Snapshot-backed bounds/runtime/digest/
   native work does not expose randomized snapshot names: profile metadata and
   bounds `source_profile` retain original selected basenames.
+- The optional multipart `orientationMode` is exact `auto|preserve`; omission
+  defaults to `auto` for backward-compatible behavior. All other present values
+  fail with HTTP 400 `INVALID_ORIENTATION_MODE`.
+- Every success and bounds failure carries `transform_schema: 1`,
+  `orientation_mode`, `orientation_outcome`, requested/automatic/total
+  rotations, and original/oriented/final dimensions. The matrix is rotation-
+  only, uses `R_total = R_requested * R_automatic`, and excludes translation,
+  grounding, and scaling. Original is after format conversion but before
+  service orientation; `stats.object_height_mm` equals final Z.
 - OpenAPI documents the four requested omitted codes plus the already-live
   `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. Bounds errors require
-  both `model_dimensions_mm` and `build_volume_limits_mm`. The complete live
+  `model_dimensions_mm`, `build_volume_limits_mm`, and the complete
+  `model_transform`. The complete live
   slice-500 enum is `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`,
   `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 - Success requires `engine_version` from the atomic pre-listen bounded `--help`
   verification of both selected executables; the startup module has exact-image
   proof and uses a telemetry-disabled runner that cannot alter slice-native
-  lifecycle metrics/events. Orca passes `--arrange 1` / `--orient 0` so
-  placement can translate the
-  model onto the plate without replacing the request-owned rotation. Focused
+  lifecycle metrics/events. Orca passes `--arrange 1`, `--orient 0`, and one
+  `--allow-rotations=0`, so placement can translate the model onto the plate
+  without adding an unreported whole-compound yaw or replacing the request-
+  owned rotation. Focused
   command/digest contracts and final exact-image HTTP transform/final-dimensions
   E2E pass on code SHA `ed85eec63409b7362fe05c2b99031eeb24b5b9c9` and local
   image ID `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
@@ -464,6 +498,15 @@ HTTP server defaults and inclusive bounds:
   runtime root selection.
 - Keep successful profile digests mandatory and keep the bounds/general OpenAPI
   422 branches disjoint.
+- Keep `orientationMode` strict and backward-compatible by defaulting only
+  omission to `auto`. Preserve the complete versioned transform contract on
+  both success and bounds failure, the total-matrix multiplication order, and
+  the final-height invariant.
+- Keep ZIP input at exactly one supported source. Do not describe a multi-
+  object 3MF as independently packable after it has been concatenated into one
+  compound STL and passed without a split-to-objects operation. Keep Orca
+  placement enabled but forbid unreported yaw with the
+  exact one-token `--allow-rotations=0` form.
 - Keep `/profiles` startup-only and request-cheap. Preserve its strong ETag,
   canonical `catalogue_sha256`, exact managed preset set, per-printer/per-engine
   envelopes, and no-manual-fleet-maximum shape. Do not make catalogue readiness
