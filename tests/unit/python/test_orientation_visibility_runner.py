@@ -263,9 +263,10 @@ class FixtureGenerationTests(unittest.TestCase):
             self.assertTrue(RUNNER.validate_ascii_outward_normals(
                 paths["j3_primary_20x255x255"],
             ))
-            zero_text = paths["j3b_zero_normal_60x60x240"].read_text(encoding="ascii")
-            self.assertEqual(zero_text.count("facet normal 0 0 0"), 12)
-            self.assertTrue(RUNNER.validate_ascii_zero_normals(
+            zero_payload = paths["j3b_zero_normal_60x60x240"].read_bytes()
+            self.assertEqual(len(zero_payload), 84 + 12 * 50)
+            self.assertFalse(zero_payload.startswith(b"solid"))
+            self.assertTrue(RUNNER.validate_binary_zero_normals(
                 paths["j3b_zero_normal_60x60x240"],
             ))
             zero_observation = next(
@@ -534,11 +535,14 @@ class ApprovedMatrixTests(unittest.TestCase):
         self.assertEqual(len(zero), 4)
         for engine in ("prusa", "orca"):
             auto = find_case(f"{engine}-zero-normal-explicit-auto-degraded-original")
-            preserve = find_case(f"{engine}-zero-normal-preserve-oriented-unavailable")
+            preserve = find_case(f"{engine}-zero-normal-preserve-degraded-original")
             self.assertEqual(auto.expected_status, 200)
             self.assertFalse(auto.expected_original_dimensions_available)
-            self.assertEqual(preserve.expected_status, 422)
-            self.assertEqual(preserve.expected_error_code, "MODEL_DIMENSIONS_UNAVAILABLE")
+            self.assertEqual(preserve.expected_status, 200)
+            self.assertFalse(preserve.expected_original_dimensions_available)
+        mass_case = find_case("orca-p1s-253x253-preserve-accepted")
+        self.assertEqual(mass_case.layer_height, 0.3)
+        self.assertEqual(mass_case.expected_material_used_g, 456.33)
 
     def test_request_fields_preserve_default_omission_and_exact_profiles(self):
         default_prusa = find_case("prusa-p1s-primary-default-auto")
@@ -935,7 +939,16 @@ class TransformContractTests(unittest.TestCase):
         )
 
     def test_oriented_dimensions_unavailable_path_is_typed_and_bare(self):
-        case = find_case("orca-zero-normal-preserve-oriented-unavailable")
+        case = RUNNER._case(
+            "unit-oriented-unavailable",
+            "orca",
+            "P1S",
+            "j3b_zero_normal_60x60x240",
+            "preserve",
+            422,
+            expected_original_dimensions_available=None,
+            expected_error_code="MODEL_DIMENSIONS_UNAVAILABLE",
+        )
         body = response_payload(case, {"x": 60.0, "y": 60.0, "z": 240.0})
         self.assertEqual(
             RUNNER.validate_case_response(
@@ -987,6 +1000,7 @@ class RequestAndPrivacyTests(unittest.TestCase):
         self.assertEqual(result.duration_sec, 1.25)
         kwargs = request.call_args.kwargs
         self.assertEqual(kwargs["slice_service_api_key"], "unit-only-secret")
+        self.assertEqual(kwargs["layer_height"], case.layer_height)
         self.assertEqual(kwargs["extra_fields"]["orientationMode"], "preserve")
         self.assertEqual(
             kwargs["extra_fields"]["printerProfile"],
@@ -1093,6 +1107,7 @@ class RequestAndPrivacyTests(unittest.TestCase):
             requested_mode="auto",
             requested_rotation_deg=(0.0, 0.0, 0.0),
             fixture_key="synthetic",
+            layer_height=0.2,
             expected_status=200,
             http_status=200,
             error_code=None,
@@ -1173,6 +1188,7 @@ class RequestAndPrivacyTests(unittest.TestCase):
                 requested_mode=case.expected_mode,
                 requested_rotation_deg=case.requested_rotation_deg,
                 fixture_key=case.fixture_key,
+                layer_height=case.layer_height,
                 expected_status=case.expected_status,
                 http_status=case.expected_status,
                 error_code=case.expected_error_code,

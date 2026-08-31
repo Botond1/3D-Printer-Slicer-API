@@ -74,7 +74,9 @@ edge beyond its declared profile is `UNESTABLISHED`. H2D-QUOTE must exist on
 both engines with P1S physics and quote-only semantics. Exact helper-image
 measurement A established Prusa `350 x 320 x 324.9 mm` and Orca
 `347.9 x 317.9 x 324.9 mm`; Prusa beyond its declared X/Y edge remains
-`UNESTABLISHED`. Final-admission B remains pending. The generic
+`UNESTABLISHED`. Exact local final-admission B confirmed all four published
+tuples; its catalogue lane passed 9/9 checks and the optional Prusa digest-
+parity lane ran and passed. The generic
 `120 x 120 x 150 mm` SLA fallback must remain absent as a
 machine envelope, and Elegoo Saturn 4 Ultra dimensions must not be fabricated.
 The v2 entry shape can later admit a truthful SLA row without another schema
@@ -122,9 +124,13 @@ replay on `18 x 130 x 240 mm`, preserve plus X90 on that fixture, and invalid
 `sideways`. Every normal row
 must first pass immediate native `prusa-slicer --info` dimension validation.
 The deliberately zero-normal regression is a separate row and must never be
-reported as a normal-fixture service defect. Cover both engines, both
-orientation modes, request-rotation composition, success, and full K2 bounds
-parity. P1S `20 x 255 x 255 mm` in `preserve` mode is an expected HTTP 422.
+reported as a normal-fixture service defect. It is a legal binary STL with
+SHA-256 `60affa17c1470817223a10f1d39475e437090d696ece969a87b06d3bf1c7721bb`;
+exact J2 and exact local B returned HTTP 200 on both engines, with B exposing
+the schema-2 false/null original-dimensions degradation. Cover both engines,
+both orientation modes, request-rotation composition, success, and full K2
+bounds parity. P1S `20 x 255 x 255 mm` in `preserve` mode is an expected HTTP
+422.
 Require `transform_schema: 2`, exact mode/outcome and matrices, mandatory
 `original_dimensions_available`, the true/object or false/null invariant with
 no oriented fallback, positive oriented/final dimensions, and canonical
@@ -134,8 +140,9 @@ oriented/final measurement must be controlled HTTP 422
 `MODEL_DIMENSIONS_UNAVAILABLE`; an explicit native
 placement/volume refusal must be full K2 HTTP 422
 `MODEL_OUT_OF_PRINTER_BOUNDS`. J3 itself passed the owner exact-container matrix
-on `58c0ccb`; J3B remains `PENDING_OWNER` and must run only with separately
-authorized exact-container/VPS inputs. Read
+on `58c0ccb`; exact local J3B passed 12/12 fixture checks, 4/4 selector checks,
+and 37/37 HTTP cases. Its owner VPS rerun remains `PENDING_OWNER` and must use
+only separately authorized exact-container/VPS inputs. Read
 `results/orientation_visibility_test_result.md`; never promote local unit
 evidence to container, hosted, deployed, or live proof.
 
@@ -155,8 +162,15 @@ profile. Fail closed on phase, selector, shape, or value drift. Read
 passed 44/44 native fixture preconditions, 10/10 brackets, and 2/2 combined
 corners on its exact helper image; `325 mm` at `0.3 mm` returned the full K2
 HTTP 422 twice on each engine after the exact conjunctive last-layer classifier.
-The final-admission-B report and owner VPS matrix remain pending; do not commit
-the generated measurement report.
+Exact local final-admission B passed 88/88 fixture preconditions, 20/20
+brackets, and 4/4 combined corners. It confirmed Prusa P1S
+`256/256/249.9`, Orca P1S `253.9/253.9/249.9`, Prusa H2D-QUOTE
+`350/320/324.9`, and Orca H2D-QUOTE `347.9/317.9/324.9`; the catalogue lane
+passed 9/9 and its optional Prusa digest-parity check ran and passed. Preserve
+the exact local mass check (`253 x 253 x 20`, Orca preserve, layer `0.3` =
+`456.33 g`) and exact J2/B outer-wall footprint parity (`248.600 x 99.600 mm`,
+500 segments, `x=3.700..252.300`, `y=78.200..177.800`). The owner VPS matrix
+remains `PENDING_OWNER`; do not commit either generated report.
 
 Operations checks must prove public /ready is minimal, protected diagnostics
 return OPERATIONS_AUTH_REQUIRED without a key, and all outputs stay bounded and

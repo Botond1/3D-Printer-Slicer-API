@@ -71,8 +71,9 @@ Last synchronized: 2026-08-31
   production H2D G-code; the plugin consumer depends on the Prusa route. Exact
   helper-image measurement A established Prusa `350 x 320 x 324.9 mm` and Orca
   `347.9 x 317.9 x 324.9 mm`. Prusa native X/Y beyond its declared quote bed
-  remains `UNESTABLISHED`; keep final-admission B and the owner VPS matrix
-  explicitly pending.
+  remains `UNESTABLISHED`. Exact local final-admission B confirmed both tuples
+  and their P1S counterparts; only the owner VPS matrix remains
+  `PENDING_OWNER`.
 - Public catalogue v2 is explicitly FDM-only and may include
   only profiles with a bound machine identity. Never represent the generic
   `120 x 120 x 150 mm` SLA fallback as a profile-derived printer envelope.

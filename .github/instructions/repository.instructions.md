@@ -27,9 +27,11 @@ Last synchronized: 2026-08-31
   profile remains `UNESTABLISHED`. Exact helper-image measurement A established
   H2D-QUOTE Prusa `350 x 320 x 324.9 mm` and Orca
   `347.9 x 317.9 x 324.9 mm`; Prusa native X/Y beyond that declared quote bed
-  remains `UNESTABLISHED`, and final-admission B remains pending. The FDM
-  fallback and configured `MAX_MODEL_DIMENSION_MM >= 350` remain compatibility
-  constraints; the existing `1 mm` profile minima remain unchanged.
+  remains `UNESTABLISHED`. Exact local final-admission B confirmed all four
+  published tuples with 88/88 fixture preconditions, 20/20 brackets, and 4/4
+  combined corners. The FDM fallback and configured
+  `MAX_MODEL_DIMENSION_MM >= 350` remain compatibility constraints; the
+  existing `1 mm` profile minima remain unchanged.
 - Preserve strict `orientationMode=auto|preserve`, with only omission defaulting
   to `auto`. Success and the full K2 `MODEL_OUT_OF_PRINTER_BOUNDS` HTTP 422
   response require the same complete `transform_schema: 2` payload.
@@ -109,8 +111,10 @@ Last synchronized: 2026-08-31
   G-code. The plugin consumer calls only `POST /prusa/slice`, so Prusa coverage
   is required. Measurement A passed 44/44 fixture preconditions, 10/10 brackets,
   and 2/2 combined corners. At `0.3 mm`, `325 mm` returned the full K2 HTTP 422
-  twice on each engine after the exact conjunctive last-layer classifier. Do not
-  promote this measurement-A result to final-admission-B or owner-VPS proof.
+  twice on each engine after the exact conjunctive last-layer classifier. Exact
+  local final-admission B passed 88/88 fixture preconditions, 20/20 brackets,
+  4/4 combined corners, the 9/9 catalogue lane, and the optional Prusa digest-
+  parity lane. This is not owner-VPS proof; that matrix remains `PENDING_OWNER`.
 - Hostinger public-route preparation accepts one through four unique private
   IPv4 `/32` entries. Initial `leadpilot-only` phase requires exactly one;
   expanded callers are separately authorized. Host-firewall TCP rejection and

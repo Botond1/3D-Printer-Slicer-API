@@ -19,9 +19,13 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
 
 - J3 itself is owner-verified on the production-identical exact `58c0ccb`
   container, including artifact-level `--allow-rotations=0` proof. Do not
-  reopen that orientation contract. J3B starts from it. H2D-QUOTE exact-image
-  measurement A is complete; final-admission B and the owner VPS matrix remain
-  `PENDING`.
+  reopen that orientation contract. J3B measurement A and exact local final-
+  admission B are complete. B binds code SHA
+  `47ae13397bb4537b4bb700b8c6bf3d9648364bdc` to image ID
+  `sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`;
+  its revision label matched and the `999:999` container was healthy, read-only,
+  with its host port bound only to localhost. The owner VPS matrix remains
+  `PENDING_OWNER`.
 - `model_transform` is schema 2. Success and the complete K2
   `MODEL_OUT_OF_PRINTER_BOUNDS` response require both
   `original_dimensions_available` and nullable `original_dimensions_mm`.
@@ -52,7 +56,8 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   measured ceilings are Prusa `350 x 320 x 324.9 mm` and Orca
   `347.9 x 317.9 x 324.9 mm`; `325 mm` at `0.3 mm` returned the full K2 HTTP 422
   twice on each engine. Prusa's native X/Y edge beyond its declared quote bed
-  remains `UNESTABLISHED`. Final-admission B remains pending.
+  remains `UNESTABLISHED`. Final-admission B passed 88/88 fixture preconditions,
+  20/20 brackets, and 4/4 corners with all four published tuples.
 - Normal generated fixtures require outward non-zero normals plus an immediate
   native `prusa-slicer --info` precondition. Keep the deliberate zero-normal
   regression separate. The orientation HTTP matrix has 37 cases, including the
@@ -61,7 +66,11 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   exact `/profiles` phase guard and exact response `max`/`source_profile`;
   Prusa reports its selected layer INI and Orca its stable machine profile.
   Exact-container native-info uses only a bounded fixture-addressing no-shell
-  JSON argv template and the report retains only its source label.
+  JSON argv template and the report retains only its source label. Exact local B
+  catalogue validation passed 9/9 with optional Prusa digest parity run/pass;
+  orientation passed 12/12 fixture checks, 4/4 selectors, and 37/37 HTTP rows.
+  A legal binary zero-normal regression returned HTTP 200 on both engines in
+  exact J2 and B, with B schema-2 original availability false/null.
   Customer exposure is zero. The owner chose one merge and one deploy for
   J2+J3+J3B after verification; neither action is authorized in this wave. See
   `docs/codex/evidence/j3b-native-envelope-and-original-dimensions.md`.
@@ -142,9 +151,9 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   `256 x 256 x 249.9 mm` and Orca `253.9 x 253.9 x 249.9 mm`. Prusa's native
   X/Y edge beyond its declared physical profile remains `UNESTABLISHED`.
   H2D-QUOTE exists on both engines with P1S physics and an enlarged declared
-  bed, quoting only. Measurement A established Prusa
-  `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`; final-admission B
-  remains pending.
+  bed, quoting only. Measurement A established and exact local final-admission B
+  confirmed Prusa `350 x 320 x 324.9 mm` and Orca
+  `347.9 x 317.9 x 324.9 mm`.
 - The J2 Hostinger preparation reads one through four unique private IPv4 `/32`
   rows. Initial phase `leadpilot-only` requires exactly one row; expansion to
   other callers is separately authorized. A host-firewall TCP reset and fixed

@@ -6,9 +6,9 @@ Current classification:
 `J3_OWNER_CONTAINER_MATRIX_VERIFIED_EXACT_58C0CCB;
 J3B_SCHEMA_OWNER_APPROVED;
 J3B_SOURCE_IMPLEMENTATION_PRESENT;
-J3B_LOCAL_VALIDATION_IN_PROGRESS;
+J3B_LOCAL_VALIDATION_COMPLETE;
 J3B_H2D_MEASUREMENT_A_EXACT_IMAGE_VERIFIED;
-J3B_FINAL_ADMISSION_B_PENDING;
+J3B_LOCAL_EXACT_IMAGE_FINAL_ADMISSION_B_VERIFIED;
 J3B_OWNER_VPS_MATRIX_PENDING;
 J3B_NO_MERGE_NO_DEPLOY_NO_ROUTE_MUTATION`.
 
@@ -16,8 +16,8 @@ J3B corrects a pre-orientation measurement regression and two native-envelope
 gaps without reopening J3's already-passed orientation contract. The owner ran
 J3's full production-identical container matrix on exact tree `58c0ccb`,
 including artifact-level G-code proof of `--allow-rotations=0`. J3B H2D-QUOTE
-measurement A is exact-image verified; final-admission B and the owner VPS
-matrix are separate pending gates.
+measurement A and exact local final-admission B are verified. The owner VPS
+matrix is a separate `PENDING_OWNER` gate.
 
 Direct executable-source map:
 
@@ -66,7 +66,18 @@ passed. The measured inclusive values are Prusa `350 x 320 x 324.9 mm` and
 Orca `347.9 x 317.9 x 324.9 mm`. At layer height `0.3 mm`, `325 mm` returned
 the complete K2 HTTP 422 twice on each engine after the exact conjunctive last-
 layer classifier. Prusa native X/Y beyond the declared profile remains
-`UNESTABLISHED`; final-admission B remains pending.
+`UNESTABLISHED`.
+
+Exact local final-admission B used code-bearing source
+`47ae13397bb4537b4bb700b8c6bf3d9648364bdc` and exact image ID
+`sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`.
+The matching revision label, non-root `999:999` identity, healthy state,
+read-only root, and host port bound only to localhost were verified. The envelope
+report passed 88/88 fixture preconditions, 20/20 brackets, and 4/4 combined
+corners; catalogue verification passed 9/9 and the optional Prusa digest-parity
+lane ran and passed. It confirmed P1S Prusa `256 x 256 x 249.9 mm`, P1S Orca
+`253.9 x 253.9 x 249.9 mm`, H2D-QUOTE Prusa `350 x 320 x 324.9 mm`, and
+H2D-QUOTE Orca `347.9 x 317.9 x 324.9 mm`.
 
 Failed native commands retain bounded stdout separately from stderr, and the
 placement classifier considers both without weakening its explicit-diagnostic
@@ -78,11 +89,22 @@ class remains unchanged.
 
 Normal matrix fixtures require valid outward non-zero facet normals and must
 pass an immediate native `prusa-slicer --info` dimension precondition. The
-deliberate zero-normal mesh is a distinct regression row, never evidence that a
-normal fixture or the service is defective. Customer exposure is zero: the
-plugin has no production deployment/traffic and LeadPilot slicing is not
-enabled. The owner chose one merge and one deploy for J2+J3+J3B only after
-verification. Neither merge nor deploy is authorized here. See
+deliberate zero-normal fixture is a legal binary STL with SHA-256
+`60affa17c1470817223a10f1d39475e437090d696ece969a87b06d3bf1c7721bb`.
+Exact J2 image
+`sha256:0d81837cdd5c3b56383580eb28df799686103bb4663a9f4016e9fbc89e4e31ea`
+and exact local B returned HTTP 200 on both engines; B exposes schema-2
+`original_dimensions_available:false` with `original_dimensions_mm:null`.
+This is a distinct regression row, never evidence that a normal fixture or the
+service is defective. Exact B also retained Orca `253 x 253 x 20 mm` preserve,
+layer `0.3` mass at `456.33 g`. The `249 x 100 x 20 mm` Orca outer-wall G-code
+footprint matches J2 at `248.600 x 99.600 mm`, 500 segments, and bounds
+`x=3.700..252.300`, `y=78.200..177.800`.
+
+Customer exposure is zero: the plugin has no production deployment/traffic and
+LeadPilot slicing is not enabled. The owner chose one merge and one deploy for
+J2+J3+J3B only after verification. Neither merge nor deploy is authorized here.
+See
 [`evidence/j3b-native-envelope-and-original-dimensions.md`](evidence/j3b-native-envelope-and-original-dimensions.md).
 
 The orientation HTTP runner now has 37 mandatory cases. Its restored section-0
@@ -96,6 +118,8 @@ fetches `/profiles` before any slice and requires an exact catalogue phase;
 each HTTP point must echo the expected admission `max` and actual bounds-source
 profile. For Prusa that source follows the selected layer-height profile; for
 Orca it remains the stable machine profile rather than the process profile.
+Exact local B orientation evidence passed 12/12 fixture checks, 4/4 selector
+checks, and all 37/37 HTTP cases. The owner VPS rerun remains `PENDING_OWNER`.
 
 ## Historical J3 orientation-visibility checkpoint
 

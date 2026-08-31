@@ -139,8 +139,9 @@ python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
   `253.9 x 253.9 x 249.9 mm`. H2D-QUOTE is present on both engines with
   P1S-derived quote-only physics. Exact helper-image measurement A established
   Prusa `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`. Prusa's
-  native X/Y edge beyond its declared quote bed remains `UNESTABLISHED`; final-
-  admission B remains pending.
+  native X/Y edge beyond its declared quote bed remains `UNESTABLISHED`. Exact
+  local final-admission B confirmed all four tuples, and its catalogue lane
+  passed 9/9 checks plus the optional Prusa digest-parity check.
 - Do not fabricate Elegoo Saturn 4 Ultra dimensions. The generic v2 entry shape
   can later admit a truthful SLA printer without a schema-version change, after
   the owner-profiled Chitubox/Elegoo Satellite remediation wave.
@@ -174,10 +175,15 @@ python tests/testing-scripts/slicing/orientation_visibility_test_runner.py
   request rotation composition, success, and `MODEL_OUT_OF_PRINTER_BOUNDS`
   parity.
 - Every normal fixture must pass `prusa-slicer --info` immediately before the
-  row. The deliberate zero-normal regression is separate: it must succeed on
-  the sliceable path with `original_dimensions_available:false` and
-  `original_dimensions_mm:null`; its preserve diagnostic row proves controlled
-  `MODEL_DIMENSIONS_UNAVAILABLE` rather than a bare 500.
+  row. The deliberate zero-normal regression is a legal binary STL with SHA-256
+  `60affa17c1470817223a10f1d39475e437090d696ece969a87b06d3bf1c7721bb`.
+  Exact J2 image
+  `sha256:0d81837cdd5c3b56383580eb28df799686103bb4663a9f4016e9fbc89e4e31ea`
+  returned HTTP 200 on Prusa and Orca. Exact local B returned HTTP 200 for both
+  engines in `auto` and `preserve`, with
+  `original_dimensions_available:false` and `original_dimensions_mm:null`.
+  It is separate from normal fixture preconditions and does not stand in for an
+  unavailable-oriented-dimension test.
 - The native-info probe defaults to the host executable. Exact-container use may
   provide only a bounded fixture-addressing JSON argv template through
   `--native-info-command-json` or `SLICER_NATIVE_INFO_COMMAND_JSON`; execution is
@@ -198,7 +204,8 @@ python tests/testing-scripts/slicing/orientation_visibility_test_runner.py
   free of filenames, paths, keys, customer data, and private network identity.
   Always read
   `tests/testing-scripts/results/orientation_visibility_test_result.md` after
-  execution.
+  execution. Exact local B passed 12/12 fixture checks, 4/4 selector checks, and
+  all 37/37 HTTP cases. The owner VPS rerun remains `PENDING_OWNER`.
 
 ## J3B native-envelope sweep contract
 
@@ -226,12 +233,19 @@ python tests/testing-scripts/slicing/native_envelope_sweep_runner.py
   10/10 brackets, and 2/2 combined corners. It established Prusa
   `350/320/324.9` and Orca `347.9/317.9/324.9`; at layer height `0.3`, `325`
   returned the full K2 HTTP 422 twice on each engine after the exact conjunctive
-  last-layer classifier. Final-admission B remains pending.
+  last-layer classifier. Exact local final-admission B passed 88/88 fixture
+  preconditions, 20/20 brackets, and 4/4 combined corners, confirming P1S
+  Prusa `256/256/249.9`, P1S Orca `253.9/253.9/249.9`, H2D-QUOTE Prusa
+  `350/320/324.9`, and H2D-QUOTE Orca `347.9/317.9/324.9`.
+- Exact local B also proved Orca `253 x 253 x 20 mm`, preserve, `0.3 mm` at
+  `456.33 g`. Its `249 x 100 x 20 mm` Orca outer-wall G-code footprint matches
+  exact J2 at `248.600 x 99.600 mm`, 500 segments, and bounds
+  `x=3.700..252.300`, `y=78.200..177.800`.
 - Read `results/native_envelope_sweep_measurement_result.md` after the native-
   measurement phase and `results/native_envelope_sweep_result.md` after final
-  admission. Keep the generated measurement report local and uncommitted; the
-  sanitized evidence belongs in `docs/codex/evidence`. A source/unit run is not
-  exact-image, hosted, deployed, or VPS evidence.
+  admission. Keep both generated reports local and uncommitted; the sanitized
+  evidence belongs in `docs/codex/evidence`. Exact local image proof is not
+  hosted, deployed, or owner-VPS evidence.
 
 ## Local Rules
 

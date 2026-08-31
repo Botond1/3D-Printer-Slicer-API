@@ -52,7 +52,9 @@ This document describes the application runtime inside app/.
     `253.9 x 253.9 x 249.9 mm`; exact helper-image measurement A established
     H2D-sized quote values as Prusa `350 x 320 x 324.9 mm` and Orca
     `347.9 x 317.9 x 324.9 mm`. Prusa native X/Y beyond the declared quote bed
-    remains `UNESTABLISHED`; final-admission B is still pending.
+    remains `UNESTABLISHED`. Exact local final-admission B confirmed all four
+    published tuples with 88/88 fixture preconditions, 20/20 brackets, and 4/4
+    corners.
 - app/config/resource-policy.js
   - Treats an omitted `MAX_CONCURRENT_SLICES` as default `1` and accepts an
     explicit value only as a canonical positive decimal integer in `1..3`.
@@ -308,8 +310,10 @@ This document describes the application runtime inside app/.
   - Current P1S ceilings are Prusa `256 x 256 x 249.9 mm` and Orca
     `253.9 x 253.9 x 249.9 mm`. H2D-QUOTE measurement A established Prusa
     `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`; the exact
-    Prusa X/Y edge beyond its declared quote bed remains `UNESTABLISHED`, and the
-    final-admission-B matrix remains pending. Catalogue failure never gates slicing.
+    Prusa X/Y edge beyond its declared quote bed remains `UNESTABLISHED`.
+    Exact local final-admission B passed its 88/88 fixture, 20/20 bracket, 4/4
+    corner, 9/9 catalogue, and optional Prusa digest-parity gates. Catalogue
+    failure never gates slicing.
 - app/services/slice/response.js
   - Composes successful slice response payloads and refuses success without a
     lowercase 64-hex `profiles.effective_profile_sha256` or machine-readable
@@ -565,8 +569,8 @@ HTTP server defaults and inclusive bounds:
   exact inclusively named admission ceiling, and engine-scoped resolutions.
 - Keep `H2D-QUOTE` on both engines as P1S-derived quote-only physics. Never
   describe it as machine-accurate H2D output or production H2D G-code. Do not
-  promote the measured-A Prusa `350 x 320 x 324.9 mm` or Orca
-  `347.9 x 317.9 x 324.9 mm` values to final-admission-B or owner-VPS proof.
+  promote the exact local final-admission-B Prusa `350 x 320 x 324.9 mm` or
+  Orca `347.9 x 317.9 x 324.9 mm` values to owner-VPS proof.
 - Keep no-Origin service behavior and exact per-audience browser-origin allowlists.
 - Keep trust proxy fail closed and request-ID validation before observability/CORS.
 - Keep readiness diagnostics and metrics operations-scoped; never add

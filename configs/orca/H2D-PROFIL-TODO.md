@@ -42,9 +42,17 @@ passed:
 At layer height `0.3 mm`, `325 mm` returned the complete K2 HTTP 422 twice on
 each engine after the exact conjunctive last-layer classifier. Prusa's native
 X/Y edge beyond its declared profile remains `UNESTABLISHED`; measurement A
-does not extend the declared bed. Final-admission B against the exact final
-candidate image and the owner VPS matrix remain pending. The generated
-measurement report stays local and uncommitted.
+does not extend the declared bed.
+
+Exact local final-admission B used code-bearing source
+`47ae13397bb4537b4bb700b8c6bf3d9648364bdc` and image ID
+`sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`.
+Its matching revision label, non-root `999:999` identity, healthy state,
+read-only root, and host port bound only to localhost were verified. All 88 fixture
+preconditions, 20 brackets, and 4 combined corners passed, confirming the same
+Prusa `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm` inclusive
+tuples. The generated A and B reports stay local and uncommitted. The owner VPS
+matrix remains `PENDING_OWNER`.
 
 ## Existing generic machine-profile limitation
 

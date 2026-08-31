@@ -21,8 +21,13 @@ Canonical Codex knowledge:
 
 J3's production-identical owner matrix passed on exact tree `58c0ccb`, including
 artifact-level proof of the Orca `--allow-rotations=0` path. J3B does not reopen
-that orientation contract. H2D-QUOTE exact-image measurement A is complete;
-final-admission B and the owner VPS matrix remain pending.
+that orientation contract. H2D-QUOTE measurement A and exact local final-
+admission B are complete. B binds code-bearing SHA
+`47ae13397bb4537b4bb700b8c6bf3d9648364bdc` to exact image ID
+`sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`;
+the revision label matched, and the `999:999` container was healthy, read-only,
+with its host port bound only to localhost. The owner VPS matrix remains
+`PENDING_OWNER`.
 
 Success and full K2 HTTP 422 `MODEL_OUT_OF_PRINTER_BOUNDS` use
 `transform_schema: 2`. Both always include mandatory
@@ -56,10 +61,14 @@ image measurement A passed 44/44 fixture preconditions, 10/10 brackets, and
 `347.9 x 317.9 x 324.9 mm`; Prusa's native X/Y edge beyond its declared profile
 remains `UNESTABLISHED`. At layer height `0.3 mm`, `325 mm` returned the full K2
 HTTP 422 twice on each engine after the exact conjunctive last-layer classifier.
-Final-admission B remains pending. Normal sweep fixtures require outward non-zero
-facet normals and an immediate native `prusa-slicer --info` precondition; the
-zero-normal regression remains a separate row. The orientation HTTP matrix has
-37 cases and retains all section-0 rows, including `20 x 240 x 245 mm` auto
+Final-admission B then passed 88/88 fixture preconditions, 20/20 brackets, and
+4/4 corners with the same four published P1S/H2D tuples. Catalogue validation
+passed 9/9 with optional Prusa digest parity run and passed. Normal sweep
+fixtures require outward non-zero facet normals and an immediate native
+`prusa-slicer --info` precondition. The separate legal binary zero-normal
+regression returned HTTP 200 on Prusa and Orca in exact J2 and B; B reported
+schema-2 original availability false/null. The orientation matrix passed 12/12
+fixture checks, 4/4 selectors, and all 37 HTTP cases, retaining `20 x 240 x 245 mm` auto
 with zero request transform, `18 x 130 x 240 mm` exact auto replay, preserve
 plus X90, and invalid `sideways`. The A/B envelope sweep refuses to start until
 `GET /profiles` exactly identifies the requested measurement/final-admission

@@ -2,7 +2,8 @@
 
 Date: 2026-08-31
 Branch basis: `codex/j3-orientation-visibility`
-Repository state: uncommitted corrective candidate
+Repository state: locally validated J3B corrective candidate; code-bearing SHA:
+`47ae13397bb4537b4bb700b8c6bf3d9648364bdc`
 Scope authority: `prompts/codex/J3B-native-envelope-and-original-dimensions.md`
 
 ## Classification
@@ -10,9 +11,9 @@ Scope authority: `prompts/codex/J3B-native-envelope-and-original-dimensions.md`
 `J3_OWNER_CONTAINER_MATRIX_VERIFIED_EXACT_58C0CCB;
 J3B_SCHEMA_OWNER_APPROVED;
 J3B_SOURCE_IMPLEMENTATION_PRESENT;
-J3B_LOCAL_VALIDATION_IN_PROGRESS;
+J3B_LOCAL_VALIDATION_COMPLETE;
 J3B_H2D_MEASUREMENT_A_EXACT_IMAGE_VERIFIED;
-J3B_FINAL_ADMISSION_B_PENDING;
+J3B_LOCAL_EXACT_IMAGE_FINAL_ADMISSION_B_VERIFIED;
 J3B_OWNER_VPS_MATRIX_PENDING;
 ZERO_CUSTOMER_EXPOSURE;
 NO_MERGE_NO_DEPLOY_NO_ROUTE_MUTATION`.
@@ -150,9 +151,48 @@ passed and `325 mm` returned the complete K2 HTTP 422
 net after the exact conjunctive last-layer classifier. The one published Z is
 therefore the strictest offered-layer value, `324.9 mm`.
 
-This closes only exact-image measurement A. Final-admission B must still prove
-the published largest-passing catalogue and response limits on the exact final
-candidate image; its report is pending.
+This closes exact-image measurement A. Its evidence remains distinct from the
+final-admission B proof below.
+
+## Exact local final-admission B
+
+Final-admission B used exact code-bearing source
+`47ae13397bb4537b4bb700b8c6bf3d9648364bdc` and image ID
+`sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`.
+The image revision label matched that source. Runtime inspection verified the
+non-root `999:999` identity, healthy state, read-only root filesystem, and
+host port bound only to localhost.
+
+| Evidence item | Result |
+| --- | --- |
+| Native fixture preconditions | 88/88 pass |
+| Largest-pass/next-rejection brackets | 20/20 pass |
+| Repeated combined X/Y corners | 4/4 pass |
+| Catalogue assertions | 9/9 pass |
+| Optional Prusa effective-profile digest parity | RUN / PASS |
+
+The B `/profiles` phase guard and every response-bound `max`/`source_profile`
+check confirmed the published tuples:
+
+| Selector | Largest passing X/Y/Z (mm) |
+| --- | --- |
+| Prusa P1S | 256 / 256 / 249.9 |
+| Orca P1S | 253.9 / 253.9 / 249.9 |
+| Prusa H2D-QUOTE | 350 / 320 / 324.9 |
+| Orca H2D-QUOTE | 347.9 / 317.9 / 324.9 |
+
+Prusa native X/Y beyond its declared profiles remains `UNESTABLISHED`; the B
+admission proof does not turn request-prevalidation rejection into a native-
+edge measurement. At layer `0.3 mm`, `325 mm` again returned the complete K2
+HTTP 422 twice on each engine after the exact conjunctive last-layer classifier.
+
+The exact local B orientation report also passed 12/12 fixture checks, 4/4
+selector checks, and all 37/37 HTTP cases. It therefore covers the restored
+section-0 rows, schema-2 success and K2 contracts, canonical positive
+oriented/final dimensions, the success height invariant, and the separate
+zero-normal regression described below. The controlled
+`MODEL_DIMENSIONS_UNAVAILABLE` oriented/final failure branch is source/unit-
+tested; the exact-image B HTTP matrix does not inject that condition.
 
 ## Fixture integrity and verification matrix
 
@@ -162,9 +202,28 @@ Every normal HTTP matrix row is preceded immediately by native
 precondition, not optional diagnostics. This prevents a malformed fixture from
 being reported as a service defect.
 
-The zero-normal ASCII mesh is deliberately retained as a separate regression
-row. It verifies schema-2 degradation and controlled unavailable-dimension
-behavior; it is not part of the normal orientation/envelope matrix.
+The zero-normal regression is a legal binary STL with SHA-256
+`60affa17c1470817223a10f1d39475e437090d696ece969a87b06d3bf1c7721bb`.
+Its 684-byte binary structure is exactly the 84-byte header/count prefix plus
+12 facet records; all 12 triangles are non-degenerate, every stored normal is
+zero, and the payload has no ASCII `solid` prefix. Native `prusa-slicer --info`
+rejection is deliberate, so it is excluded from the normal-fixture acceptance
+precondition.
+Exact J2 source `9b28b95c` image
+`sha256:0d81837cdd5c3b56383580eb28df799686103bb4663a9f4016e9fbc89e4e31ea`
+returned HTTP 200 on Prusa and Orca. Exact local B returned HTTP 200 for both
+engines in `auto` and `preserve` and exposed `transform_schema: 2`,
+`original_dimensions_available:false`, and `original_dimensions_mm:null`.
+This proves explicit degradation without reintroducing the J3 bare-500
+regression; it is not an oriented-dimensions-unavailable case.
+
+Two additional Orca regressions preserve pre-J3B behavior while exercising the
+new envelope:
+
+- `253 x 253 x 20 mm`, preserve, layer `0.3 mm` reports `456.33 g`;
+- `249 x 100 x 20 mm`, preserve, has the same B and exact-J2 outer-wall G-code
+  footprint: `248.600 x 99.600 mm`, 500 segments, with bounds
+  `x=3.700..252.300` and `y=78.200..177.800`.
 
 Repository runners:
 
@@ -196,18 +255,23 @@ Reports to read after execution:
 - `tests/testing-scripts/results/native_envelope_sweep_measurement_result.md`;
 - `tests/testing-scripts/results/native_envelope_sweep_result.md`.
 
-The measurement-A report was read and its sanitized facts are recorded above;
-the generated report remains local and uncommitted. The final-admission-B
-report is not yet available. The complete J3B VPS matrix, including the zero-
-normal row and enlarged-envelope sweeps, is `PENDING_OWNER`. Measurement A and
-repository source/unit results must not be promoted to final-B, hosted,
-deployed, owner-VPS, or live proof.
+The measurement-A, final-admission-B, and orientation reports were read and
+their sanitized facts are recorded above; all three generated reports remain
+local and uncommitted.
+The complete J3B VPS matrix, including the zero-normal row and enlarged-
+envelope sweeps, is `PENDING_OWNER`. Exact local B must not be promoted to
+hosted, deployed, owner-VPS, or live proof.
 
 ## Local source and documentation validation
 
-Observed on 2026-08-31 against the shared uncommitted corrective candidate:
+Observed on 2026-08-31 against the frozen local J3B evidence tree rooted at
+code-bearing SHA `47ae13397bb4537b4bb700b8c6bf3d9648364bdc`:
 
-- complete JavaScript aggregate: 2377/2377 pass;
+- `SUPERSEDED_NONSTABLE_RUN`: one full `npm test` invocation while
+  documentation files were still changing returned exit 1 without a complete
+  reporter summary; it was retained and was not relabeled as a pass;
+- stable standalone JavaScript aggregate: 2377/2377 pass;
+- post-freeze full `npm test`: exit 0;
 - complete Python aggregate: 166 discovered/run, 165 pass and one expected
   Windows POSIX-permission skip;
 - tracked syntax: 262 JavaScript and 46 Python files pass;
@@ -216,12 +280,13 @@ Observed on 2026-08-31 against the shared uncommitted corrective candidate:
 - relative Markdown targets: 216/216 pass across the 17 synchronized
   documentation files;
 - documentation audit: 76 in-scope Markdown files scanned, 17 J3B/H2D surfaces
-  identified, and zero stale measurement-A-pending or contradictory claims.
+  identified, and zero stale measurement-A/final-B-pending or contradictory
+  claims.
 
 These are local source/documentation results only. This documentation pass did
-not execute or rewrite either generated runner report. Exact-image measurement
-A is recorded separately above; final-admission B and the owner VPS matrix
-remain pending.
+not execute or rewrite any generated runner report. Exact-image measurement A
+and exact local final-admission B are recorded separately above; only the owner
+VPS matrix remains `PENDING_OWNER`.
 
 ## Consumer, exposure, and release boundary
 
@@ -238,5 +303,6 @@ The owner decided that J2, J3, and J3B ship together through one merge and one
 deploy only after J3B verification. This repository wave does not authorize
 that merge or deploy. It also authorizes no registry publication, public-route,
 DNS, firewall/allowlist, customer-traffic, or consumer-repository mutation.
+No push, registry publication, or deploy occurred in this evidence wave.
 No credential value, private host/network identity, or customer path is part of
 this evidence record.

@@ -6,27 +6,33 @@ Current classification:
 `J3_OWNER_CONTAINER_MATRIX_VERIFIED_EXACT_58C0CCB;
 J3B_SCHEMA_OWNER_APPROVED;
 J3B_SOURCE_IMPLEMENTATION_PRESENT;
-J3B_LOCAL_VALIDATION_IN_PROGRESS;
+J3B_LOCAL_VALIDATION_COMPLETE;
 J3B_H2D_MEASUREMENT_A_EXACT_IMAGE_VERIFIED;
-J3B_FINAL_ADMISSION_B_PENDING;
+J3B_LOCAL_EXACT_IMAGE_FINAL_ADMISSION_B_VERIFIED;
 J3B_OWNER_VPS_MATRIX_PENDING;
 J3B_NO_MERGE_NO_DEPLOY_NO_ROUTE_MUTATION`.
 
 | Control | Current classification | Fail-closed boundary |
 | --- | --- | --- |
-| Original-measurement truth | `OWNER_APPROVED; SOURCE_IMPLEMENTED; VALIDATION_IN_PROGRESS` | Schema 2 always carries `original_dimensions_available` and nullable `original_dimensions_mm` on success and full K2 bounds failure. True means a canonical real measurement object whose finite non-negative `height_mm == z`; false means null. A malformed tagged original degrades to false/null and no oriented substitute is permitted, so degradation is explicit instead of quietly mislabeled. |
-| Load-bearing geometry | `OWNER_APPROVED; SOURCE_IMPLEMENTED; VALIDATION_IN_PROGRESS` | Oriented and final dimensions drive bounds and success metrics. Missing, malformed tagged, non-finite, non-positive, or `height_mm != z` values return controlled HTTP 422 `MODEL_DIMENSIONS_UNAVAILABLE`; success unconditionally requires `stats.object_height_mm == final_dimensions_mm.z`. |
-| Native placement/volume rejection | `SOURCE_IMPLEMENTED; MEASUREMENT_A_EXACT_IMAGE_VERIFIED; FINAL_B_PENDING` | Only explicit native placement/print-volume diagnostics map to HTTP 422 `MODEL_OUT_OF_PRINTER_BOUNDS`. Failed commands preserve bounded stdout independently from stderr so either can carry the diagnostic. A Prusa exit-zero/no-artifact result maps only when its retained output explicitly reports placement refusal. The response carries the complete K2 schema-2 transform; unrelated failures remain internal. At `0.3 mm`, `325 mm` returned that full K2 422 twice on each engine after the exact conjunctive last-layer classifier. |
-| Inclusive admission catalogue | `OWNER_ACCEPTED_P1S; H2D_MEASUREMENT_A_VERIFIED; FINAL_B_PENDING` | `r3d-profile-catalogue-v2` separates physical/profile-declared dimensions from `largest_passing_dimensions_inclusive_mm`, the exact-boundary-inclusive admission authority. P1S is Prusa `256 x 256 x 249.9 mm` and Orca `253.9 x 253.9 x 249.9 mm`. Measurement A established H2D-QUOTE Prusa `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`; Prusa native X/Y beyond either declared profile remains `UNESTABLISHED`. Machine and fleet derivation is per engine, never cross-engine minimization. |
-| H2D-sized quoting chain | `SOURCE_IMPLEMENTED_BOTH_ENGINES; MEASUREMENT_A_EXACT_IMAGE_VERIFIED; FINAL_B_PENDING` | H2D-QUOTE derives from P1S physics and only enlarges the declared bed to `350 x 320 x 325 mm`. It is quote-only, not machine-accurate and not production H2D G-code. The plugin calls only `POST /prusa/slice`, so the Prusa path is mandatory. Exact helper-image measurement A passed 44/44 fixture preconditions, 10/10 brackets, and 2/2 combined corners. |
-| Fixture integrity | `MEASUREMENT_A_44_OF_44_PASS; OWNER_MATRIX_PENDING` | Normal fixtures require outward non-zero facet normals plus immediate native `prusa-slicer --info` dimension validation. The deliberately zero-normal mesh is a separate regression row and cannot be reported as a normal service defect. |
-| Exact-phase runner binding | `MEASUREMENT_A_PHASE_VERIFIED; FINAL_B_PENDING` | The 37-case orientation matrix restores all section-0 rows. Its configurable native-info command is a bounded no-shell JSON argv template and the report retains only a source label. The envelope measurement-A/final-admission-B lanes require an exact `/profiles` phase match before slicing, then bind each response to the exact expected `max` and actual bounds `source_profile` (Prusa selected layer profile; Orca machine profile, not process). Measurement A passed its exact phase guard; final-admission B has not run. |
+| Original-measurement truth | `OWNER_APPROVED; SOURCE_IMPLEMENTED; LOCAL_SOURCE_TESTED; EXACT_IMAGE_FALSE_NULL_VERIFIED` | Schema 2 always carries `original_dimensions_available` and nullable `original_dimensions_mm` on success and full K2 bounds failure. True means a canonical real measurement object whose finite non-negative `height_mm == z`; false means null. A malformed tagged original degrades to false/null and no oriented substitute is permitted, so degradation is explicit instead of quietly mislabeled. Exact-image B proves the real unavailable-measurement false/null path; malformed-tag injection remains source/unit evidence. |
+| Load-bearing geometry | `OWNER_APPROVED; SOURCE_IMPLEMENTED; LOCAL_SOURCE_TESTED` | Oriented and final dimensions drive bounds and success metrics. Missing, malformed tagged, non-finite, non-positive, or `height_mm != z` values return controlled HTTP 422 `MODEL_DIMENSIONS_UNAVAILABLE`; success unconditionally requires `stats.object_height_mm == final_dimensions_mm.z`. The exact-image B HTTP matrix proves positive canonical dimensions and the success height invariant, but does not inject this unavailable-dimension failure branch. |
+| Native placement/volume rejection | `SOURCE_IMPLEMENTED; MEASUREMENT_A_EXACT_IMAGE_VERIFIED; FINAL_B_EXACT_IMAGE_VERIFIED` | Only explicit native placement/print-volume diagnostics map to HTTP 422 `MODEL_OUT_OF_PRINTER_BOUNDS`. Failed commands preserve bounded stdout independently from stderr so either can carry the diagnostic. A Prusa exit-zero/no-artifact result maps only when its retained output explicitly reports placement refusal. The response carries the complete K2 schema-2 transform; unrelated failures remain internal. At `0.3 mm`, `325 mm` returned that full K2 422 twice on each engine after the exact conjunctive last-layer classifier. |
+| Inclusive admission catalogue | `OWNER_ACCEPTED_P1S; H2D_MEASUREMENT_A_VERIFIED; FINAL_B_EXACT_IMAGE_VERIFIED` | `r3d-profile-catalogue-v2` separates physical/profile-declared dimensions from `largest_passing_dimensions_inclusive_mm`, the exact-boundary-inclusive admission authority. P1S is Prusa `256 x 256 x 249.9 mm` and Orca `253.9 x 253.9 x 249.9 mm`. Measurement A and final-admission B established H2D-QUOTE Prusa `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`; Prusa native X/Y beyond either declared profile remains `UNESTABLISHED`. Machine and fleet derivation is per engine, never cross-engine minimization. |
+| H2D-sized quoting chain | `SOURCE_IMPLEMENTED_BOTH_ENGINES; MEASUREMENT_A_EXACT_IMAGE_VERIFIED; FINAL_B_EXACT_IMAGE_VERIFIED` | H2D-QUOTE derives from P1S physics and only enlarges the declared bed to `350 x 320 x 325 mm`. It is quote-only, not machine-accurate and not production H2D G-code. The plugin calls only `POST /prusa/slice`, so the Prusa path is mandatory. Exact helper-image measurement A passed 44/44 fixture preconditions, 10/10 brackets, and 2/2 combined corners; exact local B passed 88/88, 20/20, and 4/4. |
+| Fixture integrity | `MEASUREMENT_A_44_OF_44_PASS; FINAL_B_88_OF_88_PASS; OWNER_MATRIX_PENDING` | Normal fixtures require outward non-zero facet normals plus immediate native `prusa-slicer --info` dimension validation. The deliberately zero-normal legal binary STL is a separate regression row: exact J2 and exact local B returned HTTP 200 on both engines, and B reports schema-2 false/null original provenance. It cannot be reported as a normal service defect. |
+| Exact-phase runner binding | `MEASUREMENT_A_PHASE_VERIFIED; FINAL_B_PHASE_VERIFIED` | The 37-case orientation matrix restores all section-0 rows. Its configurable native-info command is a bounded no-shell JSON argv template and the report retains only a source label. The envelope measurement-A/final-admission-B lanes require an exact `/profiles` phase match before slicing, then bind each response to the exact expected `max` and actual bounds `source_profile` (Prusa selected layer profile; Orca machine profile, not process). Measurement A passed its exact phase guard; final B passed 88/88 fixture, 20/20 bracket, 4/4 corner, and 9/9 catalogue checks plus optional Prusa digest parity. |
 | Exposure and release boundary | `ZERO_CUSTOMER_EXPOSURE; NO_CURRENT_RELEASE_AUTHORITY` | The plugin has no production deployment/traffic and LeadPilot slicing is not enabled. The owner chose one merge and one deploy for J2+J3+J3B after verification, but this wave authorizes neither. Registry publication, deploy, public-route/DNS/allowlist mutation, consumer-repository changes, and customer traffic remain out of scope. |
 
 J3's production-identical owner matrix passed on exact tree `58c0ccb`, including
 artifact-level G-code proof of `--allow-rotations=0`; J3B does not reopen that
-contract. J3B exact-image H2D measurement A is complete; final-admission B and
-the owner VPS matrix remain separate pending gates. See
+contract. J3B exact-image H2D measurement A and exact local final-admission B
+are complete. B binds source
+`47ae13397bb4537b4bb700b8c6bf3d9648364bdc` to image
+`sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`,
+matching revision label, non-root `999:999`, healthy/read-only runtime, and
+host port bound only to localhost. Its orientation report passed 12/12 fixture, 4/4
+selector, and 37/37 HTTP checks. The owner VPS matrix remains the separate
+`PENDING_OWNER` gate. See
 [`evidence/j3b-native-envelope-and-original-dimensions.md`](evidence/j3b-native-envelope-and-original-dimensions.md).
 
 ## Historical J3 orientation-visibility and transform-provenance control delta
@@ -53,7 +59,7 @@ JavaScript tests, 132 Python tests with 131 pass plus one expected Windows
 POSIX-permission skip, syntax over 259 JavaScript and 44 Python files, 37/37
 staged safety paths, and zero production dependency vulnerabilities.
 The owner later passed the full historical J3 matrix on exact tree `58c0ccb`;
-the J3B runner and report remain `PENDING_OWNER`. See
+the J3B owner-VPS rerun and its report remain `PENDING_OWNER`. See
 [`evidence/j3-orientation-visibility.md`](evidence/j3-orientation-visibility.md).
 
 ## Historical J2 bounds, catalogue, private-route, and calibration control delta

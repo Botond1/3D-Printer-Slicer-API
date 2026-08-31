@@ -149,9 +149,10 @@ Last synchronized: 2026-08-31
   both engines with P1S physics and enlarged declared bed
   `350 x 320 x 325 mm`; it is quote-only, not machine-accurate or production
   H2D G-code. Exact helper-image measurement A established Prusa
-  `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`; final-admission B
-  remains pending, and Prusa native X/Y beyond its declared quote bed remains
-  `UNESTABLISHED`. Never advertise the generic
+  `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`; exact local
+  final-admission B confirmed those tuples with 88/88 fixture preconditions,
+  20/20 brackets, and 4/4 corners. Prusa native X/Y beyond its declared quote
+  bed remains `UNESTABLISHED`. Never advertise the generic
   `120 x 120 x 150 mm` SLA fallback as a printer envelope. Catalogue v2 can add
   a later truthful SLA row and independent per-engine SLA fleet resolution
   without another schema-version change.

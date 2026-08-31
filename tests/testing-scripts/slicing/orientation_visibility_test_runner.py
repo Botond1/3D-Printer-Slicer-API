@@ -3,7 +3,7 @@
 The runner creates synthetic STL cuboids in a private temporary directory,
 independently measures the vertices written to disk, and qualifies every normal
 fixture with the exact native ``prusa-slicer --info`` path before each service
-row.  A separate ASCII zero-normal fixture deliberately fails that native
+row.  A separate binary zero-normal fixture deliberately fails that native
 metadata read while remaining repairable by automatic orientation.  Reports
 never retain the selected host, credentials, native output, response bodies,
 or temporary paths.
@@ -17,6 +17,7 @@ import json
 import math
 import os
 import re
+import struct
 import subprocess
 import sys
 import tempfile
@@ -137,6 +138,7 @@ class OrientationCase:
     orientation_mode: str | None
     expected_status: int
     require_auto_applied: bool | None = None
+    layer_height: float = LAYER_HEIGHT
     requested_rotation_deg: tuple[float, float, float] = (0.0, 0.0, 0.0)
     expected_original_dimensions_available: bool | None = True
     expected_error_code: str | None = None
@@ -204,6 +206,7 @@ class CaseResult:
     requested_mode: str
     requested_rotation_deg: tuple[float, float, float]
     fixture_key: str
+    layer_height: float
     expected_status: int
     http_status: int
     error_code: str | None
@@ -227,7 +230,7 @@ FIXTURE_SPECS = (
     FixtureSpec(
         "j3b_zero_normal_60x60x240",
         (60.0, 60.0, 240.0),
-        "deliberate-zero-normal-ascii",
+        "deliberate-zero-normal-binary",
     ),
 )
 FIXTURE_SPEC_BY_KEY = {spec.key: spec for spec in FIXTURE_SPECS}
@@ -250,6 +253,7 @@ def _case(
     expected_final_dimensions_mm: tuple[float, float, float] | None = None,
     expected_automatic_rotation_matrix: tuple[tuple[float, float, float], ...] | None = None,
     expected_rotation_matrix: tuple[tuple[float, float, float], ...] | None = None,
+    layer_height: float = LAYER_HEIGHT,
 ) -> OrientationCase:
     return OrientationCase(
         key=key,
@@ -259,6 +263,7 @@ def _case(
         orientation_mode=orientation_mode,
         expected_status=expected_status,
         require_auto_applied=require_auto_applied,
+        layer_height=layer_height,
         requested_rotation_deg=requested_rotation_deg,
         expected_original_dimensions_available=expected_original_dimensions_available,
         expected_error_code=expected_error_code,
@@ -378,6 +383,7 @@ def build_cases() -> tuple[OrientationCase, ...]:
         _case(
             "orca-p1s-253x253-preserve-accepted",
             "orca", "P1S", "j3b_orca_253x253x20", "preserve", 200, False,
+            layer_height=0.3,
             expected_material_used_g=456.33,
         ),
         _case(
@@ -407,10 +413,9 @@ def build_cases() -> tuple[OrientationCase, ...]:
                 expected_original_dimensions_available=False,
             ),
             _case(
-                f"{engine}-zero-normal-preserve-oriented-unavailable",
-                engine, "P1S", zero_normal, "preserve", 422, None,
-                expected_original_dimensions_available=None,
-                expected_error_code="MODEL_DIMENSIONS_UNAVAILABLE",
+                f"{engine}-zero-normal-preserve-degraded-original",
+                engine, "P1S", zero_normal, "preserve", 200, False,
+                expected_original_dimensions_available=False,
             ),
         ])
     return tuple(cases)
@@ -480,24 +485,21 @@ def cuboid_ascii_stl(dimensions_mm: Sequence[float], solid_name: str) -> bytes:
     return ("\n".join(lines) + "\n").encode("ascii")
 
 
-def cuboid_ascii_zero_normal_stl(
+def cuboid_binary_zero_normal_stl(
     dimensions_mm: Sequence[float],
     solid_name: str,
 ) -> bytes:
-    """Reproduce the known ASCII fixture defect with twelve zero normals."""
+    """Reproduce the legal binary regression fixture with twelve zero normals."""
     if not solid_name or not all(
         character.isalnum() or character == "_" for character in solid_name
     ):
         raise ValueError("Cuboid fixture inputs are invalid.")
-    lines = [f"solid {solid_name}"]
+    header = (f"J3B zero-normal {solid_name}".encode("ascii")[:80]).ljust(80, b"\0")
+    facets = []
     for _, triangle in _cuboid_triangles(dimensions_mm):
-        lines.extend(("  facet normal 0 0 0", "    outer loop"))
-        for vertex in triangle:
-            coordinates = " ".join(_format_number(value) for value in vertex)
-            lines.append(f"      vertex {coordinates}")
-        lines.extend(("    endloop", "  endfacet"))
-    lines.append(f"endsolid {solid_name}")
-    return ("\n".join(lines) + "\n").encode("ascii")
+        values = (0.0, 0.0, 0.0, *(value for vertex in triangle for value in vertex))
+        facets.append(struct.pack("<12fH", *values, 0))
+    return header + struct.pack("<I", len(facets)) + b"".join(facets)
 
 
 def _read_ascii_facets(
@@ -567,6 +569,41 @@ def measure_ascii_stl(file_path: Path) -> dict[str, float]:
     ])
 
 
+def _read_binary_facets(
+    file_path: Path,
+) -> list[tuple[tuple[float, float, float], tuple[tuple[float, float, float], ...]]]:
+    """Parse the exact 12-facet binary fixture without trusting its declaration."""
+    try:
+        payload = file_path.read_bytes()
+    except OSError as error:
+        raise ValueError("Fixture is not a readable binary STL.") from error
+    if len(payload) < 84:
+        raise ValueError("Fixture contains a truncated binary STL header.")
+    facet_count = struct.unpack_from("<I", payload, 80)[0]
+    if facet_count != 12 or len(payload) != 84 + facet_count * 50:
+        raise ValueError("Fixture must contain exactly 12 binary triangles.")
+    facets = []
+    for index in range(facet_count):
+        values = struct.unpack_from("<12fH", payload, 84 + index * 50)
+        normal = tuple(float(value) for value in values[:3])
+        vertices = tuple(
+            tuple(float(value) for value in values[offset:offset + 3])
+            for offset in (3, 6, 9)
+        )
+        if any(not math.isfinite(value) for value in values[:12]):
+            raise ValueError("Fixture contains a non-finite binary STL value.")
+        facets.append((normal, vertices))
+    return facets
+
+
+def measure_binary_stl(file_path: Path) -> dict[str, float]:
+    """Measure the on-disk binary STL from parsed vertex coordinates."""
+    facets = _read_binary_facets(file_path)
+    return _measure_vertices([
+        vertex for _, facet_vertices in facets for vertex in facet_vertices
+    ])
+
+
 def _cross(left: Sequence[float], right: Sequence[float]) -> tuple[float, float, float]:
     return (
         left[1] * right[2] - left[2] * right[1],
@@ -605,9 +642,9 @@ def validate_ascii_outward_normals(file_path: Path) -> bool:
     return True
 
 
-def validate_ascii_zero_normals(file_path: Path) -> bool:
-    """Prove the regression fixture stores zero normals but real facets."""
-    for normal, vertices in _read_ascii_facets(file_path):
+def validate_binary_zero_normals(file_path: Path) -> bool:
+    """Prove the binary regression fixture stores zero normals but real facets."""
+    for normal, vertices in _read_binary_facets(file_path):
         if any(value != 0 for value in normal):
             return False
         edge_a = tuple(vertices[1][index] - vertices[0][index] for index in range(3))
@@ -816,9 +853,9 @@ def write_and_measure_fixtures(
             normals_valid = validate_ascii_outward_normals(fixture_path)
             native_expectation = "accepted-with-positive-requested-dimensions"
         else:
-            fixture_path.write_bytes(cuboid_ascii_zero_normal_stl(spec.dimensions_mm, spec.key))
-            measured = measure_ascii_stl(fixture_path)
-            normals_valid = validate_ascii_zero_normals(fixture_path)
+            fixture_path.write_bytes(cuboid_binary_zero_normal_stl(spec.dimensions_mm, spec.key))
+            measured = measure_binary_stl(fixture_path)
+            normals_valid = validate_binary_zero_normals(fixture_path)
             native_expectation = "deliberate-rejection"
         expected = _axis_map(spec.dimensions_mm)
         native_observation = native_info_probe(fixture_path)
@@ -1402,6 +1439,7 @@ def run_case(
                 requested_mode=case.orientation_mode or "default(auto)",
                 requested_rotation_deg=case.requested_rotation_deg,
                 fixture_key=case.fixture_key,
+                layer_height=case.layer_height,
                 expected_status=case.expected_status,
                 http_status=0,
                 error_code=None,
@@ -1417,7 +1455,7 @@ def run_case(
             base_url=base_url,
             endpoint=case.endpoint,
             file_path=fixture_path,
-            layer_height=LAYER_HEIGHT,
+            layer_height=case.layer_height,
             material=MATERIAL,
             slice_service_api_key=slice_service_api_key,
             extra_fields=build_request_fields(case),
@@ -1444,6 +1482,7 @@ def run_case(
         requested_mode=case.orientation_mode or "default(auto)",
         requested_rotation_deg=case.requested_rotation_deg,
         fixture_key=case.fixture_key,
+        layer_height=case.layer_height,
         expected_status=case.expected_status,
         http_status=status,
         error_code=error_code if isinstance(error_code, str) else None,
@@ -1484,10 +1523,10 @@ def write_report(
         "## Evidence boundary",
         "",
         "The fixtures are synthetic and are independently remeasured from their on-disk "
-        "ASCII STL vertices before use. Every normal matrix row reruns exact native "
+        "STL vertices before use. Every normal ASCII matrix row reruns exact native "
         "`prusa-slicer --info <synthetic-fixture>` and requires exit zero plus positive "
         "requested X/Y/Z within tolerance before the service result is evaluated. The "
-        "deliberate zero-normal ASCII regression fixture is separately required to be "
+        "deliberate zero-normal binary regression fixture is separately required to be "
         "rejected by that metadata command and is never admitted to the normal sweep "
         "precondition. This runner validates live HTTP responses and a completed native "
         "slice for HTTP 200 rows. It validates K3 by replaying the "
@@ -1529,8 +1568,8 @@ def write_report(
         "",
         "## HTTP matrix",
         "",
-        "| Case | Endpoint | Printer | Mode | Requested X/Y/Z (deg) | Fixture | Expected/actual | Error code | Result | Observation |",
-        "|:-----|:---------|:--------|:-----|:----------------------|:--------|:----------------|:-----------|:------:|:------------|",
+        "| Case | Endpoint | Printer | Layer (mm) | Mode | Requested X/Y/Z (deg) | Fixture | Expected/actual | Error code | Result | Observation |",
+        "|:-----|:---------|:--------|-----------:|:-----|:----------------------|:--------|:----------------|:-----------|:------:|:------------|",
     ])
     for result in results:
         error_code = result.error_code or "-"
@@ -1539,7 +1578,8 @@ def write_report(
         )
         lines.append(
             f"| `{result.key}` | `{result.endpoint}` | `{result.printer}` | "
-            f"`{result.requested_mode}` | `{requested_rotation}` | `{result.fixture_key}` | "
+            f"`{_format_number(result.layer_height)}` | `{result.requested_mode}` | "
+            f"`{requested_rotation}` | `{result.fixture_key}` | "
             f"`{result.expected_status}/{result.http_status}` | `{error_code}` | "
             f"{'PASS' if result.success else 'FAIL'} | `{result.observation}` |"
         )

@@ -6,9 +6,9 @@ Status:
 `J3_OWNER_CONTAINER_MATRIX_VERIFIED_EXACT_58C0CCB;
 J3B_SCHEMA_OWNER_APPROVED;
 J3B_SOURCE_IMPLEMENTATION_PRESENT;
-J3B_LOCAL_VALIDATION_IN_PROGRESS;
+J3B_LOCAL_VALIDATION_COMPLETE;
 J3B_H2D_MEASUREMENT_A_EXACT_IMAGE_VERIFIED;
-J3B_FINAL_ADMISSION_B_PENDING;
+J3B_LOCAL_EXACT_IMAGE_FINAL_ADMISSION_B_VERIFIED;
 J3B_OWNER_VPS_MATRIX_PENDING;
 J3B_NO_MERGE_NO_DEPLOY_NO_ROUTE_MUTATION`.
 
@@ -66,18 +66,37 @@ Exact-image measurement A exit evidence:
 - `325 mm` at `0.3 mm` returned the full K2 HTTP 422 twice on each engine after
   the exact conjunctive last-layer classifier.
 
+Exact local final-admission B exit evidence:
+
+- code-bearing source `47ae13397bb4537b4bb700b8c6bf3d9648364bdc`;
+- image ID
+  `sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`,
+  with matching revision label, non-root `999:999`, healthy/read-only runtime,
+  and a host port bound only to localhost;
+- 88/88 fixture preconditions, 20/20 brackets, and 4/4 combined corners pass;
+- published tuples confirmed: P1S Prusa `256/256/249.9`, P1S Orca
+  `253.9/253.9/249.9`, H2D-QUOTE Prusa `350/320/324.9`, and H2D-QUOTE Orca
+  `347.9/317.9/324.9`;
+- catalogue 9/9 and optional Prusa digest parity run/pass;
+- orientation 12/12 fixture checks, 4/4 selectors, and 37/37 HTTP cases pass;
+- the legal binary zero-normal fixture returns HTTP 200 on exact J2 and exact B
+  for both engines; B exposes schema-2 false/null original provenance;
+- exact B Orca `253 x 253 x 20 mm`, preserve, layer `0.3` reports `456.33 g`,
+  while the `249 x 100 x 20 mm` outer-wall G-code footprint matches J2 at
+  `248.600 x 99.600 mm`, 500 segments, and bounds `x=3.700..252.300`,
+  `y=78.200..177.800`.
+
+Completed local exit: the focused/aggregate, syntax, repository-safety, and
+evidence gates passed without shortening the matrix.
+
 Remaining exits:
 
-1. Run final-admission B against the exact final candidate image and published
-   H2D-QUOTE limits. Do not promote measurement-A evidence to this pending gate.
-2. Complete the local focused/aggregate, syntax, repository-safety, and evidence
-   gates without shortening the matrix.
-3. The owner reruns the full corrective matrix on the VPS, including the
+1. The owner reruns the full corrective matrix on the VPS, including the
    zero-normal row, P1S ceiling cases, and enlarged-envelope sweeps. Keep it
    `PENDING_OWNER` until the generated reports are read.
-4. Preserve zero-customer-exposure truth: the plugin has no production
+2. Preserve zero-customer-exposure truth: the plugin has no production
    deployment/traffic and LeadPilot slicing is not enabled.
-5. The owner chose one merge and one deploy for J2+J3+J3B after verification.
+3. The owner chose one merge and one deploy for J2+J3+J3B after verification.
    This plan authorizes neither merge nor deploy, and grants no registry,
    public-route, DNS/allowlist, consumer-repository, or customer-traffic action.
 

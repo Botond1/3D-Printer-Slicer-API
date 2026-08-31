@@ -133,14 +133,29 @@ measuring Prusa `350 x 320 x 324.9 mm` and Orca
 `347.9 x 317.9 x 324.9 mm`. At layer height `0.3 mm`, `325 mm` returned the
 complete K2 HTTP 422 twice on each engine after the exact conjunctive last-layer
 classifier. Prusa's native X/Y edge beyond its declared quote bed remains
-`UNESTABLISHED`. Final-admission B remains pending.
+`UNESTABLISHED`.
+
+Exact local final-admission B binds code-bearing SHA
+`47ae13397bb4537b4bb700b8c6bf3d9648364bdc` to image ID
+`sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`.
+The revision label matched; the `999:999` container was healthy and read-only,
+with its host port bound only to localhost. B passed 88/88 fixture preconditions, 20/20
+largest-pass/next-rejection brackets, and 4/4 combined corners. It confirmed
+the published tuples: Prusa P1S `256/256/249.9`, Orca P1S
+`253.9/253.9/249.9`, Prusa H2D-QUOTE `350/320/324.9`, and Orca H2D-QUOTE
+`347.9/317.9/324.9`.
 
 Normal generated fixtures use valid outward non-zero facet normals and must
 pass an immediate `prusa-slicer --info` precondition before a service row runs.
-The deliberate zero-normal regression fixture is a separate row and verifies
-the schema-v2 unavailable-original path. Measurement A is complete; the
-final-admission-B matrix and owner's final VPS matrix remain pending. Customer exposure is currently zero:
-the plugin is not deployed and LeadPilot slicing is disabled. The owner chose
+The deliberate zero-normal regression is a legal binary STL with SHA-256
+`60affa17c1470817223a10f1d39475e437090d696ece969a87b06d3bf1c7721bb`.
+It returned HTTP 200 on Prusa and Orca in exact J2 image
+`sha256:0d81837cdd5c3b56383580eb28df799686103bb4663a9f4016e9fbc89e4e31ea`
+and again in B, where schema 2 explicitly reported
+`original_dimensions_available:false` and `original_dimensions_mm:null`.
+The owner's final VPS matrix remains `PENDING_OWNER`. Customer exposure is
+currently zero: the plugin is not deployed and LeadPilot slicing is disabled.
+The owner chose
 one merge and one deploy for J2+J3+J3B after verification, but this work
 authorizes neither merge nor deploy. See the
 [J3B evidence boundary](docs/codex/evidence/j3b-native-envelope-and-original-dimensions.md).
@@ -152,7 +167,16 @@ preserve mode plus requested X90, and the invalid `sideways` request. The
 native-envelope runner has separate measurement-A and final-admission-B modes;
 before either sweep it requires an exact catalogue-v2 `/profiles` phase match,
 and every success or K2 response must carry the expected exact `max` and
-`source_profile`.
+`source_profile`. Exact local B passed 12/12 orientation fixture checks, 4/4
+selectors, and 37/37 HTTP rows. Catalogue validation passed 9/9, and the
+optional Prusa live-slice digest parity lane was run and passed.
+
+Two artifact checks protect against quiet Orca regressions. A preserve-mode
+`253 x 253 x 20 mm` model at layer height `0.3 mm` produced `456.33 g`. For a
+preserve-mode `249 x 100 x 20 mm` model, B and exact J2 produced the same outer-
+wall G-code footprint: `248.600 x 99.600 mm`, 500 segments, with X bounds
+`3.700..252.300` and Y bounds `78.200..177.800`. These are exact local checks,
+not owner-VPS or deployment proof.
 
 ### Historical J3 orientation visibility and total-rotation checkpoint
 
@@ -1008,7 +1032,8 @@ The current P1S engine rows publish Prusa `256 x 256 x 249.9 mm` and Orca
 `253.9 x 253.9 x 249.9 mm`. Exact helper-image measurement A established the
 H2D-sized quote values as Prusa `350 x 320 x 324.9 mm` and Orca
 `347.9 x 317.9 x 324.9 mm`. Prusa beyond its declared quote-bed X/Y remains
-`UNESTABLISHED`; final-admission B remains pending.
+`UNESTABLISHED`; exact local final-admission B confirmed all four published
+P1S/H2D engine tuples.
 
 Catalogue v2 remains FDM-only and never publishes the generic
 `120 x 120 x 150 mm` SLA fallback as a machine envelope. The owner-confirmed
@@ -1370,13 +1395,17 @@ implied.
   Normal
   fixtures require valid outward non-zero normals and an immediate native
   `prusa-slicer --info` precondition, while the deliberate zero-normal
-  regression is separate.
+  regression is a separately validated legal binary STL. Exact local B passed
+  12/12 fixture checks, 4/4 selectors, and 37/37 HTTP rows; the owner VPS rerun
+  remains pending.
 - `tests/testing-scripts/slicing/native_envelope_sweep_runner.py` measures and
   rechecks native/final admission boundaries. Its measurement-A and final-
   admission-B modes are guarded by the exact `/profiles` catalogue phase, and
   its HTTP assertions bind the expected response maximum and actual source
   profile (selected Prusa layer INI or stable Orca machine profile); a
-  local source result alone is not exact-image or deployed evidence.
+  local source result alone is not exact-image or deployed evidence. Exact local
+  final-admission B passed 88/88 fixture preconditions, 20/20 brackets, and 4/4
+  combined corners.
 - `tests/testing-files/` sample payloads are intentionally excluded from repository publication.
 - `tests/testing-scripts/results/` generated reports are runtime artifacts and are ignored.
 

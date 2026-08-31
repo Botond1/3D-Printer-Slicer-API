@@ -74,8 +74,9 @@ This folder contains runtime configuration files used by slicing and pricing.
 - Exact helper-image measurement A established H2D-QUOTE Prusa
   `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`. Preserve those
   measured inclusive ceilings; Prusa's native X/Y edge beyond its declared
-  quote bed remains `UNESTABLISHED`. Keep final-admission B and owner-VPS proof
-  explicitly pending.
+  quote bed remains `UNESTABLISHED`. Exact local final-admission B confirmed
+  those tuples and the P1S values; only owner-VPS proof remains
+  `PENDING_OWNER`.
 - Keep every shipped machine-bound FDM envelope compatible with the public
   startup `/profiles` catalogue. The application fallback remains a broad
   compatibility envelope, while the exact configured
