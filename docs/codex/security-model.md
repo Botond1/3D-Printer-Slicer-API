@@ -4,22 +4,26 @@
 
 Current classification:
 `J3_SCHEMA_OWNER_APPROVED;
-J3_LOCAL_IMPLEMENTATION_CANDIDATE;
+J3_LOCAL_SOURCE_TESTS_VERIFIED;
 J3_ORCA_FLAG_OWNER_VERIFIED_INPUT;
 J3_CONTAINER_VPS_MATRIX_PENDING_OWNER;
 J3_NO_DEPLOY_NO_ROUTE_MUTATION`.
 
-| Control | Candidate classification | Fail-closed boundary |
+| Control | Current classification | Fail-closed boundary |
 | --- | --- | --- |
-| Orientation request policy | `OWNER_APPROVED; LOCAL_IMPLEMENTATION_CANDIDATE` | Omission alone selects backward-compatible `auto`. A present value must be exact `auto` or `preserve`; blanks, whitespace, alternate case, null-like, numeric, array, and object values return HTTP 400 `INVALID_ORIENTATION_MODE`. Explicit `rotationX/Y/Z` remains available in either mode. |
-| Orientation sidecar trust | `LOCAL_IMPLEMENTATION_CANDIDATE; CONTAINER_PENDING` | The Python helper writes one exclusive `0600`, bounded, versioned sidecar inside the owning workspace. Node accepts only a canonical regular non-symlink with stable identity, exact keys/schema/mode, finite proper 3x3 matrix, and consistent outcome. Invalid/missing `auto` metadata becomes explicit `fallback_unmodified` identity; it is never reported as an applied rotation. |
-| Versioned transform truth | `SCHEMA_OWNER_APPROVED; LOCAL_IMPLEMENTATION_CANDIDATE` | Success and `MODEL_OUT_OF_PRINTER_BOUNDS` require the same `transform_schema: 1` contract. It distinguishes original/oriented/final dimensions and automatic/requested/total rotation. The authoritative rotation-only matrix is `R_requested * R_automatic`, where requested Euler input is X then Y then Z (`Rz * Ry * Rx`); scaling, centering, grounding, and translation are excluded. Success is refused if object height differs from final Z. |
-| Bounds-error consumer parity | `OWNER_APPROVED; LOCAL_IMPLEMENTATION_CANDIDATE` | A bounds failure includes complete `model_transform` beside model dimensions and build limits. Wording must use both fields: only `orientation_outcome=applied` supports “does not fit even after automatic rotation”; `unchanged` means automatic evaluation retained the pose, `preserved` identifies the submitted pose, and `fallback_unmodified` discloses that automatic orientation was unavailable. |
+| Orientation request policy | `OWNER_APPROVED; LOCAL_SOURCE_TESTED` | Omission alone selects backward-compatible `auto`. A present value must be exact `auto` or `preserve`; blanks, whitespace, alternate case, null-like, numeric, array, and object values return HTTP 400 `INVALID_ORIENTATION_MODE`. Explicit `rotationX/Y/Z` remains available in either mode. |
+| Orientation sidecar trust | `LOCAL_SOURCE_TESTED; CONTAINER_PENDING` | The Python helper writes one exclusive `0600`, bounded, versioned sidecar inside the owning workspace. Node accepts only a canonical regular non-symlink with stable identity, exact keys/schema/mode, finite proper 3x3 matrix, and consistent outcome. Invalid/missing `auto` metadata becomes explicit `fallback_unmodified` identity; it is never reported as an applied rotation. |
+| Versioned transform truth | `SCHEMA_OWNER_APPROVED; LOCAL_SOURCE_TESTED` | Success and `MODEL_OUT_OF_PRINTER_BOUNDS` require the same `transform_schema: 1` contract. It distinguishes original/oriented/final dimensions and automatic/requested/total rotation. The authoritative rotation-only matrix is `R_requested * R_automatic`, where requested Euler input is X then Y then Z (`Rz * Ry * Rx`); scaling, centering, grounding, and translation are excluded. Success is refused if object height differs from final Z. |
+| Bounds-error consumer parity | `OWNER_APPROVED; LOCAL_SOURCE_TESTED` | A bounds failure includes complete `model_transform` beside model dimensions and build limits. Wording must use both fields: only `orientation_outcome=applied` supports “does not fit even after automatic rotation”; `unchanged` means automatic evaluation retained the pose, `preserved` identifies the submitted pose, and `fallback_unmodified` discloses that automatic orientation was unavailable. |
 | ZIP and multi-object capability | `SOURCE_PROVEN` | The outer ZIP accepts exactly one supported source. A 3MF scene's geometries are concatenated into one compound STL, one STL argument reaches the slicer, and the API requests no split-to-objects operation. Disconnected shells therefore retain relative placement instead of becoming independently packable arranger objects; there is no current independent multi-object packing capability for the yaw prohibition to remove. |
 | Native post-transform rotation | `SOURCE_IMPLEMENTED; ORCA_FLAG_OWNER_VERIFIED_INPUT; FINAL_CONTAINER_PENDING` | Prusa adds no native rotation. Orca retains `--arrange 1` for placement and `--orient 0`, plus exactly one single-token `--allow-rotations=0` to disable unreported whole-compound yaw. The owner measured real G-code/6.25 g with the equals form and `No such file: 0` with the split form on exact Orca 2.3.1. This proves flag shape only; the final image and HTTP matrix remain pending owner VPS execution. |
 | Production boundary | `NO_DEPLOY_NO_ROUTE_MUTATION` | J3 authorizes no registry write, image publication, deploy, public-route activation, customer traffic, or consumer-repository change. Repository-local results cannot establish any of those states. |
 
-The final local counts and code-bearing SHA remain pending root finalization.
+The exact code-bearing SHA is
+`c404326f535fcc70ba62aa923fa6652f4fba5019`. Local gates passed at 2352/2352
+JavaScript tests, 132 Python tests with 131 pass plus one expected Windows
+POSIX-permission skip, syntax over 259 JavaScript and 44 Python files, 37/37
+staged safety paths, and zero production dependency vulnerabilities.
 The owner-VPS runner and report remain `PENDING_OWNER`; do not classify the
 owner's flag-shape measurement as full candidate evidence. See
 [`evidence/j3-orientation-visibility.md`](evidence/j3-orientation-visibility.md).

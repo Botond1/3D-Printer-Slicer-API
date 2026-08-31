@@ -1,18 +1,21 @@
 # Verified project map
 
-## Current J3 orientation-visibility implementation candidate
+## Current J3 orientation-visibility local source checkpoint
 
 Current classification:
 `J3_SCHEMA_OWNER_APPROVED;
-J3_LOCAL_IMPLEMENTATION_CANDIDATE;
+J3_LOCAL_SOURCE_TESTS_VERIFIED;
 J3_ORCA_FLAG_OWNER_VERIFIED_INPUT;
 J3_CONTAINER_VPS_MATRIX_PENDING_OWNER;
 J3_NO_DEPLOY_NO_ROUTE_MUTATION`.
 
 J3 starts from J2 commit
-`9b28b95cfa9f931092044300ebfca912421bac32`. Final local gate counts and the
-code-bearing J3 SHA remain pending root finalization; no exact-image, hosted,
-deployed, or public-route result is claimed here.
+`9b28b95cfa9f931092044300ebfca912421bac32`. The exact code-bearing J3 SHA is
+`c404326f535fcc70ba62aa923fa6652f4fba5019`. Local evidence is green for
+2352/2352 JavaScript tests, 132 Python tests with 131 pass plus one expected
+Windows POSIX-permission skip, syntax over 259 JavaScript and 44 Python files,
+37/37 staged safety paths, and zero production dependency vulnerabilities. No
+exact-image, hosted, deployed, or public-route result is claimed here.
 
 Direct executable-source map:
 

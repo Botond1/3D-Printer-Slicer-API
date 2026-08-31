@@ -15,9 +15,12 @@ If architecture/domain rules change in this file, synchronize changes in:
 ## Goal
 Provide a stable and secure slicing API with strict fail-fast validation and production-safe queue controls.
 
-## J3 Orientation-Visibility Implementation Candidate
+## J3 Orientation-Visibility Local Source Checkpoint
 
 - J3 starts from J2 commit `9b28b95cfa9f931092044300ebfca912421bac32`.
+  Its exact code-bearing SHA is
+  `c404326f535fcc70ba62aa923fa6652f4fba5019`; local source gates are green and
+  the exact-container/VPS matrix remains `PENDING_OWNER`.
   Its owner-approved request field is strict `orientationMode=auto|preserve`;
   omission defaults to `auto` for compatibility, and every other present value
   returns HTTP 400 `INVALID_ORIENTATION_MODE`.

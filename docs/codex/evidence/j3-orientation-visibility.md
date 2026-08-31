@@ -5,17 +5,17 @@ Date: 2026-08-31
 ## Classification
 
 `J3_SCHEMA_OWNER_APPROVED;
-J3_LOCAL_IMPLEMENTATION_CANDIDATE;
+J3_LOCAL_SOURCE_TESTS_VERIFIED;
 J3_ORCA_FLAG_OWNER_VERIFIED_INPUT;
 J3_CONTAINER_VPS_MATRIX_PENDING_OWNER;
 J3_NO_DEPLOY_NO_ROUTE_MUTATION`.
 
 J3 starts from J2 commit
 `9b28b95cfa9f931092044300ebfca912421bac32` on the isolated
-`codex/j3-orientation-visibility` branch. The final code-bearing J3 SHA and
-local gate counts are deliberately left `PENDING_ROOT_FINALIZATION` in this
-draft. No image was published or deployed, and no public route or consumer
-repository was changed.
+`codex/j3-orientation-visibility` branch. The exact code-bearing J3 commit is
+`c404326f535fcc70ba62aa923fa6652f4fba5019`. Its complete local source gate is
+green at the counts recorded below. No image was published or deployed, and no
+public route or consumer repository was changed.
 
 ## Owner-approved wire contract
 
@@ -29,7 +29,7 @@ The 2026-08-31 owner review approved:
 4. a full-path authoritative rotation matrix, including prevention or explicit
    accounting of any later native arrange rotation.
 
-The implemented candidate defines:
+The implementation defines:
 
 - `orientation_outcome`: `applied`, `unchanged`, `preserved`, or
   `fallback_unmodified`;
@@ -113,8 +113,13 @@ contract evidence.
 | Owner schema review and K1-K3 authorization | `APPROVED 2026-08-31` |
 | ZIP/multi-object source trace | `SOURCE_PROVEN` |
 | Exact Orca 2.3.1 flag shape | `OWNER_VERIFIED_INPUT` |
-| Local source/unit/syntax/safety gates | `PENDING_ROOT_FINALIZATION` |
-| Code-bearing J3 commit SHA | `PENDING_ROOT_FINALIZATION` |
+| Aggregate JavaScript tests | `2352/2352 PASS` |
+| Aggregate Python tests | `132 discovered; 132 run; 131 PASS; 0 failed; 0 errors; 1 expected Windows POSIX-permission skip` |
+| Tracked syntax gate | `259 JavaScript and 44 Python files PASS` |
+| Staged repository-safety gate | `37/37 indexed files PASS` |
+| Production dependency audit | `0 vulnerabilities` |
+| Cached and working-tree diff checks | `PASS` |
+| Code-bearing J3 commit SHA | `c404326f535fcc70ba62aa923fa6652f4fba5019` |
 | Exact candidate container/VPS HTTP matrix | `PENDING_OWNER / NOT VERIFIED` |
 | Hosted exact-SHA Source/Image validation | `NOT VERIFIED` |
 | Registry publication or deployment | `NOT RUN / NOT AUTHORIZED` |

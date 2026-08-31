@@ -4,12 +4,12 @@
 
 Status:
 `J3_SCHEMA_OWNER_APPROVED;
-J3_LOCAL_IMPLEMENTATION_CANDIDATE;
+J3_LOCAL_SOURCE_TESTS_VERIFIED;
 J3_ORCA_FLAG_OWNER_VERIFIED_INPUT;
 J3_CONTAINER_VPS_MATRIX_PENDING_OWNER;
 J3_NO_DEPLOY_NO_ROUTE_MUTATION`.
 
-Implemented candidate exits:
+Local source-verified exits:
 
 1. Accept optional multipart `orientationMode`; only exact `auto` and
    `preserve` are valid. Omission defaults to `auto` so unaware callers retain
@@ -48,18 +48,21 @@ Implemented candidate exits:
    asymmetric `20 x 255 x 255 mm` and all-axes-distinct
    `20 x 240 x 245 mm` fixtures. The P1S preserve-mode
    `20 x 255 x 255 mm` case is expected HTTP 422, not success.
+9. Finalize the exact code-bearing SHA
+   `c404326f535fcc70ba62aa923fa6652f4fba5019`. Local gates pass at 2352/2352
+   JavaScript tests, 132 Python tests with 131 pass plus one expected Windows
+   POSIX-permission skip, syntax over 259 JavaScript and 44 Python files, 37/37
+   staged safety paths, and zero production dependency vulnerabilities.
 
 Remaining exits:
 
-1. Root must finalize exact local test counts, syntax/safety results, and the
-   code-bearing J3 SHA; no numbers are asserted in this draft.
-2. The owner must run the full Prusa/Orca, auto/preserve, request-rotation,
+1. The owner must run the full Prusa/Orca, auto/preserve, request-rotation,
    success/bounds matrix against the exact VPS container and read the generated
    report. Until then container/native end-to-end behavior is
    `PENDING_OWNER / NOT VERIFIED`.
-3. Any hosted exact-SHA Source/Image result remains `NOT VERIFIED` unless it is
+2. Any hosted exact-SHA Source/Image result remains `NOT VERIFIED` unless it is
    separately run and recorded.
-4. Keep deploy, registry write, public-route activation, customer traffic, and
+3. Keep deploy, registry write, public-route activation, customer traffic, and
    consumer-repository changes outside J3 authority.
 
 See

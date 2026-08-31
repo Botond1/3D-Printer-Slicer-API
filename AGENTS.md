@@ -17,12 +17,15 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
-## Current J3 orientation-visibility implementation candidate
+## Current J3 orientation-visibility local source checkpoint
 
 J3 starts from J2 commit
 `9b28b95cfa9f931092044300ebfca912421bac32`. The owner-approved request
 contract is strict `orientationMode=auto|preserve`, with omission defaulting to
 `auto` and any other present value returning `INVALID_ORIENTATION_MODE`.
+The exact code-bearing J3 SHA is
+`c404326f535fcc70ba62aa923fa6652f4fba5019`; local source gates are green, while
+the complete exact-container/VPS matrix remains `PENDING_OWNER`.
 
 Success and `MODEL_OUT_OF_PRINTER_BOUNDS` carry the same complete
 `model_transform` with `transform_schema: 1`, orientation mode/outcome,

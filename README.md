@@ -65,7 +65,7 @@ lifecycle evidence remain separate gates.
 - **Resource/state envelope:** actual-byte limits, validated final artifacts,
   stable job/artifact correlation, leased retention, and atomic pricing state.
 
-### J3 orientation visibility and total-rotation candidate
+### J3 orientation visibility and total-rotation local source checkpoint
 
 Both slice endpoints accept the optional multipart field
 `orientationMode=auto|preserve`. Omission defaults to `auto`, retaining the
