@@ -71,10 +71,11 @@ component-to-selector bindings, and exact
 metadata. The owner-accepted P1S ceiling is Prusa
 `256 x 256 x 249.9 mm` and Orca `253.9 x 253.9 x 249.9 mm`; Prusa's native X/Y
 edge beyond its declared profile is `UNESTABLISHED`. H2D-QUOTE must exist on
-both engines with P1S physics and quote-only semantics. Its Prusa
-`350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm` values remain
-provisional seeds under `PENDING_LOCAL_EXACT_IMAGE_SWEEP`, never measured
-results. The generic `120 x 120 x 150 mm` SLA fallback must remain absent as a
+both engines with P1S physics and quote-only semantics. Exact helper-image
+measurement A established Prusa `350 x 320 x 324.9 mm` and Orca
+`347.9 x 317.9 x 324.9 mm`; Prusa beyond its declared X/Y edge remains
+`UNESTABLISHED`. Final-admission B remains pending. The generic
+`120 x 120 x 150 mm` SLA fallback must remain absent as a
 machine envelope, and Elegoo Saturn 4 Ultra dimensions must not be fabricated.
 The v2 entry shape can later admit a truthful SLA row without another schema
 change. The runner's optional
@@ -150,9 +151,12 @@ success and full K2 rejection must carry the exact expected response `max` and
 request, while Orca reports its stable machine profile rather than the process
 profile. Fail closed on phase, selector, shape, or value drift. Read
 `results/native_envelope_sweep_measurement_result.md` after measurement and
-`results/native_envelope_sweep_result.md` after final admission. H2D-QUOTE
-remains `PENDING_LOCAL_EXACT_IMAGE_SWEEP` until that exact candidate-image lane
-confirms or replaces its provisional constants.
+`results/native_envelope_sweep_result.md` after final admission. Measurement A
+passed 44/44 native fixture preconditions, 10/10 brackets, and 2/2 combined
+corners on its exact helper image; `325 mm` at `0.3 mm` returned the full K2
+HTTP 422 twice on each engine after the exact conjunctive last-layer classifier.
+The final-admission-B report and owner VPS matrix remain pending; do not commit
+the generated measurement report.
 
 Operations checks must prove public /ready is minimal, protected diagnostics
 return OPERATIONS_AUTH_REQUIRED without a key, and all outputs stay bounded and

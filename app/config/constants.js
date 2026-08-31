@@ -111,15 +111,15 @@ const P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM = Object.freeze({
 });
 
 /**
- * PROVISIONAL SEEDS PENDING EXACT CANDIDATE SWEEP.
+ * Exact-image measured H2D-sized quote ceilings, inclusive on every axis.
  *
- * The Prusa seed preserves the declared planar size and uses the strictest
- * offered-layer Z multiple. The Orca seed applies the owner-observed P1S
- * planar clearance delta to the enlarged quote bed. Neither enlarged entry is
- * measurement evidence. Replace or explicitly confirm these exact constants
- * after the candidate-image X/Y/Z sweep.
+ * The A measurement sweep reproduced every largest PASS and next 0.1 mm
+ * rejection twice on both engines, plus each combined X/Y corner. Prusa's
+ * planar values reach the declared profile boundary; its native edge beyond
+ * that physical declaration remains unestablished. The single Z value is the
+ * strictest ceiling across all offered layer heights.
  */
-const PENDING_EXACT_CANDIDATE_SWEEP_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM =
+const H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM =
 Object.freeze({
     prusa: Object.freeze({
         'FDM_P1S_H2D_SIZE_QUOTING_0.1mm.ini': Object.freeze({ x: 350, y: 320, z: 324.9 }),
@@ -189,7 +189,7 @@ module.exports = {
     DEFAULT_PRICING,
     MAX_BUILD_VOLUMES,
     P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
-    PENDING_EXACT_CANDIDATE_SWEEP_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE,
     MIN_BUILD_VOLUMES,
     EXTENSIONS,

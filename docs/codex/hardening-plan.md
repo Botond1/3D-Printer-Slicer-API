@@ -7,7 +7,8 @@ Status:
 J3B_SCHEMA_OWNER_APPROVED;
 J3B_SOURCE_IMPLEMENTATION_PRESENT;
 J3B_LOCAL_VALIDATION_IN_PROGRESS;
-J3B_H2D_EXACT_IMAGE_SWEEP_PENDING;
+J3B_H2D_MEASUREMENT_A_EXACT_IMAGE_VERIFIED;
+J3B_FINAL_ADMISSION_B_PENDING;
 J3B_OWNER_VPS_MATRIX_PENDING;
 J3B_NO_MERGE_NO_DEPLOY_NO_ROUTE_MUTATION`.
 
@@ -53,12 +54,22 @@ Authorized implementation exits:
    bounds `source_profile`; Prusa follows the selected layer profile, while
    Orca retains the machine rather than process profile.
 
+Exact-image measurement A exit evidence:
+
+- helper source `2f4cddab923863ee8a9231e26671ddd2e70444eb`;
+- image ID
+  `sha256:f2259f29fb1472ba695c90f664af0fe0b9a298b89f5139667a0ec8a274406fae`;
+- 44/44 fixture preconditions, 10/10 brackets, and 2/2 combined corners pass;
+- measured inclusive ceilings are Prusa `350 x 320 x 324.9 mm` and Orca
+  `347.9 x 317.9 x 324.9 mm`; Prusa native X/Y beyond its declared quote bed
+  remains `UNESTABLISHED`;
+- `325 mm` at `0.3 mm` returned the full K2 HTTP 422 twice on each engine after
+  the exact conjunctive last-layer classifier.
+
 Remaining exits:
 
-1. Run the exact candidate-image H2D-QUOTE X/Y/Z and corner sweep on both
-   engines. Until it passes, the Prusa `350 x 320 x 324.9 mm` and Orca
-   `347.9 x 317.9 x 324.9 mm` numbers are only
-   `PENDING_LOCAL_EXACT_IMAGE_SWEEP` provisional seeds, not measured ceilings.
+1. Run final-admission B against the exact final candidate image and published
+   H2D-QUOTE limits. Do not promote measurement-A evidence to this pending gate.
 2. Complete the local focused/aggregate, syntax, repository-safety, and evidence
    gates without shortening the matrix.
 3. The owner reruns the full corrective matrix on the VPS, including the

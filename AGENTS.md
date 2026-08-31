@@ -21,8 +21,8 @@ Canonical Codex knowledge:
 
 J3's production-identical owner matrix passed on exact tree `58c0ccb`, including
 artifact-level proof of the Orca `--allow-rotations=0` path. J3B does not reopen
-that orientation contract. Its exact H2D-QUOTE candidate-image sweep and owner
-VPS matrix remain pending.
+that orientation contract. H2D-QUOTE exact-image measurement A is complete;
+final-admission B and the owner VPS matrix remain pending.
 
 Success and full K2 HTTP 422 `MODEL_OUT_OF_PRINTER_BOUNDS` use
 `transform_schema: 2`. Both always include mandatory
@@ -50,10 +50,13 @@ edge beyond its declared profile remains `UNESTABLISHED`.
 
 H2D-QUOTE is a P1S-derived enlarged-bed quoting chain on both engines, not a
 machine-accurate H2D profile and not production H2D G-code. The plugin consumer
-uses only `POST /prusa/slice`, so Prusa coverage is mandatory. Exact-image
-H2D-QUOTE values remain `PENDING_LOCAL_EXACT_IMAGE_SWEEP`; provisional,
-non-evidence seeds are Prusa `350 x 320 x 324.9 mm` and Orca
-`347.9 x 317.9 x 324.9 mm`. Normal sweep fixtures require outward non-zero
+uses only `POST /prusa/slice`, so Prusa coverage is mandatory. Exact helper-
+image measurement A passed 44/44 fixture preconditions, 10/10 brackets, and
+2/2 combined corners. It measured Prusa `350 x 320 x 324.9 mm` and Orca
+`347.9 x 317.9 x 324.9 mm`; Prusa's native X/Y edge beyond its declared profile
+remains `UNESTABLISHED`. At layer height `0.3 mm`, `325 mm` returned the full K2
+HTTP 422 twice on each engine after the exact conjunctive last-layer classifier.
+Final-admission B remains pending. Normal sweep fixtures require outward non-zero
 facet normals and an immediate native `prusa-slicer --info` precondition; the
 zero-normal regression remains a separate row. The orientation HTTP matrix has
 37 cases and retains all section-0 rows, including `20 x 240 x 245 mm` auto

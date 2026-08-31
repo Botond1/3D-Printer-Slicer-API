@@ -613,7 +613,7 @@ class CatalogueV2PreflightTests(unittest.TestCase):
             {observation.observation for observation in observations},
         )
 
-    def test_quote_limit_is_catalogue_resolved_not_a_provisional_hardcode(self):
+    def test_quote_limit_is_catalogue_resolved_not_a_runner_hardcode(self):
         body = catalogue_body()
         quote_profile = next(
             profile for profile in body["profiles"]

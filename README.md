@@ -125,17 +125,21 @@ J3B adds the explicit `H2D-QUOTE` selector on both engines using a P1S-derived
 profile enlarged to the H2D-size declared bed. This is quote-only P1S physics:
 it is not hardware-faithful H2D estimation and its artifact is not production
 H2D G-code. The plugin consumer uses only `POST /prusa/slice`, which is why the
-Prusa profile is mandatory rather than incidental. The exact-candidate H2D
-sweep is still `PENDING_LOCAL_EXACT_IMAGE_SWEEP`; the provisional, non-evidence
-seeds are Prusa `350 x 320 x 324.9 mm` and Orca
-`347.9 x 317.9 x 324.9 mm`. They must be replaced or explicitly confirmed by
-the exact-image sweep before this section may call them measured.
+Prusa profile is mandatory rather than incidental. Exact-image measurement A
+used helper source `2f4cddab923863ee8a9231e26671ddd2e70444eb` and image ID
+`sha256:f2259f29fb1472ba695c90f664af0fe0b9a298b89f5139667a0ec8a274406fae`.
+It passed 44/44 fixture preconditions, 10/10 brackets, and 2/2 combined corners,
+measuring Prusa `350 x 320 x 324.9 mm` and Orca
+`347.9 x 317.9 x 324.9 mm`. At layer height `0.3 mm`, `325 mm` returned the
+complete K2 HTTP 422 twice on each engine after the exact conjunctive last-layer
+classifier. Prusa's native X/Y edge beyond its declared quote bed remains
+`UNESTABLISHED`. Final-admission B remains pending.
 
 Normal generated fixtures use valid outward non-zero facet normals and must
 pass an immediate `prusa-slicer --info` precondition before a service row runs.
 The deliberate zero-normal regression fixture is a separate row and verifies
-the schema-v2 unavailable-original path. J3B's local exact-image sweep and the
-owner's final VPS matrix remain pending. Customer exposure is currently zero:
+the schema-v2 unavailable-original path. Measurement A is complete; the
+final-admission-B matrix and owner's final VPS matrix remain pending. Customer exposure is currently zero:
 the plugin is not deployed and LeadPilot slicing is disabled. The owner chose
 one merge and one deploy for J2+J3+J3B after verification, but this work
 authorizes neither merge nor deploy. See the
@@ -1001,9 +1005,10 @@ Keep every per-printer/per-engine profile row. `machine_resolutions` and
 different native engines are never merged or component-wise minimized. Preset
 disagreement within one technology/printer/engine fails catalogue construction.
 The current P1S engine rows publish Prusa `256 x 256 x 249.9 mm` and Orca
-`253.9 x 253.9 x 249.9 mm`. The H2D-sized quote rows retain the provisional
-Prusa `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm` seeds only
-until the exact candidate sweep confirms or replaces them.
+`253.9 x 253.9 x 249.9 mm`. Exact helper-image measurement A established the
+H2D-sized quote values as Prusa `350 x 320 x 324.9 mm` and Orca
+`347.9 x 317.9 x 324.9 mm`. Prusa beyond its declared quote-bed X/Y remains
+`UNESTABLISHED`; final-admission B remains pending.
 
 Catalogue v2 remains FDM-only and never publishes the generic
 `120 x 120 x 150 mm` SLA fallback as a machine envelope. The owner-confirmed

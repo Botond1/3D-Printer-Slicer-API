@@ -7,15 +7,17 @@ Current classification:
 J3B_SCHEMA_OWNER_APPROVED;
 J3B_SOURCE_IMPLEMENTATION_PRESENT;
 J3B_LOCAL_VALIDATION_IN_PROGRESS;
-J3B_H2D_EXACT_IMAGE_SWEEP_PENDING;
+J3B_H2D_MEASUREMENT_A_EXACT_IMAGE_VERIFIED;
+J3B_FINAL_ADMISSION_B_PENDING;
 J3B_OWNER_VPS_MATRIX_PENDING;
 J3B_NO_MERGE_NO_DEPLOY_NO_ROUTE_MUTATION`.
 
 J3B corrects a pre-orientation measurement regression and two native-envelope
 gaps without reopening J3's already-passed orientation contract. The owner ran
 J3's full production-identical container matrix on exact tree `58c0ccb`,
-including artifact-level G-code proof of `--allow-rotations=0`. J3B's own
-exact-image H2D sweep and owner VPS matrix are separate pending gates.
+including artifact-level G-code proof of `--allow-rotations=0`. J3B H2D-QUOTE
+measurement A is exact-image verified; final-admission B and the owner VPS
+matrix are separate pending gates.
 
 Direct executable-source map:
 
@@ -56,11 +58,15 @@ H2D-QUOTE is present on both engines through P1S-derived profiles whose
 declared bed is `350 x 320 x 325 mm`. It is a quoting-only chain, not
 machine-accurate H2D physics and not production H2D G-code. The plugin consumer
 calls only `POST /prusa/slice`; therefore the Prusa enlarged path is the
-consumer-critical one. Exact values remain
-`PENDING_LOCAL_EXACT_IMAGE_SWEEP`. Searchable provisional seeds are Prusa
-`350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`; they are not
-measurement evidence and must be confirmed or replaced by the exact candidate
-image sweep.
+consumer-critical one. Measurement A used helper source
+`2f4cddab923863ee8a9231e26671ddd2e70444eb` and exact image ID
+`sha256:f2259f29fb1472ba695c90f664af0fe0b9a298b89f5139667a0ec8a274406fae`.
+All 44 fixture preconditions, 10 brackets, and 2 repeated combined corners
+passed. The measured inclusive values are Prusa `350 x 320 x 324.9 mm` and
+Orca `347.9 x 317.9 x 324.9 mm`. At layer height `0.3 mm`, `325 mm` returned
+the complete K2 HTTP 422 twice on each engine after the exact conjunctive last-
+layer classifier. Prusa native X/Y beyond the declared profile remains
+`UNESTABLISHED`; final-admission B remains pending.
 
 Failed native commands retain bounded stdout separately from stderr, and the
 placement classifier considers both without weakening its explicit-diagnostic

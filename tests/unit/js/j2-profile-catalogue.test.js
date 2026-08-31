@@ -191,7 +191,7 @@ test('P1S declared dimensions remain physical while admission ceilings are engin
     assert.equal(prusa.filament_density_g_cm3, null);
 });
 
-test('quote rows expose exact selectors and provisional enlarged native ceilings', () => {
+test('quote rows expose exact selectors and measured enlarged native ceilings', () => {
     const prusa = findProfile('prusa', 'H2D-QUOTE');
     const orca = findProfile('orca', 'H2D-QUOTE', 0.2, 'PLA');
     assert.deepEqual(prusa.slice_selector, {

@@ -19,8 +19,9 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
 
 - J3 itself is owner-verified on the production-identical exact `58c0ccb`
   container, including artifact-level `--allow-rotations=0` proof. Do not
-  reopen that orientation contract. J3B starts from it and its own exact-image
-  sweep plus final owner VPS matrix remain `PENDING`.
+  reopen that orientation contract. J3B starts from it. H2D-QUOTE exact-image
+  measurement A is complete; final-admission B and the owner VPS matrix remain
+  `PENDING`.
 - `model_transform` is schema 2. Success and the complete K2
   `MODEL_OUT_OF_PRINTER_BOUNDS` response require both
   `original_dimensions_available` and nullable `original_dimensions_mm`.
@@ -46,9 +47,12 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   `UNESTABLISHED`.
 - `H2D-QUOTE` exists on both engines and is a P1S-physics estimate on a
   H2D-sized declared bed, quote-only and never production H2D G-code. The
-  plugin calls only `POST /prusa/slice`. Exact-image H2D measurement is
-  `PENDING_LOCAL_EXACT_IMAGE_SWEEP`; provisional non-evidence seeds are Prusa
-  `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`.
+  plugin calls only `POST /prusa/slice`. Exact helper-image measurement A passed
+  44/44 fixture preconditions, 10/10 brackets, and 2/2 combined corners. Its
+  measured ceilings are Prusa `350 x 320 x 324.9 mm` and Orca
+  `347.9 x 317.9 x 324.9 mm`; `325 mm` at `0.3 mm` returned the full K2 HTTP 422
+  twice on each engine. Prusa's native X/Y edge beyond its declared quote bed
+  remains `UNESTABLISHED`. Final-admission B remains pending.
 - Normal generated fixtures require outward non-zero normals plus an immediate
   native `prusa-slicer --info` precondition. Keep the deliberate zero-normal
   regression separate. The orientation HTTP matrix has 37 cases, including the
@@ -138,9 +142,9 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   `256 x 256 x 249.9 mm` and Orca `253.9 x 253.9 x 249.9 mm`. Prusa's native
   X/Y edge beyond its declared physical profile remains `UNESTABLISHED`.
   H2D-QUOTE exists on both engines with P1S physics and an enlarged declared
-  bed, quoting only. Its Prusa `350 x 320 x 324.9 mm` and Orca
-  `347.9 x 317.9 x 324.9 mm` values are provisional seeds under
-  `PENDING_LOCAL_EXACT_IMAGE_SWEEP`, not measurements.
+  bed, quoting only. Measurement A established Prusa
+  `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`; final-admission B
+  remains pending.
 - The J2 Hostinger preparation reads one through four unique private IPv4 `/32`
   rows. Initial phase `leadpilot-only` requires exactly one row; expansion to
   other callers is separately authorized. A host-firewall TCP reset and fixed

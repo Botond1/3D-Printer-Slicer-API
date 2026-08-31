@@ -28,19 +28,23 @@ Catalogue v2 publishes physical/profile-declared
 `declared_build_volume_dimensions_mm` separately from the exact-boundary-
 inclusive admission authority `largest_passing_dimensions_inclusive_mm`.
 
-The enlarged values are not yet measured on the exact J3B candidate image.
-Current searchable status is `PENDING_LOCAL_EXACT_IMAGE_SWEEP`, with provisional
-seeds only:
+Exact-image measurement A used helper source
+`2f4cddab923863ee8a9231e26671ddd2e70444eb` and image ID
+`sha256:f2259f29fb1472ba695c90f664af0fe0b9a298b89f5139667a0ec8a274406fae`.
+All 44 fixture preconditions, 10 brackets, and 2 repeated combined corners
+passed:
 
-| Engine | Provisional X (mm) | Provisional Y (mm) | Provisional Z (mm) |
+| Engine | Measured inclusive X (mm) | Measured inclusive Y (mm) | Measured inclusive Z (mm) |
 | --- | ---: | ---: | ---: |
 | Prusa | 350 | 320 | 324.9 |
 | Orca | 347.9 | 317.9 | 324.9 |
 
-The exact candidate-image sweep must confirm or replace every value. If the
-largest passing ceiling is lower, publish the measured lower value; never round
-up to the declared bed. The owner reruns the container matrix afterward. Until
-then no H2D-QUOTE exact-image or VPS result is claimed.
+At layer height `0.3 mm`, `325 mm` returned the complete K2 HTTP 422 twice on
+each engine after the exact conjunctive last-layer classifier. Prusa's native
+X/Y edge beyond its declared profile remains `UNESTABLISHED`; measurement A
+does not extend the declared bed. Final-admission B against the exact final
+candidate image and the owner VPS matrix remain pending. The generated
+measurement report stays local and uncommitted.
 
 ## Existing generic machine-profile limitation
 

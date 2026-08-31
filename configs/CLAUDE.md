@@ -71,10 +71,11 @@ This folder contains runtime configuration files used by slicing and pricing.
   with P1S physics, are not hardware-faithful H2D profiles, and must never be
   represented as production H2D G-code. The plugin consumer uses only the
   Prusa slice route, so the three Prusa quote profiles are required.
-- Do not call the provisional H2D-QUOTE ceilings measured. Until the exact
-  candidate image sweep, the seeds are Prusa `350 x 320 x 324.9 mm` and Orca
-  `347.9 x 317.9 x 324.9 mm`; exact-image evidence must confirm or replace
-  them.
+- Exact helper-image measurement A established H2D-QUOTE Prusa
+  `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`. Preserve those
+  measured inclusive ceilings; Prusa's native X/Y edge beyond its declared
+  quote bed remains `UNESTABLISHED`. Keep final-admission B and owner-VPS proof
+  explicitly pending.
 - Keep every shipped machine-bound FDM envelope compatible with the public
   startup `/profiles` catalogue. The application fallback remains a broad
   compatibility envelope, while the exact configured

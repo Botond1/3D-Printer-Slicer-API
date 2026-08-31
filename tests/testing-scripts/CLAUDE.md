@@ -137,9 +137,10 @@ python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
   `minimum_dimensions_inclusive_mm` as a floor, not machine metadata.
 - The owner-accepted P1S ceiling is Prusa `256 x 256 x 249.9 mm` and Orca
   `253.9 x 253.9 x 249.9 mm`. H2D-QUOTE is present on both engines with
-  P1S-derived quote-only physics. Its Prusa `350 x 320 x 324.9 mm` and Orca
-  `347.9 x 317.9 x 324.9 mm` values remain provisional seeds until the exact
-  candidate image sweep confirms or replaces them.
+  P1S-derived quote-only physics. Exact helper-image measurement A established
+  Prusa `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`. Prusa's
+  native X/Y edge beyond its declared quote bed remains `UNESTABLISHED`; final-
+  admission B remains pending.
 - Do not fabricate Elegoo Saturn 4 Ultra dimensions. The generic v2 entry shape
   can later admit a truthful SLA printer without a schema-version change, after
   the owner-profiled Chitubox/Elegoo Satellite remediation wave.
@@ -221,13 +222,16 @@ python tests/testing-scripts/slicing/native_envelope_sweep_runner.py
 - P1S accepted evidence is Prusa `256/256/249.9` and Orca
   `253.9/253.9/249.9`. Prusa's native edge beyond the declared physical profile
   remains `UNESTABLISHED`; policy rejection at `256.1` is not a native edge.
-- H2D-QUOTE exact-image values remain `PENDING_LOCAL_EXACT_IMAGE_SWEEP` until
-  the measurement lane runs. The provisional Prusa `350/320/324.9` and Orca
-  `347.9/317.9/324.9` values are seeds, never measured results.
+- H2D-QUOTE exact-image measurement A passed 44/44 fixture preconditions,
+  10/10 brackets, and 2/2 combined corners. It established Prusa
+  `350/320/324.9` and Orca `347.9/317.9/324.9`; at layer height `0.3`, `325`
+  returned the full K2 HTTP 422 twice on each engine after the exact conjunctive
+  last-layer classifier. Final-admission B remains pending.
 - Read `results/native_envelope_sweep_measurement_result.md` after the native-
   measurement phase and `results/native_envelope_sweep_result.md` after final
-  admission. A source/unit run is not exact-image, hosted, deployed, or VPS
-  evidence.
+  admission. Keep the generated measurement report local and uncommitted; the
+  sanitized evidence belongs in `docs/codex/evidence`. A source/unit run is not
+  exact-image, hosted, deployed, or VPS evidence.
 
 ## Local Rules
 

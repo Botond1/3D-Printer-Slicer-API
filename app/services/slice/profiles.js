@@ -11,7 +11,7 @@ const {
     ORCA_PROCESS_PROFILE_BY_LAYER,
     MAX_BUILD_VOLUMES,
     P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
-    PENDING_EXACT_CANDIDATE_SWEEP_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE,
     MIN_BUILD_VOLUMES
 } = require('../../config/constants');
@@ -275,11 +275,11 @@ function resolveBuildVolumeLimits(
     const declaredMax = { ...limits.max };
     const knownProfileLimits = P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[engine]
         || Object.freeze({});
-    const provisionalProfileLimits =
-        PENDING_EXACT_CANDIDATE_SWEEP_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[engine]
+    const h2dQuoteProfileLimits =
+        H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[engine]
         || Object.freeze({});
     const configuredLargestPassing = knownProfileLimits[limits.sourceProfile]
-        || provisionalProfileLimits[limits.sourceProfile]
+        || h2dQuoteProfileLimits[limits.sourceProfile]
         || null;
     let largestPassing = configuredLargestPassing
         ? { ...configuredLargestPassing }

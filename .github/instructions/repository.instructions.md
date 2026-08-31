@@ -24,11 +24,12 @@ Last synchronized: 2026-08-31
   Runtime bounds and the public catalogue consume the largest value proved to
   pass, inclusively: P1S Prusa `256 x 256 x 249.9 mm` and Orca
   `253.9 x 253.9 x 249.9 mm`. Prusa's native X/Y edge beyond the declared
-  profile remains `UNESTABLISHED`. H2D-QUOTE provisional seeds remain Prusa
-  `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm` until the exact
-  candidate-image sweep confirms or replaces them. The FDM fallback and
-  configured `MAX_MODEL_DIMENSION_MM >= 350` remain compatibility constraints;
-  the existing `1 mm` profile minima remain unchanged.
+  profile remains `UNESTABLISHED`. Exact helper-image measurement A established
+  H2D-QUOTE Prusa `350 x 320 x 324.9 mm` and Orca
+  `347.9 x 317.9 x 324.9 mm`; Prusa native X/Y beyond that declared quote bed
+  remains `UNESTABLISHED`, and final-admission B remains pending. The FDM
+  fallback and configured `MAX_MODEL_DIMENSION_MM >= 350` remain compatibility
+  constraints; the existing `1 mm` profile minima remain unchanged.
 - Preserve strict `orientationMode=auto|preserve`, with only omission defaulting
   to `auto`. Success and the full K2 `MODEL_OUT_OF_PRINTER_BOUNDS` HTTP 422
   response require the same complete `transform_schema: 2` payload.
@@ -106,9 +107,10 @@ Last synchronized: 2026-08-31
 - Keep H2D-QUOTE on both engines as a P1S-derived, enlarged-bed quoting chain.
   It is quoting-only, not machine-accurate and never proof of production H2D
   G-code. The plugin consumer calls only `POST /prusa/slice`, so Prusa coverage
-  is required. Exact H2D-QUOTE ceilings remain
-  `PENDING_LOCAL_EXACT_IMAGE_SWEEP`; provisional seed values must never be
-  described as measured.
+  is required. Measurement A passed 44/44 fixture preconditions, 10/10 brackets,
+  and 2/2 combined corners. At `0.3 mm`, `325 mm` returned the full K2 HTTP 422
+  twice on each engine after the exact conjunctive last-layer classifier. Do not
+  promote this measurement-A result to final-admission-B or owner-VPS proof.
 - Hostinger public-route preparation accepts one through four unique private
   IPv4 `/32` entries. Initial `leadpilot-only` phase requires exactly one;
   expanded callers are separately authorized. Host-firewall TCP rejection and

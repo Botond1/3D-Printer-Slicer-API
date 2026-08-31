@@ -68,9 +68,11 @@ Last synchronized: 2026-08-31
   Nine numeric Bambu references plus the P1S-overheight boundary exist, but
   tight Orca calibration still requires the complete approved vendor chain.
 - Keep H2D-QUOTE on both engines. It is not hardware-faithful H2D estimation or
-  production H2D G-code; the plugin consumer depends on the Prusa route. Until
-  exact-image measurement, Prusa `350 x 320 x 324.9 mm` and Orca
-  `347.9 x 317.9 x 324.9 mm` are provisional seeds only.
+  production H2D G-code; the plugin consumer depends on the Prusa route. Exact
+  helper-image measurement A established Prusa `350 x 320 x 324.9 mm` and Orca
+  `347.9 x 317.9 x 324.9 mm`. Prusa native X/Y beyond its declared quote bed
+  remains `UNESTABLISHED`; keep final-admission B and the owner VPS matrix
+  explicitly pending.
 - Public catalogue v2 is explicitly FDM-only and may include
   only profiles with a bound machine identity. Never represent the generic
   `120 x 120 x 150 mm` SLA fallback as a profile-derived printer envelope.

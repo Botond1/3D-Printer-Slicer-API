@@ -68,14 +68,14 @@ IDENTITY_ROTATION_MATRIX = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 
 @dataclass(frozen=True)
 class ProfileSpec:
-    """One public engine/profile selector and its candidate boundary seeds."""
+    """One public engine/profile selector and its expected inclusive boundary."""
 
     key: str
     engine: str
     printer: str
     selector_fields: Mapping[str, str]
     declared_dimensions_mm: Mapping[str, float]
-    candidate_largest_passing_mm: Mapping[str, float]
+    expected_largest_passing_mm: Mapping[str, float]
 
     @property
     def endpoint(self) -> str:
@@ -158,7 +158,7 @@ PROFILE_SPECS = (
         printer="P1S",
         selector_fields={"printerProfile": "FDM_0.2mm.ini"},
         declared_dimensions_mm={"x": 256.0, "y": 256.0, "z": 250.0},
-        candidate_largest_passing_mm={"x": 256.0, "y": 256.0, "z": 249.9},
+        expected_largest_passing_mm={"x": 256.0, "y": 256.0, "z": 249.9},
     ),
     ProfileSpec(
         key="orca-p1s",
@@ -169,7 +169,7 @@ PROFILE_SPECS = (
             "processProfile": "FDM_0.2mm.json",
         },
         declared_dimensions_mm={"x": 256.0, "y": 256.0, "z": 250.0},
-        candidate_largest_passing_mm={"x": 253.9, "y": 253.9, "z": 249.9},
+        expected_largest_passing_mm={"x": 253.9, "y": 253.9, "z": 249.9},
     ),
     ProfileSpec(
         key="prusa-h2d-quote",
@@ -179,7 +179,7 @@ PROFILE_SPECS = (
             "printerProfile": "FDM_P1S_H2D_SIZE_QUOTING_0.2mm.ini",
         },
         declared_dimensions_mm={"x": 350.0, "y": 320.0, "z": 325.0},
-        candidate_largest_passing_mm={"x": 350.0, "y": 320.0, "z": 324.9},
+        expected_largest_passing_mm={"x": 350.0, "y": 320.0, "z": 324.9},
     ),
     ProfileSpec(
         key="orca-h2d-quote",
@@ -190,7 +190,7 @@ PROFILE_SPECS = (
             "processProfile": "FDM_0.2mm.json",
         },
         declared_dimensions_mm={"x": 350.0, "y": 320.0, "z": 325.0},
-        candidate_largest_passing_mm={"x": 347.9, "y": 317.9, "z": 324.9},
+        expected_largest_passing_mm={"x": 347.9, "y": 317.9, "z": 324.9},
     ),
 )
 
@@ -412,7 +412,7 @@ def validate_catalogue_phase(body: object, phase: str) -> PhaseGuardResult:
         expected_largest = (
             profile.declared_dimensions_mm
             if phase == "native-measurement"
-            else profile.candidate_largest_passing_mm
+            else profile.expected_largest_passing_mm
         )
         if (
             not isinstance(limits, dict)
@@ -585,10 +585,10 @@ def build_sweep_cases(phase: str = "final-admission") -> tuple[SweepCase, ...]:
         expected_validation_ceiling = (
             profile.declared_dimensions_mm
             if phase == "native-measurement"
-            else profile.candidate_largest_passing_mm
+            else profile.expected_largest_passing_mm
         )
         for axis in ("x", "y"):
-            passing = float(profile.candidate_largest_passing_mm[axis])
+            passing = float(profile.expected_largest_passing_mm[axis])
             expected_stage = (
                 "native_safety_net"
                 if phase == "native-measurement" and profile.engine == "orca"
@@ -610,7 +610,7 @@ def build_sweep_cases(phase: str = "final-admission") -> tuple[SweepCase, ...]:
             passing = (
                 float(profile.declared_dimensions_mm["z"])
                 if at_declared_divisible_layer
-                else float(profile.candidate_largest_passing_mm["z"])
+                else float(profile.expected_largest_passing_mm["z"])
             )
             expected_stage = (
                 "native_safety_net"
@@ -992,18 +992,18 @@ def run_combined_corner(
         profile=profile,
         axis="x",
         layer_height=XY_SWEEP_LAYER_HEIGHT,
-        pass_value_mm=float(profile.candidate_largest_passing_mm["x"]),
-        fail_value_mm=float(profile.candidate_largest_passing_mm["x"]) + GRID_STEP_MM,
+        pass_value_mm=float(profile.expected_largest_passing_mm["x"]),
+        fail_value_mm=float(profile.expected_largest_passing_mm["x"]) + GRID_STEP_MM,
         expected_rejection_stage="request_prevalidation",
         expected_validation_ceiling_mm=(
             profile.declared_dimensions_mm
             if phase == "native-measurement"
-            else profile.candidate_largest_passing_mm
+            else profile.expected_largest_passing_mm
         ),
     )
     dimensions = {
-        "x": float(profile.candidate_largest_passing_mm["x"]),
-        "y": float(profile.candidate_largest_passing_mm["y"]),
+        "x": float(profile.expected_largest_passing_mm["x"]),
+        "y": float(profile.expected_largest_passing_mm["y"]),
         "z": FIXED_CROSS_AXIS_MM,
     }
     observations: list[PointObservation] = []
@@ -1163,8 +1163,8 @@ def write_report(
         "Every result below is accepted only when this run observed the planned boundary pass "
         "and its next 0.1 mm service rejection twice each, with the required rejection stage, "
         "and the published "
-        "X/Y corner passes twice. Provisional source constants "
-        "are not evidence. The suite uses preserve orientation, independently validates each "
+        "X/Y corner passes twice. Source constants alone are not evidence. The suite uses "
+        "preserve orientation, independently validates each "
         "outward-normal cuboid, and executes the configured native `prusa-slicer --info` "
         "precondition immediately before every HTTP upload. Every accepted success and bounds "
         "observation also carries the complete schema-v2 preserve transform; every 422 carries "
@@ -1223,8 +1223,8 @@ def write_report(
     ])
     for result in corners:
         dimensions = {
-            "x": result.profile.candidate_largest_passing_mm["x"],
-            "y": result.profile.candidate_largest_passing_mm["y"],
+            "x": result.profile.expected_largest_passing_mm["x"],
+            "y": result.profile.expected_largest_passing_mm["y"],
             "z": FIXED_CROSS_AXIS_MM,
         }
         summary = ", ".join(

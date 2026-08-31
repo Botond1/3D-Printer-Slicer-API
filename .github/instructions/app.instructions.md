@@ -148,9 +148,10 @@ Last synchronized: 2026-08-31
   edge beyond the declared profile remains `UNESTABLISHED`. H2D-QUOTE exists on
   both engines with P1S physics and enlarged declared bed
   `350 x 320 x 325 mm`; it is quote-only, not machine-accurate or production
-  H2D G-code. Its Prusa `350 x 320 x 324.9 mm` and Orca
-  `347.9 x 317.9 x 324.9 mm` ceilings remain provisional seeds under
-  `PENDING_LOCAL_EXACT_IMAGE_SWEEP`. Never advertise the generic
+  H2D G-code. Exact helper-image measurement A established Prusa
+  `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`; final-admission B
+  remains pending, and Prusa native X/Y beyond its declared quote bed remains
+  `UNESTABLISHED`. Never advertise the generic
   `120 x 120 x 150 mm` SLA fallback as a printer envelope. Catalogue v2 can add
   a later truthful SLA row and independent per-engine SLA fleet resolution
   without another schema-version change.

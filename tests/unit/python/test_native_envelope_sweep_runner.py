@@ -137,7 +137,7 @@ class NativeEnvelopePlanTests(unittest.TestCase):
             largest = (
                 profile.declared_dimensions_mm
                 if phase == "native-measurement"
-                else profile.candidate_largest_passing_mm
+                else profile.expected_largest_passing_mm
             )
             profiles.append({
                 "engine": profile.engine,
@@ -178,8 +178,23 @@ class NativeEnvelopePlanTests(unittest.TestCase):
             round(case.fail_value_mm - case.pass_value_mm, 6) == 0.1
             for case in cases
         ))
+        for profile in RUNNER.PROFILE_SPECS:
+            z_cases = [
+                case for case in cases
+                if case.profile.key == profile.key and case.axis == "z"
+            ]
+            self.assertEqual(
+                [(case.layer_height, case.pass_value_mm, case.fail_value_mm)
+                 for case in z_cases],
+                [(0.1, profile.expected_largest_passing_mm["z"], 250.0
+                  if profile.printer == "P1S" else 325.0),
+                 (0.2, profile.expected_largest_passing_mm["z"], 250.0
+                  if profile.printer == "P1S" else 325.0),
+                 (0.3, profile.expected_largest_passing_mm["z"], 250.0
+                  if profile.printer == "P1S" else 325.0)],
+            )
 
-    def test_native_measurement_phase_reaches_h2d_native_seeds_only(self):
+    def test_native_measurement_phase_reaches_h2d_expected_boundaries_only(self):
         cases = RUNNER.build_sweep_cases("native-measurement")
         self.assertEqual(len(cases), 10)
         self.assertEqual({case.profile.printer for case in cases}, {"H2D-QUOTE"})

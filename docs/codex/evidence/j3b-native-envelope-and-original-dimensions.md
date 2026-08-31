@@ -11,7 +11,8 @@ Scope authority: `prompts/codex/J3B-native-envelope-and-original-dimensions.md`
 J3B_SCHEMA_OWNER_APPROVED;
 J3B_SOURCE_IMPLEMENTATION_PRESENT;
 J3B_LOCAL_VALIDATION_IN_PROGRESS;
-J3B_H2D_EXACT_IMAGE_SWEEP_PENDING;
+J3B_H2D_MEASUREMENT_A_EXACT_IMAGE_VERIFIED;
+J3B_FINAL_ADMISSION_B_PENDING;
 J3B_OWNER_VPS_MATRIX_PENDING;
 ZERO_CUSTOMER_EXPOSURE;
 NO_MERGE_NO_DEPLOY_NO_ROUTE_MUTATION`.
@@ -109,7 +110,7 @@ The conservative P1S Z value is 249.9 across the offered layer heights. This
 prevents a quality change from moving the accepted customer envelope. It is the
 largest common passing value, not a rounded declared maximum.
 
-## H2D-QUOTE implementation and pending measurement
+## H2D-QUOTE implementation and exact-image measurement A
 
 The owner decided against shipping the placeholder H2D machine preset as a real
 profile. J3B instead derives a quoting chain from P1S physics and enlarges only
@@ -126,17 +127,32 @@ H2D physics and not production H2D G-code. The plugin consumer calls only
 `POST /prusa/slice`, so the Prusa path is the consumer-critical implementation;
 Orca remains required by the owner decision and cross-engine API contract.
 
-Exact candidate-image measurement status is deliberately searchable:
-`PENDING_LOCAL_EXACT_IMAGE_SWEEP`.
+Measurement A used helper source
+`2f4cddab923863ee8a9231e26671ddd2e70444eb` and exact image ID
+`sha256:f2259f29fb1472ba695c90f664af0fe0b9a298b89f5139667a0ec8a274406fae`.
+Its exact `/profiles` declared-admission phase guard passed before slicing.
 
-| Engine | Provisional X (mm) | Provisional Y (mm) | Provisional Z (mm) | Status |
+| Evidence item | Result |
+| --- | --- |
+| Native fixture preconditions | 44/44 pass |
+| Largest-pass/next-rejection brackets | 10/10 pass |
+| Repeated combined X/Y corners | 2/2 pass |
+
+| Engine | Measured inclusive X (mm) | Measured inclusive Y (mm) | Conservative published Z (mm) | Boundary detail |
 | --- | ---: | ---: | ---: | --- |
-| Prusa | 350 | 320 | 324.9 | Provisional seed; not measured. |
-| Orca | 347.9 | 317.9 | 324.9 | Provisional seed; not measured. |
+| Prusa | 350 | 320 | 324.9 | X `350.1` and Y `320.1` were request-prevalidation rejections. The native X/Y edge beyond the declared profile therefore remains `UNESTABLISHED`. |
+| Orca | 347.9 | 317.9 | 324.9 | X `348.0` and Y `318.0` were native-safety-net rejections. |
 
-The exact-image X/Y/Z and combined-corner sweep must confirm or replace these
-values. If a lower ceiling is observed, that largest passing value must be
-published without rounding up to the declared bed.
+At layer heights `0.1 mm` and `0.2 mm`, Z `325 mm` passed and `325.1 mm` was
+rejected by request prevalidation on both engines. At `0.3 mm`, Z `324.9 mm`
+passed and `325 mm` returned the complete K2 HTTP 422
+`MODEL_OUT_OF_PRINTER_BOUNDS` twice on each engine through the native safety
+net after the exact conjunctive last-layer classifier. The one published Z is
+therefore the strictest offered-layer value, `324.9 mm`.
+
+This closes only exact-image measurement A. Final-admission B must still prove
+the published largest-passing catalogue and response limits on the exact final
+candidate image; its report is pending.
 
 ## Fixture integrity and verification matrix
 
@@ -180,31 +196,32 @@ Reports to read after execution:
 - `tests/testing-scripts/results/native_envelope_sweep_measurement_result.md`;
 - `tests/testing-scripts/results/native_envelope_sweep_result.md`.
 
-The exact H2D candidate-image sweep is not yet recorded. The complete J3B VPS
-matrix, including the zero-normal row and enlarged-envelope sweeps, is
-`PENDING_OWNER`. Repository source/unit results must not be promoted to
-exact-image, hosted, deployed, or live proof.
+The measurement-A report was read and its sanitized facts are recorded above;
+the generated report remains local and uncommitted. The final-admission-B
+report is not yet available. The complete J3B VPS matrix, including the zero-
+normal row and enlarged-envelope sweeps, is `PENDING_OWNER`. Measurement A and
+repository source/unit results must not be promoted to final-B, hosted,
+deployed, owner-VPS, or live proof.
 
 ## Local source and documentation validation
 
 Observed on 2026-08-31 against the shared uncommitted corrective candidate:
 
-- focused JavaScript contracts for original dimensions, native errors/command
-  lifecycle, output lifecycle, catalogue, and OpenAPI: 74/74 pass;
-- focused Python orientation and native-envelope runner contracts: 62/62 pass;
-- complete JavaScript aggregate: 2375/2375 pass;
+- complete JavaScript aggregate: 2377/2377 pass;
 - complete Python aggregate: 166 discovered/run, 165 pass and one expected
   Windows POSIX-permission skip;
-- tracked syntax: 259 JavaScript and 44 Python files pass;
-- tracked repository safety: 435 indexed files pass;
+- tracked syntax: 262 JavaScript and 46 Python files pass;
+- tracked repository safety: 445 indexed files pass;
 - `git diff --check`: pass;
 - relative Markdown targets: 216/216 pass across the 17 synchronized
-  documentation files.
+  documentation files;
+- documentation audit: 76 in-scope Markdown files scanned, 17 J3B/H2D surfaces
+  identified, and zero stale measurement-A-pending or contradictory claims.
 
-These are local source/documentation results only. Neither live runner was
-executed in this documentation pass, so no generated runner report was claimed
-or rewritten. H2D remains `PENDING_LOCAL_EXACT_IMAGE_SWEEP`, and the owner VPS
-matrix remains `PENDING_OWNER`.
+These are local source/documentation results only. This documentation pass did
+not execute or rewrite either generated runner report. Exact-image measurement
+A is recorded separately above; final-admission B and the owner VPS matrix
+remain pending.
 
 ## Consumer, exposure, and release boundary
 

@@ -7,7 +7,7 @@ const path = require('node:path');
 
 const {
     P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
-    PENDING_EXACT_CANDIDATE_SWEEP_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM
+    H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM
 } = require('../../../app/config/constants');
 const { PRUSA_CONFIGS_DIR, ORCA_CONFIGS_DIR } = require('../../../app/config/paths');
 const { readIniKeyValues } = require('../../../app/services/slice/profile-readers');
@@ -125,13 +125,13 @@ test('P1S physical dimensions stay declared while runtime max is exact native ce
     assert.deepEqual(orca.max, orca.largestPassingDimensionsInclusive);
 });
 
-test('enlarged provisional seeds are isolated pending exact candidate sweep', () => {
+test('measured H2D quote ceilings remain separate from declared profile dimensions', () => {
     const constantsSource = fs.readFileSync(
         path.join(__dirname, '../../../app/config/constants.js'),
         'utf8'
     );
-    assert.match(constantsSource, /PROVISIONAL SEEDS PENDING EXACT CANDIDATE SWEEP/);
-    assert.match(constantsSource, /Neither enlarged entry is\s+\* measurement evidence/);
+    assert.match(constantsSource, /Exact-image measured H2D-sized quote ceilings/);
+    assert.match(constantsSource, /reproduced every largest PASS and next 0\.1 mm/);
 
     for (const layer of PRUSA_LAYERS) {
         const profile = `${PRUSA_QUOTE_PREFIX}${layer}mm.ini`;
@@ -139,8 +139,7 @@ test('enlarged provisional seeds are isolated pending exact candidate sweep', ()
         assert.deepEqual(limits.declaredMax, { x: 350, y: 320, z: 325 });
         assert.deepEqual(
             limits.largestPassingDimensionsInclusive,
-            PENDING_EXACT_CANDIDATE_SWEEP_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM
-                .prusa[profile]
+            H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM.prusa[profile]
         );
         assert.deepEqual(limits.max, { x: 350, y: 320, z: 324.9 });
     }
@@ -148,7 +147,7 @@ test('enlarged provisional seeds are isolated pending exact candidate sweep', ()
     assert.deepEqual(orca.declaredMax, { x: 350, y: 320, z: 325 });
     assert.deepEqual(
         orca.largestPassingDimensionsInclusive,
-        PENDING_EXACT_CANDIDATE_SWEEP_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM.orca[ORCA_QUOTE]
+        H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM.orca[ORCA_QUOTE]
     );
     assert.deepEqual(orca.max, { x: 347.9, y: 317.9, z: 324.9 });
 });
