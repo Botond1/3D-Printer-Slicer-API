@@ -35,7 +35,7 @@ const RESOURCE_DEFINITIONS = Object.freeze({
     MAX_MATERIAL_USED_GRAMS: { default: 100_000, min: 1, max: 1_000_000 },
     MAX_MATERIAL_USED_ML: { default: 100_000, min: 1, max: 1_000_000 },
     MAX_HOURLY_PRICE_HUF: { default: 1_000_000, min: 1, max: 100_000_000 },
-    MAX_MODEL_DIMENSION_MM: { default: 10_000, min: 250, max: 100_000 },
+    MAX_MODEL_DIMENSION_MM: { default: 10_000, min: 350, max: 100_000 },
     ARTIFACT_TTL_MS: { default: DAY_MS, min: 60_000, max: 30 * DAY_MS },
     MAX_MANAGED_ARTIFACTS: { default: 500, min: 1, max: 5_000 },
     MAX_MANAGED_ARTIFACT_BYTES: { default: 500 * MiB, min: 1, max: 10 * 500 * MiB },

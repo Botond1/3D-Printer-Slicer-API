@@ -1,5 +1,110 @@
 # Security model
 
+## J3B measurement, native-envelope, and catalogue control delta
+
+Current classification:
+`J3_OWNER_CONTAINER_MATRIX_VERIFIED_EXACT_58C0CCB;
+J3B_SCHEMA_OWNER_APPROVED;
+J3B_SOURCE_IMPLEMENTATION_PRESENT;
+J3B_LOCAL_VALIDATION_COMPLETE;
+J3B_H2D_MEASUREMENT_A_EXACT_IMAGE_VERIFIED;
+J3B_LOCAL_EXACT_IMAGE_FINAL_ADMISSION_B_VERIFIED;
+J3B_OWNER_PRODUCTION_IDENTICAL_CONTAINER_MATRIX_VERIFIED_DB42B93;
+J3B_OWNER_SOURCE_TREE_MATCH_445_TRACKED_FILES;
+J3B_MERGE_AUTHORIZED_NOT_YET_COMPLETE;
+J3B_DEPLOY_NOT_AUTHORIZED;
+J3B_NO_REGISTRY_NO_ROUTE_DNS_ALLOWLIST_MUTATION`.
+
+| Control | Current classification | Fail-closed boundary |
+| --- | --- | --- |
+| Original-measurement truth | `OWNER_APPROVED; SOURCE_IMPLEMENTED; LOCAL_SOURCE_TESTED; EXACT_IMAGE_FALSE_NULL_VERIFIED` | Schema 2 always carries `original_dimensions_available` and nullable `original_dimensions_mm` on success and full K2 bounds failure. True means a canonical real measurement object whose finite non-negative `height_mm == z`; false means null. A malformed tagged original degrades to false/null and no oriented substitute is permitted, so degradation is explicit instead of quietly mislabeled. Exact-image B proves the real unavailable-measurement false/null path; malformed-tag injection remains source/unit evidence. |
+| Load-bearing geometry | `OWNER_APPROVED; SOURCE_IMPLEMENTED; LOCAL_SOURCE_TESTED` | Oriented and final dimensions drive bounds and success metrics. Missing, malformed tagged, non-finite, non-positive, or `height_mm != z` values return controlled HTTP 422 `MODEL_DIMENSIONS_UNAVAILABLE`; success unconditionally requires `stats.object_height_mm == final_dimensions_mm.z`. The exact-image B HTTP matrix proves positive canonical dimensions and the success height invariant, but does not inject this unavailable-dimension failure branch. |
+| Native placement/volume rejection | `SOURCE_IMPLEMENTED; MEASUREMENT_A_EXACT_IMAGE_VERIFIED; FINAL_B_EXACT_IMAGE_VERIFIED` | Only explicit native placement/print-volume diagnostics map to HTTP 422 `MODEL_OUT_OF_PRINTER_BOUNDS`. Failed commands preserve bounded stdout independently from stderr so either can carry the diagnostic. A Prusa exit-zero/no-artifact result maps only when its retained output explicitly reports placement refusal. The response carries the complete K2 schema-2 transform; unrelated failures remain internal. At `0.3 mm`, `325 mm` returned that full K2 422 twice on each engine after the exact conjunctive last-layer classifier. |
+| Inclusive admission catalogue | `OWNER_ACCEPTED_P1S; H2D_MEASUREMENT_A_VERIFIED; FINAL_B_EXACT_IMAGE_VERIFIED` | `r3d-profile-catalogue-v2` separates physical/profile-declared dimensions from `largest_passing_dimensions_inclusive_mm`, the exact-boundary-inclusive admission authority. P1S is Prusa `256 x 256 x 249.9 mm` and Orca `253.9 x 253.9 x 249.9 mm`. Measurement A and final-admission B established H2D-QUOTE Prusa `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`; Prusa native X/Y beyond either declared profile remains `UNESTABLISHED`. Machine and fleet derivation is per engine, never cross-engine minimization. |
+| H2D-sized quoting chain | `SOURCE_IMPLEMENTED_BOTH_ENGINES; MEASUREMENT_A_EXACT_IMAGE_VERIFIED; FINAL_B_EXACT_IMAGE_VERIFIED` | H2D-QUOTE derives from P1S physics and only enlarges the declared bed to `350 x 320 x 325 mm`. It is quote-only, not machine-accurate and not production H2D G-code. The plugin calls only `POST /prusa/slice`, so the Prusa path is mandatory. Exact helper-image measurement A passed 44/44 fixture preconditions, 10/10 brackets, and 2/2 combined corners; exact local B passed 88/88, 20/20, and 4/4. |
+| Fixture integrity | `MEASUREMENT_A_44_OF_44_PASS; FINAL_B_88_OF_88_PASS; OWNER_MATRIX_VERIFIED_DB42B93` | Normal fixtures require outward non-zero facet normals plus immediate native `prusa-slicer --info` dimension validation. The deliberately zero-normal legal binary STL is a separate regression row: exact J2, exact local B, and the owner production-identical VPS matrix returned HTTP 200 on both engines; schema 2 reports false/null original provenance. It cannot be reported as a normal service defect. |
+| Exact-phase runner binding | `MEASUREMENT_A_PHASE_VERIFIED; FINAL_B_PHASE_VERIFIED` | The 37-case orientation matrix restores all section-0 rows. Its configurable native-info command is a bounded no-shell JSON argv template and the report retains only a source label. The envelope measurement-A/final-admission-B lanes require an exact `/profiles` phase match before slicing, then bind each response to the exact expected `max` and actual bounds `source_profile` (Prusa selected layer profile; Orca machine profile, not process). Measurement A passed its exact phase guard; final B passed 88/88 fixture, 20/20 bracket, 4/4 corner, and 9/9 catalogue checks plus optional Prusa digest parity. |
+| Exposure and release boundary | `ZERO_CUSTOMER_EXPOSURE; MERGE_AUTHORIZED_NOT_YET_COMPLETE; DEPLOY_NOT_AUTHORIZED` | The plugin has no production deployment/traffic and LeadPilot slicing is not enabled. One branch push, one PR into `main`, and that PR's merge are owner-authorized but not yet claimed complete. Registry/image publication, deploy, production-container, public-route/DNS/allowlist mutation, consumer-repository changes, and customer traffic remain out of scope. |
+
+J3's production-identical owner matrix passed on exact tree `58c0ccb`, including
+artifact-level G-code proof of `--allow-rotations=0`; J3B does not reopen that
+contract. J3B exact-image H2D measurement A and exact local final-admission B
+are complete. B binds source
+`47ae13397bb4537b4bb700b8c6bf3d9648364bdc` to image
+`sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`,
+matching revision label, non-root `999:999`, healthy/read-only runtime, and
+host port bound only to localhost. Its orientation report passed 12/12 fixture, 4/4
+selector, and 37/37 HTTP checks. The owner later ran the complete production-
+identical VPS matrix from exact tree
+`db42b93b2416ac0b791a45a0eae1233b303cf557` after independently matching all
+445 tracked files. The owner build's different image ID is not treated as byte-
+identical-image evidence. Its matrix confirmed inclusive P1S/H2D-QUOTE
+boundaries on all four selectors, full K2 422 conversion of the former native
+500 cases, zero-normal false/null degradation, distinct applied/preserved/
+unchanged outcomes, unchanged mass/no-yaw guards, and all three enlarged Prusa
+layer profiles. See
+[`evidence/j3b-native-envelope-and-original-dimensions.md`](evidence/j3b-native-envelope-and-original-dimensions.md).
+
+## Historical J3 orientation-visibility and transform-provenance control delta
+
+Current classification:
+`J3_SCHEMA_OWNER_APPROVED;
+J3_LOCAL_SOURCE_TESTS_VERIFIED;
+J3_OWNER_CONTAINER_MATRIX_VERIFIED_EXACT_58C0CCB;
+J3_NO_DEPLOY_NO_ROUTE_MUTATION`.
+
+| Control | Current classification | Fail-closed boundary |
+| --- | --- | --- |
+| Orientation request policy | `OWNER_APPROVED; LOCAL_SOURCE_TESTED` | Omission alone selects backward-compatible `auto`. A present value must be exact `auto` or `preserve`; blanks, whitespace, alternate case, null-like, numeric, array, and object values return HTTP 400 `INVALID_ORIENTATION_MODE`. Explicit `rotationX/Y/Z` remains available in either mode. |
+| Orientation sidecar trust | `LOCAL_SOURCE_TESTED; OWNER_CONTAINER_MATRIX_VERIFIED_EXACT_58C0CCB` | The Python helper writes one exclusive `0600`, bounded, versioned sidecar inside the owning workspace. Node accepts only a canonical regular non-symlink with stable identity, exact keys/schema/mode, finite proper 3x3 matrix, and consistent outcome. Invalid/missing `auto` metadata becomes explicit `fallback_unmodified` identity; it is never reported as an applied rotation. |
+| Versioned transform truth | `HISTORICAL_FIRST_VERSION; SUPERSEDED_BY_J3B_SCHEMA_2` | Historical J3 success and bounds responses shared one complete transform contract distinguishing original/oriented/final dimensions and automatic/requested/total rotation. The authoritative rotation-only matrix is `R_requested * R_automatic`, where requested Euler input is X then Y then Z (`Rz * Ry * Rx`); scaling, centering, grounding, and translation are excluded. J3B schema 2 above is current. |
+| Bounds-error consumer parity | `OWNER_APPROVED; LOCAL_SOURCE_TESTED` | A bounds failure includes complete `model_transform` beside model dimensions and build limits. Wording must use both fields: only `orientation_outcome=applied` supports “does not fit even after automatic rotation”; `unchanged` means automatic evaluation retained the pose, `preserved` identifies the submitted pose, and `fallback_unmodified` discloses that automatic orientation was unavailable. |
+| ZIP and multi-object capability | `SOURCE_PROVEN` | The outer ZIP accepts exactly one supported source. A 3MF scene's geometries are concatenated into one compound STL, one STL argument reaches the slicer, and the API requests no split-to-objects operation. Disconnected shells therefore retain relative placement instead of becoming independently packable arranger objects; there is no current independent multi-object packing capability for the yaw prohibition to remove. |
+| Native post-transform rotation | `OWNER_CONTAINER_MATRIX_VERIFIED_EXACT_58C0CCB` | Prusa adds no native rotation. Orca retains `--arrange 1` for placement and `--orient 0`, plus exactly one single-token `--allow-rotations=0` to disable unreported whole-compound yaw. The owner measured real G-code/6.25 g with the equals form and `No such file: 0` with the split form on exact Orca 2.3.1, then passed the full J3 matrix on exact tree `58c0ccb`. This does not prove the corrective J3B image. |
+| Production boundary | `NO_DEPLOY_NO_ROUTE_MUTATION` | J3 authorizes no registry write, image publication, deploy, public-route activation, customer traffic, or consumer-repository change. Repository-local results cannot establish any of those states. |
+
+The exact code-bearing SHA is
+`c404326f535fcc70ba62aa923fa6652f4fba5019`. Local gates passed at 2352/2352
+JavaScript tests, 132 Python tests with 131 pass plus one expected Windows
+POSIX-permission skip, syntax over 259 JavaScript and 44 Python files, 37/37
+staged safety paths, and zero production dependency vulnerabilities.
+The owner later passed the full historical J3 matrix on exact tree `58c0ccb`;
+the later J3B owner production-identical VPS rerun also passed on exact tree
+`db42b93`. See
+[`evidence/j3-orientation-visibility.md`](evidence/j3-orientation-visibility.md).
+
+## Historical J2 bounds, catalogue, private-route, and calibration control delta
+
+Current classification:
+`J2_LOCAL_AGGREGATE_PASS;
+J2_HOSTED_BASELINE_SOURCE_IMAGE_PASS_NO_PUBLISH;
+J2_LIVE_ACTIVATION_REHEARSAL_BLOCKED_NOT_RUN;
+J2_NO_ROUTE_MUTATION;
+J2_REHEARSAL_TERMINAL_CONTRACT_DARK;
+J2_ORCA_CALIBRATION_BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`.
+
+The v1 catalogue and declared-envelope admission statements in this table are
+historical J2 evidence. The J3B control table above is authoritative for the
+current schema, per-engine inclusive ceilings, and H2D-QUOTE boundary.
+
+| Control | Current classification | Fail-closed boundary |
+| --- | --- | --- |
+| Physical build-envelope truth | `IMPLEMENTED_FOCUSED_TESTED` | Prusa FDM and Orca P1S resolve to `256 x 256 x 250 mm`; Orca H2D resolves to `350 x 320 x 325 mm`. FDM fallback is the largest supported envelope, H2D. Selection-specific bounds remain authoritative: P1S Z `230 mm` is accepted, while `251 mm` and `260 mm` are rejected. |
+| Public startup profile catalogue | `HISTORICAL_J2_CONTRACT; SUPERSEDED_BY_J3B_V2` | J2 established an unauthenticated, startup-built, machine-bound FDM catalogue through the production profile chain, with bounded generic selectors/components, a strong ETag, `catalogue_sha256`, and typed non-cacheable `503 PROFILE_CATALOGUE_UNAVAILABLE`. It excluded the generic `120 x 120 x 150 mm` SLA fallback. J3B catalogue v2 above is current. |
+| Machine resolution, fleet maximum, and future SLA shape | `HISTORICAL_J2_RESOLUTION; SUPERSEDED_BY_ENGINE_SCOPED_V2` | J2 retained every preset row, failed on same-engine preset drift, and avoided component-wise conflict synthesis. J3B supersedes its cross-engine resolution with per-engine machine/fleet derivation. The owner-confirmed future SLA target remains the Elegoo Saturn 4 Ultra; its dimensions are not guessed, and a separate owner-profiled Chitubox/Elegoo Satellite wave is required before a truthful catalogue-v2 SLA row. |
+| Private source allowlist | `REPOSITORY_CONTRACT_TESTED; LIVE_NOT_RUN` | The rendered router admits one through four unique canonical private IPv4 `/32` ranges. Phase one requires exactly one LeadPilot source; two through four are a later expansion. Router denial is HTTP 403, host-firewall denial is TCP reset plus private `J2_ALLOWLIST_DENY`, and application principal failure remains HTTP 401. |
+| Route activation authority | `BLOCKED_NOT_RUN; NO_ROUTE_MUTATION; TERMINAL_DARK_CONTRACT_ONLY` | Repository checks can only prepare a dark-to-active rehearsal. One inherited root-private FD9 lock must span every route action and external observation; the helper re-proves canonical/root-owned/non-writable ancestor identity and terminates only through strict `--assert-router-dark` with an exact retained source. An external orchestrator must independently prove allowed and denied sources, TLS issuance/renewal, rollback, and the final dark readback. Repository-local gates cannot authorize promotion. Any `*_rollback_uncertain` result is `STOP/UNKNOWN`, not dark evidence. Logical fsync-cutpoint recovery is locally tested; real process/kernel/power-loss durability is `NOT_VERIFIED`. |
+| Calibration privacy and comparability | `BAMBU_REFERENCE_9_NUMERIC_PLUS_BOUNDARY; ORCA_BLOCKED` | Public records use only `M01`-`M10` and hashes. Nine numeric Bambu rows plus the `M03` boundary form the gate. Orca auto-orient is disabled, the calibration process forces support off before digest/native execution, and the native call reuses production machine/process `--load-settings` plus separate `--load-filaments` construction. Missing vendor profiles and local Docker prevent an Orca measurement; generic profiles cannot establish vendor-faithful time or pricing. |
+
+The protected-main baseline
+`0dedbe1e9e4c32a0373982a45bf788cdcdb4f024` passed read-only Source run
+`32996102492` and no-push Image run `32996102426`. Those runs are not hosted J2
+evidence. No exact J0-capable publication/deployment or private/live observation
+exists, so activation, TLS, allowlist behavior, rollback, current route state,
+and customer traffic remain unverified. J2 made no route mutation; the latest
+prior I12 dark classification was not re-verified. See
+[`evidence/j2-bounds-network-calibration.md`](evidence/j2-bounds-network-calibration.md).
+
 ## J1C corrective over the J1 control delta
 
 Current local classification:
@@ -22,10 +127,10 @@ NO_VENDOR_IMPORT; NO_EXTERNAL_PRODUCTION_AUTHORITY`.
 | Slice consumer separation | `IMPLEMENTED_FOCUSED_TESTED` | WooCommerce and LeadPilot have distinct active/previous key families behind the single `x-slicer-api-key` header. Every configured slot is fixed-digest compared; absent dummy slots never authorize. Cross-audience/principal reuse and incomplete configuration refuse startup generically. |
 | Explicit slice-auth mode | `IMPLEMENTED_FOCUSED_TESTED` | `SLICE_SERVICE_AUTH_MODE` defaults to `legacy`, which requires the shared active and forbids principal material/expiry. `migration` requires shared active, both principal actives, and a future `SLICE_SERVICE_LEGACY_MIGRATION_UNTIL` no more than 90 days away. Shared active/previous authorize only while request time is strictly before expiry; at and after expiry they return the stable rejection while principal slots continue, and all six resolved slots are still compared. `principals` requires both principal actives and forbids shared active/previous and expiry; it is the route-activation target. Optional previous slots require their own active in the application contract, while the J0 initial route-activation gate requires both principal previous slots absent. A later rotation must separately prove every configured previous slot, an owner-approved removal deadline, and post-removal rejection. A configured valid `ADMIN_API_KEY` participates in global uniqueness; only its exact authorized substitution for one missing non-slice active avoids duplicate self-registration. Mode, slot, or deadline mismatch fails before listen. External production activation is outside repository evidence and authority. |
 | Principal-only dark activation gate | `RUNBOOK_DEFINED; NOT_RUN_REPOSITORY_EVIDENCE` | Before any router action, sanitized resolver readback must prove `principals`, both principal actives, `legacyAccepted=false`, `expiresAt=null`, and absent shared active/previous, expiry, and both principal previous slots for initial activation. One private synthetic slice per principal must pass; available retired shared credentials under `x-slicer-api-key` and a correct principal under `x-api-key` must return exact 401 without workspace, queue, or artifact effects. Queue/artifact cleanup must be exact. Later rotation is separately authorized and proves every configured previous slot, an owner-approved removal deadline, and post-removal rejection. Missing or inconclusive evidence keeps the route dark. External production activation is outside repository evidence and authority. |
-| Public read surfaces | `UNCHANGED` | `GET /health`, `GET /ready`, and `GET /pricing` remain authentication-free. `/health` is cheap liveness and `/ready` is minimal readiness. J1C proposes, but does not implement, future native capability state on `/ready`. |
+| Public read surfaces | `J2_CATALOGUE_ADDED` | `GET /health`, `GET /ready`, `GET /pricing`, and informational `GET /profiles` remain authentication-free. `/health` is cheap liveness, `/ready` is minimal readiness, and catalogue unavailability is an independent typed 503 that does not gate either surface or slicing. |
 | Repository filament and material-mass identity | `J1C_LOCAL_AGGREGATE_PASS; FINAL_IMAGE_PENDING` | Orca PLA/PETG requests select and snapshot an exact repository filament profile, load machine/process through `--load-settings`, and load the selected filament through `--load-filaments`. Normalized material plus filament JSON remains digest-bound and the response exposes actual profile diameter/density. Missing or unsupported material omits `--load-filaments`, preserves explicit null metadata/mass/rate/price, and cannot trigger automatic pricing. Any non-null mass comes only from the slicer's direct G-code marker and is never inferred from length. |
 | Strict G-code metric drift | `OWNER_SUPPLIED_GUARD_VPS_PASS; LOCAL_AGGREGATE_PASS; FINAL_IMAGE_PENDING` | `SLICE_STRICT_GCODE_METRICS` defaults to true and requires positive print-time and filament-length markers. On optional-mass paths, a missing or recognized non-positive grams marker becomes null/manual and is never published as zero or derived from length. Selected-profile Orca still requires positive direct grams within `MAX_MATERIAL_USED_GRAMS`; recognized zero remains `GCODE_FILAMENT_NOT_POSITIVE`, and missing/drifted mass maps to bounded HTTP 500 `SLICE_OUTPUT_UNPARSED`. The owner-supplied guard-only diagnostic image returned HTTP 200 with positive length and null mass/rate/price. The combined local aggregate passes; exact-image and hosted gates remain pending. |
-| Live Bambu calibration | `SEPARATE_VENDOR_TIME_MOTION_LANE; NOT_J1C_BLOCKER` | The repository P1S/H2D candidates remain generic Marlin profiles and no vendor profile was imported. The incomplete vendor chain remains a separate W8 time/motion qualification lane. J2 separately owns P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm bed-shape/Z correction. `scripts/sz-b2-orca-calibration.js` still embeds the superseded combined settings list; it is outside the production-engine correction and unqualified. |
+| Live Bambu calibration | `J2_BAMBU_REFERENCE_9_NUMERIC_PLUS_BOUNDARY; ORCA_BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER` | The repository P1S/H2D candidates remain generic Marlin profiles and no vendor profile was imported. J2 supplies P1S `256 x 256 x 250 mm` and H2D `350 x 320 x 325 mm` physical envelopes only. Nine numeric Bambu rows and the `M03` boundary are recorded. The runner fixes `--orient 0`, forces support off before digest/native work, and shares production machine/process `--load-settings` plus separate `--load-filaments` construction; no Orca measurement or automatic-pricing qualification is claimed. |
 | Capability readiness | `PROPOSAL_ONLY_NOT_IMPLEMENTED` | Keep public `/health` cheap liveness and place future native slicing capability on public `/ready`. Startup qualification needs Prusa and selected-filament Orca probes, contained cleanup, state/cache/admission integration, and Docker/VPS evidence. Docker still checks `/health`; Traefik already consumes `/ready`, so a future `/ready` 503 withholds routing without making Docker unhealthy. Rolling degradation requires typed per-engine failures, anti-DoS semantics, and recovery/hysteresis; raw last-N 5xx is unsafe. |
 
 The J0 final local image identity and aggregate remain historical evidence. The
@@ -665,6 +770,7 @@ delta above when reading test classifications.
 | Scoped service trust is repository-tested and the dark private topology is host-verified, but public controls are incomplete. | Critical | I5 tests active/previous audiences, two-restart revocation, finite legacy migration, Origin policy, proxy identity, readiness, and observability. I12 verifies the exact dark private peer, auth rejection, digest and API/native egress; public caller/proxy CIDR, firewall, DNS/certificate and complete production secret lifecycle remain `UNVERIFIED`. | **Public route + secret lifecycle gate:** prove the intended public caller, denied unintended caller, firewall, hostname/certificate, secret ownership/mode/state and exact digest before route activation. An agent cannot grant an exception. |
 | Multipart/HTTP ingress can exhaust resources beyond the application subset. | High | S1a covers bounded multipart fields and cleanup. I3 applies bounded Node header/request/keep-alive timeouts, headers, connections, and requests/socket with fallback. Actual VPS capacity/proxy timeouts, total streamed upload duration, and measured memory/disk/CPU envelopes remain unverified. | **S2:** measure and enforce host/proxy upload duration, connection/concurrency, memory, CPU, and disk envelopes under synthetic load. |
 | Verified repository and dark-host evidence is not public production acceptance. | Critical | I11 completed automatic no-deploy rehearsal at run `32669484893`. I12 verifies one exact dark API digest and corrected proxy topology, but does not verify public DNS/certificate/caller/firewall, customer traffic, full secret lifecycle, monitoring/backup acceptance or a public change window. | **Public activation gate:** separately authorize and prove every remaining public control, authenticated hostname route and rollback before customer traffic. |
+| An allowlist block can be misdiagnosed as a bad application key. | High | J2 separates router HTTP 403 and host-firewall TCP reset/private `J2_ALLOWLIST_DENY` from application HTTP 401 in the repository contract. Route mutation also requires one whole-rehearsal lock, protected ancestors, and strict terminal dark assertion. Live firewall/router behavior and real crash/power-loss durability are not observed. | **J2 external rehearsal gate:** prove denied and permitted sources from outside, correlate the private deny event, verify target-filesystem durability, and preserve terminal dark rollback. |
 
 ## Historical S0 control inventory
 

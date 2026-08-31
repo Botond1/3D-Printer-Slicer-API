@@ -41,3 +41,7 @@ tests/testing-scripts/results/**
 configs/pricing.json
 configs/pricing-state/*
 !configs/pricing-state/.gitkeep
+
+# Hostinger operator runtime-private router state
+/ops/hostinger/.runtime-private/
+/ops/hostinger/dynamic/slicer-api.yml

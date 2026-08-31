@@ -4,12 +4,13 @@ applyTo: "**"
 
 # Repository Wide Instructions
 
-Last synchronized: 2026-08-26
+Last synchronized: 2026-08-31
 
 ## Architecture
 - Backend stack is Node.js + Express + Python helper scripts.
 - Slicing engines: PrusaSlicer (FDM/SLA) and OrcaSlicer (FDM only).
 - Service-authenticated slicing endpoints: /prusa/slice and /orca/slice.
+- Public informational startup catalogue: GET /profiles.
 
 ## Hard Constraints
 - Runtime directories must remain root-scoped: input/, output/, configs/.
@@ -18,6 +19,40 @@ Last synchronized: 2026-08-26
 - Keep queueing and rate-limiting active for CPU-heavy slicing work.
 - Keep Orca output mapping deterministic via per-request isolated output directory handling.
 - Preserve slice route order: limiter -> x-slicer-api-key authentication -> root-scoped workspace/Multer -> queue -> native processing.
+- Preserve the physical/profile-declared P1S `256 x 256 x 250 mm` and enlarged
+  quote-bed `350 x 320 x 325 mm` dimensions separately from native admission.
+  Runtime bounds and the public catalogue consume the largest value proved to
+  pass, inclusively: P1S Prusa `256 x 256 x 249.9 mm` and Orca
+  `253.9 x 253.9 x 249.9 mm`. Prusa's native X/Y edge beyond the declared
+  profile remains `UNESTABLISHED`. Exact helper-image measurement A established
+  H2D-QUOTE Prusa `350 x 320 x 324.9 mm` and Orca
+  `347.9 x 317.9 x 324.9 mm`; Prusa native X/Y beyond that declared quote bed
+  remains `UNESTABLISHED`. Exact local final-admission B confirmed all four
+  published tuples with 88/88 fixture preconditions, 20/20 brackets, and 4/4
+  combined corners. The FDM fallback and configured
+  `MAX_MODEL_DIMENSION_MM >= 350` remain compatibility constraints; the
+  existing `1 mm` profile minima remain unchanged.
+- Preserve strict `orientationMode=auto|preserve`, with only omission defaulting
+  to `auto`. Success and the full K2 `MODEL_OUT_OF_PRINTER_BOUNDS` HTTP 422
+  response require the same complete `transform_schema: 2` payload.
+  `original_dimensions_available` is mandatory: `true` iff
+  `original_dimensions_mm` is an object from a real measurement and `false`
+  iff it is null; never substitute oriented dimensions. Oriented and final
+  dimensions are load-bearing and must be positive, otherwise return controlled
+  HTTP 422 `MODEL_DIMENSIONS_UNAVAILABLE`. The authoritative rotation-only
+  matrix is `R_requested * R_automatic`; successful object height always equals
+  final Z. Canonical measured data also requires `height_mm == z`: malformed
+  tagged original data degrades to false/null, while malformed oriented/final
+  data returns the controlled 422.
+- Preserve bounded native stdout independently from stderr on command failure.
+  Full K2 native mapping still requires an explicit placement/print-volume
+  diagnostic from either stream. A Prusa exit-zero/no-artifact result is only a
+  placement safety-net rejection when that explicit diagnostic is present.
+- Preserve exactly one supported source per outer ZIP. Multi-object 3MF scenes
+  are concatenated into one compound STL, passed as one STL argument, and not
+  sent through split-to-objects. Orca may keep `--arrange 1` for placement but
+  must use `--orient 0` plus exactly one single-token
+  `--allow-rotations=0` to prevent unreported native rotation.
 
 ## Security
 - Normal startup requires pricing, artifact, and operations active keys plus one
@@ -45,6 +80,61 @@ Last synchronized: 2026-08-26
   cases, and exact cleanup. Missing or inconclusive evidence keeps the route
   dark. External production activation is outside repository evidence and
   authority.
+- Keep `/profiles` unauthenticated, startup-built, immutable, informational,
+  and independent of slicing availability. Preserve the strong ETag,
+  conditional 304, body `catalogue_sha256`, typed non-critical 503, and the
+  exact 18-row machine-bound FDM-only `r3d-profile-catalogue-v2` set. Every row
+  must expose physical/profile-declared
+  `declared_build_volume_dimensions_mm` separately from the authoritative,
+  exact-boundary-inclusive `largest_passing_dimensions_inclusive_mm`. The
+  latter is the admission authority consumed by both the API and clients.
+  Preserve `declared_source_kind: profile-explicit` and
+  `minimum_dimensions_inclusive_mm`; the minimum remains a compatibility floor,
+  not machine metadata. Keep every per-printer/per-engine preset row and fail on
+  drift within one technology/printer/engine. Resolve machine and fleet
+  envelopes per technology and engine; never merge Prusa and Orca ceilings,
+  silently minimize them, or add a manual `fleet_max`. Never publish the
+  generic `120 x 120 x 150 mm` SLA fallback as a machine envelope.
+- The future SLA printer is the owner-confirmed Elegoo Saturn 4 Ultra, but its
+  dimensions must not be guessed. Current Prusa `--export-sla`/SL1 handling is
+  incompatible with Elegoo `.goo`/`.ctb` artifacts and credible MSLA timing.
+  Remediate in a separate wave from owner Chitubox/Elegoo Satellite profiles.
+  Preserve bounded generic `engine`, generic endpoint plus ordered
+  `slice_selector.parameters[{name,value}]`, ordered path-free
+  `profile_components[{role,basename,selector_parameter}]`, exact nullable
+  component-to-selector bindings, the exact
+  `r3d-effective-slice-profile-v2` identity marker. A later truthful SLA row
+  and its independent per-engine SLA fleet resolution can use catalogue v2
+  without another schema-version change.
+- Keep H2D-QUOTE on both engines as a P1S-derived, enlarged-bed quoting chain.
+  It is quoting-only, not machine-accurate and never proof of production H2D
+  G-code. The plugin consumer calls only `POST /prusa/slice`, so Prusa coverage
+  is required. Measurement A passed 44/44 fixture preconditions, 10/10 brackets,
+  and 2/2 combined corners. At `0.3 mm`, `325 mm` returned the full K2 HTTP 422
+  twice on each engine after the exact conjunctive last-layer classifier. Exact
+  local final-admission B passed 88/88 fixture preconditions, 20/20 brackets,
+  4/4 combined corners, the 9/9 catalogue lane, and the optional Prusa digest-
+  parity lane. The owner production-identical VPS matrix from exact tree
+  `db42b93` later confirmed all four inclusive boundaries, full K2 422 mapping,
+  zero-normal false/null degradation, and the Orca mass/no-yaw guards. The
+  separate owner image ID is not byte-identical-image evidence. Merge is
+  authorized but not yet claimed complete; deploy and every external mutation
+  remain unauthorized.
+- Hostinger public-route preparation accepts one through four unique private
+  IPv4 `/32` entries. Initial `leadpilot-only` phase requires exactly one;
+  expanded callers are separately authorized. Host-firewall TCP rejection and
+  fixed private `J2_ALLOWLIST_DENY`, or router HTTP 403, must remain distinct
+  from backend HTTP 401. The external orchestrator owns allowed/denied, TLS
+  issuance/renewal, rollback, and final-dark proof. One inherited root-private
+  FD9 lock must span the complete rehearsal; each action re-proves canonical,
+  root-owned, non-writable ancestors and terminal proof uses strict
+  `--assert-router-dark`. Local evidence covers logical fsync cutpoints, not
+  real crash/power-loss durability. Any
+  `*_rollback_uncertain` result is `STOP/UNKNOWN`, not dark evidence. Current
+  live rehearsal is `BLOCKED / NOT RUN` until an exact J0-capable image is
+  published and deployed and private live evidence exists. J2 performs no
+  route mutation and does not freshly verify the prior I12 dark state;
+  repository gates cannot authorize permanent activation.
 - No-Origin requests are allowed. Browser-origin protected calls use only their
   SLICE_, PRICING_, ARTIFACT_, or OPERATIONS_CORS_ALLOWED_ORIGINS list.
 - Protected x-api-key routes remain IP-rate-limited.
@@ -71,22 +161,26 @@ Last synchronized: 2026-08-26
   `engine_version` and lowercase `profiles.effective_profile_sha256`. Keep
   Prusa section/key identity case-sensitive and reject exact duplicate
   qualified keys like the native Boost parser.
-- OpenAPI includes the four requested omitted runtime codes plus the already-
-  live `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. Keep the bounds
-  branch disjoint and require both dimension payloads. Keep the complete live
+- OpenAPI includes the four requested omitted runtime codes plus the controlled
+  `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. Keep the bounds branch
+  disjoint and require both dimension payloads plus the complete schema-v2 K2
+  `model_transform`, including orientation and original-availability fields.
+  Keep the complete live
   slice-500 enum: `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
   `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 - Resolve both selected engines' versions atomically from bounded `--help`
   output before listen; publish neither unless both pass. The startup module has
-  exact-image proof. Keep Orca invocation at `--arrange 1` / `--orient 0` after
-  preprocessing/bounds checks: arrangement places the already-rotated model
-  onto the build plate, while auto-orient stays disabled and cannot replace the
-  requested rotation. Focused command/digest contracts and final exact-image
+  exact-image proof. Keep Orca invocation at `--arrange 1`, `--orient 0`, and
+  one `--allow-rotations=0` after preprocessing/bounds checks: arrangement
+  translates the already-rotated compound model onto the build plate, while
+  auto-orient and arrange yaw stay disabled and cannot replace or extend the
+  reported rotation. Focused command/digest contracts and final exact-image
   HTTP transform/final-dimensions E2E pass for both principals; the exact local
   code/image identity is recorded in the J0 evidence document.
-- Filament-profile identity plus `material_used_g` is a separate W8 prerequisite
-  classified `BLOCKED_OWNER_INPUT / NOT_STARTED` pending required Bambu
-  reference profile fields; do not infer it from the effective-profile digest.
+- Bambu reference numbers are available for nine measurable cases plus one
+  P1S-overheight boundary. Tight Orca time/mass qualification remains blocked
+  on the complete owner-approved vendor profile chain and runnable Docker; do
+  not infer calibration from the effective-profile digest or physical envelope.
 - HTTP defaults/bounds are headers timeout 60000 [1000,60000], request timeout 600000 [60000,600000], keep-alive timeout 5000 [1000,60000], header count 2000 [16,2000], connections 128 [1,1024], and requests/socket 100 [1,1000].
 - Invalid HTTP envelope overrides fall back to defaults and effective headers timeout is capped at request timeout. Actual VPS capacity and reverse-proxy timeouts are UNVERIFIED.
 - Public /health is liveness and /ready is minimal readiness. Detailed

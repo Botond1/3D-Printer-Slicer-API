@@ -4,6 +4,7 @@
 
 const { DEFAULTS } = require('../../config/constants');
 const { GcodeMetricsError } = require('./gcode-metrics');
+const { buildNativeBoundsResponse } = require('./native-bounds');
 
 /**
  * Detect converter-level geometry failures from command output.
@@ -138,6 +139,11 @@ function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, g
             error: `Processing exceeded ${DEFAULTS.SLICE_TIMEOUT_MINUTES} minutes. The uploaded file may be too complex or invalid for automatic slicing. Please simplify or correct the file and try again.`,
             errorCode: 'FILE_PROCESSING_TIMEOUT'
         });
+    }
+
+    const nativeBoundsResponse = buildNativeBoundsResponse(err);
+    if (nativeBoundsResponse) {
+        return res.status(422).json(nativeBoundsResponse);
     }
 
     if (isSourceGeometryError(err)) {

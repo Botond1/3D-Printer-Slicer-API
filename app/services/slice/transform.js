@@ -7,9 +7,21 @@ const fs = require('node:fs/promises');
 const { PYTHON_EXECUTABLE } = require('../../config/python');
 const { runCommand, throwIfAborted } = require('./command');
 const { resolvePythonHelper } = require('./helper-paths');
-const { getModelInfo } = require('./model-stats');
+const {
+    MODEL_INFO_MEASUREMENT_STATUSES,
+    createMeasuredModelMeasurement,
+    createUnavailableModelMeasurement,
+    getModelInfo,
+    isModelMeasurement,
+    isPositiveModelMeasurement
+} = require('./model-stats');
 const { validateModelDimensionsAgainstLimits } = require('./profiles');
 const { roundDimensions } = require('./common');
+const {
+    buildModelTransformContract,
+    createOrientationState,
+    identityRotationMatrix
+} = require('./orientation-contract');
 
 /**
  * Check whether all base model dimensions are positive.
@@ -18,6 +30,47 @@ const { roundDimensions } = require('./common');
  */
 function hasPositiveDimensions(dimensions) {
     return Object.values(dimensions).every((value) => Number.isFinite(value) && value > 0);
+}
+
+function normalizeDirectModelMeasurement(candidate) {
+    if (candidate?.status === MODEL_INFO_MEASUREMENT_STATUSES.MEASURED) {
+        return isModelMeasurement(candidate)
+            ? candidate
+            : createUnavailableModelMeasurement();
+    }
+    if (candidate?.status === MODEL_INFO_MEASUREMENT_STATUSES.UNAVAILABLE) {
+        return candidate.modelInfo === null
+            ? candidate
+            : createUnavailableModelMeasurement();
+    }
+    if (
+        candidate
+        && typeof candidate === 'object'
+        && ['x', 'y', 'z'].every((axis) => (
+            Object.hasOwn(candidate, axis)
+            && Number.isFinite(Number(candidate[axis]))
+            && Number(candidate[axis]) >= 0
+        ))
+    ) {
+        try {
+            return createMeasuredModelMeasurement(candidate);
+        } catch {
+            return createUnavailableModelMeasurement();
+        }
+    }
+    return createUnavailableModelMeasurement();
+}
+
+function modelDimensionsUnavailableResult() {
+    return {
+        isValid: false,
+        status: 422,
+        response: {
+            success: false,
+            error: 'Model dimensions could not be resolved after preprocessing.',
+            errorCode: 'MODEL_DIMENSIONS_UNAVAILABLE'
+        }
+    };
 }
 
 /**
@@ -203,24 +256,33 @@ function resolveTransformedPath(inputPath, workspace, suffixFactory = () => rand
 /**
  * Apply optional transform and validate final model bounds against build-volume limits.
  * @param {string} processableFile STL candidate path.
- * @param {{x: number|string, y: number|string, z: number|string, height_mm?: number}} originalModelInfo Original model metadata.
+ * @param {{status: 'measured'|'unavailable', modelInfo: {x: number, y: number, z: number, height_mm: number}|null}|{x: number|string, y: number|string, z: number|string, height_mm?: number}} orientedModelMeasurement Post-orientation measurement. A raw object is accepted only for direct/unit compatibility.
  * @param {{unit: 'mm'|'inch', keepProportions: boolean, requestedTargetSize: {x: number | null, y: number | null, z: number | null}, targetSizeMm: {x: number | null, y: number | null, z: number | null}, scalePercent: number | null, rotationDeg: {x: number, y: number, z: number}}} transformOptions Parsed transform options.
  * @param {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string}} buildVolumeLimits Printer limits.
  * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {AbortSignal} [signal] Request cancellation signal.
+ * @param {{orientation?: Readonly<Record<string, unknown>>, originalModelMeasurement?: Record<string, unknown>, originalModelInfo?: Record<string, number>}} [transformContext] Orientation and original-measurement provenance used by the versioned response contract. `originalModelInfo` is a direct/unit compatibility seam.
  * @returns {Promise<
- *   {isValid: true, processableFile: string, transformPlan: {requiresTransform: boolean, scale: {x: number, y: number, z: number}, rotationDeg: {x: number, y: number, z: number}, requestedUnit: 'mm'|'inch', keepProportions: boolean, requestedTargetSize: {x: number | null, y: number | null, z: number | null}, predictedSizeMm: {x: number, y: number, z: number}}, effectiveModelInfo: {x: number, y: number, z: number, height_mm: number}, modelBoundsValidation: {isValid: true, dimensions: {x: number, y: number, z: number}}}
- *   | {isValid: false, status: number, response: {success: false, error: string, errorCode: string, model_dimensions_mm?: {x: number, y: number, z: number}, build_volume_limits_mm?: {min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, source_profile: string}}}
+ *   {isValid: true, processableFile: string, transformPlan: Record<string, unknown>, modelTransform: Record<string, unknown>, effectiveModelInfo: {x: number, y: number, z: number, height_mm: number}, modelBoundsValidation: {isValid: true, dimensions: {x: number, y: number, z: number}}}
+ *   | {isValid: false, status: number, response: {success: false, error: string, errorCode: string, model_dimensions_mm?: {x: number, y: number, z: number}, model_transform?: Record<string, unknown>, build_volume_limits_mm?: {min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, source_profile: string}}}
  * >} Validation result.
  */
 async function applyTransformAndValidateModel(
     processableFile,
-    originalModelInfo,
+    orientedModelMeasurementCandidate,
     transformOptions,
     buildVolumeLimits,
-    workspace, signal
+    workspace,
+    signal,
+    transformContext = {}
 ) {
     throwIfAborted(signal);
-    const transformPlanResult = buildModelTransformPlan(originalModelInfo, transformOptions);
+    const orientedModelMeasurement = normalizeDirectModelMeasurement(orientedModelMeasurementCandidate);
+    if (!isPositiveModelMeasurement(orientedModelMeasurement)) {
+        return modelDimensionsUnavailableResult();
+    }
+    const orientedModelInfo = orientedModelMeasurement.modelInfo;
+    const transformPlanResult = buildModelTransformPlan(orientedModelInfo, transformOptions);
     if (!transformPlanResult.isValid) {
         return {
             isValid: false,
@@ -240,25 +302,33 @@ async function applyTransformAndValidateModel(
     }
 
     throwIfAborted(signal);
-    const effectiveModelInfo = transformPlan.requiresTransform
-        ? await getModelInfo(transformedFilePath, signal) : originalModelInfo;
+    const finalModelMeasurement = transformPlan.requiresTransform
+        ? await getModelInfo(transformedFilePath, signal) : orientedModelMeasurement;
     throwIfAborted(signal);
-
-    const hasKnownFinalDimensions = [effectiveModelInfo.x, effectiveModelInfo.y, effectiveModelInfo.z]
-        .every((value) => Number.isFinite(Number(value)) && Number(value) > 0);
-    if (!hasKnownFinalDimensions) {
-        return {
-            isValid: false,
-            status: 422,
-            response: {
-                success: false,
-                error: 'Model dimensions could not be resolved after preprocessing.',
-                errorCode: 'MODEL_DIMENSIONS_UNAVAILABLE'
-            }
-        };
-    }
+    if (!isPositiveModelMeasurement(finalModelMeasurement)) return modelDimensionsUnavailableResult();
+    const effectiveModelInfo = finalModelMeasurement.modelInfo;
 
     const modelBoundsValidation = validateModelDimensionsAgainstLimits(effectiveModelInfo, buildVolumeLimits);
+    const orientation = transformContext.orientation || createOrientationState(
+        'auto',
+        'unchanged',
+        identityRotationMatrix()
+    );
+    const originalModelMeasurement = Object.hasOwn(transformContext, 'originalModelMeasurement')
+        ? normalizeDirectModelMeasurement(transformContext.originalModelMeasurement)
+        : Object.hasOwn(transformContext, 'originalModelInfo')
+            ? normalizeDirectModelMeasurement(transformContext.originalModelInfo)
+            // Direct/unit callers predating the explicit measurement state treat
+            // their positive oriented input as the same measured original input.
+            : orientedModelMeasurement;
+    const modelTransform = buildModelTransformContract({
+        transformOptions,
+        transformPlan,
+        orientation,
+        originalModelMeasurement,
+        orientedModelMeasurement,
+        finalModelMeasurement
+    });
     if (!modelBoundsValidation.isValid) {
         const issues = [
             ...modelBoundsValidation.tooSmall,
@@ -273,6 +343,7 @@ async function applyTransformAndValidateModel(
                 error: `Model dimensions are outside selected printer limits. ${issues}`,
                 errorCode: 'MODEL_OUT_OF_PRINTER_BOUNDS',
                 model_dimensions_mm: roundDimensions(modelBoundsValidation.dimensions),
+                model_transform: modelTransform,
                 build_volume_limits_mm: {
                     min: roundDimensions(buildVolumeLimits.min),
                     max: roundDimensions(buildVolumeLimits.max),
@@ -286,6 +357,7 @@ async function applyTransformAndValidateModel(
         isValid: true,
         processableFile: transformedFilePath,
         transformPlan,
+        modelTransform,
         effectiveModelInfo,
         modelBoundsValidation
     };
@@ -293,5 +365,6 @@ async function applyTransformAndValidateModel(
 
 module.exports = {
     applyTransformAndValidateModel,
+    normalizeDirectModelMeasurement,
     resolveTransformedPath
 };

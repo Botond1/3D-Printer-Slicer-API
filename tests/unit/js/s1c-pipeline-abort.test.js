@@ -61,7 +61,10 @@ test('pre-aborted converter, orientation, and model-info calls launch no command
     const { convertInputToStl, tryOptimizeOrientation } = require(INPUT_PATH);
     const { getModelInfo } = require(MODEL_PATH);
     await assert.rejects(convertInputToStl('model.obj', workspace, controller.signal), (error) => error === reason);
-    await assert.rejects(tryOptimizeOrientation('model.stl', 'FDM', workspace, controller.signal), (error) => error === reason);
+    await assert.rejects(
+        tryOptimizeOrientation('model.stl', 'FDM', 'auto', workspace, controller.signal),
+        (error) => error === reason
+    );
     await assert.rejects(getModelInfo('model.stl', controller.signal), (error) => error === reason);
     assert.equal(launches, 0);
 });
@@ -72,7 +75,7 @@ test('orientation and model-info fallbacks rethrow active abort instead of swall
     const { tryOptimizeOrientation } = require(INPUT_PATH);
     const { getModelInfo } = require(MODEL_PATH);
     for (const invoke of [
-        (signal) => tryOptimizeOrientation('model.stl', 'FDM', workspace, signal),
+        (signal) => tryOptimizeOrientation('model.stl', 'FDM', 'auto', workspace, signal),
         (signal) => getModelInfo('model.stl', signal)
     ]) {
         const reason = new Error('active abort'); reason.name = 'AbortError';
@@ -88,8 +91,64 @@ test('genuine non-abort orientation and metadata failures retain their safe fall
     const workspace = { assertContainedPath(candidate) { return candidate; } };
     const { tryOptimizeOrientation } = require(INPUT_PATH);
     const { getModelInfo } = require(MODEL_PATH);
-    assert.equal(await tryOptimizeOrientation('model.stl', 'FDM', workspace), 'model.stl');
-    assert.deepEqual(await getModelInfo('model.stl'), { x: 0, y: 0, z: 0, height_mm: 0 });
+    const fallback = await tryOptimizeOrientation('model.stl', 'FDM', 'auto', workspace);
+    assert.equal(fallback.processableFile, 'model.stl');
+    assert.equal(fallback.orientation.mode, 'auto');
+    assert.equal(fallback.orientation.outcome, 'fallback_unmodified');
+    assert.equal(fallback.orientation.automaticOrientationApplied, false);
+    assert.deepEqual(fallback.orientation.automaticRotationMatrix, [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1]
+    ]);
+    assert.deepEqual(await getModelInfo('model.stl'), {
+        status: 'unavailable',
+        modelInfo: null
+    });
+});
+
+test('an oriented output without trusted sidecar metadata is ignored', async (t) => {
+    resetModules();
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), 's1c-orientation-metadata-'));
+    t.after(() => fsp.rm(root, { recursive: true, force: true }));
+    const modelPath = path.join(root, 'model.stl');
+    await fsp.writeFile(modelPath, 'solid original');
+    runImpl = async (_executable, args) => {
+        await fsp.writeFile(args[2], 'solid untrusted-rotated-output');
+        return { stdout: '', stderr: '' };
+    };
+    const workspace = { assertContainedPath(candidate) { return candidate; } };
+    const { tryOptimizeOrientation } = require(INPUT_PATH);
+
+    const result = await tryOptimizeOrientation(modelPath, 'FDM', 'auto', workspace);
+    assert.equal(result.processableFile, modelPath);
+    assert.equal(result.orientation.outcome, 'fallback_unmodified');
+    assert.equal(result.orientation.automaticOrientationApplied, false);
+});
+
+test('fallback_unmodified sidecar keeps the original STL as the slicer input', async (t) => {
+    resetModules();
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), 's1c-orientation-fallback-'));
+    t.after(() => fsp.rm(root, { recursive: true, force: true }));
+    const modelPath = path.join(root, 'model.stl');
+    await fsp.writeFile(modelPath, 'solid original');
+    runImpl = async (_executable, args) => {
+        await fsp.writeFile(args[2], 'solid helper-fallback-copy');
+        await fsp.writeFile(args[5], JSON.stringify({
+            orientation_metadata_schema: 1,
+            orientation_mode: 'auto',
+            orientation_outcome: 'fallback_unmodified',
+            rotation_matrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+        }));
+        return { stdout: '', stderr: '' };
+    };
+    const workspace = { assertContainedPath(candidate) { return candidate; } };
+    const { tryOptimizeOrientation } = require(INPUT_PATH);
+
+    const result = await tryOptimizeOrientation(modelPath, 'FDM', 'auto', workspace);
+    assert.equal(result.processableFile, modelPath);
+    assert.equal(result.orientation.outcome, 'fallback_unmodified');
+    assert.equal(result.orientation.automaticOrientationApplied, false);
 });
 
 test('orientation abort stops preprocessing before model-info, transform, or slicing', async (t) => {
@@ -103,17 +162,21 @@ test('orientation abort stops preprocessing before model-info, transform, or sli
     const launches = [];
     runImpl = async (executable, args) => {
         launches.push([executable, ...args]);
+        if (executable === 'prusa-slicer') {
+            return { stdout: 'size_x = 10\nsize_y = 20\nsize_z = 30\n', stderr: '' };
+        }
         controller.abort(reason);
         throw reason;
     };
     const workspace = { assertContainedPath(candidate) { return path.resolve(candidate); } };
     const { prepareProcessableModel } = require(PIPELINE_PATH);
     await assert.rejects(
-        prepareProcessableModel(modelPath, 'FDM', workspace, controller.signal),
+        prepareProcessableModel(modelPath, 'FDM', 'auto', workspace, controller.signal),
         (error) => error === reason
     );
-    assert.equal(launches.length, 1);
-    assert.equal(path.basename(launches[0][1]), 'orient.py');
+    assert.equal(launches.length, 2);
+    assert.deepEqual(launches[0].slice(0, 2), ['prusa-slicer', '--info']);
+    assert.equal(path.basename(launches[1][1]), 'orient.py');
 });
 
 async function outputFixture(t) {
@@ -146,6 +209,31 @@ function outputContext(output, workspace, signal) {
     };
 }
 
+function schemaTwoPreserveTransform(dimensions = { x: 20, y: 30, z: 40 }) {
+    const zero = { x: 0, y: 0, z: 0 };
+    const identity = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    return {
+        transform_schema: 2,
+        size_unit: 'mm',
+        keep_proportions: true,
+        requested_size: { x: null, y: null, z: null },
+        scale_percent: 100,
+        scale_factors: { x: 1, y: 1, z: 1 },
+        orientation_mode: 'preserve',
+        orientation_outcome: 'preserved',
+        automatic_orientation_applied: false,
+        automatic_rotation_deg: { ...zero },
+        requested_rotation_deg: { ...zero },
+        rotation_deg: { ...zero },
+        automatic_rotation_matrix: identity.map((row) => [...row]),
+        rotation_matrix: identity.map((row) => [...row]),
+        original_dimensions_available: true,
+        original_dimensions_mm: { ...dimensions },
+        oriented_dimensions_mm: { ...dimensions },
+        final_dimensions_mm: { ...dimensions }
+    };
+}
+
 test('abort after native return prevents parsing and artifact promotion', async (t) => {
     const { output } = await outputFixture(t);
     const reason = new Error('post-native abort'); reason.name = 'AbortError';
@@ -167,6 +255,109 @@ test('abort after native return prevents parsing and artifact promotion', async 
     assert.equal(observedSignal, controller.signal);
     assert.equal(parses, 0);
     assert.equal(promotions, 0);
+});
+
+test('Prusa exit-zero missing output maps exact last-layer height rejection to full H2D K2', async (t) => {
+    const { output } = await outputFixture(t);
+    const controller = new AbortController();
+    const { runSlicerAndParseStats } = loadOutputLifecycle(async () => {
+        throw new Error('must not parse');
+    });
+    const workspace = {
+        assertContainedPath(candidate) { return candidate; },
+        async promoteOutputCandidate() { throw new Error('must not promote'); }
+    };
+    const buildVolumeLimits = {
+        min: { x: 0.1, y: 0.1, z: 0.1 },
+        max: { x: 350, y: 320, z: 325 },
+        sourceProfile: 'FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini'
+    };
+    const context = {
+        ...outputContext(output, workspace, controller.signal),
+        layerHeight: 0.3,
+        effectiveModelInfo: { height_mm: 325 },
+        modelTransform: schemaTwoPreserveTransform({ x: 60, y: 60, z: 325 }),
+        buildVolumeLimits
+    };
+    const { buildNativeBoundsResponse } = require('../../../app/services/slice/native-bounds');
+    runImpl = async () => ({
+        stdout: '',
+        stderr: 'While the object z325.stl itself fits the build volume, its last layer exceeds '
+            + 'the maximum build volume height. You might want to reduce the size of your model '
+            + 'or change current print settings and retry.'
+    });
+
+    let placementError;
+    await assert.rejects(runSlicerAndParseStats(context), (error) => {
+        placementError = error;
+        return error.code === 'NATIVE_MODEL_OUT_OF_PRINTER_BOUNDS';
+    });
+    const response = buildNativeBoundsResponse(placementError);
+    assert.equal(response.errorCode, 'MODEL_OUT_OF_PRINTER_BOUNDS');
+    assert.deepEqual(response.model_dimensions_mm, { x: 60, y: 60, z: 325 });
+    assert.deepEqual(response.model_transform, context.modelTransform);
+    assert.deepEqual(response.build_volume_limits_mm, {
+        min: buildVolumeLimits.min,
+        max: buildVolumeLimits.max,
+        source_profile: buildVolumeLimits.sourceProfile
+    });
+
+    for (const nativeResult of [
+        {
+            stdout: '',
+            stderr: 'While the object z325.stl itself fits the build volume, validation failed.'
+        },
+        {
+            stdout: '',
+            stderr: 'The last layer exceeds the maximum build volume height.'
+        },
+        {
+            stdout: 'unrelated successful diagnostic',
+            stderr: 'warning: unrelated native note'
+        }
+    ]) {
+        runImpl = async () => nativeResult;
+        await assert.rejects(runSlicerAndParseStats(context), (error) => (
+            error.code === 'ENOENT' && buildNativeBoundsResponse(error) === null
+        ));
+    }
+});
+
+test('Prusa exit-zero missing output preserves prior explicit placement mapping', async (t) => {
+    const { output } = await outputFixture(t);
+    const controller = new AbortController();
+    const { runSlicerAndParseStats } = loadOutputLifecycle(async () => {
+        throw new Error('must not parse');
+    });
+    const workspace = {
+        assertContainedPath(candidate) { return candidate; },
+        async promoteOutputCandidate() { throw new Error('must not promote'); }
+    };
+    const buildVolumeLimits = {
+        min: { x: 0.1, y: 0.1, z: 0.1 },
+        max: { x: 253.9, y: 253.9, z: 249.9 },
+        sourceProfile: 'Bambu_P1S_0.4_nozzle.json'
+    };
+    const context = {
+        ...outputContext(output, workspace, controller.signal),
+        modelTransform: schemaTwoPreserveTransform(),
+        buildVolumeLimits
+    };
+    runImpl = async () => ({
+        stdout: 'plate 1: Nothing to be sliced; no object is fully inside the print volume',
+        stderr: 'warning: unrelated native note'
+    });
+
+    let placementError;
+    await assert.rejects(runSlicerAndParseStats(context), (error) => {
+        placementError = error;
+        return error.code === 'NATIVE_MODEL_OUT_OF_PRINTER_BOUNDS';
+    });
+    const { buildNativeBoundsResponse } = require('../../../app/services/slice/native-bounds');
+    const response = buildNativeBoundsResponse(placementError);
+    assert.equal(response.errorCode, 'MODEL_OUT_OF_PRINTER_BOUNDS');
+    assert.deepEqual(response.model_transform, context.modelTransform);
+    assert.deepEqual(response.build_volume_limits_mm.max, buildVolumeLimits.max);
 });
 
 test('abort racing with promotion cannot become a successful artifact response', async (t) => {

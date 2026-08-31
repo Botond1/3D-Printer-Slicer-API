@@ -1,4 +1,4 @@
-# Kalibráció — 2026-08 (J1, anonimizált munkalap)
+# Kalibráció — 2026-08 (J2, anonimizált munkalap)
 
 > Ez a publikus repóba szánt, anonimizált változat. A modelleket kizárólag
 > `M01`–`M10` és SHA-256 azonosítja. Az azonosító és a tényleges modellútvonal
@@ -12,7 +12,11 @@ filament-profil, valamint a tényleges Orca bináris becslése használható-e
 automatikus árazáshoz. A profil szerkesztése vagy a motor cseréje új identitást
 ad, ezért a korábbi mérés nem öröklődik át.
 
-Jelen állapot: `BLOCKED_OWNER_INPUT`. A repó
+Jelen állapot:
+`BAMBU_REFERENCE_9_OF_10_COMPLETE; ORCA_MEASUREMENT_BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`.
+A tulajdonosi Bambu Studio referencia kilenc mérhető modellhez számszerűen
+megérkezett; az `M03` 290 mm-es Z kiterjedése miatt a P1S elutasította, ami
+határeredmény, nem hiány. A repó
 `Bambu_P1S_0.4_nozzle.json` fájlja generikus Marlin-profilt tartalmaz, nem a
 valódi Bambu Lab P1S vendor-profilt. A szükséges tulajdonosi bemenetet a
 [`configs/orca/H2D-PROFIL-TODO.md`](../configs/orca/H2D-PROFIL-TODO.md)
@@ -24,7 +28,7 @@ minősíti a valódi P1S-t.
 | Tétel | Elvárt érték vagy forrás |
 |---|---|
 | Gép | a tulajdonos által jóváhagyott P1S 0,4 mm vendor-profil; jelenleg hiányzik |
-| Folyamat | `FDM_0.2mm.json` (0,20 mm, 20% kitöltés, automatikus támasz) |
+| Folyamat | `FDM_0.2mm.json` (0,20 mm, 20% kitöltés); a mérési runtime-példányban kötelező `enable_support=0` |
 | Anyag | `filament/PLA_generic.json` |
 | Névleges sűrűség | 1,24 g/cm³ |
 | Névleges szálátmérő | 1,75 mm |
@@ -71,20 +75,23 @@ eltérés % = (orca - bambu) / bambu * 100
 
 | Modell | Orca idő (mp) | Orca gramm | Bambu idő (mp) | Bambu gramm | Eltérés idő % | Eltérés gramm % |
 |---|---:|---:|---:|---:|---:|---:|
-| `M01` | függőben | függőben | ____ | ____ | ____ | ____ |
-| `M02` | függőben | függőben | ____ | ____ | ____ | ____ |
-| `M03` | függőben | függőben | ____ | ____ | ____ | ____ |
-| `M04` | függőben | függőben | ____ | ____ | ____ | ____ |
-| `M05` | függőben | függőben | ____ | ____ | ____ | ____ |
-| `M06` | függőben | függőben | ____ | ____ | ____ | ____ |
-| `M07` | függőben | függőben | ____ | ____ | ____ | ____ |
-| `M08` | függőben | függőben | ____ | ____ | ____ | ____ |
-| `M09` | függőben | függőben | ____ | ____ | ____ | ____ |
-| `M10` | függőben | függőben | ____ | ____ | ____ | ____ |
+| `M01` | függőben | függőben | 714 | 0,72 | ____ | ____ |
+| `M02` | függőben | függőben | 6420 | 46,33 | ____ | ____ |
+| `M03` | elutasítás függőben | nem alkalmazható | P1S-határ felett | nem alkalmazható | nem alkalmazható | nem alkalmazható |
+| `M04` | függőben | függőben | 9900 | 91,86 | ____ | ____ |
+| `M05` | függőben | függőben | 3396 | 19,95 | ____ | ____ |
+| `M06` | függőben | függőben | 1578 | 7,17 | ____ | ____ |
+| `M07` | függőben | függőben | 7680 | 45,06 | ____ | ____ |
+| `M08` | függőben | függőben | 6300 | 33,23 | ____ | ____ |
+| `M09` | függőben | függőben | 6600 | 36,43 | ____ | ____ |
+| `M10` | függőben | függőben | 24360 | 222,47 | ____ | ____ |
 
 **Elfogadási feltétel:**
-`max(abs(időeltérés), abs(grammeltérés)) <= 10%` mind a tíz modellen. Egyetlen
-kicsúszó modell esetén a profil nem alkalmas automatikus árazásra.
+`max(abs(időeltérés), abs(grammeltérés)) <= 10%` mind a kilenc számszerűen
+mérhető modellen. Az `M03` külön határkapu: mindkét útvonalnak el kell utasítania
+a P1S 250 mm-es Z határa felett, hamis idő- vagy grammérték nélkül. Egyetlen
+kicsúszó mérés vagy eltérő határdöntés esetén a profil nem alkalmas automatikus
+árazásra.
 
 ### Kötelező referencia-metaadatok
 
@@ -103,6 +110,12 @@ A tulajdonosi leolvasásnak minden modellnél rögzítenie kell:
 Az orientáció nem mellékes: a repó a natív automatikus orientálást kikapcsolja
 (`--orient 0`). Eltérő GUI-orientáció két különböző geometriai feladatot jelent,
 így az összehasonlítás nem lenne kalibráció.
+
+A mérési futtató a generált Orca runtime process-profilt a digest és a natív
+hívás előtt pontosan `enable_support=0` értékre állítja, majd visszaolvassa ezt
+az értéket. A natív hívást a production policy-helper építi: a gép és process
+`--load-settings`, a filament külön `--load-filaments` argumentum. Ez kizárólag
+a referencia-mérés szerződése; a termékprofil támogatás-beállítását nem módosítja.
 
 ## Futási szerződés
 
@@ -159,7 +172,8 @@ gramm-markert, ezért a Prusa sikeres ága null tömeggel és kézi árral tér 
   a gép sebesség- és gyorsulásadatai is. Csak időeltérés esetén először a
   gépprofilt kell vizsgálni, nem utólagos időszorzót bevezetni.
 - Három modell durva hibák kiszűrésére elég lehet, a ±10%-os árazási kapuhoz
-  nem. A tízmodell-es készlet a kötelező minimum ebben a munkalapban.
+  nem. Ebben a munkalapban a kilenc számszerű modell és az `M03` külön
+  P1S-határeredménye együtt alkotja a kötelező tízmodell-es készletet.
 - A PETG külön filament-profilt és eltérő effektív digestet kap, ezért külön
   kalibráció szükséges; nem örökölheti a PLA eredményét.
 - Egy korábbi, sávon kívüli Prusa-referencia az `M09` nagyságrendjét 0,20 mm
@@ -169,7 +183,9 @@ gramm-markert, ezért a Prusa sikeres ága null tömeggel és kézi árral tér 
 ## Ami még nincs ellenőrizve
 
 - A tulajdonos által jóváhagyott P1S és H2D vendor-profil nincs a repóban.
-- A tíz modell tényleges Orca- és Bambu Studio-mérése nincs kitöltve.
+- A kilenc számszerű Bambu Studio referencia rögzített; a tényleges Orca-mérés
+  nincs lefuttatva, mert a jóváhagyott vendor-profil hiányzik, és a helyi Docker
+  daemon ezen a checkpointon nem volt elérhető.
 - A helyi/hostolt image, memória-csúcs és a végleges erőforráslimit e
   dokumentummal nincs igazolva.
 - A fogyasztói automatikus árazás elfogadása külön, tulajdonos által vezérelt

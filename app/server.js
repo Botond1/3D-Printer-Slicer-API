@@ -19,6 +19,7 @@ try {
 
 const createSwaggerDocument = require('./docs/swagger-docs');
 const { createPricingRouter } = require('./routes/pricing.routes');
+const { createProfileCatalogueRouter } = require('./routes/profile-catalogue.routes');
 const { createSliceRouter } = require('./routes/slice.routes');
 const { createSystemRouter } = require('./routes/system.routes');
 const errorHandler = require('./middleware/errorHandler');
@@ -37,6 +38,7 @@ const { auditStaleWorkspaces, auditWorkspacesThenListen } = require('./services/
 const { cleanupManagedArtifacts } = require('./services/artifact-store');
 const { beginSliceQueueShutdown } = require('./services/slice/queue');
 const { initializeSlicerEngineVersions } = require('./services/slice/engine-version');
+const { createProfileCatalogueService } = require('./services/slice/profile-catalogue');
 const { createRuntimeLifecycle } = require('./services/runtime-lifecycle');
 const { createReadinessService } = require('./services/readiness.service');
 const { emitEvent, setEventWriter } = require('./services/observability/events');
@@ -90,6 +92,15 @@ const sliceRoutes = createSliceRouter({
 const pricingRoutes = createPricingRouter({
     authenticate: createRequireAdminAudience('pricing', serviceKeyRing, { logger: authLogger })
 });
+const profileCatalogueService = createProfileCatalogueService({
+    onStatusChange(result) {
+        emitEvent('profile_catalogue.changed', {
+            outcome: result.ready ? 'ready' : 'unavailable',
+            error_code: result.ready ? undefined : 'PROFILE_CATALOGUE_UNAVAILABLE'
+        });
+    }
+});
+const profileCatalogueRoutes = createProfileCatalogueRouter({ service: profileCatalogueService });
 const systemRoutes = createSystemRouter({
     authenticateArtifact: createRequireAdminAudience('artifact', serviceKeyRing, { logger: authLogger }),
     authenticateOperations: createRequireAdminAudience('operations', serviceKeyRing, { logger: authLogger }),
@@ -189,6 +200,7 @@ app.get('/', (req, res) => res.redirect('/docs'));
 
 // API Routes
 app.use(pricingRoutes);
+app.use(profileCatalogueRoutes);
 app.use(sliceRoutes);
 app.use(systemRoutes);
 
@@ -211,7 +223,8 @@ const httpServer = createBoundedHttpServer(app);
  * S1a intentionally keeps production startup audit-only because total request lifetime is not bounded yet.
  */
 async function startServer() {
-    await initializeSlicerEngineVersions();
+    const engineVersions = await initializeSlicerEngineVersions();
+    await profileCatalogueService.initialize({ engineVersions });
     const scratchCleanup = await auditStaleWorkspaces({
         jobsRoot: JOB_SCRATCH_DIR,
         delete: true,

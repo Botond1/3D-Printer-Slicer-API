@@ -17,6 +17,152 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
+## Current J3B native-envelope and original-dimension corrective candidate
+
+J3's production-identical owner matrix passed on exact tree `58c0ccb`, including
+artifact-level proof of the Orca `--allow-rotations=0` path. J3B does not reopen
+that orientation contract. H2D-QUOTE measurement A and exact local final-
+admission B are complete. B binds code-bearing SHA
+`47ae13397bb4537b4bb700b8c6bf3d9648364bdc` to exact image ID
+`sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`;
+the revision label matched, and the `999:999` container was healthy, read-only,
+with its host port bound only to localhost. The owner then ran the complete
+production-identical VPS matrix from exact tree
+`db42b93b2416ac0b791a45a0eae1233b303cf557` and independently matched all 445
+tracked files. The owner image identifier differs from local B, so this proves
+source-tree identity and the production-identical matrix, not byte-identical
+image identity.
+
+Success and full K2 HTTP 422 `MODEL_OUT_OF_PRINTER_BOUNDS` use
+`transform_schema: 2`. Both always include mandatory
+`original_dimensions_available` and nullable `original_dimensions_mm`: true iff
+the object came from a real measurement and false iff null, with no oriented
+fallback. Oriented/final dimensions are load-bearing and must be positive;
+otherwise return controlled HTTP 422 `MODEL_DIMENSIONS_UNAVAILABLE`. Successful
+object height always equals final Z. A canonical measured value also requires
+`height_mm == z`: a malformed tagged original degrades to the explicit
+false/null state, while the same defect in oriented/final data returns the
+controlled 422. Explicit native placement/print-volume refusal maps only to the
+full K2 bounds response; failed native commands preserve bounded stdout
+separately from stderr so either stream can supply the diagnostic. Prusa's
+exit-zero/no-artifact case is only this bounds safety net when the output is an
+explicit placement refusal; unrelated native or missing-artifact failures
+remain internal.
+
+The public catalogue is `r3d-profile-catalogue-v2`. It preserves physical/
+profile-declared `declared_build_volume_dimensions_mm` separately from the
+exact-boundary-inclusive admission authority
+`largest_passing_dimensions_inclusive_mm`; machine and fleet resolutions are
+engine-scoped. Owner-accepted P1S ceilings are Prusa
+`256 x 256 x 249.9 mm` and Orca `253.9 x 253.9 x 249.9 mm`. Prusa's native X/Y
+edge beyond its declared profile remains `UNESTABLISHED`.
+
+H2D-QUOTE is a P1S-derived enlarged-bed quoting chain on both engines, not a
+machine-accurate H2D profile and not production H2D G-code. The plugin consumer
+uses only `POST /prusa/slice`, so Prusa coverage is mandatory. Exact helper-
+image measurement A passed 44/44 fixture preconditions, 10/10 brackets, and
+2/2 combined corners. It measured Prusa `350 x 320 x 324.9 mm` and Orca
+`347.9 x 317.9 x 324.9 mm`; Prusa's native X/Y edge beyond its declared profile
+remains `UNESTABLISHED`. At layer height `0.3 mm`, `325 mm` returned the full K2
+HTTP 422 twice on each engine after the exact conjunctive last-layer classifier.
+Final-admission B then passed 88/88 fixture preconditions, 20/20 brackets, and
+4/4 corners with the same four published P1S/H2D tuples. Catalogue validation
+passed 9/9 with optional Prusa digest parity run and passed. Normal sweep
+fixtures require outward non-zero facet normals and an immediate native
+`prusa-slicer --info` precondition. The separate legal binary zero-normal
+regression returned HTTP 200 on Prusa and Orca in exact J2 and B; B reported
+schema-2 original availability false/null. The orientation matrix passed 12/12
+fixture checks, 4/4 selectors, and all 37 HTTP cases, retaining `20 x 240 x 245 mm` auto
+with zero request transform, `18 x 130 x 240 mm` exact auto replay, preserve
+plus X90, and invalid `sideways`. The A/B envelope sweep refuses to start until
+`GET /profiles` exactly identifies the requested measurement/final-admission
+phase; every HTTP result must echo the exact expected limit maximum and source
+profile (selected Prusa layer INI or stable Orca machine profile). Native-info
+exact-container overrides are bounded fixture-addressing JSON argv templates,
+run without a shell or service credentials, and reports retain only a source
+label.
+
+The owner VPS matrix confirmed every published inclusive P1S/H2D-QUOTE
+boundary on all four selectors, full K2 HTTP 422 conversion for the former
+native 500 cases, zero-normal false/null degradation on both engines, distinct
+`applied`/`preserved`/`unchanged` outcomes, Orca `456.33 g`, and the unchanged
+`248.60 x 99.60 mm` no-yaw footprint. Prusa enlargement is present in all three
+layer-height profiles. The catalogue exposes 18 managed profile rows plus six
+engine-scoped resolution rows; the profile rows keep declared and inclusive
+largest-passing values separate.
+
+Customer exposure is zero. The owner chose one merge and one deploy for
+J2+J3+J3B after verification. One branch push, one PR into `main`, and that PR's
+merge are now authorized but are not yet claimed complete. Deploy, registry
+publication/image promotion, route/DNS/allowlist mutation, production-container
+changes, and consumer-repository work remain unauthorized. See
+`docs/codex/evidence/j3b-native-envelope-and-original-dimensions.md`.
+
+## Historical J3 orientation-visibility checkpoint
+
+J3 starts from J2 commit
+`9b28b95cfa9f931092044300ebfca912421bac32`. The owner-approved request
+contract is strict `orientationMode=auto|preserve`, with omission defaulting to
+`auto` and any other present value returning `INVALID_ORIENTATION_MODE`.
+The exact code-bearing J3 SHA is
+`c404326f535fcc70ba62aa923fa6652f4fba5019`; local source gates are green. The
+owner later passed the complete J3 matrix on exact tree `58c0ccb`.
+
+On the historical J3 tree, success and `MODEL_OUT_OF_PRINTER_BOUNDS` carried the
+same complete first-version `model_transform`, orientation mode/outcome,
+requested/automatic/total rotations, and original/oriented/final dimensions.
+The rotation-only authoritative matrix composes as
+`R_total = R_requested * R_automatic`; it excludes centering, grounding,
+scaling, and translation. Original dimensions are measured after safe source
+conversion and before service orientation, oriented dimensions after that
+orientation, and final dimensions after request sizing/rotation.
+`stats.object_height_mm` equals `final_dimensions_mm.z`.
+
+An outer ZIP admits exactly one supported source. A multi-object 3MF is
+concatenated into one compound STL, passed as one STL argument, and never sent
+through a split-to-objects operation. Disconnected shells retain their relative
+placement, so this API has no independent multi-object packing capability.
+Orca therefore retains `--arrange 1` and `--orient 0` but
+adds exactly one `--allow-rotations=0` token to disable unreported whole-
+compound yaw. The exact Orca 2.3.1 flag behavior and complete historical J3
+container/VPS matrix are owner-verified. J3 did not
+authorize deploy, registry write, route activation, or consumer-repository
+changes. See
+`docs/codex/evidence/j3-orientation-visibility.md`.
+
+## Historical J2 bounds, catalogue, and dark-route candidate
+
+J2 starts at protected-main baseline
+`0dedbe1e9e4c32a0373982a45bf788cdcdb4f024`. Current classification is
+`J2_LOCAL_AGGREGATE_PASS; J2_HOSTED_BASELINE_SOURCE_IMAGE_PASS_NO_PUBLISH;
+J2_LIVE_ACTIVATION_REHEARSAL_BLOCKED_NOT_RUN; J2_NO_ROUTE_MUTATION;
+J2_REHEARSAL_TERMINAL_CONTRACT_DARK;
+J2_ORCA_CALIBRATION_BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`.
+
+J2 established physical/profile-declared P1S `256 x 256 x 250 mm` and H2D-sized
+`350 x 320 x 325 mm` metadata and retained the `1 mm` lower compatibility
+boundary. J3B's current engine-specific inclusive ceilings above supersede the
+historical use of those declared values as admission limits.
+
+Public informational `GET /profiles` remains startup-built and non-critical.
+J3B supersedes the historical catalogue with 18 FDM-only v2 rows, separate
+declared and largest-passing fields, and per-engine machine/fleet resolution.
+The generic SLA fallback is never a machine; Elegoo values remain owner-profile
+future work.
+
+The dark route contract accepts one through four unique `/32` callers, with
+LeadPilot alone in phase one. Network denial is distinct from backend HTTP 401.
+All route actions require one inherited root-private rehearsal lock and stable
+root-owned protected ancestors; terminal acceptance requires strict dark
+assertion. J2 did not mutate the live route because the exact J0-capable deploy,
+private inputs, and external allowlist/TLS/rollback observations are absent.
+
+Calibration records nine numeric Bambu references plus the `M03` boundary. Its
+Orca runner enforces `--orient 0`, support off before digest/native work, and
+reuses production machine/process `--load-settings` plus separate
+`--load-filaments`. Vendor-faithful measurement remains blocked. See
+[`docs/codex/evidence/j2-bounds-network-calibration.md`](docs/codex/evidence/j2-bounds-network-calibration.md).
+
 ## Current J1C slice-contract corrective checkpoint
 
 Current classification:
@@ -41,10 +187,9 @@ the dedicated filament option changes native output from 0.00 g to 4.12 g, but
 the exact final combined candidate image rerun remains pending.
 
 The incomplete vendor chain is a separate W8 time/motion calibration lane, not
-a J1C blocker; no vendor profile was imported. J2 separately owns P1S
-256 x 256 x 250 mm and H2D 350 x 320 x 325 mm bed-shape/Z correction. The
-privacy-safe calibration helper still embeds the superseded settings-list
-composition and is outside this production-engine correction and unqualified.
+a J1C blocker; no vendor profile was imported. J2 later corrects P1S
+256 x 256 x 250 mm and H2D 350 x 320 x 325 mm bed-shape/Z, and makes the
+privacy-safe calibration helper reuse J1C's production invocation policy.
 
 Capability readiness is a proposal only. Public `GET /health` remains cheap
 liveness; future capability state belongs on public `GET /ready`. Docker still

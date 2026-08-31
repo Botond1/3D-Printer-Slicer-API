@@ -47,9 +47,14 @@ test('accepts tiny file with complete concurrent legitimate flat field and alias
         'keepProportions', 'lockProportions', 'unlockProportions', 'allowNonProportional',
         'targetSizeX', 'sizeX', 'dimensionX', 'targetX', 'targetSizeY', 'sizeY', 'dimensionY', 'targetY',
         'targetSizeZ', 'sizeZ', 'dimensionZ', 'targetZ', 'scalePercent',
-        'rotationX', 'rotateX', 'rotationY', 'rotateY', 'rotationZ', 'rotateZ'
+        'rotationX', 'rotateX', 'rotationY', 'rotateY', 'rotationZ', 'rotateZ', 'orientationMode'
     ];
-    const fields = names.map((name) => ({ name, value: name.includes('Profile') || name === 'profile' ? 'profile.ini' : '1' }));
+    const fields = names.map((name) => ({
+        name,
+        value: name === 'orientationMode'
+            ? 'auto'
+            : (name.includes('Profile') || name === 'profile' ? 'profile.ini' : '1')
+    }));
     const response = await expectCase(t, [file(), ...fields], { status: 200 });
     assert.equal(response.body.fields.length, names.length);
     assert.equal(response.body.file, true);

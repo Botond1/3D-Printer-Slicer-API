@@ -13,6 +13,7 @@ const { readOrcaFilamentProfileMetadata } = require('./filament-profile');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { invalidOutput } = require('./resource-errors');
 const { cleanupManagedArtifacts } = require('../artifact-store');
+const { wrapNativePlacementRejection } = require('./native-bounds');
 
 async function resolveSliceOutputTargets(engine, originalName, technology, workspace) {
     const outputCandidate = await workspace.registerOutputCandidate(originalName, technology);
@@ -54,7 +55,8 @@ async function runSlicerAndParseStats(context) {
         engine, technology, layerHeight, infillPercentage, baseConfigFile,
         orcaMachineConfigFile, orcaFilamentConfigFile, material,
         slicerOutputPath, outputCandidate,
-        engineOutputDir, processableFile, effectiveModelInfo, workspace
+        engineOutputDir, processableFile, effectiveModelInfo, modelTransform,
+        buildVolumeLimits, workspace
     } = context;
     const { signal } = context;
     throwIfAborted(signal);
@@ -85,15 +87,51 @@ async function runSlicerAndParseStats(context) {
         orcaMachineConfigFile,
         orcaFilamentConfigFile
     );
-    await runCommand(resolveSlicerExecutable(engine), [...slicerArgs, processableFile], { signal });
+    let nativeResult;
+    try {
+        nativeResult = await runCommand(
+            resolveSlicerExecutable(engine),
+            [...slicerArgs, processableFile],
+            { signal }
+        );
+    } catch (err) {
+        throwIfAborted(signal);
+        throw wrapNativePlacementRejection(err, { modelTransform, buildVolumeLimits });
+    }
     throwIfAborted(signal);
 
     const generatedPath = engine === 'orca'
         ? await resolveSingleOutputFile(engineOutputDir, '.gcode', workspace)
         : slicerOutputPath;
     throwIfAborted(signal);
-    if (!generatedPath) throw new Error('Slicer did not produce an output artifact.');
-    const effectiveOutputPath = await assertValidContainedArtifact(generatedPath, workspace, technology);
+    let effectiveOutputPath;
+    try {
+        if (!generatedPath) {
+            const error = new Error('Slicer did not produce an output artifact.');
+            error.code = 'ENOENT';
+            throw error;
+        }
+        effectiveOutputPath = await assertValidContainedArtifact(
+            generatedPath,
+            workspace,
+            technology
+        );
+    } catch (artifactError) {
+        if (artifactError?.code !== 'ENOENT') throw artifactError;
+        const missingOutputError = new Error('Slicer did not produce an output artifact.', {
+            cause: artifactError
+        });
+        missingOutputError.stdout = nativeResult?.stdout || '';
+        missingOutputError.stderr = nativeResult?.stderr || '';
+        const classified = wrapNativePlacementRejection(
+            missingOutputError,
+            { modelTransform, buildVolumeLimits }
+        );
+        if (classified !== missingOutputError) throw classified;
+        // Preserve the engine's prior missing-artifact failure class when no
+        // explicit native placement diagnostic is present.
+        throw artifactError;
+    }
     throwIfAborted(signal);
     const stats = await parseOutputDetailed(
         effectiveOutputPath,

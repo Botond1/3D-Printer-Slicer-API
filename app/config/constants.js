@@ -84,17 +84,70 @@ const DEFAULT_PRICING = {
 };
 
 /**
- * Maximum printable build volumes in millimeters by technology.
+ * Largest supported build envelopes in millimeters by technology.
+ * Shipped printer profiles must override these values with their exact machine
+ * metadata; the fallback must never silently be narrower than a supported
+ * machine because that would reject printable customer models.
  * @type {{FDM: {x: number, y: number, z: number}, SLA: {x: number, y: number, z: number}}}
  */
 const MAX_BUILD_VOLUMES = {
-    FDM: { x: 250, y: 210, z: 210 },
+    FDM: { x: 350, y: 320, z: 325 },
     SLA: { x: 120, y: 120, z: 150 }
 };
 
 /**
- * Minimum printable build volumes in millimeters by technology.
- * These are conservative safety defaults and can be overridden by profile metadata.
+ * Owner-accepted P1S validation ceilings. These values are admission-only and
+ * never rewrite the physical dimensions stored in the slicer profile.
+ */
+const P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM = Object.freeze({
+    prusa: Object.freeze({
+        'FDM_0.1mm.ini': Object.freeze({ x: 256, y: 256, z: 249.9 }),
+        'FDM_0.2mm.ini': Object.freeze({ x: 256, y: 256, z: 249.9 }),
+        'FDM_0.3mm.ini': Object.freeze({ x: 256, y: 256, z: 249.9 })
+    }),
+    orca: Object.freeze({
+        'Bambu_P1S_0.4_nozzle.json': Object.freeze({ x: 253.9, y: 253.9, z: 249.9 })
+    })
+});
+
+/**
+ * Exact-image measured H2D-sized quote ceilings, inclusive on every axis.
+ *
+ * The A measurement sweep reproduced every largest PASS and next 0.1 mm
+ * rejection twice on both engines, plus each combined X/Y corner. Prusa's
+ * planar values reach the declared profile boundary; its native edge beyond
+ * that physical declaration remains unestablished. The single Z value is the
+ * strictest ceiling across all offered layer heights.
+ */
+const H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM =
+Object.freeze({
+    prusa: Object.freeze({
+        'FDM_P1S_H2D_SIZE_QUOTING_0.1mm.ini': Object.freeze({ x: 350, y: 320, z: 324.9 }),
+        'FDM_P1S_H2D_SIZE_QUOTING_0.2mm.ini': Object.freeze({ x: 350, y: 320, z: 324.9 }),
+        'FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini': Object.freeze({ x: 350, y: 320, z: 324.9 })
+    }),
+    orca: Object.freeze({
+        'Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json': Object.freeze({
+            x: 347.9,
+            y: 317.9,
+            z: 324.9
+        })
+    })
+});
+
+/**
+ * Validation-only fallback derates for non-catalogued FDM profiles. Known
+ * server-owned profiles always use one of the explicit tables above.
+ */
+const FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE = Object.freeze({
+    prusa: Object.freeze({ x: 0, y: 0, z: 0.1 }),
+    orca: Object.freeze({ x: 2.1, y: 2.1, z: 0.1 })
+});
+
+/**
+ * Existing minimum accepted model dimensions in millimeters by technology.
+ * J2 changes only the proven upper machine envelopes; changing this lower
+ * compatibility boundary requires a separate owner semantics decision.
  * @type {{FDM: {x: number, y: number, z: number}, SLA: {x: number, y: number, z: number}}}
  */
 const MIN_BUILD_VOLUMES = {
@@ -135,6 +188,9 @@ module.exports = {
     ORCA_PROCESS_PROFILE_BY_LAYER,
     DEFAULT_PRICING,
     MAX_BUILD_VOLUMES,
+    P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE,
     MIN_BUILD_VOLUMES,
     EXTENSIONS,
     PORT

@@ -55,13 +55,249 @@ lifecycle evidence remain separate gates.
 ## ✨ Core Features
 
 - 🔄 **Model-focused input processing:** direct 3D, CAD, and ZIP uploads with exactly one supported model source file.
-- ⚖️ **Auto-orientation:** Python-based orientation optimization before slicing.
+- ⚖️ **Visible orientation control:** backward-compatible `auto` optimization or
+  explicit `preserve`, with versioned total-rotation provenance on success and
+  bounds failure.
 - 🧮 **Pricing engine:** dynamic hourly-rate calculation from persisted pricing map.
 - 🚦 **Queue + rate protection:** bounded queue and endpoint rate limiting for CPU-heavy requests.
 - 🧨 **ZIP safety checks:** entry/size/path validation and encrypted ZIP rejection.
 - 🧵 **Dual slicer routing:** Prusa and Orca engines behind dedicated endpoints.
 - **Resource/state envelope:** actual-byte limits, validated final artifacts,
   stable job/artifact correlation, leased retention, and atomic pricing state.
+
+### J3B native envelope and original-dimension corrective candidate
+
+The J3 orientation contract passed the owner's production-identical container
+matrix on the exact `58c0ccb4614c6f5dc25212403ecdb23f3c3a985c` tree,
+including G-code-level proof that Orca received the effective
+`--allow-rotations=0` policy. J3B does not reopen that contract. It corrects the
+pre-orientation measurement regression and makes native engine acceptance
+limits explicit.
+
+`model_transform` now uses `transform_schema: 2`. Both success and the full K2
+`MODEL_OUT_OF_PRINTER_BOUNDS` response always include
+`original_dimensions_available` and nullable `original_dimensions_mm`:
+
+- `original_dimensions_available: true` if and only if
+  `original_dimensions_mm` came from a real pre-orientation measurement;
+- `original_dimensions_available: false` if and only if
+  `original_dimensions_mm` is `null`;
+- oriented dimensions are never substituted for a missing original
+  measurement.
+
+The original measurement is provenance and may degrade without failing an
+otherwise sliceable request. `oriented_dimensions_mm` and
+`final_dimensions_mm` remain load-bearing; an unavailable/non-positive value
+on either branch returns controlled HTTP 422
+`MODEL_DIMENSIONS_UNAVAILABLE`. The success invariant
+`stats.object_height_mm == model_transform.final_dimensions_mm.z` remains
+unconditional. A tagged measurement is canonical only when its `height_mm`
+equals its `z`. A malformed tagged original measurement therefore degrades to
+`original_dimensions_available:false` plus `original_dimensions_mm:null`,
+whereas the same malformed state in oriented/final data returns the controlled
+422. A native slicer diagnostic that explicitly refuses placement or
+print-volume containment maps to HTTP 422
+`MODEL_OUT_OF_PRINTER_BOUNDS` with the same complete schema-v2 transform,
+including `orientation_mode` and `orientation_outcome`; unrelated native
+failures remain internal errors. Failed native commands preserve bounded stdout
+independently from stderr, so a placement diagnostic is not hidden by an
+unrelated warning. If Prusa exits zero without producing an artifact, the same
+mapping is used only when its retained output explicitly reports placement
+refusal; otherwise the pre-existing missing-artifact failure remains intact.
+
+The catalogue is now `r3d-profile-catalogue-v2`. It separates
+`declared_build_volume_dimensions_mm` (physical/profile metadata) from
+`largest_passing_dimensions_inclusive_mm` (the authoritative inclusive
+admission ceiling). The latter names the contract precisely: a model exactly
+on the published value is accepted. Machine and fleet derivations are scoped
+per native engine rather than merging different engine capabilities.
+
+Owner-accepted P1S ceilings are Prusa `256 x 256 x 249.9 mm` and Orca
+`253.9 x 253.9 x 249.9 mm`; the declared P1S profile remains
+`256 x 256 x 250 mm`. Orca's X/Y first failure is `254.0 mm` after a
+twice-reproduced `0.1 mm` sweep whose largest pass was `253.9 mm`. Prusa passes
+the full declared X/Y boundary; its native edge beyond that physical profile is
+`UNESTABLISHED`. One conservative Z value, `249.9 mm`, is published across
+the offered `0.1`, `0.2`, and `0.3 mm` layer heights so admission does not
+change when quality changes.
+
+J3B adds the explicit `H2D-QUOTE` selector on both engines using a P1S-derived
+profile enlarged to the H2D-size declared bed. This is quote-only P1S physics:
+it is not hardware-faithful H2D estimation and its artifact is not production
+H2D G-code. The plugin consumer uses only `POST /prusa/slice`, which is why the
+Prusa profile is mandatory rather than incidental. Exact-image measurement A
+used helper source `2f4cddab923863ee8a9231e26671ddd2e70444eb` and image ID
+`sha256:f2259f29fb1472ba695c90f664af0fe0b9a298b89f5139667a0ec8a274406fae`.
+It passed 44/44 fixture preconditions, 10/10 brackets, and 2/2 combined corners,
+measuring Prusa `350 x 320 x 324.9 mm` and Orca
+`347.9 x 317.9 x 324.9 mm`. At layer height `0.3 mm`, `325 mm` returned the
+complete K2 HTTP 422 twice on each engine after the exact conjunctive last-layer
+classifier. Prusa's native X/Y edge beyond its declared quote bed remains
+`UNESTABLISHED`.
+
+Exact local final-admission B binds code-bearing SHA
+`47ae13397bb4537b4bb700b8c6bf3d9648364bdc` to image ID
+`sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`.
+The revision label matched; the `999:999` container was healthy and read-only,
+with its host port bound only to localhost. B passed 88/88 fixture preconditions, 20/20
+largest-pass/next-rejection brackets, and 4/4 combined corners. It confirmed
+the published tuples: Prusa P1S `256/256/249.9`, Orca P1S
+`253.9/253.9/249.9`, Prusa H2D-QUOTE `350/320/324.9`, and Orca H2D-QUOTE
+`347.9/317.9/324.9`.
+
+Normal generated fixtures use valid outward non-zero facet normals and must
+pass an immediate `prusa-slicer --info` precondition before a service row runs.
+The deliberate zero-normal regression is a legal binary STL with SHA-256
+`60affa17c1470817223a10f1d39475e437090d696ece969a87b06d3bf1c7721bb`.
+It returned HTTP 200 on Prusa and Orca in exact J2 image
+`sha256:0d81837cdd5c3b56383580eb28df799686103bb4663a9f4016e9fbc89e4e31ea`
+and again in B, where schema 2 explicitly reported
+`original_dimensions_available:false` and `original_dimensions_mm:null`.
+The owner later passed the complete production-identical VPS matrix from exact
+tree `db42b93b2416ac0b791a45a0eae1233b303cf557`, independently matching all 445
+tracked files. The separately built owner image has a different identifier, so
+this is source-tree and production-identical-matrix proof, not byte-identical-
+image proof. The run confirmed the four published inclusive envelopes, the
+full K2 422 contract for former native 500 cases, zero-normal false/null
+degradation, distinct `applied`/`preserved`/`unchanged` outcomes, and the Orca
+mass/no-yaw guards. Customer exposure remains zero: the plugin is not deployed
+and LeadPilot slicing is disabled. One branch push, one PR into `main`, and its
+merge are owner-authorized but not yet claimed complete. Deploy, registry/image
+publication, production-container, route/DNS/allowlist, and consumer-repository
+changes remain unauthorized. See the
+[J3B evidence boundary](docs/codex/evidence/j3b-native-envelope-and-original-dimensions.md).
+
+The J3B orientation runner now requires all 37 HTTP cases. Its restored
+section-0 coverage includes `20 x 240 x 245 mm` auto with a zero request
+transform, the exact `18 x 130 x 240 mm` automatic replay, that fixture in
+preserve mode plus requested X90, and the invalid `sideways` request. The
+native-envelope runner has separate measurement-A and final-admission-B modes;
+before either sweep it requires an exact catalogue-v2 `/profiles` phase match,
+and every success or K2 response must carry the expected exact `max` and
+`source_profile`. Exact local B passed 12/12 orientation fixture checks, 4/4
+selectors, and 37/37 HTTP rows. Catalogue validation passed 9/9, and the
+optional Prusa live-slice digest parity lane was run and passed.
+
+Two artifact checks protect against quiet Orca regressions. A preserve-mode
+`253 x 253 x 20 mm` model at layer height `0.3 mm` produced `456.33 g`. For a
+preserve-mode `249 x 100 x 20 mm` model, B and exact J2 produced the same outer-
+wall G-code footprint: `248.600 x 99.600 mm`, 500 segments, with X bounds
+`3.700..252.300` and Y bounds `78.200..177.800`. These exact local checks were
+later independently reproduced by the owner VPS matrix; neither result is
+deployment proof.
+
+### Historical J3 orientation visibility and total-rotation checkpoint
+
+Both slice endpoints accept the optional multipart field
+`orientationMode=auto|preserve`. Omission defaults to `auto`, retaining the
+historical stable-pose optimization for existing callers. A present value is
+strict: whitespace, alternate case, blank, null-like, numeric, array, or object
+forms return HTTP `400 INVALID_ORIENTATION_MODE`.
+
+On the owner-verified J3 tree, every successful response and every
+`MODEL_OUT_OF_PRINTER_BOUNDS` response carried the same complete
+`model_transform` contract in its first schema version. J3B supersedes that
+wire schema with `transform_schema: 2` as described above. The J3 contract
+exposed orientation mode/outcome, whether automatic orientation applied a
+non-identity rotation,
+requested/automatic/total Euler summaries and matrices, and three distinct
+dimension stages:
+
+- `original_dimensions_mm`: after safe source-format conversion, before
+  service orientation or request transforms;
+- `oriented_dimensions_mm`: after `auto` orientation or `preserve`
+  normalization, before requested sizing/rotation;
+- `final_dimensions_mm`: after requested sizing/rotation, as passed to the
+  native slicer.
+
+The authoritative `rotation_matrix` is rotation-only. For column vectors it is
+`R_total = R_requested * R_automatic`, with the requested matrix built as
+`Rz * Ry * Rx`; it intentionally excludes scaling, centering, grounding, and
+translation. `rotation_deg` is a canonical Euler summary of that total matrix,
+not a replacement for it. On success, `stats.object_height_mm` is the final
+pre-native height and equals `model_transform.final_dimensions_mm.z`.
+`orientation_outcome` is `applied`, `unchanged`, `preserved`, or
+`fallback_unmodified`. Bounds wording must use both mode and outcome: only
+`applied` supports “does not fit even after automatic rotation”; `unchanged`
+means automatic evaluation kept the pose, `preserved` identifies the submitted
+pose, and `fallback_unmodified` must disclose that automatic orientation was
+unavailable.
+
+The outer ZIP path accepts exactly one supported source file. If that source
+is a multi-geometry 3MF scene, conversion concatenates its geometries into one
+compound STL. The API passes one STL argument and requests no split-to-objects
+operation, so disconnected shells retain their relative placement instead of
+becoming independently packable objects. Orca therefore keeps `--arrange 1`
+for translation/placement
+and `--orient 0`, but adds exactly one single-token
+`--allow-rotations=0` so no later whole-compound yaw escapes the authoritative
+matrix. Prusa receives the already transformed geometry and performs no native
+rotation.
+
+The exact Orca 2.3.1 flag result and the complete J3 two-engine HTTP matrix are
+owner-verified on the exact `58c0ccb` production-identical container.
+`--allow-rotations=0` produced real G-code with 6.25 g, while the split
+`--allow-rotations 0` form failed with `No such file: 0`; the produced
+preserve-mode G-code also retained the expected X/Y footprint. This historical
+proof is distinct from the later owner production-identical J3B VPS matrix on
+exact tree `db42b93`, which also passed. Neither wave authorizes deployment,
+publication, route activation, or consumer-repository mutation.
+See the [J3 evidence boundary](docs/codex/evidence/j3-orientation-visibility.md).
+
+### Historical J2 build-volume, profile-catalogue, network, and calibration candidate
+
+J3B supersedes J2's first catalogue resolution and raw declared admission
+numbers. The paragraphs below preserve the non-catalogue J2 checkpoint; use the
+J3B section and catalogue-v2 wire contract for current profile behavior.
+
+J2 starts from protected-main SHA
+`0dedbe1e9e4c32a0373982a45bf788cdcdb4f024`. The three shipped Prusa FDM
+profiles and the Orca P1S profile now resolve the physical P1S envelope as
+`256 x 256 x 250 mm`; the Orca H2D profile resolves
+`350 x 320 x 325 mm`. FDM's fallback is the largest supported envelope,
+`350 x 320 x 325 mm`, so missing height metadata cannot silently narrow a
+  supported machine. The existing `1,1,1 mm` lower compatibility boundary is
+  unchanged; changing it requires a separate owner semantics decision. The P1S fit
+contract accepts Z `230 mm` and rejects Z `251 mm` or `260 mm`.
+
+Public `GET /profiles` still exposes one immutable startup generation built
+through the production selection/snapshot/runtime/bounds/filament/digest chain,
+with strong `ETag`, body `catalogue_sha256`, conditional 304, and non-critical
+typed 503 behavior. J3B updates that public generation to the engine-scoped
+catalogue-v2 contract described above. The generic
+`120 x 120 x 150 mm` SLA fallback remains non-machine metadata and is never
+advertised. The owner-confirmed future Elegoo Saturn 4 Ultra still requires a
+separate `.goo`/`.ctb` and MSLA-timing remediation wave; no dimension is
+guessed.
+
+The J2 Hostinger contract accepts one through four unique private IPv4 `/32`
+entries from a root-private file. The first rehearsal phase is exactly one
+LeadPilot address; later callers require a separate expanded phase. Host
+firewall rejection is a TCP reset with a fixed private
+`J2_ALLOWLIST_DENY` classification, while an unlisted source that reaches the
+router receives HTTP `403`; both are distinct from backend HTTP `401`
+`SLICE_SERVICE_AUTH_REQUIRED`. One root-private inherited FD9 lock spans the
+whole rehearsal; every action re-proves that lock and unchanged canonical,
+root-owned, non-writable ancestor chains. Terminal acceptance uses strict
+`--assert-router-dark`. Local tests prove logical fsync-cutpoint recovery, not
+real process/kernel/power-loss durability. The external orchestrator must prove the
+allowed/denied matrix, TLS issuance and renewal, and
+`dark -> active -> dark -> active -> dark` rollback. A completed rehearsal
+requires a proved final dark state; `*_rollback_uncertain` is `STOP/UNKNOWN`,
+not dark evidence. The live rehearsal is currently `BLOCKED / NOT RUN`:
+protected main has no published/deployed exact J0-capable image and no private
+external evidence. J2 made no route mutation. The latest prior I12 evidence was
+dark, but J2 did not re-read current live state; permanent activation is a later
+owner-controlled decision.
+
+Calibration has nine numeric Bambu Studio reference rows plus the `M03`
+P1S-overheight rejection boundary. The comparison fixes Orca at `--orient 0`,
+disables support in the runtime measurement profile, and reuses the production
+machine/process `--load-settings` plus separate `--load-filaments` policy. Orca measurement is
+still blocked on complete owner-approved Bambu vendor profiles and an available
+local Docker daemon; no automatic-pricing acceptance is claimed. See
+[`docs/kalibracio-2026-08.md`](docs/kalibracio-2026-08.md) and the
+[J2 evidence boundary](docs/codex/evidence/j2-bounds-network-calibration.md).
 
 ### J1 calibration harvest over the J0 W2/W3 candidate
 
@@ -173,17 +409,19 @@ containing both Orca corrections still awaits an exact-image rerun.
 
 This candidate is not deployed or a public-activation result. The retained P1S
 and new H2D candidates identify as generic Marlin profiles, not verified native
-Bambu profiles. A bounded audit parsed 11/11 supplied JSON files, matched 11/11
-declared hashes, and derived P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm,
-but the set is not self-contained: 11 include templates, H2D-compatible and
+Bambu profiles. A bounded historical audit parsed 11/11 supplied JSON files,
+matched 11/11 declared hashes, and derived the supplied P1S as
+256 x 256 x 250 mm and H2D as 350 x 320 x 325 mm, but the set is not
+self-contained: 11 include templates, H2D-compatible and
 0.1/0.3 BBL processes, vendor filament/parent chains, and exact Orca 2.3.1
 qualification remain missing. The owner authorized later repository inclusion,
 but no vendor profile was imported. This is a separate W8 time/motion
 calibration lane, not a J1C blocker. Production Orca now uses dedicated
 `--load-filaments`, and both repository-owned child machine profiles own exact
 `layer_change_gcode='G92 E0'`. Owner-supplied mechanism evidence produced
-4.12 g instead of 0.00 g. J2 separately owns the P1S/H2D bed-shape and Z
-correction; W8 live calibration remains `BLOCKED_OWNER_INPUT`.
+4.12 g instead of 0.00 g. J2 now supplies the repository physical envelopes as
+P1S 256 x 256 x 250 mm and H2D 350 x 320 x 325 mm. W8 live calibration remains
+`BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`.
 
 Capability readiness is a proposal only. Public `GET /health` remains cheap
 liveness, and future slicing-capability state belongs on public `GET /ready`.
@@ -380,6 +618,7 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 - `GET /health`
 - `GET /ready`
 - `GET /pricing`
+- `GET /profiles`
 - `GET /openapi.json`
 - `GET /docs`
 - `GET /`
@@ -439,6 +678,7 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 
 - `app/routes/slice.routes.js` - `POST /prusa/slice`, `POST /orca/slice` with limiter -> service auth -> workspace/Multer -> queue/native ordering.
 - `app/routes/pricing.routes.js` - public pricing read + admin pricing mutations.
+- `app/routes/profile-catalogue.routes.js` - public conditional `GET /profiles` with strong ETag and non-critical typed 503.
 - `app/routes/system.routes.js` - health endpoints and admin artifact listing/download endpoints.
 
 ### Services
@@ -451,10 +691,15 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 - `app/services/slice.service.js` - end-to-end slicing orchestrator and queue error mapping.
 - `app/services/slice/command.js` - subprocess execution via `execFile` with timeout and optional debug logs.
 - `app/services/slice/common.js` - output naming, isolated Orca output dirs, cleanup utilities.
-- `app/services/slice/engine.js` - slicer argument construction, including Orca's fixed `--arrange 1` / `--orient 0` placement/orientation policy.
+- `app/services/slice/engine.js` - slicer argument construction, including
+  Orca's fixed `--arrange 1`, `--orient 0`, and one-token
+  `--allow-rotations=0` placement/orientation policy.
 - `app/services/slice/engine-version.js` - atomic pre-listen resolution of both actual slicer versions from bounded `--help` output.
 - `app/services/slice/errors.js` - error classification and API error responses.
 - `app/services/slice/input-processing.js` - conversion/orientation preprocessing pipeline.
+- `app/services/slice/orientation-contract.js` - strict orientation metadata,
+  proper-matrix validation, total rotation composition, and versioned response
+  contract.
 - `app/services/slice/model-stats.js` - metadata/stat parsing from slicer outputs.
 - `app/services/slice/number-utils.js` - shared numeric parser helpers.
 - `app/services/slice/options.js` - strict request option validation/parsing.
@@ -462,6 +707,7 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 - `app/services/slice/orca-profile-inheritance.js` - bounded resolution of the versioned repository copy of the Orca v2.3.1 `Custom` parent chain.
 - `app/services/slice/profile-snapshot.js` - exact Prusa-byte and flattened Orca profile snapshots in job scratch.
 - `app/services/slice/profile-digest.js` - deterministic effective-profile and request-independent native-invocation identity excluding request layer-height/infill overrides.
+- `app/services/slice/profile-catalogue.js` - startup-built immutable managed-preset catalogue using the production profile preparation chain.
 - `app/services/slice/queue.js` - FIFO queue + per-client fairness + timeout enforcement.
 - `app/services/slice/transform.js` - transform planning/execution and bounds validation.
 - `app/services/slice/value-parsers.js` - safe parsing and profile filename sanitization.
@@ -472,6 +718,7 @@ must match only the audience-specific `SLICE_`, `PRICING_`, `ARTIFACT_`, or
 - `app/utils/client-ip.js` - Express trust-proxy-aware validated client IP normalization.
 - `app/utils/logger.js` - structured allowlisted processing-event emission.
 - `app/docs/swagger-docs.js` - OpenAPI generation for `/docs` and `/openapi.json`.
+- `app/docs/profile-catalogue-openapi.js` - public catalogue, ETag, 304, and non-critical 503 schema.
 
 ---
 
@@ -498,6 +745,7 @@ Optional fields:
 - `targetSizeX`, `targetSizeY`, `targetSizeZ` (target dimensions in selected unit)
 - `scalePercent` (uniform scale; cannot be combined with `targetSizeX/Y/Z`)
 - `rotationX`, `rotationY`, `rotationZ` (degrees)
+- `orientationMode` (`auto` or `preserve`; omission defaults to `auto`)
 - `printerProfile` (profile override filename)
 - `processProfile` (Orca only process profile override filename)
 
@@ -533,6 +781,7 @@ curl -X POST http://localhost:3000/prusa/slice \
   -F "layerHeight=0.2" \
   -F "material=PLA" \
   -F "infill=20" \
+  -F "orientationMode=preserve" \
   -F "sizeUnit=mm" \
   -F "keepProportions=true" \
   -F "targetSizeZ=120"
@@ -545,7 +794,8 @@ Uses `orca-slicer`.
 - Forced `FDM` processing
 - Allowed `layerHeight`: `0.1`, `0.2`, `0.3`
 - Rejects SLA-only materials
-- Runs with Orca arrange/orient flow and machine+process+optional-filament profile order
+- Runs with Orca `--arrange 1`, `--orient 0`, and one-token
+  `--allow-rotations=0`, plus machine+process+optional-filament profile order
   - Machine profile file is resolved from `.env` via `ORCA_MACHINE_PROFILE` (default: `Bambu_P1S_0.4_nozzle.json`)
 - Process profile file is selected by `layerHeight` (`0.1/0.2/0.3`) and can be overridden via `.env`:
   - `ORCA_PROCESS_PROFILE_0_1`
@@ -567,6 +817,8 @@ Uses `orca-slicer`.
   - `processProfile` → process profile from `configs/orca`
 - Output artifacts are resolved through a per-request isolated output directory before final filename alignment.
 - Supports same size preprocessing options as Prusa endpoint (`sizeUnit`, `keepProportions`, `targetSizeX/Y/Z`, `scalePercent`, rotations)
+- Supports `orientationMode=auto|preserve` with strict validation and default
+  `auto`
 - Validates final model size against selected machine profile build-volume limits
 
 Example:
@@ -605,6 +857,7 @@ curl -X POST http://localhost:3000/orca/slice \
     "effective_profile_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   },
   "model_transform": {
+    "transform_schema": 2,
     "size_unit": "mm",
     "keep_proportions": true,
     "requested_size": {
@@ -618,12 +871,41 @@ curl -X POST http://localhost:3000/orca/slice \
       "y": 1.5,
       "z": 1.5
     },
+    "orientation_mode": "auto",
+    "orientation_outcome": "unchanged",
+    "automatic_orientation_applied": false,
+    "automatic_rotation_deg": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "requested_rotation_deg": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
     "rotation_deg": {
       "x": 0,
       "y": 0,
       "z": 0
     },
+    "automatic_rotation_matrix": [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1]
+    ],
+    "rotation_matrix": [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1]
+    ],
+    "original_dimensions_available": true,
     "original_dimensions_mm": {
+      "x": 80,
+      "y": 60,
+      "z": 80
+    },
+    "oriented_dimensions_mm": {
       "x": 80,
       "y": 60,
       "z": 80
@@ -643,7 +925,7 @@ curl -X POST http://localhost:3000/orca/slice \
     "max": {
       "x": 256,
       "y": 256,
-      "z": 210
+      "z": 250
     },
     "source_profile": "FDM_0.2mm.ini"
   },
@@ -653,7 +935,7 @@ curl -X POST http://localhost:3000/orca/slice \
     "print_time_readable": "1h 30m",
     "material_used_m": 12.45,
     "material_used_g": null,
-    "object_height_mm": 45.2,
+    "object_height_mm": 120,
     "estimated_price_huf": null
   }
 }
@@ -678,6 +960,7 @@ curl -X POST http://localhost:3000/orca/slice \
 - `INVALID_KEEP_PROPORTIONS`
 - `INVALID_SIZE_OPTIONS`
 - `INVALID_ROTATION_OPTIONS`
+- `INVALID_ORIENTATION_MODE`
 - `CONFLICTING_SIZE_OPTIONS`
 - `INVALID_PROFILE_NAME`
 - `PROFILE_NOT_FOUND`
@@ -694,8 +977,13 @@ curl -X POST http://localhost:3000/orca/slice \
 
 For `MODEL_OUT_OF_PRINTER_BOUNDS`, the JSON response always includes
 `model_dimensions_mm` with `x`, `y`, and `z`, plus
-`build_volume_limits_mm` with `min`, `max`, and `source_profile`. The public
-field remains `errorCode`; no `error_code` alias is introduced.
+`build_volume_limits_mm` with `min`, `max`, and `source_profile`, plus the same
+complete `transform_schema: 2` `model_transform` used by success. The transform
+always includes `original_dimensions_available` and nullable
+`original_dimensions_mm` with the exact availability invariant. Consumers can
+branch on `orientation_mode` and `orientation_outcome` without inferring state
+from dimensions. The public field remains `errorCode`; no `error_code` alias is
+introduced.
 
 ### Queue and rate-limit response semantics
 
@@ -705,6 +993,66 @@ field remains `errorCode`; no `error_code` alias is introduced.
 - `SLICE_QUEUE_CLIENT_LIMIT` -> HTTP `429`.
 - `SLICE_QUEUE_TIMEOUT` -> HTTP `503`.
 - `FILE_PROCESSING_TIMEOUT` -> HTTP `422`.
+
+---
+
+## 🗂️ Profile Catalogue API
+
+### `GET /profiles`
+
+Returns the immutable startup generation of the public informational profile
+catalogue. No credential is required. Each managed entry includes a bounded
+generic `engine`, printer identity, generic `slice_selector.endpoint` plus
+ordered `parameters[{name,value}]`, ordered path-free
+`profile_components[{role,basename,selector_parameter}]`, and an effective
+profile digest with identity schema
+`r3d-effective-slice-profile-v2`, verified engine version, resolved
+`build_volume_limits_mm`, and available filament diameter and density. Current
+`r3d-profile-catalogue-v2` includes 18 machine-bound FDM entries: Prusa P1S and
+`H2D-QUOTE` presets at layer heights 0.1, 0.2, and 0.3 mm, plus PLA/PETG Orca
+presets for those two selectors at the same layer heights. Four per-engine
+machine resolutions and two per-engine fleet resolutions bring the complete
+catalogue view to 24 envelope records. The 18 profile rows carry declared and
+inclusive largest-passing values separately; derived rows publish their
+engine-scoped inclusive result.
+
+Each `profile_components` item has nullable `selector_parameter`: Orca machine
+uses `printerProfile`, process uses `processProfile`, filament uses null, and
+the Prusa combined component uses `printerProfile`.
+
+Use the response's strong `ETag` with `If-None-Match`; an unchanged generation
+returns `304` without a body. `catalogue_sha256` hashes the canonical catalogue
+content inside the body. If startup catalogue construction failed, the route
+returns HTTP `503` with `PROFILE_CATALOGUE_UNAVAILABLE` and `Cache-Control:
+no-store`; slicing remains independent and available.
+
+Do not treat declared profile dimensions as the admission decision. Every row's
+`build_volume_limits_mm` contains
+`minimum_dimensions_inclusive_mm`,
+`declared_build_volume_dimensions_mm`, and
+`largest_passing_dimensions_inclusive_mm`; only the last field is the
+authoritative inclusive upper validation limit. An exact published boundary
+value is accepted. `declared_source_kind: profile-explicit` proves the declared
+X/Y/Z values came from selected-profile metadata, while the generic `1 mm`
+minimum remains a compatibility floor rather than machine metadata.
+
+Keep every per-printer/per-engine profile row. `machine_resolutions` and
+`fleet_resolutions` are derived independently for each technology and engine;
+different native engines are never merged or component-wise minimized. Preset
+disagreement within one technology/printer/engine fails catalogue construction.
+The current P1S engine rows publish Prusa `256 x 256 x 249.9 mm` and Orca
+`253.9 x 253.9 x 249.9 mm`. Exact helper-image measurement A established the
+H2D-sized quote values as Prusa `350 x 320 x 324.9 mm` and Orca
+`347.9 x 317.9 x 324.9 mm`. Prusa beyond its declared quote-bed X/Y remains
+`UNESTABLISHED`; exact local final-admission B confirmed all four published
+P1S/H2D engine tuples.
+
+Catalogue v2 remains FDM-only and never publishes the generic
+`120 x 120 x 150 mm` SLA fallback as a machine envelope. The owner-confirmed
+Elegoo Saturn 4 Ultra requires a separate future `.goo`/`.ctb` and MSLA-timing
+remediation wave using owner-supplied Chitubox/Elegoo Satellite profiles; its
+dimensions are not guessed. A later real machine-bound SLA row can use the
+same generic entry shape and receive separate per-engine fleet resolution.
 
 ---
 
@@ -882,10 +1230,15 @@ No app-local runtime folders are used (`app/input`, `app/output`, `app/configs` 
   - `configs/prusa/FDM_0.1mm.ini`
   - `configs/prusa/FDM_0.2mm.ini`
   - `configs/prusa/FDM_0.3mm.ini`
+  - `configs/prusa/FDM_P1S_H2D_SIZE_QUOTING_0.1mm.ini`
+  - `configs/prusa/FDM_P1S_H2D_SIZE_QUOTING_0.2mm.ini`
+  - `configs/prusa/FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini`
   - `configs/prusa/SLA_0.025mm.ini`
   - `configs/prusa/SLA_0.05mm.ini`
 - Orca machine/process profiles (`.json`):
   - `configs/orca/Bambu_P1S_0.4_nozzle.json`
+  - `configs/orca/Bambu_H2D_0.4_nozzle.json`
+  - `configs/orca/Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json`
   - `configs/orca/FDM_0.1mm.json`
   - `configs/orca/FDM_0.2mm.json`
   - `configs/orca/FDM_0.3mm.json`
@@ -940,7 +1293,10 @@ You can customize pricing, security, and slicing behavior without changing endpo
   manual-pricing result. SLA resin is bounded by `MAX_MATERIAL_USED_ML`
   (default `100000`).
 - **ZIP Safety Limits:** ZIP upload inspection and admin `ALL` bulk export are guarded by max entries (`MAX_ZIP_ENTRIES`, default `500`) and max cumulative size (`MAX_ZIP_UNCOMPRESSED_BYTES`, default `500MB`).
-- **ZIP Content Rule:** ZIP uploads must contain exactly one supported source file; unsupported or suspicious ZIP contents are rejected and cleaned up.
+- **ZIP Content Rule:** ZIP uploads must contain exactly one supported source
+  file; unsupported or suspicious ZIP contents are rejected and cleaned up. A
+  multi-geometry 3MF source is converted to one compound STL, not independent
+  packable plate objects.
 - **Body Parser Limits:** JSON/form payload size is capped (`JSON_BODY_LIMIT`, `FORM_BODY_LIMIT`, default `1mb`).
 - **Artifact Retention:** Owned managed outputs are bounded by TTL, count, and
   aggregate bytes; active downloads and unknown/unsafe entries are preserved.
@@ -949,6 +1305,12 @@ You can customize pricing, security, and slicing behavior without changing endpo
   PID/memory/CPU/log/stop settings. Defaults are repository safety defaults,
   not VPS capacity claims.
 - **Slicer Profiles:** Stored in `configs/prusa/*.ini` and `configs/orca/*.json`.
+- **Build-volume fallback:** shipped machine profiles carry declared physical
+  metadata, while the configured engine-specific largest-passing value is the
+  inclusive admission authority. FDM fallback remains the broad
+  (`350 x 320 x 325 mm`) compatibility envelope, profile minima remain `1 mm`, and
+  `MAX_MODEL_DIMENSION_MM` remains default `10000` with an accepted minimum of
+  `350`; a fallback must not silently reject a supported machine.
 - **Timeouts:** Internal 10-minute kill-switches prevent infinite loops during complex conversion/slicing operations and return `FILE_PROCESSING_TIMEOUT` when exceeded.
 - **Model Fidelity Policy:** Uploaded model data is never auto-healed or shape-corrected; invalid/non-printable source data is rejected with a clear error.
 - **Supply-Chain Integrity:** Docker build pins and verifies SHA256 checksums for downloaded PrusaSlicer and OrcaSlicer AppImages.
@@ -1036,6 +1398,26 @@ implied.
 ## 🧪 Test publication policy
 
 - `tests/testing-scripts/` is intended to be public and versioned.
+- `tests/testing-scripts/slicing/orientation_visibility_test_runner.py` is the
+  owner-VPS entry point for the 37-case J3/J3B two-engine orientation matrix;
+  it retains the zero-request auto, exact auto replay, preserve+X90, and invalid
+  `sideways` section-0 rows. Its native-info precondition supports a bounded
+  fixture-addressing JSON argv template for exact-container use, executes
+  without a shell or service credentials, and reports only a source label.
+  Normal
+  fixtures require valid outward non-zero normals and an immediate native
+  `prusa-slicer --info` precondition, while the deliberate zero-normal
+  regression is a separately validated legal binary STL. Exact local B passed
+  12/12 fixture checks, 4/4 selectors, and 37/37 HTTP rows. The owner later
+  passed the production-identical VPS rerun from exact tree `db42b93`.
+- `tests/testing-scripts/slicing/native_envelope_sweep_runner.py` measures and
+  rechecks native/final admission boundaries. Its measurement-A and final-
+  admission-B modes are guarded by the exact `/profiles` catalogue phase, and
+  its HTTP assertions bind the expected response maximum and actual source
+  profile (selected Prusa layer INI or stable Orca machine profile); a
+  local source result alone is not exact-image or deployed evidence. Exact local
+  final-admission B passed 88/88 fixture preconditions, 20/20 brackets, and 4/4
+  combined corners.
 - `tests/testing-files/` sample payloads are intentionally excluded from repository publication.
 - `tests/testing-scripts/results/` generated reports are runtime artifacts and are ignored.
 

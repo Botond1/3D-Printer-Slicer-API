@@ -161,6 +161,11 @@ class CommandExecution {
         if (error.killed) {
             error.message = `The slicing process timed out after ${Math.round(this.dependencies.timeoutMs / 60000)} minutes.`;
         }
+        // Preserve both bounded execFile streams independently. Existing
+        // classifiers retain the historical stderr fallback, while consumers
+        // that own stdout-only native diagnostics no longer lose them when an
+        // unrelated warning is also emitted on stderr.
+        error.stdout = stdout || '';
         error.stderr = stderr || stdout || error.message;
         this.settle(this.reject, error);
     }

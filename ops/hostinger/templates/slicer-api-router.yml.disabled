@@ -1,5 +1,7 @@
 # The committed .disabled template is outside the mounted dynamic directory.
-# Replace only the exact .invalid hostname during the bounded activation step.
+# Render only through scripts/i12-hostinger-operator-contract.js. It replaces
+# the exact .invalid hostname and __J2_SOURCE_RANGES__ placeholder from private
+# inputs.
 http:
   routers:
     slicer-api:
@@ -7,8 +9,15 @@ http:
         - websecure
       rule: "Host(`slicer-api.invalid`)"
       service: slicer-api
+      middlewares:
+        - slicer-api-source-allowlist
       tls:
         certResolver: letsencrypt
+  middlewares:
+    slicer-api-source-allowlist:
+      ipAllowList:
+        sourceRange:
+          __J2_SOURCE_RANGES__
   services:
     slicer-api:
       loadBalancer:

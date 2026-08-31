@@ -7,6 +7,10 @@ const REPO_ROOT = path.resolve(__dirname, '../../..');
 const PROCESSING_ERRORS_PATH = path.join(REPO_ROOT, 'app/services/slice/errors.js');
 const { handleProcessingError } = require(PROCESSING_ERRORS_PATH);
 const {
+    isNativePlacementRejection,
+    wrapNativePlacementRejection
+} = require('../../../app/services/slice/native-bounds');
+const {
     loadCommonJsFromSource
 } = require('./helpers/load-commonjs-from-source');
 
@@ -92,6 +96,150 @@ test('Orca preset mismatch maps live to ORCA_PROFILE_INCOMPATIBLE (422)', () => 
         invokeProcessingError(new Error('process not compatible with printer')),
         422,
         'ORCA_PROFILE_INCOMPATIBLE'
+    );
+});
+
+function schemaTwoModelTransform(dimensions = { x: 254, y: 100, z: 20 }) {
+    return {
+        transform_schema: 2,
+        size_unit: 'mm',
+        keep_proportions: true,
+        requested_size: { x: null, y: null, z: null },
+        scale_percent: null,
+        scale_factors: { x: 1, y: 1, z: 1 },
+        orientation_mode: 'preserve',
+        orientation_outcome: 'preserved',
+        automatic_orientation_applied: false,
+        automatic_rotation_deg: { x: 0, y: 0, z: 0 },
+        requested_rotation_deg: { x: 0, y: 0, z: 0 },
+        rotation_deg: { x: 0, y: 0, z: 0 },
+        automatic_rotation_matrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        rotation_matrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        original_dimensions_available: false,
+        original_dimensions_mm: null,
+        oriented_dimensions_mm: { ...dimensions },
+        final_dimensions_mm: { ...dimensions }
+    };
+}
+
+test('known native placement rejection maps to the full K2 bounds contract', () => {
+    const nativeError = new Error('plate 1: Nothing to be sliced, no object is fully inside the print volume');
+    const wrapped = wrapNativePlacementRejection(nativeError, {
+        modelTransform: schemaTwoModelTransform(),
+        buildVolumeLimits: {
+            min: { x: 0.1, y: 0.1, z: 0.1 },
+            max: { x: 253.9, y: 253.9, z: 249.9 },
+            sourceProfile: 'Bambu_P1S_0.4_nozzle.json'
+        }
+    });
+    const result = invokeProcessingError(wrapped);
+
+    assertProcessingMapping(result, 422, 'MODEL_OUT_OF_PRINTER_BOUNDS');
+    assert.deepEqual(result.body.model_dimensions_mm, { x: 254, y: 100, z: 20 });
+    assert.deepEqual(result.body.model_transform, schemaTwoModelTransform());
+    assert.deepEqual(result.body.build_volume_limits_mm, {
+        min: { x: 0.1, y: 0.1, z: 0.1 },
+        max: { x: 253.9, y: 253.9, z: 249.9 },
+        source_profile: 'Bambu_P1S_0.4_nozzle.json'
+    });
+});
+
+test('stdout placement diagnostic plus unrelated stderr warning still maps to full K2', () => {
+    const nativeError = Object.assign(new Error('Native command failed.'), {
+        stdout: 'plate 1: Nothing to be sliced; no object is fully inside the print volume',
+        stderr: 'warning: unrelated preset metadata note'
+    });
+    const wrapped = wrapNativePlacementRejection(nativeError, {
+        modelTransform: schemaTwoModelTransform(),
+        buildVolumeLimits: {
+            min: { x: 0.1, y: 0.1, z: 0.1 },
+            max: { x: 253.9, y: 253.9, z: 249.9 },
+            sourceProfile: 'Bambu_P1S_0.4_nozzle.json'
+        }
+    });
+    const result = invokeProcessingError(wrapped);
+
+    assertProcessingMapping(result, 422, 'MODEL_OUT_OF_PRINTER_BOUNDS');
+    assert.deepEqual(result.body.model_transform, schemaTwoModelTransform());
+    assert.deepEqual(result.body.build_volume_limits_mm.max, {
+        x: 253.9, y: 253.9, z: 249.9
+    });
+});
+
+test('exact native last-layer height rejection maps command failure to full K2', () => {
+    const modelTransform = schemaTwoModelTransform({ x: 60, y: 60, z: 325 });
+    const nativeError = Object.assign(new Error('Native command failed.'), {
+        stdout: '',
+        stderr: 'While the object z325.stl itself fits the build volume, its last layer exceeds '
+            + 'the maximum build volume height. You might want to reduce the size of your model '
+            + 'or change current print settings and retry.'
+    });
+    const wrapped = wrapNativePlacementRejection(nativeError, {
+        modelTransform,
+        buildVolumeLimits: {
+            min: { x: 0.1, y: 0.1, z: 0.1 },
+            max: { x: 350, y: 320, z: 325 },
+            sourceProfile: 'FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini'
+        }
+    });
+    const result = invokeProcessingError(wrapped);
+
+    assertProcessingMapping(result, 422, 'MODEL_OUT_OF_PRINTER_BOUNDS');
+    assert.deepEqual(result.body.model_dimensions_mm, { x: 60, y: 60, z: 325 });
+    assert.deepEqual(result.body.model_transform, modelTransform);
+    assert.deepEqual(result.body.build_volume_limits_mm, {
+        min: { x: 0.1, y: 0.1, z: 0.1 },
+        max: { x: 350, y: 320, z: 325 },
+        source_profile: 'FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini'
+    });
+});
+
+test('native placement diagnostic requires complete schema-v2 context before mapping', () => {
+    const nativeError = new Error('Object does not fit inside the print volume');
+    const wrapped = wrapNativePlacementRejection(nativeError, {
+        modelTransform: { transform_schema: 1 },
+        buildVolumeLimits: null
+    });
+    assertProcessingMapping(
+        invokeProcessingError(wrapped),
+        500,
+        'INTERNAL_PROCESSING_ERROR'
+    );
+});
+
+test('native placement matcher excludes unrelated native failures', () => {
+    assert.equal(
+        isNativePlacementRejection({
+            message: 'Slicer did not produce an output artifact.',
+            stderr: 'plate 1: Nothing to be sliced; no object is fully inside the print volume'
+        }),
+        true
+    );
+    assert.equal(
+        isNativePlacementRejection(new Error('Slicer exited with status 1')),
+        false
+    );
+    assert.equal(
+        isNativePlacementRejection({ stderr: 'Nothing to be sliced' }),
+        false
+    );
+    assert.equal(
+        isNativePlacementRejection({
+            stdout: 'All objects are outside the print volume.'
+        }),
+        true
+    );
+    assert.equal(
+        isNativePlacementRejection({
+            stderr: 'While the object z325.stl itself fits the build volume, validation failed.'
+        }),
+        false
+    );
+    assert.equal(
+        isNativePlacementRejection({
+            stderr: 'The last layer exceeds the maximum build volume height.'
+        }),
+        false
     );
 });
 

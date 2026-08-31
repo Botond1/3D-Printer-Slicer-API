@@ -7,6 +7,7 @@ const path = require('node:path');
 const ORCA_INVOCATION_POLICY = Object.freeze({
     arrange: '1',
     orient: '0',
+    allowRotations: '0',
     slice: '0',
     settingsPrecedence: Object.freeze(['machine', 'process']),
     filamentOption: '--load-filaments'
@@ -96,6 +97,7 @@ function buildSlicerCommandArgs(
         args.push(
             '--arrange', policy.arrange,
             '--orient', policy.orient,
+            `--allow-rotations=${policy.allowRotations}`,
             '--slice', policy.slice,
             '--outputdir', outputDir
         );

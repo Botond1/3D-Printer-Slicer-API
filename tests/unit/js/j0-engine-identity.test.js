@@ -95,7 +95,7 @@ test('startup initialization is atomic and request lookup launches no child proc
 
 test('Orca native policy places but never reorients the transformed and bounds-checked model', () => {
     assert.deepEqual(resolveSlicerInvocationPolicy('orca', 'FDM'), {
-        arrange: '1', orient: '0', slice: '0',
+        arrange: '1', orient: '0', allowRotations: '0', slice: '0',
         settingsPrecedence: ['machine', 'process'], filamentOption: '--load-filaments'
     });
     const args = buildSlicerCommandArgs(
@@ -103,10 +103,16 @@ test('Orca native policy places but never reorients the transformed and bounds-c
     );
     const arrangeIndex = args.indexOf('--arrange');
     const orientIndex = args.indexOf('--orient');
+    const allowRotationTokens = args.filter((value) => value.startsWith('--allow-rotations'));
     assert.ok(arrangeIndex >= 0);
     assert.ok(orientIndex >= 0);
     assert.equal(args[arrangeIndex + 1], '1');
     assert.equal(args[orientIndex + 1], '0');
+    assert.deepEqual(allowRotationTokens, ['--allow-rotations=0']);
+    assert.equal(args.includes('--allow-rotations'), false);
+    assert.equal(args.filter((value) => value === '--allow-rotations=0').length, 1);
+    assert.ok(args.indexOf('--allow-rotations=0') > orientIndex);
+    assert.ok(args.indexOf('--allow-rotations=0') < args.indexOf('--slice'));
     assert.equal(args[1], 'machine.json;process.json');
     assert.equal(args[args.indexOf('--load-filaments') + 1], 'filament.json');
     assert.equal(

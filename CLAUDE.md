@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Operating Guide
 
-Last synchronized: 2026-08-26
+Last synchronized: 2026-08-31
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -14,6 +14,179 @@ When architecture rules or domain constraints change in this file, keep these fi
 
 ## Goal
 Provide a reliable slicing and pricing API for 3D printing workflows with strict safety and predictable behavior.
+
+## J3B native-envelope and original-dimension corrective candidate
+
+- J3 itself is owner-verified on the production-identical exact `58c0ccb`
+  container, including artifact-level `--allow-rotations=0` proof. Do not
+  reopen that orientation contract. J3B measurement A and exact local final-
+  admission B are complete. B binds code SHA
+  `47ae13397bb4537b4bb700b8c6bf3d9648364bdc` to image ID
+  `sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`;
+  its revision label matched and the `999:999` container was healthy, read-only,
+  with its host port bound only to localhost. The owner then passed the complete
+  production-identical VPS matrix from exact tree
+  `db42b93b2416ac0b791a45a0eae1233b303cf557` after independently matching all
+  445 tracked files. Its separately built image ID differs, so this is exact
+  source-tree and production-identical-matrix proof, not byte-identical-image
+  proof.
+- `model_transform` is schema 2. Success and the complete K2
+  `MODEL_OUT_OF_PRINTER_BOUNDS` response require both
+  `original_dimensions_available` and nullable `original_dimensions_mm`.
+  `true` is equivalent to a real measured object; `false` is equivalent to
+  `null`. Never substitute oriented dimensions for a missing original.
+  Oriented/final dimensions remain mandatory and positive; either unavailable
+  branch returns controlled HTTP 422 `MODEL_DIMENSIONS_UNAVAILABLE`.
+  Canonical measured data requires `height_mm == z`: a malformed tagged
+  original degrades to false/null, while malformed oriented/final data returns
+  that controlled 422. `stats.object_height_mm == final_dimensions_mm.z`
+  remains unconditional.
+- Explicit native placement/print-volume refusal maps to HTTP 422
+  `MODEL_OUT_OF_PRINTER_BOUNDS` with the full schema-2 transform, including
+  orientation mode/outcome. Failed commands retain bounded stdout independently
+  from stderr. Prusa exit-zero/no-artifact maps through this safety net only
+  with an explicit placement diagnostic; unrelated failures remain internal.
+- Catalogue schema is `r3d-profile-catalogue-v2`. Preserve physical/profile
+  metadata as `declared_build_volume_dimensions_mm` and use only
+  `largest_passing_dimensions_inclusive_mm` as the inclusive admission
+  authority. Machine/fleet derivation is engine-scoped. Accepted P1S ceilings
+  are Prusa `256 x 256 x 249.9 mm` and Orca
+  `253.9 x 253.9 x 249.9 mm`; Prusa's edge beyond its declared X/Y boundary is
+  `UNESTABLISHED`.
+- `H2D-QUOTE` exists on both engines and is a P1S-physics estimate on a
+  H2D-sized declared bed, quote-only and never production H2D G-code. The
+  plugin calls only `POST /prusa/slice`. Exact helper-image measurement A passed
+  44/44 fixture preconditions, 10/10 brackets, and 2/2 combined corners. Its
+  measured ceilings are Prusa `350 x 320 x 324.9 mm` and Orca
+  `347.9 x 317.9 x 324.9 mm`; `325 mm` at `0.3 mm` returned the full K2 HTTP 422
+  twice on each engine. Prusa's native X/Y edge beyond its declared quote bed
+  remains `UNESTABLISHED`. Final-admission B passed 88/88 fixture preconditions,
+  20/20 brackets, and 4/4 corners with all four published tuples.
+- Normal generated fixtures require outward non-zero normals plus an immediate
+  native `prusa-slicer --info` precondition. Keep the deliberate zero-normal
+  regression separate. The orientation HTTP matrix has 37 cases, including the
+  `20 x 240 x 245` zero-request auto row, exact `18 x 130 x 240` auto replay,
+  preserve+X90, and invalid `sideways`. The A/B envelope sweep requires an
+  exact `/profiles` phase guard and exact response `max`/`source_profile`;
+  Prusa reports its selected layer INI and Orca its stable machine profile.
+  Exact-container native-info uses only a bounded fixture-addressing no-shell
+  JSON argv template and the report retains only its source label. Exact local B
+  catalogue validation passed 9/9 with optional Prusa digest parity run/pass;
+  orientation passed 12/12 fixture checks, 4/4 selectors, and 37/37 HTTP rows.
+  A legal binary zero-normal regression returned HTTP 200 on both engines in
+  exact J2 and B, with B schema-2 original availability false/null.
+  The owner VPS run confirmed all four exact inclusive boundaries, full K2 422
+  conversion for the former native 500 cases, distinct applied/preserved/
+  unchanged outcomes, unchanged Orca mass/no-yaw guards, and all three enlarged
+  Prusa layer profiles. Customer exposure is zero. One branch push, one PR into
+  `main`, and that PR's merge are now authorized but not yet claimed complete.
+  Deploy, registry/image publication, route/DNS/allowlist, production-container,
+  and consumer-repository changes remain unauthorized. See
+  `docs/codex/evidence/j3b-native-envelope-and-original-dimensions.md`.
+
+## J3 orientation-visibility local source checkpoint
+
+- J3 starts from J2 commit `9b28b95cfa9f931092044300ebfca912421bac32`.
+  Its exact code-bearing SHA is
+  `c404326f535fcc70ba62aa923fa6652f4fba5019`; local source gates are green.
+  The owner subsequently passed the full J3 matrix on exact tree `58c0ccb`.
+  Its owner-approved request field is strict `orientationMode=auto|preserve`;
+  omission defaults to `auto` for compatibility, and every other present value
+  returns HTTP 400 `INVALID_ORIENTATION_MODE`.
+- On the historical J3 tree, success and `MODEL_OUT_OF_PRINTER_BOUNDS` shared
+  the complete first-version `model_transform`; J3B supersedes its wire schema
+  with `transform_schema: 2`. The orientation contract retains orientation mode and
+  outcome, requested/automatic/total rotations, and original/oriented/final
+  dimensions. The authoritative rotation is rotation-only and composes as
+  `R_total = R_requested * R_automatic`; it does not encode centering,
+  grounding, scaling, or translation. `original_dimensions_mm` is measured
+  after safe source conversion and before service orientation,
+  `oriented_dimensions_mm` after orientation, and `final_dimensions_mm` after
+  request sizing/rotation. `stats.object_height_mm` must equal
+  `model_transform.final_dimensions_mm.z`.
+- `orientation_outcome` is one of `applied`, `unchanged`, `preserved`, or
+  `fallback_unmodified`. Bounds wording must branch on the outcome: only
+  `applied` may say the model does not fit even after automatic rotation;
+  `unchanged` says automatic evaluation kept the pose, `preserved` refers to
+  the submitted pose, and `fallback_unmodified` must disclose that automatic
+  orientation was unavailable.
+- An outer ZIP admits exactly one supported source file. If that file is a 3MF
+  scene, its internal geometries are concatenated into one compound STL before
+  native slicing. The API passes one STL argv and requests no split-to-objects
+  operation, so disconnected shells retain their relative placement rather
+  than becoming independently packable objects. Orca keeps `--arrange 1` for
+  placement and
+  `--orient 0`, while exactly one single-token `--allow-rotations=0` disables
+  only whole-compound arrange yaw. Prusa receives the already transformed
+  geometry and adds no native rotation.
+- The exact Orca 2.3.1 AppImage flag shape is `OWNER_VERIFIED_INPUT`:
+  `--allow-rotations=0` produced real G-code with 6.25 g, while the split
+  `--allow-rotations 0` form failed with `No such file: 0`. This is not a
+  current J3B candidate run. The full historical J3 HTTP matrix is owner-
+  verified; the later J3B owner production-identical VPS matrix also passed on
+  exact tree `db42b93`. Neither result authorizes deploy, registry write, route
+  activation, or consumer-repository change. See
+  `docs/codex/evidence/j3-orientation-visibility.md`.
+
+## J2 bounds/network baseline and J3B catalogue successor
+
+- J2 starts from protected main
+  `0dedbe1e9e4c32a0373982a45bf788cdcdb4f024`. It established the
+  physical/profile-declared P1S `256 x 256 x 250 mm` and H2D-sized
+  `350 x 320 x 325 mm` metadata, the unchanged `1 mm` compatibility minima,
+  and `MAX_MODEL_DIMENSION_MM >= 350`. J3B separates those declared values from
+  the measured, inclusive admission ceiling.
+- Public `GET /profiles` remains startup-built, immutable, informational, and
+  independent of slicing availability. Its current
+  `r3d-profile-catalogue-v2` payload contains 18 machine-bound server-owned FDM
+  rows, preserves the strong `ETag`, body `catalogue_sha256`, 304 behavior, and
+  typed non-critical 503 `PROFILE_CATALOGUE_UNAVAILABLE`, and never advertises
+  the generic `120 x 120 x 150 mm` SLA fallback as a machine.
+- Every entry exposes `declared_build_volume_dimensions_mm`,
+  `declared_source_kind: profile-explicit`,
+  `minimum_dimensions_inclusive_mm`, and the exact-boundary-inclusive admission
+  authority `largest_passing_dimensions_inclusive_mm`. Preserve the bounded
+  generic engine/selector/component shape and
+  `effective_profile_identity_schema: r3d-effective-slice-profile-v2`.
+  Machine and fleet resolutions are derived per technology and engine; never
+  merge Prusa and Orca values, synthesize a component-wise ceiling, or add a
+  manual `fleet_max`.
+- The owner-confirmed future SLA printer is the Elegoo Saturn 4 Ultra, but the
+  current Prusa `--export-sla` and SL1 metadata parser are incompatible with
+  its `.goo`/`.ctb` artifacts and credible MSLA timing. Do not guess its build
+  envelope. SLA remediation is a separate future wave using owner-supplied
+  Chitubox/Elegoo Satellite profiles. A later truthful SLA row can use catalogue
+  v2 without another schema-version change; no SLA row exists today.
+- P1S largest-passing admission is owner-accepted as Prusa
+  `256 x 256 x 249.9 mm` and Orca `253.9 x 253.9 x 249.9 mm`. Prusa's native
+  X/Y edge beyond its declared physical profile remains `UNESTABLISHED`.
+  H2D-QUOTE exists on both engines with P1S physics and an enlarged declared
+  bed, quoting only. Measurement A established and exact local final-admission B
+  confirmed Prusa `350 x 320 x 324.9 mm` and Orca
+  `347.9 x 317.9 x 324.9 mm`.
+- The J2 Hostinger preparation reads one through four unique private IPv4 `/32`
+  rows. Initial phase `leadpilot-only` requires exactly one row; expansion to
+  other callers is separately authorized. A host-firewall TCP reset and fixed
+  private `J2_ALLOWLIST_DENY` event, or router HTTP 403, remain distinct from
+  backend HTTP 401. Every route action requires one inherited root-private FD9
+  lock held across the whole rehearsal plus unchanged canonical, root-owned,
+  non-writable ancestor chains. Terminal proof uses strict
+  `--assert-router-dark`; only logical fsync-cutpoint recovery is locally proved,
+  while real crash/power-loss durability remains external `NOT_VERIFIED`. The
+  external orchestrator must prove intended/denied callers, TLS issuance/
+  renewal, and the repeated activation/rollback sequence. A completed rehearsal requires proven terminal dark; any
+  `*_rollback_uncertain` result is `STOP/UNKNOWN`. Live rehearsal is
+  `BLOCKED / NOT RUN` because no exact J0-capable main image has been
+  published/deployed and private live evidence is absent. J2 performs no route
+  mutation; the latest prior I12 dark state was
+  not re-verified. Never infer permanent activation from repository gates.
+- Calibration now has nine numeric Bambu reference cases and the `M03`
+  P1S-overheight rejection. Measurement fixes Orca `--orient 0`, disables
+  support in the measurement-only runtime profile, and reuses the production
+  machine/process `--load-settings` plus separate `--load-filaments` policy.
+  Orca measurement and
+  automatic-pricing acceptance remain blocked on complete approved vendor
+  profiles and an available local Docker daemon.
 
 ## J1 calibration harvest over the J0 W2/W3 public contract
 
@@ -87,9 +260,10 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   nullable Prusa/manual pricing, selected-profile Orca direct grams, and strict
   marker-drift failure. Strict mode defaults on and never substitutes zero or a
   length-derived mass.
-  The retained P1S and new H2D candidates are generic Marlin profiles, so real
-  Bambu references, owner-selected models, and acceptance thresholds keep W8
-  live calibration `BLOCKED_OWNER_INPUT`.
+  The retained P1S and H2D candidates are generic Marlin profiles. Nine numeric
+  Bambu references plus the `M03` P1S-boundary result are recorded, but W8 Orca
+  calibration remains `BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`; no automatic-
+  pricing acceptance is inferred.
 
 ## I12 Hostinger production-qualification boundary
 
@@ -203,6 +377,7 @@ Public endpoints:
 - GET /health
 - GET /ready
 - GET /pricing
+- GET /profiles
 - GET /openapi.json
 - GET /docs
 - GET /
@@ -378,6 +553,7 @@ Core keys from .env:
 - JSON_BODY_LIMIT
 - FORM_BODY_LIMIT
 - MAX_UPLOAD_BYTES
+- MAX_MODEL_DIMENSION_MM
 - MAX_MATERIAL_USED_METERS
 - MAX_MATERIAL_USED_GRAMS
 - MAX_MATERIAL_USED_ML
@@ -416,10 +592,13 @@ Focused suites:
 - python tests/testing-scripts/slicing/full_api_prusa_fdm_test_runner.py
 - python tests/testing-scripts/slicing/full_api_prusa_sl1_test_runner.py
 - python tests/testing-scripts/slicing/unsupported_upload_test_runner.py
+- python tests/testing-scripts/slicing/orientation_visibility_test_runner.py
+- python tests/testing-scripts/slicing/native_envelope_sweep_runner.py
 - python tests/testing-scripts/pricing/pricing_cycle_test_runner.py
 - python tests/testing-scripts/admin/admin_output_files_test_runner.py
 - python tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
 - python tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py
+- python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
 - python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --expected-max-concurrent N --retry-on-429 1 --cleanup-manifest NEW_MANIFEST_PATH --report NEW_REPORT_PATH
 
 Test organization:

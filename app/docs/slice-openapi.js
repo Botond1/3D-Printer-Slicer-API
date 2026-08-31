@@ -24,6 +24,12 @@ const COMMON_MULTIPART_PROPERTIES = Object.freeze({
         minimum: 0,
         maximum: 100
     },
+    orientationMode: {
+        type: 'string',
+        enum: ['auto', 'preserve'],
+        default: 'auto',
+        description: 'Controls server preprocessing orientation. `auto` preserves the historical automatic stable-pose optimization; `preserve` skips that automatic rotation. Explicit rotationX/Y/Z values still apply in both modes.'
+    },
     sizeUnit: {
         type: 'string',
         enum: ['mm', 'inch'],
@@ -68,6 +74,177 @@ const COMMON_MULTIPART_PROPERTIES = Object.freeze({
     }
 });
 
+const DIMENSIONS_SCHEMA = Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    required: ['x', 'y', 'z'],
+    properties: {
+        x: { type: 'number' },
+        y: { type: 'number' },
+        z: { type: 'number' }
+    }
+});
+
+const NULLABLE_DIMENSIONS_SCHEMA = Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    required: ['x', 'y', 'z'],
+    properties: {
+        x: { type: 'number', nullable: true },
+        y: { type: 'number', nullable: true },
+        z: { type: 'number', nullable: true }
+    }
+});
+
+const MEASURED_DIMENSIONS_SCHEMA = Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    required: ['x', 'y', 'z'],
+    properties: {
+        x: { type: 'number', minimum: 0 },
+        y: { type: 'number', minimum: 0 },
+        z: { type: 'number', minimum: 0 }
+    }
+});
+
+const ROTATION_DEGREES_SCHEMA = Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    required: ['x', 'y', 'z'],
+    properties: {
+        x: { type: 'number' },
+        y: { type: 'number' },
+        z: { type: 'number' }
+    }
+});
+
+const ROTATION_MATRIX_ROW_SCHEMA = Object.freeze({
+    type: 'array',
+    minItems: 3,
+    maxItems: 3,
+    items: { type: 'number' }
+});
+
+const ROTATION_MATRIX_SCHEMA = Object.freeze({
+    type: 'array',
+    minItems: 3,
+    maxItems: 3,
+    items: ROTATION_MATRIX_ROW_SCHEMA,
+    description: 'Authoritative 3x3 proper-rotation matrix. Every cell is a finite JSON number.'
+});
+
+const BUILD_VOLUME_LIMITS_SCHEMA = Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    required: ['min', 'max', 'source_profile'],
+    properties: {
+        min: DIMENSIONS_SCHEMA,
+        max: DIMENSIONS_SCHEMA,
+        source_profile: { type: 'string' }
+    }
+});
+
+const MODEL_TRANSFORM_SCHEMA = Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    description: 'Versioned transform provenance. The operation order is automatic orientation, sizing in the oriented axes, requested X/Y/Z rotation, then translation to the build plate.',
+    required: [
+        'transform_schema',
+        'size_unit',
+        'keep_proportions',
+        'requested_size',
+        'scale_percent',
+        'scale_factors',
+        'orientation_mode',
+        'orientation_outcome',
+        'automatic_orientation_applied',
+        'automatic_rotation_deg',
+        'requested_rotation_deg',
+        'rotation_deg',
+        'automatic_rotation_matrix',
+        'rotation_matrix',
+        'original_dimensions_available',
+        'original_dimensions_mm',
+        'oriented_dimensions_mm',
+        'final_dimensions_mm'
+    ],
+    properties: {
+        transform_schema: {
+            type: 'integer',
+            enum: [2],
+            description: 'Version of the model-transform response contract.'
+        },
+        size_unit: { type: 'string', enum: ['mm', 'inch'] },
+        keep_proportions: { type: 'boolean' },
+        requested_size: NULLABLE_DIMENSIONS_SCHEMA,
+        scale_percent: { type: 'number', nullable: true },
+        scale_factors: DIMENSIONS_SCHEMA,
+        orientation_mode: { type: 'string', enum: ['auto', 'preserve'] },
+        orientation_outcome: {
+            type: 'string',
+            enum: ['applied', 'unchanged', 'preserved', 'fallback_unmodified'],
+            description: '`applied` means auto used a non-identity rotation; `unchanged` means auto completed with identity; `preserved` means the submitted pose was requested; `fallback_unmodified` means automatic orientation was unavailable and the original converted STL continued.'
+        },
+        automatic_orientation_applied: {
+            type: 'boolean',
+            description: 'True only when automatic preprocessing applied a non-identity rotation.'
+        },
+        automatic_rotation_deg: {
+            ...ROTATION_DEGREES_SCHEMA,
+            description: 'Canonical Euler representation of automatic orientation only.'
+        },
+        requested_rotation_deg: {
+            ...ROTATION_DEGREES_SCHEMA,
+            description: 'Requested X, then Y, then Z rotations in degrees.'
+        },
+        rotation_deg: {
+            ...ROTATION_DEGREES_SCHEMA,
+            description: 'Canonical Rz*Ry*Rx Euler representation of the total effective rotation.'
+        },
+        automatic_rotation_matrix: {
+            ...ROTATION_MATRIX_SCHEMA,
+            description: 'Rotation applied by automatic orientation preprocessing only.'
+        },
+        rotation_matrix: {
+            ...ROTATION_MATRIX_SCHEMA,
+            description: 'Authoritative total rotation for column vectors: R_total = R_requested * R_automatic, where R_requested = Rz * Ry * Rx. Native slicer rotation is disabled.'
+        },
+        original_dimensions_available: {
+            type: 'boolean',
+            description: 'True exactly when original_dimensions_mm contains a real successful pre-orientation measurement; false exactly when it is null.'
+        },
+        original_dimensions_mm: {
+            ...MEASURED_DIMENSIONS_SCHEMA,
+            nullable: true,
+            description: 'Submitted model dimensions after format conversion and before orientation or requested transforms, or null when that provenance-only measurement was unavailable. Oriented dimensions are never substituted.'
+        },
+        oriented_dimensions_mm: {
+            ...DIMENSIONS_SCHEMA,
+            description: 'Dimensions after automatic-or-preserved orientation and before requested size/rotation transforms.'
+        },
+        final_dimensions_mm: {
+            ...DIMENSIONS_SCHEMA,
+            description: 'Final dimensions passed to the native slicer after all server-side transforms.'
+        }
+    },
+    oneOf: [
+        {
+            title: 'Original dimensions measured',
+            properties: {
+                original_dimensions_available: { type: 'boolean', enum: [true] },
+                original_dimensions_mm: MEASURED_DIMENSIONS_SCHEMA
+            }
+        },
+        {
+            title: 'Original dimensions unavailable',
+            properties: {
+                original_dimensions_available: { type: 'boolean', enum: [false] },
+                original_dimensions_mm: { type: 'object', nullable: true, enum: [null] }
+            }
+        }
+    ]
+});
+
 const SUCCESS_SCHEMA = Object.freeze({
     type: 'object',
     required: [
@@ -77,6 +254,8 @@ const SUCCESS_SCHEMA = Object.freeze({
         'slicer_engine',
         'engine_version',
         'profiles',
+        'model_transform',
+        'build_volume_limits_mm',
         'hourly_rate',
         'stats'
     ],
@@ -121,9 +300,11 @@ const SUCCESS_SCHEMA = Object.freeze({
             nullable: true,
             description: 'Configured hourly rate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
         },
+        model_transform: MODEL_TRANSFORM_SCHEMA,
+        build_volume_limits_mm: BUILD_VOLUME_LIMITS_SCHEMA,
         stats: {
             type: 'object',
-            required: ['material_used_m', 'material_used_g', 'estimated_price_huf'],
+            required: ['material_used_m', 'material_used_g', 'object_height_mm', 'estimated_price_huf'],
             properties: {
                 material_used_m: {
                     type: 'number',
@@ -136,6 +317,11 @@ const SUCCESS_SCHEMA = Object.freeze({
                     minimum: 0,
                     description: 'Filament mass parsed directly from the slicer marker; null when the selected native profile emits no mass marker. It is never derived from length.'
                 },
+                object_height_mm: {
+                    type: 'number',
+                    minimum: 0,
+                    description: 'Final pre-native-slicer model height. It equals model_transform.final_dimensions_mm.z.'
+                },
                 estimated_price_huf: {
                     type: 'number',
                     nullable: true,
@@ -143,26 +329,6 @@ const SUCCESS_SCHEMA = Object.freeze({
                 }
             }
         }
-    }
-});
-
-const DIMENSIONS_SCHEMA = Object.freeze({
-    type: 'object',
-    required: ['x', 'y', 'z'],
-    properties: {
-        x: { type: 'number' },
-        y: { type: 'number' },
-        z: { type: 'number' }
-    }
-});
-
-const BUILD_VOLUME_LIMITS_SCHEMA = Object.freeze({
-    type: 'object',
-    required: ['min', 'max', 'source_profile'],
-    properties: {
-        min: DIMENSIONS_SCHEMA,
-        max: DIMENSIONS_SCHEMA,
-        source_profile: { type: 'string' }
     }
 });
 
@@ -207,11 +373,12 @@ function validationErrorResponse() {
                     },
                     oneOf: [
                         {
-                            required: ['model_dimensions_mm', 'build_volume_limits_mm'],
+                            required: ['model_dimensions_mm', 'build_volume_limits_mm', 'model_transform'],
                             properties: {
                                 errorCode: { type: 'string', enum: ['MODEL_OUT_OF_PRINTER_BOUNDS'] },
                                 model_dimensions_mm: DIMENSIONS_SCHEMA,
-                                build_volume_limits_mm: BUILD_VOLUME_LIMITS_SCHEMA
+                                build_volume_limits_mm: BUILD_VOLUME_LIMITS_SCHEMA,
+                                model_transform: MODEL_TRANSFORM_SCHEMA
                             }
                         },
                         {
@@ -234,7 +401,12 @@ function createSliceResponses() {
         },
         400: errorCodeResponse(
             'Invalid request, geometry, or source archive.',
-            ['INVALID_SOURCE_ARCHIVE', 'INVALID_SOURCE_GEOMETRY', 'UNSUPPORTED_FILE_FORMAT']
+            [
+                'INVALID_SOURCE_ARCHIVE',
+                'INVALID_SOURCE_GEOMETRY',
+                'UNSUPPORTED_FILE_FORMAT',
+                'INVALID_ORIENTATION_MODE'
+            ]
         ),
         401: {
             description: 'Slice service authentication is required.',

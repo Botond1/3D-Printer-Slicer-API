@@ -1,6 +1,6 @@
 # App Folder - Local Claude Guide
 
-Last synchronized: 2026-08-26
+Last synchronized: 2026-08-31
 
 ## Scope
 
@@ -10,8 +10,13 @@ This document describes the application runtime inside app/.
 
 - HTTP stack: bounded Node HTTP server + Express + helmet + method-aware
   audience CORS + validated request ID + lifecycle observability + global error handler.
-- Upload flow: slice limiter, x-slicer-api-key authentication, root-scoped workspace allocation, route-level multer single-file upload on choosenFile, queueing, option validation, conversion/orientation, transform, native slicing, stats parsing, and pricing response.
+- Upload flow: slice limiter, x-slicer-api-key authentication, root-scoped workspace allocation, route-level multer single-file upload on choosenFile, queueing, strict option validation, conversion, versioned orientation capture, transform/bounds validation, native slicing, stats parsing, and pricing response.
 - Slicing engines: PrusaSlicer (FDM/SLA) and OrcaSlicer (FDM only).
+- Public profile catalogue: immutable startup generation for machine-bound,
+  server-owned FDM presets; strong ETag/body digest; non-critical typed 503.
+- J3B transform/envelope contract: schema-2 original-measurement availability,
+  load-bearing oriented/final dimensions, per-engine inclusive admission
+  ceilings, and full K2 mapping for explicit native placement rejection.
 - Runtime folder contract: root-scoped input/, output/, configs/ only.
 
 ## Detailed JavaScript File Responsibilities
@@ -28,7 +33,9 @@ This document describes the application runtime inside app/.
   - Applies exact per-audience CORS while allowing requests without Origin,
     validates/propagates X-Request-Id, and observes request settlement.
   - Creates one bounded Node HTTP server before listening.
-  - Registers JSON and urlencoded body limits, Swagger endpoints, business routes, 404 handler, and global error handler.
+  - Resolves both engine versions, attempts non-critical profile-catalogue
+    initialization, then registers JSON/urlencoded limits, Swagger endpoints,
+    business routes, 404 handler, and global error handler.
 
 ### Configuration modules
 
@@ -37,11 +44,24 @@ This document describes the application runtime inside app/.
   - Defines the inclusive application concurrency range `1..3`; the default
     remains `MAX_CONCURRENT_SLICES=1`.
   - Defines extension groups, Orca process-profile defaults, and default pricing matrix.
+  - Uses `350 x 320 x 325 mm` as the largest-supported FDM fallback and keeps
+    the existing `1 mm` profile minima unchanged; shipped profiles must supply
+    exact upper machine metadata.
+  - Owns validation-only largest-passing ceilings separately from declared
+    profile dimensions. P1S is Prusa `256 x 256 x 249.9 mm` and Orca
+    `253.9 x 253.9 x 249.9 mm`; exact helper-image measurement A established
+    H2D-sized quote values as Prusa `350 x 320 x 324.9 mm` and Orca
+    `347.9 x 317.9 x 324.9 mm`. Prusa native X/Y beyond the declared quote bed
+    remains `UNESTABLISHED`. Exact local final-admission B confirmed all four
+    published tuples with 88/88 fixture preconditions, 20/20 brackets, and 4/4
+    corners.
 - app/config/resource-policy.js
   - Treats an omitted `MAX_CONCURRENT_SLICES` as default `1` and accepts an
     explicit value only as a canonical positive decimal integer in `1..3`.
   - Rejects malformed, non-canonical, unsafe, or out-of-range explicit values
     during startup validation.
+  - Accepts `MAX_MODEL_DIMENSION_MM` only from `350` through `100000`; its
+    default remains `10000`.
 - app/config/service-auth.js
   - Requires pricing, artifact, and operations actives plus one complete
     `SLICE_SERVICE_AUTH_MODE`; default `legacy` requires shared active,
@@ -108,6 +128,11 @@ This document describes the application runtime inside app/.
   - Declares GET /pricing (public).
   - Declares pricing-scoped mutation routes and applies adminRateLimiter plus
     the injected pricing authenticator.
+- app/routes/profile-catalogue.routes.js
+  - Declares public GET /profiles.
+  - Returns the immutable serialized startup snapshot with a strong ETag,
+    supports weak/strong `If-None-Match` candidates and 304, and returns
+    no-store HTTP 503 `PROFILE_CATALOGUE_UNAVAILABLE` when initialization failed.
 - app/routes/system.routes.js
   - Declares public GET /health and minimal GET /ready.
   - Declares operations-scoped GET /health/detailed,
@@ -150,6 +175,9 @@ This document describes the application runtime inside app/.
 - app/services/slice/command.js
   - Runs external binaries via execFile with argument arrays.
   - Enforces SLICE_COMMAND_TIMEOUT_MS without emitting raw native stdout/stderr.
+  - On command failure, retains bounded stdout and stderr as separate error
+    properties so a stdout placement diagnostic is not hidden by a stderr
+    warning; neither stream is emitted to logs.
 - app/services/slice/common.js
   - Shared helpers for supported extensions, deterministic output naming, isolated Orca output dirs, file alignment, and cleanup.
 - app/services/slice/engine.js
@@ -158,14 +186,16 @@ This document describes the application runtime inside app/.
     and Orca. Prusa export flags, Orca's machine/process `--load-settings`
     order, and the selected filament's dedicated `--load-filaments` option are
     composed from that same hash-fed policy; Orca sends
-    `--arrange 1` / `--orient 0` after preprocessing/
-    bounds checks. Arrangement places already-rotated geometry onto the build
-    plate, while auto-orient remains disabled.
+    `--arrange 1`, `--orient 0`, and exactly one single-token
+    `--allow-rotations=0` after preprocessing/bounds checks. Arrangement keeps
+    translation/placement while whole-compound yaw and native auto-orient are
+    disabled, so no post-contract rotation is omitted.
 - app/services/slice/engine-version.js
   - Resolves both selected executables' bounded `--help` output atomically before
     listen, publishes only the all-success initialized map, and evicts failures.
 - app/services/slice/errors.js
-  - Classifies pipeline failures (geometry, zip, timeout, unsupported format, Orca profile mismatch).
+  - Classifies pipeline failures (geometry, zip, timeout, unsupported format,
+    Orca profile mismatch, and complete-context native placement refusal).
   - Converts exceptions to stable API error responses.
 - app/services/slice/filament-profile.js
   - Resolves the allowlisted Orca filament profile from normalized material and
@@ -178,9 +208,19 @@ This document describes the application runtime inside app/.
     derived from length.
 - app/services/slice/input-processing.js
   - Converts supported model/CAD inputs to STL via Python scripts.
-  - Runs orientation optimization with graceful fallback.
+  - Runs `auto` orientation or `preserve` normalization and accepts only the
+    bounded, exact-shape, versioned orientation sidecar from the owned workspace.
+  - Converts a missing/invalid optimizer result to explicit
+    `fallback_unmodified` identity rather than claiming a rotation.
 - app/services/slice/model-stats.js
-  - Reads model dimensions and parses slicer outputs for print-time/material
+  - Returns explicit `measured` or `unavailable` model-dimension results;
+    failed `prusa-slicer --info` measurement never becomes silent zeros, while
+    a genuinely measured zero remains distinguishable.
+  - A canonical measured tag requires finite non-negative X/Y/Z/height and
+    `height_mm === z`. Malformed tagged original provenance degrades to
+    unavailable; malformed oriented/final measurements fail through the
+    controlled dimensions-unavailable branch.
+  - Parses slicer outputs for print-time/material
     length and nullable direct grams. `SLICE_STRICT_GCODE_METRICS` defaults to
     true; missing required Orca mass maps to `SLICE_OUTPUT_UNPARSED`, and a
     recognized required zero maps through `GCODE_FILAMENT_NOT_POSITIVE`.
@@ -191,14 +231,34 @@ This document describes the application runtime inside app/.
 - app/services/slice/number-utils.js
   - Shared positive-integer parsing plus bounded canonical concurrency parsing.
 - app/services/slice/options.js
-  - Validates request fields: layerHeight, material, infill, size/scale/rotation, unit, and profile overrides.
+  - Validates request fields: layerHeight, material, infill, size/scale/rotation,
+    unit, profile overrides, and strict `orientationMode=auto|preserve`.
+    Omission alone defaults to `auto`; malformed or differently cased present
+    values return `INVALID_ORIENTATION_MODE`.
   - Enforces engine/technology layer constraints and material-technology compatibility.
+- app/services/slice/orientation-contract.js
+  - Validates proper 3x3 rotation matrices and the versioned orientation
+    sidecar; owns orientation modes/outcomes and `transform_schema: 2`.
+  - Requires `original_dimensions_available:true` exactly with a real measured
+    object and false exactly with `original_dimensions_mm:null`; it never uses
+    oriented dimensions as original provenance. Oriented/final measurements
+    must be positive.
+  - Composes the authoritative rotation-only matrix as
+    `R_total = R_requested * R_automatic` and emits canonical Euler summaries.
+- app/services/slice/output-lifecycle.js
+  - If a slicer exits zero but produces no output artifact, preserves the
+    engine's existing missing-artifact failure unless stdout/stderr contains an
+    explicit placement refusal. That Prusa safety-net case maps through the
+    complete K2 native-bounds contract.
 - app/services/slice/profiles.js
   - Resolves Prusa and Orca machine/process/filament profile selection.
   - Validates profile existence.
   - Creates runtime profile variants and resolves build-volume limits from
     snapshot bytes while preserving the original selected basename for public
     `source_profile` metadata.
+  - Preserves `declaredMax` as physical/profile metadata and makes runtime
+    `max` consume only the configured per-engine
+    `largestPassingDimensionsInclusive` admission value.
   - Keeps Prusa INI section/key case significant, rejects exact duplicate
     qualified keys, and replaces one exact top-level request key or inserts a
     missing one before the first section.
@@ -218,10 +278,52 @@ This document describes the application runtime inside app/.
   - Builds the deterministic effective machine/process and request-independent
     native-invocation identity, including stable relative-extrusion settings,
     while excluding request layer-height/infill.
+- app/services/slice/profile-catalogue.js
+  - Builds the immutable `r3d-profile-catalogue-v2` managed-preset catalogue at startup through the
+    production selection, snapshot, runtime-profile, build-volume, filament,
+    and effective-digest chain.
+  - V2 lists only machine-bound server-owned FDM presets: Prusa/Orca P1S and
+    explicit `H2D-QUOTE`. Custom overrides and dynamic/unmapped materials remain outside v2.
+    The generic `120 x 120 x 150 mm` SLA fallback is never a machine envelope.
+  - Uses a bounded generic `engine`, generic `slice_selector.endpoint` plus
+    ordered `parameters[{name,value}]`, and ordered path-free
+    `profile_components[{role,basename,selector_parameter}]`. Nullable
+    `selector_parameter` binds machine/combined to `printerProfile`, process to
+    `processProfile`, and filament to no selector.
+  - Declares `effective_profile_identity_schema` as
+    `r3d-effective-slice-profile-v2`.
+    `declared_build_volume_dimensions_mm` and
+    `declared_source_kind: profile-explicit` identify physical/profile metadata;
+    `largest_passing_dimensions_inclusive_mm` alone is the inclusive admission
+    authority. `minimum_dimensions_inclusive_mm` is a generic floor.
+  - The owner-confirmed future SLA printer is the Elegoo Saturn 4 Ultra, but
+    current Prusa `--export-sla`/SL1 handling cannot represent its `.goo`/`.ctb`
+    artifacts or credible MSLA timing. Do not guess its dimensions; remediation
+    is a later owner-profiled Chitubox/Elegoo Satellite wave. A truthful row can
+    use catalogue v2 and a separate per-engine technology fleet row without
+    another schema-version change; none exists now.
+  - Preserves every per-printer/per-engine preset row. Presets inside one
+    technology/printer/engine must agree on declared and admission envelopes or
+    catalogue construction fails. `machine_resolutions` and
+    `fleet_resolutions` are engine-scoped; cross-engine ceilings are never
+    merged or minimized component-wise.
+  - Current P1S ceilings are Prusa `256 x 256 x 249.9 mm` and Orca
+    `253.9 x 253.9 x 249.9 mm`. H2D-QUOTE measurement A established Prusa
+    `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`; the exact
+    Prusa X/Y edge beyond its declared quote bed remains `UNESTABLISHED`.
+    Exact local final-admission B passed its 88/88 fixture, 20/20 bracket, 4/4
+    corner, 9/9 catalogue, and optional Prusa digest-parity gates. Catalogue
+    failure never gates slicing. The owner production-identical VPS matrix from
+    exact tree `db42b93` later confirmed all four inclusive selector boundaries,
+    full K2 422 mapping, and all three enlarged Prusa layer profiles; its
+    separately built image ID is not byte-identical-image evidence.
 - app/services/slice/response.js
   - Composes successful slice response payloads and refuses success without a
     lowercase 64-hex `profiles.effective_profile_sha256` or machine-readable
     actual-selected-executable `engine_version`.
+  - Requires the complete schema-2 `model_transform`, including the exact
+    original-availability invariant, and enforces
+    `stats.object_height_mm === model_transform.final_dimensions_mm.z`.
   - Encapsulates pricing and profile payload mapper strategies for engine/technology-specific response shaping.
 - app/services/slice/queue.js
   - Implements the bounded FIFO queue with canonical
@@ -234,11 +336,29 @@ This document describes the application runtime inside app/.
     and active ownership, and releases the quarantine subscriber exactly once
     after drain.
 - app/services/slice/transform.js
-  - Builds transform plan (scale/rotation), applies model transform via Python script, and validates final bounds against build-volume limits.
+  - Builds the scale/request-rotation plan, applies it through Python, and
+    validates final bounds against build-volume limits.
+  - Builds one complete `model_transform` for both success and
+    `MODEL_OUT_OF_PRINTER_BOUNDS`, including orientation and
+    original/oriented/final dimensions.
+  - Allows original measurement provenance to be unavailable, but returns
+    controlled HTTP 422 `MODEL_DIMENSIONS_UNAVAILABLE` if oriented or final
+    load-bearing measurement is unavailable, malformed, non-positive, or has
+    `height_mm !== z`.
+- app/services/slice/native-bounds.js
+  - Recognizes only explicit native placement/print-volume diagnostics and
+    builds the full K2 HTTP 422 payload only from a complete schema-2 transform
+    plus selected build limits; incomplete/unrelated failures remain internal.
+  - Classifies bounded message, stderr, and stdout independently preserved by
+    command/output lifecycle handling, including Prusa exit-zero/no-artifact
+    placement diagnostics.
 - app/services/slice/value-parsers.js
   - Normalizes numeric/boolean/unit inputs and sanitizes profile override filenames.
 - app/services/slice/zip.js
   - Performs ZIP guard checks (entry count, cumulative uncompressed size, path safety, encryption rejection, exact single supported source file requirement).
+  - Never creates a multi-source plate: one 3MF source may contain multiple
+    geometries, but `mesh2stl.py` concatenates them into one compound STL, the
+    command passes one STL argument, and no split-to-objects operation is used.
 
 ### Utilities and docs generation
 
@@ -248,19 +368,26 @@ This document describes the application runtime inside app/.
   - Provides structured error logging helper for processing failures.
 - app/docs/swagger-docs.js
   - Generates OpenAPI document used by /openapi.json and Swagger UI /docs.
+- app/docs/profile-catalogue-openapi.js
+  - Defines the public catalogue 200/304/503 contract, strong ETag/body digest,
+    machine-bound entry fields, and informational/non-critical semantics.
 - app/docs/slice-openapi.js
-  - Defines slice success/error schemas, including `engine_version`, the
-    effective-profile digest, four requested omitted runtime codes, the live
-    `MODEL_DIMENSIONS_UNAVAILABLE` general branch, and the disjoint bounds branch
-    requiring both dimension payloads. The slice-500 enum is the complete live
-    set: `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`,
+  - Defines strict `orientationMode`, the complete `transform_schema: 2`
+    response schema, `engine_version`, and the effective-profile digest.
+  - Requires both original-dimension fields and encodes the true/object versus
+    false/null invariant on success and full bounds errors.
+  - Keeps `MODEL_DIMENSIONS_UNAVAILABLE` in the general branch and requires
+    model dimensions, build limits, and the same complete `model_transform` in
+    the disjoint `MODEL_OUT_OF_PRINTER_BOUNDS` branch. The slice-500 enum is the
+    complete live set: `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`,
     `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 
 ## Python Helper Scripts in app/
 
 - app/cad2stl.py: CAD-to-STL conversion.
 - app/mesh2stl.py: mesh normalization to STL.
-- app/orient.py: orientation optimization for printability.
+- app/orient.py: `auto`/`preserve` orientation preprocessing plus exclusive,
+  bounded, versioned rotation-matrix sidecar output.
 - app/scale_model.py: scale/rotation transform execution.
 
 ## Endpoint Behavior Notes
@@ -277,17 +404,29 @@ This document describes the application runtime inside app/.
   `profiles.effective_profile_sha256`. Snapshot-backed bounds/runtime/digest/
   native work does not expose randomized snapshot names: profile metadata and
   bounds `source_profile` retain original selected basenames.
+- The optional multipart `orientationMode` is exact `auto|preserve`; omission
+  defaults to `auto` for backward-compatible behavior. All other present values
+  fail with HTTP 400 `INVALID_ORIENTATION_MODE`.
+- Every success and full bounds failure carries `transform_schema: 2`,
+  `orientation_mode`, `orientation_outcome`, requested/automatic/total
+  rotations, and original/oriented/final dimensions. Original availability is
+  explicit: true iff a real measurement object exists, false iff null; no
+  oriented fallback is permitted. The matrix is rotation-only, uses
+  `R_total = R_requested * R_automatic`, and excludes translation, grounding,
+  and scaling; `stats.object_height_mm` equals final Z.
 - OpenAPI documents the four requested omitted codes plus the already-live
   `MODEL_DIMENSIONS_UNAVAILABLE` general-422 correction. Bounds errors require
-  both `model_dimensions_mm` and `build_volume_limits_mm`. The complete live
+  `model_dimensions_mm`, `build_volume_limits_mm`, and the complete
+  `model_transform`. The complete live
   slice-500 enum is `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`,
   `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
 - Success requires `engine_version` from the atomic pre-listen bounded `--help`
   verification of both selected executables; the startup module has exact-image
   proof and uses a telemetry-disabled runner that cannot alter slice-native
-  lifecycle metrics/events. Orca passes `--arrange 1` / `--orient 0` so
-  placement can translate the
-  model onto the plate without replacing the request-owned rotation. Focused
+  lifecycle metrics/events. Orca passes `--arrange 1`, `--orient 0`, and one
+  `--allow-rotations=0`, so placement can translate the model onto the plate
+  without adding an unreported whole-compound yaw or replacing the request-
+  owned rotation. Focused
   command/digest contracts and final exact-image HTTP transform/final-dimensions
   E2E pass on code SHA `ed85eec63409b7362fe05c2b99031eeb24b5b9c9` and local
   image ID `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
@@ -308,18 +447,26 @@ This document describes the application runtime inside app/.
   200/null path and the Orca mechanism's 0.00 g to 4.12 g correction. The
   combined local focused set passes 69/69; the final combined exact-image rerun
   remains pending.
-- Keep W8 live calibration `BLOCKED_OWNER_INPUT`: the retained P1S and new H2D
+- Keep W8 Orca calibration
+  `BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`: the retained P1S and H2D
   candidates identify as generic Marlin profiles, not verified native Bambu
-  profiles. Their child files now own exact `layer_change_gcode='G92 E0'`, but
-  the incomplete vendor chain remains a separate time/motion calibration lane
-  and J2 owns bed shape/Z. No vendor profile was imported, and no deploy or
-  public route is authorized by the repository contract.
+  profiles. J2 supplies only their `256 x 256 x 250 mm` and
+  `350 x 320 x 325 mm` physical envelopes. Nine numeric Bambu references plus
+  the `M03` P1S-boundary result exist; the calibration runner fixes
+  `--orient 0`, support off, and production machine/process `--load-settings`
+  plus separate `--load-filaments`, but no Orca measurement, deploy, public route,
+  or automatic-pricing acceptance is authorized.
 - No-Origin service requests are allowed; browser-origin protected requests
   must match only their exact audience allowlist.
 - /prusa/slice allows FDM and SLA based on layerHeight.
 - /orca/slice is FDM-only and profile compatibility aware.
 - /orca/slice resolves generated output from per-request isolated output directory before final filename alignment.
 - /health is liveness. /ready is public minimal readiness only.
+- /profiles is public and informational. Its v2 rows separate declared profile
+  dimensions from `largest_passing_dimensions_inclusive_mm`, the inclusive
+  admission authority, and resolve machines/fleets per engine. Slice routes
+  remain authoritative; catalogue initialization failure returns typed 503
+  without changing readiness or slice admission.
 - J1C capability readiness is proposal-only: keep `/health` cheap, place future
   native slicing capability on public `/ready`, and require separate startup-
   smoke, Docker/VPS, typed per-engine failure, anti-DoS, and recovery/hysteresis
@@ -339,6 +486,7 @@ Public endpoints:
 - GET /health -> handler
 - GET /ready -> minimal readiness handler
 - GET /pricing -> handler
+- GET /profiles -> immutable startup snapshot / conditional 304 / non-critical typed 503
 - GET /openapi.json -> handler
 - GET /docs -> swagger-ui middleware chain
 - GET / -> redirect to /docs
@@ -406,6 +554,26 @@ HTTP server defaults and inclusive bounds:
   runtime root selection.
 - Keep successful profile digests mandatory and keep the bounds/general OpenAPI
   422 branches disjoint.
+- Keep `orientationMode` strict and backward-compatible by defaulting only
+  omission to `auto`. Preserve the complete versioned transform contract on
+  both success and bounds failure, the total-matrix multiplication order, and
+  the final-height invariant.
+- Keep ZIP input at exactly one supported source. Do not describe a multi-
+  object 3MF as independently packable after it has been concatenated into one
+  compound STL and passed without a split-to-objects operation. Keep Orca
+  placement enabled but forbid unreported yaw with the
+  exact one-token `--allow-rotations=0` form.
+- Keep `/profiles` startup-only and request-cheap. Preserve its strong ETag,
+  canonical `catalogue_sha256`, exact managed preset set, per-printer/per-engine
+  envelopes, and no-manual-fleet-maximum shape. Do not make catalogue readiness
+  a prerequisite for slicing. Keep v2 FDM-only and never publish the generic
+  SLA fallback as a printer envelope. Preserve the engine-generic selector,
+  path-free component chain, digest-schema marker, declared-profile metadata,
+  exact inclusively named admission ceiling, and engine-scoped resolutions.
+- Keep `H2D-QUOTE` on both engines as P1S-derived quote-only physics. Never
+  describe it as machine-accurate H2D output or production H2D G-code. Do not
+  promote the now owner-VPS-verified inclusive values to deployment, production
+  H2D physics, or Prusa native-edge-beyond-declared proof.
 - Keep no-Origin service behavior and exact per-audience browser-origin allowlists.
 - Keep trust proxy fail closed and request-ID validation before observability/CORS.
 - Keep readiness diagnostics and metrics operations-scoped; never add

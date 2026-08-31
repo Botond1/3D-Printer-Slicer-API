@@ -204,7 +204,23 @@ test('router mutations cannot become a generic proxy or drift from the exact API
         ['TLS removed', replaceRequired(router, /^      tls:\n        certResolver: letsencrypt\n/m, '')],
         ['certificate resolver drift', replaceRequired(router, /certResolver: letsencrypt/, 'certResolver: default')],
         ['readiness path drift', replaceRequired(router, /path: \/ready/, 'path: /health')],
+        ['duplicate passHostHeader override', replaceRequired(
+            router,
+            /^        passHostHeader: true$/m,
+            '        passHostHeader: true\n        passHostHeader: false'
+        )],
+        ['second healthCheck block', replaceRequired(
+            router,
+            /^        servers:$/m,
+            '        healthCheck:\n          path: /health\n          interval: 10s\n'
+                + '          timeout: 3s\n        servers:'
+        )],
         ['extra backend', replaceRequired(router, /^          - url:.*$/m, '$&\n          - url: "http://other:3000"')],
+        ['multiline extra backend item', replaceRequired(
+            router,
+            /^          - url:.*$/m,
+            '$&\n          -\n            url: "http://other:3000"'
+        )],
         ['forward-auth scope', replaceRequired(router, /^      service: slicer-api$/m, '      middlewares: [forwardAuth]\n      service: slicer-api')]
     ];
     for (const [label, source] of cases) {

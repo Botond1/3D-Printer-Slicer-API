@@ -1,6 +1,7 @@
 'use strict';
 
 const { createPricingPaths } = require('./pricing-openapi');
+const { createProfileCataloguePaths } = require('./profile-catalogue-openapi');
 const { createSlicePaths } = require('./slice-openapi');
 const { createAdminPaths } = require('./admin-openapi');
 const { createSystemPaths } = require('./system-openapi');
@@ -21,6 +22,7 @@ function createSwaggerDocument(pricing) {
         },
         tags: [
             { name: 'Pricing', description: 'Runtime pricing configuration endpoints' },
+            { name: 'Profiles', description: 'Public startup profile catalogue' },
             { name: 'Slicing', description: 'Explicit FDM/SLA slicing and print estimation endpoints' },
             { name: 'Admin', description: 'Protected operational endpoints requiring x-api-key' },
             { name: 'Operations', description: 'Protected readiness and metrics endpoints' },
@@ -28,6 +30,7 @@ function createSwaggerDocument(pricing) {
         ],
         paths: {
             ...createPricingPaths(),
+            ...createProfileCataloguePaths(),
             ...createSlicePaths(),
             ...createAdminPaths(),
             ...createSystemPaths()
