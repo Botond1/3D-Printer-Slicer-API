@@ -72,8 +72,10 @@ Last synchronized: 2026-08-31
   helper-image measurement A established Prusa `350 x 320 x 324.9 mm` and Orca
   `347.9 x 317.9 x 324.9 mm`. Prusa native X/Y beyond its declared quote bed
   remains `UNESTABLISHED`. Exact local final-admission B confirmed both tuples
-  and their P1S counterparts; only the owner VPS matrix remains
-  `PENDING_OWNER`.
+  and their P1S counterparts. The owner production-identical VPS matrix from
+  exact tree `db42b93` independently confirmed every inclusive boundary and all
+  three enlarged Prusa layer profiles. Its separately built image ID is not
+  byte-identical-image evidence.
 - Public catalogue v2 is explicitly FDM-only and may include
   only profiles with a bound machine identity. Never represent the generic
   `120 x 120 x 150 mm` SLA fallback as a profile-derived printer envelope.

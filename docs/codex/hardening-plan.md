@@ -9,8 +9,11 @@ J3B_SOURCE_IMPLEMENTATION_PRESENT;
 J3B_LOCAL_VALIDATION_COMPLETE;
 J3B_H2D_MEASUREMENT_A_EXACT_IMAGE_VERIFIED;
 J3B_LOCAL_EXACT_IMAGE_FINAL_ADMISSION_B_VERIFIED;
-J3B_OWNER_VPS_MATRIX_PENDING;
-J3B_NO_MERGE_NO_DEPLOY_NO_ROUTE_MUTATION`.
+J3B_OWNER_PRODUCTION_IDENTICAL_CONTAINER_MATRIX_VERIFIED_DB42B93;
+J3B_OWNER_SOURCE_TREE_MATCH_445_TRACKED_FILES;
+J3B_MERGE_AUTHORIZED_NOT_YET_COMPLETE;
+J3B_DEPLOY_NOT_AUTHORIZED;
+J3B_NO_REGISTRY_NO_ROUTE_DNS_ALLOWLIST_MUTATION`.
 
 Authorized implementation exits:
 
@@ -89,16 +92,30 @@ Exact local final-admission B exit evidence:
 Completed local exit: the focused/aggregate, syntax, repository-safety, and
 evidence gates passed without shortening the matrix.
 
-Remaining exits:
+Completed owner VPS exit:
 
-1. The owner reruns the full corrective matrix on the VPS, including the
-   zero-normal row, P1S ceiling cases, and enlarged-envelope sweeps. Keep it
-   `PENDING_OWNER` until the generated reports are read.
-2. Preserve zero-customer-exposure truth: the plugin has no production
+1. The owner ran the full corrective matrix in a production-identical VPS
+   container from exact tree `db42b93b2416ac0b791a45a0eae1233b303cf557`
+   after independently matching all 445 tracked files. The separate owner image
+   ID differs from local B, so only source-tree identity is claimed.
+2. All published P1S/H2D-QUOTE boundary values passed inclusively on all four
+   selectors and the next tested Orca/P1S and Orca/H2D edges returned full K2
+   HTTP 422 instead of native 500. P1S Z `249.9` passed and `250.0` rejected;
+   H2D-QUOTE Z `324.9` passed on both engines.
+3. The zero-normal false/null branch, applied/preserved/unchanged orientation
+   outcomes, `456.33 g` Orca mass, `248.60 x 99.60 mm` no-yaw footprint, and
+   all three enlarged Prusa layer profiles were independently confirmed.
+4. The catalogue exposes 18 managed profile rows and six engine-scoped derived
+   resolution rows, for 24 total envelope records.
+
+Remaining boundaries:
+
+1. Preserve zero-customer-exposure truth: the plugin has no production
    deployment/traffic and LeadPilot slicing is not enabled.
-3. The owner chose one merge and one deploy for J2+J3+J3B after verification.
-   This plan authorizes neither merge nor deploy, and grants no registry,
-   public-route, DNS/allowlist, consumer-repository, or customer-traffic action.
+2. One branch push, one PR into `main`, and that PR's merge are authorized but
+   are not yet claimed complete. Deploy remains separately unauthorized. No
+   registry/image publication, public-route, DNS/allowlist, production-
+   container, consumer-repository, or customer-traffic action is authorized.
 
 The current J3B owner brief explicitly authorizes this corrective schema and
 catalogue wave; the historical J2.1 sequencing note below is not a blocker for
@@ -161,8 +178,9 @@ Local source-verified exits:
 Remaining exits:
 
 1. The owner passed the full historical J3 Prusa/Orca, auto/preserve,
-   request-rotation, success/bounds matrix on exact tree `58c0ccb`. J3B's
-   corrective rerun remains a separate pending exit above.
+   request-rotation, success/bounds matrix on exact tree `58c0ccb`. The later
+   J3B corrective owner matrix also passed on exact tree `db42b93` as recorded
+   above.
 2. Any hosted exact-SHA Source/Image result remains `NOT VERIFIED` unless it is
    separately run and recorded.
 3. Keep deploy, registry write, public-route activation, customer traffic, and

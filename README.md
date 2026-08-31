@@ -153,11 +153,18 @@ It returned HTTP 200 on Prusa and Orca in exact J2 image
 `sha256:0d81837cdd5c3b56383580eb28df799686103bb4663a9f4016e9fbc89e4e31ea`
 and again in B, where schema 2 explicitly reported
 `original_dimensions_available:false` and `original_dimensions_mm:null`.
-The owner's final VPS matrix remains `PENDING_OWNER`. Customer exposure is
-currently zero: the plugin is not deployed and LeadPilot slicing is disabled.
-The owner chose
-one merge and one deploy for J2+J3+J3B after verification, but this work
-authorizes neither merge nor deploy. See the
+The owner later passed the complete production-identical VPS matrix from exact
+tree `db42b93b2416ac0b791a45a0eae1233b303cf557`, independently matching all 445
+tracked files. The separately built owner image has a different identifier, so
+this is source-tree and production-identical-matrix proof, not byte-identical-
+image proof. The run confirmed the four published inclusive envelopes, the
+full K2 422 contract for former native 500 cases, zero-normal false/null
+degradation, distinct `applied`/`preserved`/`unchanged` outcomes, and the Orca
+mass/no-yaw guards. Customer exposure remains zero: the plugin is not deployed
+and LeadPilot slicing is disabled. One branch push, one PR into `main`, and its
+merge are owner-authorized but not yet claimed complete. Deploy, registry/image
+publication, production-container, route/DNS/allowlist, and consumer-repository
+changes remain unauthorized. See the
 [J3B evidence boundary](docs/codex/evidence/j3b-native-envelope-and-original-dimensions.md).
 
 The J3B orientation runner now requires all 37 HTTP cases. Its restored
@@ -175,8 +182,9 @@ Two artifact checks protect against quiet Orca regressions. A preserve-mode
 `253 x 253 x 20 mm` model at layer height `0.3 mm` produced `456.33 g`. For a
 preserve-mode `249 x 100 x 20 mm` model, B and exact J2 produced the same outer-
 wall G-code footprint: `248.600 x 99.600 mm`, 500 segments, with X bounds
-`3.700..252.300` and Y bounds `78.200..177.800`. These are exact local checks,
-not owner-VPS or deployment proof.
+`3.700..252.300` and Y bounds `78.200..177.800`. These exact local checks were
+later independently reproduced by the owner VPS matrix; neither result is
+deployment proof.
 
 ### Historical J3 orientation visibility and total-rotation checkpoint
 
@@ -231,9 +239,9 @@ owner-verified on the exact `58c0ccb` production-identical container.
 `--allow-rotations=0` produced real G-code with 6.25 g, while the split
 `--allow-rotations 0` form failed with `No such file: 0`; the produced
 preserve-mode G-code also retained the expected X/Y footprint. This historical
-proof does not verify the J3B candidate, whose final owner VPS matrix remains
-pending. Neither wave authorizes deployment, publication, route activation, or
-consumer-repository mutation.
+proof is distinct from the later owner production-identical J3B VPS matrix on
+exact tree `db42b93`, which also passed. Neither wave authorizes deployment,
+publication, route activation, or consumer-repository mutation.
 See the [J3 evidence boundary](docs/codex/evidence/j3-orientation-visibility.md).
 
 ### Historical J2 build-volume, profile-catalogue, network, and calibration candidate
@@ -1002,7 +1010,11 @@ profile digest with identity schema
 `build_volume_limits_mm`, and available filament diameter and density. Current
 `r3d-profile-catalogue-v2` includes 18 machine-bound FDM entries: Prusa P1S and
 `H2D-QUOTE` presets at layer heights 0.1, 0.2, and 0.3 mm, plus PLA/PETG Orca
-presets for those two selectors at the same layer heights.
+presets for those two selectors at the same layer heights. Four per-engine
+machine resolutions and two per-engine fleet resolutions bring the complete
+catalogue view to 24 envelope records. The 18 profile rows carry declared and
+inclusive largest-passing values separately; derived rows publish their
+engine-scoped inclusive result.
 
 Each `profile_components` item has nullable `selector_parameter`: Orca machine
 uses `printerProfile`, process uses `processProfile`, filament uses null, and
@@ -1396,8 +1408,8 @@ implied.
   fixtures require valid outward non-zero normals and an immediate native
   `prusa-slicer --info` precondition, while the deliberate zero-normal
   regression is a separately validated legal binary STL. Exact local B passed
-  12/12 fixture checks, 4/4 selectors, and 37/37 HTTP rows; the owner VPS rerun
-  remains pending.
+  12/12 fixture checks, 4/4 selectors, and 37/37 HTTP rows. The owner later
+  passed the production-identical VPS rerun from exact tree `db42b93`.
 - `tests/testing-scripts/slicing/native_envelope_sweep_runner.py` measures and
   rechecks native/final admission boundaries. Its measurement-A and final-
   admission-B modes are guarded by the exact `/profiles` catalogue phase, and

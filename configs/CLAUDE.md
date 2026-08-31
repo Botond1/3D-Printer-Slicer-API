@@ -75,8 +75,10 @@ This folder contains runtime configuration files used by slicing and pricing.
   `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`. Preserve those
   measured inclusive ceilings; Prusa's native X/Y edge beyond its declared
   quote bed remains `UNESTABLISHED`. Exact local final-admission B confirmed
-  those tuples and the P1S values; only owner-VPS proof remains
-  `PENDING_OWNER`.
+  those tuples and the P1S values. The owner production-identical VPS matrix
+  from exact tree `db42b93` independently confirmed every inclusive boundary
+  and all three enlarged Prusa layer profiles. Its separately built image ID is
+  not byte-identical-image evidence.
 - Keep every shipped machine-bound FDM envelope compatible with the public
   startup `/profiles` catalogue. The application fallback remains a broad
   compatibility envelope, while the exact configured

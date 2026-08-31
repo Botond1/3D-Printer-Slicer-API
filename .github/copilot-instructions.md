@@ -24,8 +24,12 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   to image ID
   `sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`;
   its revision label matched and the `999:999` container was healthy, read-only,
-  with its host port bound only to localhost. The owner VPS matrix remains
-  `PENDING_OWNER`.
+  with its host port bound only to localhost. The owner then passed the complete
+  production-identical VPS matrix from exact tree
+  `db42b93b2416ac0b791a45a0eae1233b303cf557` after independently matching all
+  445 tracked files. Its separately built image ID differs, so this is exact
+  source-tree and production-identical-matrix proof, not byte-identical-image
+  proof.
 - `model_transform` uses `transform_schema: 2`. Success and the full K2 bounds
   response always contain `original_dimensions_available` and nullable
   `original_dimensions_mm`: true iff a real measurement object exists, false
@@ -67,9 +71,14 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   passed 9/9 with optional Prusa digest parity run/pass; orientation passed
   12/12 fixture checks, 4/4 selectors, and 37/37 HTTP rows. A legal binary zero-
   normal regression returned HTTP 200 on both engines in exact J2 and B, with B
-  schema-2 original availability false/null. Customer exposure is zero. One
-  merge/one deploy after J3B verification is the owner's sequencing
-  decision, not current authorization.
+  schema-2 original availability false/null. The owner VPS run confirmed all
+  four exact inclusive boundaries, full K2 422 conversion for the former native
+  500 cases, distinct applied/preserved/unchanged outcomes, unchanged Orca
+  mass/no-yaw guards, and all three enlarged Prusa layer profiles. Customer
+  exposure is zero. One branch push, one PR into `main`, and that PR's merge are
+  now authorized but not yet claimed complete. Deploy, registry/image
+  publication, route/DNS/allowlist, production-container, and consumer-
+  repository changes remain unauthorized.
   See `docs/codex/evidence/j3b-native-envelope-and-original-dimensions.md`.
 
 ## J3 Orientation-Visibility Local Source Checkpoint
@@ -111,8 +120,9 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   `--allow-rotations=0` produced real G-code with 6.25 g, while the split
   `--allow-rotations 0` form failed with `No such file: 0`. This is not a
   current J3B candidate run. The historical J3 full HTTP matrix is owner-
-  verified; J3B's final owner-VPS matrix remains pending. J3 performs no deploy,
-  registry write, route activation, or consumer-repository change. See
+  verified; the later J3B owner production-identical VPS matrix also passed on
+  exact tree `db42b93`. Neither result authorizes deploy, registry write, route
+  activation, or consumer-repository change. See
   `docs/codex/evidence/j3-orientation-visibility.md`.
 
 ## J2 Bounds/Network Baseline and J3B Catalogue Successor

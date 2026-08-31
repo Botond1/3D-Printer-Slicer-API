@@ -51,8 +51,16 @@ Its matching revision label, non-root `999:999` identity, healthy state,
 read-only root, and host port bound only to localhost were verified. All 88 fixture
 preconditions, 20 brackets, and 4 combined corners passed, confirming the same
 Prusa `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm` inclusive
-tuples. The generated A and B reports stay local and uncommitted. The owner VPS
-matrix remains `PENDING_OWNER`.
+tuples. The generated A and B reports stay local and uncommitted.
+
+The owner later passed the production-identical VPS matrix from exact tree
+`db42b93b2416ac0b791a45a0eae1233b303cf557` after independently matching all
+445 tracked files. The owner image ID differs from local B, so this is source-
+tree rather than byte-identical-image proof. Orca H2D-QUOTE passed
+`347.9 x 317.9 mm`, rejected the tested `348.0 mm` edge and `350 x 320 mm`, and
+Prusa H2D-QUOTE passed `350 x 320 mm`; `324.9 mm` Z passed on both engines.
+All three Prusa layer-height profiles carry the enlargement. Prusa native X/Y
+beyond its declared quote bed remains `UNESTABLISHED`.
 
 ## Existing generic machine-profile limitation
 

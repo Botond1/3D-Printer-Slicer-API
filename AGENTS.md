@@ -26,8 +26,12 @@ admission B are complete. B binds code-bearing SHA
 `47ae13397bb4537b4bb700b8c6bf3d9648364bdc` to exact image ID
 `sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`;
 the revision label matched, and the `999:999` container was healthy, read-only,
-with its host port bound only to localhost. The owner VPS matrix remains
-`PENDING_OWNER`.
+with its host port bound only to localhost. The owner then ran the complete
+production-identical VPS matrix from exact tree
+`db42b93b2416ac0b791a45a0eae1233b303cf557` and independently matched all 445
+tracked files. The owner image identifier differs from local B, so this proves
+source-tree identity and the production-identical matrix, not byte-identical
+image identity.
 
 Success and full K2 HTTP 422 `MODEL_OUT_OF_PRINTER_BOUNDS` use
 `transform_schema: 2`. Both always include mandatory
@@ -78,8 +82,20 @@ exact-container overrides are bounded fixture-addressing JSON argv templates,
 run without a shell or service credentials, and reports retain only a source
 label.
 
+The owner VPS matrix confirmed every published inclusive P1S/H2D-QUOTE
+boundary on all four selectors, full K2 HTTP 422 conversion for the former
+native 500 cases, zero-normal false/null degradation on both engines, distinct
+`applied`/`preserved`/`unchanged` outcomes, Orca `456.33 g`, and the unchanged
+`248.60 x 99.60 mm` no-yaw footprint. Prusa enlargement is present in all three
+layer-height profiles. The catalogue exposes 18 managed profile rows plus six
+engine-scoped resolution rows; the profile rows keep declared and inclusive
+largest-passing values separate.
+
 Customer exposure is zero. The owner chose one merge and one deploy for
-J2+J3+J3B after verification, but neither is authorized in this wave. See
+J2+J3+J3B after verification. One branch push, one PR into `main`, and that PR's
+merge are now authorized but are not yet claimed complete. Deploy, registry
+publication/image promotion, route/DNS/allowlist mutation, production-container
+changes, and consumer-repository work remain unauthorized. See
 `docs/codex/evidence/j3b-native-envelope-and-original-dimensions.md`.
 
 ## Historical J3 orientation-visibility checkpoint

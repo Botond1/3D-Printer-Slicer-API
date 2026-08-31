@@ -114,7 +114,12 @@ Last synchronized: 2026-08-31
   twice on each engine after the exact conjunctive last-layer classifier. Exact
   local final-admission B passed 88/88 fixture preconditions, 20/20 brackets,
   4/4 combined corners, the 9/9 catalogue lane, and the optional Prusa digest-
-  parity lane. This is not owner-VPS proof; that matrix remains `PENDING_OWNER`.
+  parity lane. The owner production-identical VPS matrix from exact tree
+  `db42b93` later confirmed all four inclusive boundaries, full K2 422 mapping,
+  zero-normal false/null degradation, and the Orca mass/no-yaw guards. The
+  separate owner image ID is not byte-identical-image evidence. Merge is
+  authorized but not yet claimed complete; deploy and every external mutation
+  remain unauthorized.
 - Hostinger public-route preparation accepts one through four unique private
   IPv4 `/32` entries. Initial `leadpilot-only` phase requires exactly one;
   expanded callers are separately authorized. Host-firewall TCP rejection and

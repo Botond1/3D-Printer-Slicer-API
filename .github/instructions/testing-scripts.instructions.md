@@ -141,8 +141,9 @@ oriented/final measurement must be controlled HTTP 422
 placement/volume refusal must be full K2 HTTP 422
 `MODEL_OUT_OF_PRINTER_BOUNDS`. J3 itself passed the owner exact-container matrix
 on `58c0ccb`; exact local J3B passed 12/12 fixture checks, 4/4 selector checks,
-and 37/37 HTTP cases. Its owner VPS rerun remains `PENDING_OWNER` and must use
-only separately authorized exact-container/VPS inputs. Read
+and 37/37 HTTP cases. The owner later passed the production-identical VPS rerun
+from exact tree `db42b93` after independently matching all 445 tracked files;
+the separately built owner image ID is not byte-identical-image evidence. Read
 `results/orientation_visibility_test_result.md`; never promote local unit
 evidence to container, hosted, deployed, or live proof.
 
@@ -169,8 +170,12 @@ brackets, and 4/4 combined corners. It confirmed Prusa P1S
 passed 9/9 and its optional Prusa digest-parity check ran and passed. Preserve
 the exact local mass check (`253 x 253 x 20`, Orca preserve, layer `0.3` =
 `456.33 g`) and exact J2/B outer-wall footprint parity (`248.600 x 99.600 mm`,
-500 segments, `x=3.700..252.300`, `y=78.200..177.800`). The owner VPS matrix
-remains `PENDING_OWNER`; do not commit either generated report.
+500 segments, `x=3.700..252.300`, `y=78.200..177.800`). The owner VPS matrix on
+exact tree `db42b93` independently confirmed all four inclusive selectors,
+former native 500 cases as full K2 422, zero-normal false/null, distinct
+applied/preserved/unchanged outcomes, the mass/no-yaw guards, and all three
+enlarged Prusa layer profiles. Do not invent an owner image identity, promote
+these results to deployment, or commit either generated report.
 
 Operations checks must prove public /ready is minimal, protected diagnostics
 return OPERATIONS_AUTH_REQUIRED without a key, and all outputs stay bounded and

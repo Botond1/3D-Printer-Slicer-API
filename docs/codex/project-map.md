@@ -9,15 +9,21 @@ J3B_SOURCE_IMPLEMENTATION_PRESENT;
 J3B_LOCAL_VALIDATION_COMPLETE;
 J3B_H2D_MEASUREMENT_A_EXACT_IMAGE_VERIFIED;
 J3B_LOCAL_EXACT_IMAGE_FINAL_ADMISSION_B_VERIFIED;
-J3B_OWNER_VPS_MATRIX_PENDING;
-J3B_NO_MERGE_NO_DEPLOY_NO_ROUTE_MUTATION`.
+J3B_OWNER_PRODUCTION_IDENTICAL_CONTAINER_MATRIX_VERIFIED_DB42B93;
+J3B_OWNER_SOURCE_TREE_MATCH_445_TRACKED_FILES;
+J3B_MERGE_AUTHORIZED_NOT_YET_COMPLETE;
+J3B_DEPLOY_NOT_AUTHORIZED;
+J3B_NO_REGISTRY_NO_ROUTE_DNS_ALLOWLIST_MUTATION`.
 
 J3B corrects a pre-orientation measurement regression and two native-envelope
 gaps without reopening J3's already-passed orientation contract. The owner ran
 J3's full production-identical container matrix on exact tree `58c0ccb`,
 including artifact-level G-code proof of `--allow-rotations=0`. J3B H2D-QUOTE
-measurement A and exact local final-admission B are verified. The owner VPS
-matrix is a separate `PENDING_OWNER` gate.
+measurement A and exact local final-admission B are verified. The owner later
+passed the complete production-identical VPS matrix from exact tree
+`db42b93b2416ac0b791a45a0eae1233b303cf557` after independently matching its
+445 tracked files. The owner image ID differs from local B; this is exact
+source-tree, not byte-identical-image, evidence.
 
 Direct executable-source map:
 
@@ -42,6 +48,7 @@ success or explicit native placement/volume refusal
   -> success always requires stats.object_height_mm = final_dimensions_mm.z
 GET /profiles
   -> r3d-profile-catalogue-v2, 18 FDM rows
+  -> 4 machine_resolutions + 2 fleet_resolutions = 24 envelope records total
   -> declared_build_volume_dimensions_mm = physical/profile metadata
   -> largest_passing_dimensions_inclusive_mm = inclusive admission authority
   -> machine_resolutions and fleet_resolutions are engine-scoped
@@ -79,6 +86,16 @@ lane ran and passed. It confirmed P1S Prusa `256 x 256 x 249.9 mm`, P1S Orca
 `253.9 x 253.9 x 249.9 mm`, H2D-QUOTE Prusa `350 x 320 x 324.9 mm`, and
 H2D-QUOTE Orca `347.9 x 317.9 x 324.9 mm`.
 
+The owner VPS rerun independently confirmed that every published boundary is
+inclusive on all four selectors: Orca P1S `253.9` passes and `254.0` rejects on
+X/Y, Prusa P1S `256 x 256` passes, P1S Z `249.9` passes and `250.0` rejects on
+both engines, Orca H2D-QUOTE `347.9 x 317.9` passes while the tested `348.0`
+edge and `350 x 320` reject, Prusa H2D-QUOTE `350 x 320` passes, and H2D-QUOTE
+Z `324.9` passes on both engines. Former native 500 cases are full K2 422 with
+complete transforms. The same run confirmed zero-normal false/null degradation,
+applied/preserved/unchanged outcomes, the Orca `456.33 g` mass guard, the
+`248.60 x 99.60 mm` no-yaw footprint, and all three enlarged Prusa layer files.
+
 Failed native commands retain bounded stdout separately from stderr, and the
 placement classifier considers both without weakening its explicit-diagnostic
 requirement. This protects stdout-only placement evidence from an unrelated
@@ -102,8 +119,10 @@ footprint matches J2 at `248.600 x 99.600 mm`, 500 segments, and bounds
 `x=3.700..252.300`, `y=78.200..177.800`.
 
 Customer exposure is zero: the plugin has no production deployment/traffic and
-LeadPilot slicing is not enabled. The owner chose one merge and one deploy for
-J2+J3+J3B only after verification. Neither merge nor deploy is authorized here.
+LeadPilot slicing is not enabled. One branch push, one PR into `main`, and that
+PR's merge are owner-authorized but not yet claimed complete. Deploy, registry/
+image publication, production-container, route/DNS/allowlist, and consumer-
+repository changes remain unauthorized.
 See
 [`evidence/j3b-native-envelope-and-original-dimensions.md`](evidence/j3b-native-envelope-and-original-dimensions.md).
 
@@ -119,7 +138,8 @@ each HTTP point must echo the expected admission `max` and actual bounds-source
 profile. For Prusa that source follows the selected layer-height profile; for
 Orca it remains the stable machine profile rather than the process profile.
 Exact local B orientation evidence passed 12/12 fixture checks, 4/4 selector
-checks, and all 37/37 HTTP cases. The owner VPS rerun remains `PENDING_OWNER`.
+checks, and all 37/37 HTTP cases. The owner production-identical VPS rerun from
+exact tree `db42b93` also passed.
 
 ## Historical J3 orientation-visibility checkpoint
 
@@ -198,7 +218,8 @@ owner-supplied:
 subsequently ran
 [`orientation_visibility_test_runner.py`](../../tests/testing-scripts/slicing/orientation_visibility_test_runner.py)
 on the production-identical container for exact tree `58c0ccb`; the complete
-two-engine J3 matrix passed. The corrective J3B rerun remains `PENDING_OWNER`.
+two-engine J3 matrix passed. The corrective J3B owner rerun later passed on
+exact tree `db42b93`.
 
 See
 [`evidence/j3-orientation-visibility.md`](evidence/j3-orientation-visibility.md)

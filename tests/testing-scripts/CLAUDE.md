@@ -205,7 +205,9 @@ python tests/testing-scripts/slicing/orientation_visibility_test_runner.py
   Always read
   `tests/testing-scripts/results/orientation_visibility_test_result.md` after
   execution. Exact local B passed 12/12 fixture checks, 4/4 selector checks, and
-  all 37/37 HTTP cases. The owner VPS rerun remains `PENDING_OWNER`.
+  all 37/37 HTTP cases. The owner later passed the production-identical VPS
+  rerun from exact tree `db42b93` after independently matching all 445 tracked
+  files. Its separately built image ID is not byte-identical-image evidence.
 
 ## J3B native-envelope sweep contract
 
@@ -244,8 +246,15 @@ python tests/testing-scripts/slicing/native_envelope_sweep_runner.py
 - Read `results/native_envelope_sweep_measurement_result.md` after the native-
   measurement phase and `results/native_envelope_sweep_result.md` after final
   admission. Keep both generated reports local and uncommitted; the sanitized
-  evidence belongs in `docs/codex/evidence`. Exact local image proof is not
-  hosted, deployed, or owner-VPS evidence.
+  evidence belongs in `docs/codex/evidence`. Exact local image proof remains
+  distinct from the later owner production-identical VPS proof; neither is
+  deployment evidence.
+- The owner VPS matrix on exact tree `db42b93` confirmed all four inclusive
+  selectors, former native 500 cases as full K2 422, zero-normal false/null,
+  applied/preserved/unchanged outcomes, Orca `456.33 g`, the
+  `248.60 x 99.60 mm` no-yaw footprint, and all three enlarged Prusa layer
+  profiles. Preserve these as owner-supplied results; do not invent an owner
+  image identity or promote them to deploy/production proof.
 
 ## Local Rules
 

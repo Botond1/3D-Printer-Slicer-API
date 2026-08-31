@@ -2,7 +2,8 @@
 
 Date: 2026-08-31
 Branch basis: `codex/j3-orientation-visibility`
-Repository state: locally validated J3B corrective candidate; code-bearing SHA:
+Repository state: owner-VPS-verified J3B corrective candidate at tree
+`db42b93b2416ac0b791a45a0eae1233b303cf557`; code-bearing SHA:
 `47ae13397bb4537b4bb700b8c6bf3d9648364bdc`
 Scope authority: `prompts/codex/J3B-native-envelope-and-original-dimensions.md`
 
@@ -14,9 +15,12 @@ J3B_SOURCE_IMPLEMENTATION_PRESENT;
 J3B_LOCAL_VALIDATION_COMPLETE;
 J3B_H2D_MEASUREMENT_A_EXACT_IMAGE_VERIFIED;
 J3B_LOCAL_EXACT_IMAGE_FINAL_ADMISSION_B_VERIFIED;
-J3B_OWNER_VPS_MATRIX_PENDING;
+J3B_OWNER_PRODUCTION_IDENTICAL_CONTAINER_MATRIX_VERIFIED_DB42B93;
+J3B_OWNER_SOURCE_TREE_MATCH_445_TRACKED_FILES;
 ZERO_CUSTOMER_EXPOSURE;
-NO_MERGE_NO_DEPLOY_NO_ROUTE_MUTATION`.
+MERGE_AUTHORIZED_NOT_YET_COMPLETE;
+DEPLOY_NOT_AUTHORIZED;
+NO_REGISTRY_PUBLICATION_NO_ROUTE_DNS_ALLOWLIST_MUTATION`.
 
 J3 itself is closed at the owner evidence boundary. The owner ran its complete
 production-identical container matrix on exact tree `58c0ccb`, including
@@ -257,10 +261,57 @@ Reports to read after execution:
 
 The measurement-A, final-admission-B, and orientation reports were read and
 their sanitized facts are recorded above; all three generated reports remain
-local and uncommitted.
-The complete J3B VPS matrix, including the zero-normal row and enlarged-
-envelope sweeps, is `PENDING_OWNER`. Exact local B must not be promoted to
-hosted, deployed, owner-VPS, or live proof.
+local and uncommitted. Their local exact-image classification remains distinct
+from the owner-supplied VPS proof below.
+
+## Owner production-identical VPS container matrix
+
+The owner subsequently built and ran a production-identical container on the
+VPS from exact tree `db42b93b2416ac0b791a45a0eae1233b303cf557`. The owner
+independently verified that its 445 tracked files match this repository tree.
+The owner build has a different image identifier from the local B build, so
+this record claims exact source-tree identity and production-identical container
+configuration, not byte-identical image identity.
+
+The owner reported the following inclusive boundary observations:
+
+| Selector / probe | Largest tested pass | First or representative tested rejection |
+| --- | --- | --- |
+| Orca P1S X and Y | `253.9 mm` -> HTTP 200 on each axis | `254.0 mm` -> HTTP 422 on each axis; `256 x 256 mm` -> HTTP 422 |
+| Prusa P1S X/Y | `256 x 256 mm` -> HTTP 200 | Native X/Y beyond the declared profile remains `UNESTABLISHED` |
+| P1S Z, both engines | `249.9 mm` -> HTTP 200 | `250.0 mm` -> HTTP 422 |
+| Orca H2D-QUOTE X/Y | `347.9 x 317.9 mm` -> HTTP 200 | tested `348.0 mm` edge -> HTTP 422; `350 x 320 mm` -> HTTP 422 |
+| Prusa H2D-QUOTE X/Y | `350 x 320 mm` -> HTTP 200 | Native X/Y beyond the declared quote bed remains `UNESTABLISHED` |
+| H2D-QUOTE Z, both engines | `324.9 mm` -> HTTP 200 | Local measurement A separately established the `325 mm` layer-`0.3` rejection |
+
+The value named by `largest_passing_dimensions_inclusive_mm` therefore passes
+at the boundary itself on every selector. Every formerly observed native 500
+in this matrix became controlled HTTP 422
+`MODEL_OUT_OF_PRINTER_BOUNDS` with the complete `model_transform` contract.
+
+The owner also confirmed:
+
+- the legal zero-normal mesh returns HTTP 200 on both engines with
+  `original_dimensions_available:false` and `original_dimensions_mm:null`;
+- the Orca `255 mm` automatic-orientation regression is now HTTP 422 with
+  `orientation_outcome=applied`, and the matrix distinguishes `applied`,
+  `preserved`, and `unchanged`;
+- Orca `253 x 253 x 20 mm`, preserve, layer `0.3 mm` remains `456.33 g`;
+- the Orca `249 x 100 x 20 mm` outer-wall footprint remains
+  `248.60 x 99.60 mm`, preserving the effective `--allow-rotations=0` policy;
+- all three Prusa layer-height profiles carry the H2D-sized enlargement;
+- the full catalogue view contains 24 envelope records: 18 managed profile
+  rows plus four machine-resolution and two fleet-resolution rows. The 18
+  profile rows keep declared dimensions separate from inclusive largest-
+  passing dimensions; the six derived rows remain engine-scoped and publish
+  their inclusive largest-passing result.
+
+The owner independently inspected the complete 88-file merge payload from
+`origin/main` through `db42b93`: calibration data remains the anonymized
+`M01`-`M10` table, all documented IP addresses are RFC 5737 examples, and no
+customer name, lead/order identifier, key value, private egress IP, or customer
+path was found. This is owner-supplied privacy evidence; no private value is
+reproduced here.
 
 ## Local source and documentation validation
 
@@ -284,9 +335,9 @@ code-bearing SHA `47ae13397bb4537b4bb700b8c6bf3d9648364bdc`:
   claims.
 
 These are local source/documentation results only. This documentation pass did
-not execute or rewrite any generated runner report. Exact-image measurement A
-and exact local final-admission B are recorded separately above; only the owner
-VPS matrix remains `PENDING_OWNER`.
+not execute or rewrite any generated runner report. Exact-image measurement A,
+exact local final-admission B, and the later owner production-identical VPS
+matrix are recorded as three separate evidence boundaries above.
 
 ## Consumer, exposure, and release boundary
 
@@ -299,10 +350,13 @@ Customer exposure is zero. The plugin has no production deployment or traffic,
 and LeadPilot's slicing path is not enabled. The defects are real but are not a
 reason to shorten verification.
 
-The owner decided that J2, J3, and J3B ship together through one merge and one
-deploy only after J3B verification. This repository wave does not authorize
-that merge or deploy. It also authorizes no registry publication, public-route,
-DNS, firewall/allowlist, customer-traffic, or consumer-repository mutation.
-No push, registry publication, or deploy occurred in this evidence wave.
+The owner authorized one PR from
+`codex/j3b-native-envelope-original-dimensions` into `main` and its merge, so
+J2, J3, and J3B remain one source-level integration. At this documentation
+boundary the merge is authorized but not yet claimed complete. Deploy remains
+a separate, unauthorized decision. Registry publication, image promotion,
+public-route, DNS, firewall/allowlist, customer-traffic, production-container,
+and consumer-repository mutation remain forbidden. No registry publication or
+deploy occurred in this evidence wave.
 No credential value, private host/network identity, or customer path is part of
 this evidence record.

@@ -313,7 +313,10 @@ This document describes the application runtime inside app/.
     Prusa X/Y edge beyond its declared quote bed remains `UNESTABLISHED`.
     Exact local final-admission B passed its 88/88 fixture, 20/20 bracket, 4/4
     corner, 9/9 catalogue, and optional Prusa digest-parity gates. Catalogue
-    failure never gates slicing.
+    failure never gates slicing. The owner production-identical VPS matrix from
+    exact tree `db42b93` later confirmed all four inclusive selector boundaries,
+    full K2 422 mapping, and all three enlarged Prusa layer profiles; its
+    separately built image ID is not byte-identical-image evidence.
 - app/services/slice/response.js
   - Composes successful slice response payloads and refuses success without a
     lowercase 64-hex `profiles.effective_profile_sha256` or machine-readable
@@ -569,8 +572,8 @@ HTTP server defaults and inclusive bounds:
   exact inclusively named admission ceiling, and engine-scoped resolutions.
 - Keep `H2D-QUOTE` on both engines as P1S-derived quote-only physics. Never
   describe it as machine-accurate H2D output or production H2D G-code. Do not
-  promote the exact local final-admission-B Prusa `350 x 320 x 324.9 mm` or
-  Orca `347.9 x 317.9 x 324.9 mm` values to owner-VPS proof.
+  promote the now owner-VPS-verified inclusive values to deployment, production
+  H2D physics, or Prusa native-edge-beyond-declared proof.
 - Keep no-Origin service behavior and exact per-audience browser-origin allowlists.
 - Keep trust proxy fail closed and request-ID validation before observability/CORS.
 - Keep readiness diagnostics and metrics operations-scoped; never add
