@@ -74,12 +74,23 @@ Last synchronized: 2026-09-01
 - ADMIN_API_KEY is only a <=90-day, explicitly named, one non-slice audience
   migration. Any other cross-slot reuse is refused; normal behavior is scoped
   and fail closed.
-- Before any router action, require the principal-only dark gate: sanitized
+- Before initial activation or any later router mutation, require the
+  principal-only dark gate: sanitized
   `principals` readback with both actives and no shared/expiry material, one
   private positive slice per principal, retired-shared and `x-api-key` negative
-  cases, and exact cleanup. Missing or inconclusive evidence keeps the route
-  dark. External production activation is outside repository evidence and
-  authority.
+  cases, and exact cleanup. Missing or inconclusive evidence forbids the router
+  mutation. The current owner-supplied post-activation record is
+  `router_activation=PASS phase=leadpilot-only entries=1`, certificate issued,
+  allowed-source HTTP 200, external unlisted-source HTTP 403 without a
+  `Content-Type`, and redirect-follow completion on public 443. This
+  documentation-only repository change does not independently repeat or mutate
+  that live state. A later owner-supplied record proves the IPv4 deny counters
+  with caller-visible timeout, IPv6 `INPUT` blocking, idempotent three-IPv4 plus
+  one-IPv6 rule identity, Docker-service restart survival, and one normal-
+  reboot survival observation that closes the exact point-in-time perimeter-
+  persistence exit. Future reboot after relevant drift and crash/power-loss
+  recovery require repeat proof; public router rollback, forced renewal,
+  monitoring, and customer readiness remain separate.
 - Keep `/profiles` unauthenticated, startup-built, immutable, informational,
   and independent of slicing availability. Preserve the strong ETag,
   conditional 304, body `catalogue_sha256`, typed non-critical 503, and the
@@ -119,35 +130,59 @@ Last synchronized: 2026-09-01
   zero-normal false/null degradation, and the Orca mass/no-yaw guards. The
   separate owner image ID is not byte-identical-image evidence. J2+J3+J3B is
   merged at protected main `bf5e712`; the later owner-reported dark API deploy
-  is recorded below. Consumer-repository and public-route mutations remain
-  unauthorized.
-- Hostinger public-route preparation accepts exactly one canonical private IPv4
+  and subsequent live route record are recorded below. Consumer-repository
+  mutation remains outside this repository's authority.
+- Hostinger routing accepts exactly one canonical private IPv4
   `/32` entry in the sole `leadpilot-only` phase. A second entry, broader
   prefix, forwarded identity, or `ipStrategy` fails closed. This is
   machine-level trust, and unreserved-address reassignment is a silent perimeter
   failure unless the consumer reports rebuilds or migrations in advance.
-  Host-firewall TCP rejection and
-  fixed private `J2_ALLOWLIST_DENY`, or router HTTP 403, must remain distinct
-  from backend HTTP 401. The external orchestrator owns allowed/denied, TLS
+  Caller-visible host-firewall timeout with an incremented deny counter and
+  fixed private `r3d-perimeter-deny: ` diagnostic, router HTTP 403, and backend
+  HTTP 401 must remain distinct. The external orchestrator owns allowed/denied, TLS
   issuance/renewal, rollback, and final-dark proof. One inherited root-private
   FD9 lock must span the complete rehearsal; each action re-proves canonical,
   root-owned, non-writable ancestors plus exact running dynamic-bind/operator-
   pack equality, and terminal proof uses strict
   `--assert-router-dark`. Local evidence covers logical fsync cutpoints, not
   real crash/power-loss durability. Redirects target external `:443`, never
-  internal `:8443`; a `DOCKER-USER` 443 rule is valid only for one hosted name. Any
-  `*_rollback_uncertain` result is `STOP/UNKNOWN`, not dark evidence. Exact
+  internal `:8443`; the IPv4 `DOCKER-USER` 443 rule is valid only for one hosted
+  name. IPv6 `[::]:443` bypasses that chain through docker-proxy on this host
+  and is blocked in `ip6tables INPUT`; port 80 stays untouched.
+  Any `*_rollback_uncertain` result is `STOP/UNKNOWN`, not dark evidence. The
+  operator pack must be a Git clone or linked worktree; a tarball surfaces
+  `operator_pack_file_invalid`. Normalize root-private modes after every new
+  release, keep lock-bearing router helpers on host Node v20.20.2, and pass a
+  canonical absolute staging target to `--render-router`. Exact
   protected-main source `bf5e712071e3174a67fdb22ff3794003fa3ab32b` has a
-  signed, attested immutable candidate. The owner reports that exact digest now
-  runs dark from a later operator release tree with intentional mounted
+  signed, attested immutable candidate. The owner first reported that exact
+  digest running dark from a later operator release tree with intentional mounted
   configs, no API host port, final `/health` and `/ready` 200, and a completed
   previous/candidate health round trip within 15 seconds per direction. The
   recovery set and pricing-state snapshot remain intact. Automatic run
   `33450012850` stays failed closed on configs compatibility; the operator-host
-  round trip is separate application-rollback evidence, not a CI pass. The full
-  public-route rehearsal remains `BLOCKED / NOT RUN`, and this repository turn
-  performs no route mutation or host action; repository gates cannot authorize
-  permanent activation.
+  round trip is separate application-rollback evidence, not a CI pass. A later
+  owner-supplied record reports
+  `router_activation=PASS phase=leadpilot-only entries=1`, issued TLS,
+  approved-source HTTP 200, unlisted-source plain HTTP 403, and redirect-follow
+  completion on public 443. A later perimeter record corrects the reset
+  assumption: all three tested IPv4 `REJECT` variants timed out while counters
+  increased. The final original-destination/443 rules remained exactly three
+  IPv4 plus one IPv6 `INPUT` rule across three applications and survived a
+  Docker-service restart. One owner-observed normal reboot then preserved the
+  same 3+1 policy, active/enabled perimeter service, healthy current containers,
+  candidate-image prefix `sha256:153987840361...`, allowed 200/valid TLS in
+  0.13 seconds, IPv6/443 blocking, port-80/ACME continuity, and loopback 403.
+  Retained `traefik-traefik-1` stayed stopped/exit 0 with `unless-stopped`,
+  runtime `ports={}`, and no 80/443 listener. This closes the exact point-in-time
+  perimeter-persistence exit but does not generalize to future reboots or
+  crash/power-loss recovery. Version the exact script, probe, and unit under
+  `ops/hostinger/perimeter/`, with private paths and the real probe hostname
+  supplied only by the operator. Successful HTTP-01
+  issuance is not the forced-renewal rehearsal.
+  This documentation-only repository turn performs no route mutation or host
+  action. Public router rollback, monitoring, recovery acceptance, and customer
+  readiness remain separate.
 - No-Origin requests are allowed. Browser-origin protected calls use only their
   SLICE_, PRICING_, ARTIFACT_, or OPERATIONS_CORS_ALLOWED_ORIGINS list.
 - Protected x-api-key routes remain IP-rate-limited.
@@ -262,10 +297,17 @@ Last synchronized: 2026-09-01
   evidence and exact cleanup. Rehearsal permissions are read-only; the exact
   I11 hosted result is the successful run above.
 - Hosted S4/S5 and I9 topology/rollback evidence remains ephemeral repository
-  proof. I12 separately verifies one exact dark N=1 API digest and Traefik
-  topology on the authorized VPS; public caller/firewall/DNS/certificate/route,
-  secret lifecycle, live rollback, and full production acceptance remain
-  unverified and separately authorized.
+  proof. Historical I12 evidence separately verifies one exact dark N=1 API
+  digest and Traefik topology on the authorized VPS. A later owner-supplied
+  record adds the LeadPilot-only route, certificate issuance, approved-source
+  HTTP 200, unlisted-source HTTP 403, and redirect-follow completion on public
+  443, plus later owner-supplied IPv4/IPv6 perimeter, idempotency, and
+  Docker-service restart evidence. One later owner-observed normal reboot closes
+  the point-in-time perimeter-persistence exit; future reboot after relevant
+  drift and crash/power-loss recovery require repeat proof. Forced renewal,
+  public router rollback, secret lifecycle, monitoring/recovery, customer
+  readiness, and full production acceptance remain unverified and separately
+  authorized.
 
 ## Testing
 - Use Python test runners under tests/testing-scripts/.

@@ -1,0 +1,15 @@
+[Unit]
+Description=R3D network-layer perimeter for the public HTTPS listener
+Documentation=file:///usr/local/sbin/r3d-perimeter.sh
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/rocket3d/slicer-api/r3d-perimeter.env
+ExecStart=/usr/local/sbin/r3d-perimeter.sh
+
+[Install]
+WantedBy=multi-user.target

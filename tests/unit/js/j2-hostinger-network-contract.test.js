@@ -108,8 +108,14 @@ function allowlistFilesystem(target, pathStates, descriptorStates) {
 }
 
 function mutateRequired(source, from, to) {
-    assert.ok(source.includes(from), `missing mutation seam: ${from}`);
-    return source.replace(from, to);
+    if (typeof from === 'string') {
+        assert.ok(source.includes(from), `missing mutation seam: ${from}`);
+    } else {
+        assert.match(source, from, `missing mutation seam: ${from}`);
+    }
+    const mutated = source.replace(from, to);
+    assert.notEqual(mutated, source, `mutation did not change source: ${from}`);
+    return mutated;
 }
 
 function runGit(repositoryRoot, args) {
@@ -946,10 +952,10 @@ test('runbook mutations cannot weaken DNS-only, firewall, ACME, or final-dark ga
             'STOP_LIVE_DYNAMIC_RELEASE_MISMATCH',
             'CONTINUE_WITH_DIFFERENT_DYNAMIC_RELEASE'
         )],
-        ['owner-observed empty DOCKER-USER state omitted', mutateRequired(
+        ['owner-observed empty IPv4 DOCKER-USER state omitted', mutateRequired(
             runbook,
-            'owner-observed starting state is an empty `DOCKER-USER` chain with inactive',
-            'starting firewall state is inferred from the repository with active'
+            'owner-observed starting state was an empty IPv4 `DOCKER-USER` chain with\ninactive UFW',
+            'current IPv4 firewall state is inferred from the repository with active UFW'
         )],
         ['published ports assumed to obey UFW', mutateRequired(
             runbook, 'Published Docker ports can bypass UFW', 'Published Docker ports always obey UFW'
@@ -970,12 +976,30 @@ test('runbook mutations cannot weaken DNS-only, firewall, ACME, or final-dark ga
             'STOP_DOCKER_FIREWALL_BACKEND_UNSUPPORTED',
             'CONTINUE_WITH_UNKNOWN_FIREWALL_BACKEND'
         )],
-        ['INPUT substituted', mutateRequired(runbook, '`DOCKER-USER` chains', '`INPUT` chains')],
-        ['post-DNAT port used', mutateRequired(runbook, '`--ctorigdstport 443`', '`--dport 443`')],
+        ['IPv6 listener incorrectly assumed to traverse DOCKER-USER', mutateRequired(
+            runbook,
+            'Docker exposes\n`[::]:443` through `docker-proxy` without IPv6 DNAT',
+            'Docker exposes\n`[::]:443` through IPv6 DNAT and `DOCKER-USER`'
+        )],
+        ['dedicated IPv4 chain reintroduced', mutateRequired(
+            runbook,
+            'installs directly in IPv4 `DOCKER-USER`, in this\norder',
+            'installs through a dedicated chain jumped from IPv4 `DOCKER-USER`, in this\norder'
+        )],
+        ['original-destination conntrack replaced by post-DNAT port', mutateRequired(
+            runbook,
+            'every IPv4 rule must\nuse conntrack `--ctorigdst <verified-public-VPS-IPv4>` together with\n`--ctorigdstport 443`',
+            'every IPv4 rule may instead use the post-DNAT internal `--dport 8443`'
+        )],
         ['original destination is not owner-bound public input', mutateRequired(
             runbook,
             '`--ctorigdst <verified-public-VPS-IPv4>`',
             '`--ctorigdst <private-VPS-IPv4>`'
+        )],
+        ['original port 80 filtering admitted', mutateRequired(
+            runbook,
+            'Plain `--dport 443`, internal `--dport 8443`, and any\nrule matching original port 80 are forbidden',
+            'Original-destination port 80 may use the same perimeter rule'
         )],
         ['retained parent becomes writable', mutateRequired(
             runbook,
@@ -1129,26 +1153,133 @@ test('runbook mutations cannot weaken DNS-only, firewall, ACME, or final-dark ga
         )],
         ['HTTP-01 restricted', mutateRequired(
             runbook,
-            'Port 80 remains globally reachable over IPv4',
+            'Port 80 remains globally\nreachable over IPv4',
             'Port 80 uses the caller allowlist'
         )],
-        ['HTTPS opened', mutateRequired(
+        ['HTTPS source scope widened', mutateRequired(
             runbook,
-            'Port 443 accepts only the currently rendered `/32` entries',
-            'Port 443 accepts every source'
+            'for the current singular `/32`',
+            'for every IPv4 source'
         )],
         ['deny event loses fixed classification', mutateRequired(
-            runbook, '`J2_ALLOWLIST_DENY`', '`NETWORK_EVENT`'
+            runbook, 'exact fixed prefix `r3d-perimeter-deny: `', 'variable prefix `NETWORK_EVENT`'
         )],
-        ['firewall deny becomes silent drop', mutateRequired(
+        ['installed deny target changes to DROP', mutateRequired(
             runbook, '`REJECT --reject-with tcp-reset`', '`DROP`'
         )],
-        ['firewall rejection misreported as HTTP', mutateRequired(
+        ['drop-like caller behavior changed to immediate refusal', mutateRequired(
             runbook,
-            'receives a TCP reset and no HTTP status',
-            'receives HTTP 403 from the firewall'
+            "From the caller's perspective this layer therefore behaves\nas a drop",
+            "From the caller's perspective this layer behaves as an immediate refusal"
         )],
-        ['403 and 401 conflated', mutateRequired(runbook, 'Traefik HTTP 403', 'backend HTTP 401')],
+        ['firewall timeout misreported as HTTP', mutateRequired(
+            runbook,
+            'connection timeout, no reset,\nand no HTTP status',
+            'caller-visible HTTP 403 response'
+        )],
+        ['measured REJECT-versus-DROP boundary reopened without evidence', mutateRequired(
+            runbook,
+            'Do not reopen `REJECT` versus `DROP` without new contrary\nevidence',
+            'Prefer `REJECT` over `DROP` without additional evidence'
+        )],
+        ['IPv6 deny moved from INPUT to DOCKER-USER', mutateRequired(
+            runbook,
+            'places one rule at the start of `ip6tables INPUT` to reject every new inbound\nTCP connection to port 443',
+            'places one rule in IPv6 `DOCKER-USER` for every new inbound TCP connection to port 443'
+        )],
+        ['IPv6 deny moved from 443 to 80', mutateRequired(
+            runbook,
+            'TCP connection to port 443. Putting that rule in IPv6 `DOCKER-USER`',
+            'TCP connection to port 80. Putting that rule in IPv6 `DOCKER-USER`'
+        )],
+        ['IPv6 port 80 filtered', mutateRequired(
+            runbook,
+            'IPv6 port 80 remains\nuntouched',
+            'IPv6 port 80 is rejected'
+        )],
+        ['perimeter idempotence rule count widened', mutateRequired(
+            runbook,
+            'exactly three IPv4 rules and one IPv6 rule',
+            'an arbitrary number of IPv4 and IPv6 rules'
+        )],
+        ['retained proxy boot inventory skipped', mutateRequired(
+            runbook,
+            'After every real host reboot, re-inventory the retained old proxy before',
+            'After the initial cutover, do not re-inventory the retained old proxy before'
+        )],
+        ['retained proxy boot identity generalized', mutateRequired(
+            runbook,
+            'exist as exactly `traefik-traefik-1`, remain stopped/exited with',
+            'exist under any Traefik-like name in any runtime state with'
+        )],
+        ['retained proxy boot state tuple weakened', mutateRequired(
+            runbook,
+            '`Running=false` and `ExitCode=0`, retain restart policy `unless-stopped`, and\nreport an empty runtime port map as `ports={}`',
+            '`Running=true` with any exit code, restart policy, and port-binding set'
+        )],
+        ['retained proxy listener ownership proof removed', mutateRequired(
+            runbook,
+            'it owns no\nlistener on host ports 80 or 443',
+            'listener ownership need not be checked'
+        )],
+        ['runtime port map overclaimed as saved-binding safety', mutateRequired(
+            runbook,
+            '`ports={}` on a stopped container does not prove that saved\n`HostConfig.PortBindings` or `Config.ExposedPorts` is empty, that a later manual\nstart cannot reclaim 80/443',
+            '`ports={}` proves saved bindings are empty and every later manual start is safe'
+        )],
+        ['post-reboot proxy inventory acceptance gate removed', mutateRequired(
+            runbook,
+            'After a host reboot, the retained-old-proxy boot inventory in the recovery\nboundary above must pass before listener or public-route acceptance.',
+            'After a host reboot, public-route acceptance may precede retained-proxy inventory.'
+        )],
+        ['owner reboot timestamp replaced by Docker-only evidence', mutateRequired(
+            runbook,
+            '`2026-09-01 13:14:41`',
+            '`Docker-service restart only`'
+        )],
+        ['boot perimeter service state and reapply proof removed', mutateRequired(
+            runbook,
+            '`r3d-perimeter.service` was both `active` and `enabled` and\nreapplied the rules at boot',
+            '`r3d-perimeter.service` state and boot execution were not observed'
+        )],
+        ['post-boot perimeter rule count widened', mutateRequired(
+            runbook,
+            'post-boot policy remained exactly three\nIPv4 rules plus one IPv6 rule',
+            'post-boot policy contained an arbitrary number of rules'
+        )],
+        ['post-boot container health and digest binding removed', mutateRequired(
+            runbook,
+            'both `healthy` at `t+5s`; the API\nremained on the deployed candidate image recorded for this reboot only as\nprefix `sha256:153987840361...`',
+            'had unspecified health, timing, and API image identity'
+        )],
+        ['post-boot caller TLS and dual-stack matrix weakened', mutateRequired(
+            runbook,
+            'HTTP 200 with valid\nTLS in 0.13 seconds; IPv6 port 443 remained blocked; port 80 remained reachable\nwith ACME unaffected; and the loopback Traefik-only probe returned HTTP 403',
+            'an incomplete local-only request was observed'
+        )],
+        ['post-boot retained proxy observation removed', mutateRequired(
+            runbook,
+            'The retained old `traefik-traefik-1` container remained stopped with exit code\n0, restart policy `unless-stopped`, and runtime `ports={}`, and did not own\nports 80 or 443.',
+            'The retained proxy state was not inspected after reboot.'
+        )],
+        ['owner reboot closure regressed to NOT_VERIFIED', mutateRequired(
+            runbook,
+            'closes the last open perimeter-\npersistence element for this exact observed host configuration',
+            'leaves real host reboot perimeter persistence `NOT_VERIFIED`'
+        )],
+        ['owner reboot observations relabeled as universal proof', mutateRequired(
+            runbook,
+            'These are\npoint-in-time owner observations',
+            'These are universal continuity guarantees'
+        )],
+        ['point-in-time reboot evidence generalized to future recovery', mutateRequired(
+            runbook,
+            'not prove continuity of pre-reboot counters or rule objects, freedom from every\nboot-order race, a future reboot, Docker-crash recovery, or crash/power-loss\nrecovery. The verified persistence mechanism is the enabled service reapplying\nthe policy at this one observed normal boot.',
+            'prove every future reboot and crash/power-loss recovery'
+        )],
+        ['403 and 401 conflated', mutateRequired(
+            runbook, /Traefik HTTP 403/g, 'backend HTTP 401'
+        )],
         ['ACME ambiguity ignored', mutateRequired(
             runbook, 'STOP_ACME_VOLUME_IDENTITY_UNPROVEN', 'CONTINUE_WITH_ANY_ACME_VOLUME'
         )],

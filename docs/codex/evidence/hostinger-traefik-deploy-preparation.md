@@ -7,10 +7,17 @@ SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED
 AUTOMATIC_EPHEMERAL_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY
 OWNER_REPORTED_BF5E712_DARK_API_DEPLOYMENT_COMPLETE
 OWNER_REPORTED_APPLICATION_ROLLBACK_ROUND_TRIP_COMPLETE
-PUBLIC_ROUTE_DISABLED
+PUBLIC_ROUTE_DISABLED_AT_PREPARATION_CHECKPOINT
 HOSTINGER_TRAEFIK_DEPLOY_PREPARATION_LOCAL_GATES_PASS
 THIS_REPOSITORY_CHANGE_NO_HOST_ROUTE_DNS_FIREWALL_OR_CONSUMER_MUTATION
 ```
+
+This document preserves the route-dark deploy-preparation checkpoint. The later
+owner-supplied LeadPilot-only activation supersedes only its route-state
+classification; see
+[`hostinger-leadpilot-route-activation.md`](hostinger-leadpilot-route-activation.md).
+The preparation facts and the time-qualified `NOT VERIFIED` list below remain
+historical evidence for this checkpoint, not claims about the current route.
 
 This corrective starts from exact protected-main source
 `bf5e712071e3174a67fdb22ff3794003fa3ab32b`. The repository branch prepares and
@@ -148,11 +155,17 @@ migration can silently admit a future assignee and exclude the intended caller.
 The consumer must notify migration in advance, and the owner must re-verify and
 replace the live allowlist/firewall identity before the new host is used.
 
-The owner-observed empty `DOCKER-USER` chain and inactive UFW are inputs, not
-repository-verified current state. Docker-published ports can bypass UFW, so
-the planned `DOCKER-USER` rule is the only host-network second layer. A port-443
-rule cannot distinguish Host/SNI and is accepted only while this Traefik serves
-exactly one hostname; a second hostname is a mandatory stop and redesign.
+The owner-observed empty `DOCKER-USER` chain and inactive UFW were preparation
+inputs, not repository-verified current state. This checkpoint treated the
+planned `DOCKER-USER` rule as the IPv4 host-network second layer. Later target-
+host measurement showed that `[::]:443` uses docker-proxy without IPv6 DNAT and
+therefore bypasses `DOCKER-USER`; the live dual-stack correction uses
+`ip6tables INPUT` for IPv6 443. The current timeout/IPv6 mechanism and versioned
+perimeter artifacts are recorded in
+[`hostinger-leadpilot-route-activation.md`](hostinger-leadpilot-route-activation.md).
+A port-443 policy cannot distinguish Host/SNI and remains accepted only while
+this Traefik serves exactly one hostname; a second hostname is a mandatory stop
+and redesign.
 
 ## Local evidence
 
@@ -185,7 +198,11 @@ commit `f681b8368f40a7efa84110df24350545aab87c65` adds the mandatory Compose
 project identity and the bounded dark-host rollback substitute without changing
 the image, route, host, or automatic rehearsal guard.
 
-## NOT VERIFIED
+## NOT VERIFIED at the preparation checkpoint
+
+The following list records what this preparation task had not verified at its
+route-dark stop point. It is intentionally preserved rather than rewritten with
+later activation facts.
 
 - independent repetition by this repository task of the owner-reported API
   deployment, profile/bounds/slice observations, or application rollback;
