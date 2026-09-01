@@ -48,8 +48,12 @@ generic forwarding, NAT, or DNS tunnelling for the API. The repository
 contract alone does not prove a deployed proxy, firewall, secret, digest, VPS,
 or readiness state. The I12 checkpoint below adds bounded point-in-time proof
 for one exact dark digest, private readiness, egress denial and socketless
-proxy; public caller/firewall/DNS/certificate/route and complete secret-
-lifecycle evidence remain separate gates.
+proxy; its public caller/firewall/DNS/certificate/route and complete secret-
+lifecycle evidence were separate gates. A later owner-supplied activation
+record adds the route, certificate, allowed-source 200, unlisted-source 403,
+and redirect-to-443 observations. Exact firewall identity/counters, forced
+renewal, public router rollback, monitoring/recovery, and customer readiness
+remain separate.
 
 ---
 
@@ -282,10 +286,15 @@ and owner re-verification before the new host is allowed. Host
 firewall rejection is a TCP reset with a fixed private
 `J2_ALLOWLIST_DENY` classification, while an unlisted source that reaches the
 router receives HTTP `403`; both are distinct from backend HTTP `401`
-`SLICE_SERVICE_AUTH_REQUIRED`. One root-private inherited FD9 lock spans the
-whole rehearsal; every action re-proves that lock and unchanged canonical,
-root-owned, non-writable ancestor chains plus exact equality between the running
-Traefik dynamic bind and the executing operator pack. HTTP redirects target
+`SLICE_SERVICE_AUTH_REQUIRED`. The operator pack must be a real Git clone or
+linked worktree; a tarball fails as `operator_pack_file_invalid`. Normalize the
+root-private modes for every new release. One root-private inherited FD9 lock
+spans the whole rehearsal; every action re-proves that lock and unchanged
+canonical, root-owned, non-writable ancestor chains plus exact equality between
+the running Traefik dynamic bind and the executing operator pack. Lock-bearing
+router helpers require host Node v20.20.2; the supported container path cannot
+preserve and prove the already-held host FD 9. Render targets must be canonical
+absolute direct children of the private staging directory. HTTP redirects target
 external `:443`, not container-internal `:8443`. The `DOCKER-USER` second layer
 is valid only while the shared Traefik serves one hostname. Terminal acceptance uses strict
 `--assert-router-dark`. Local tests prove logical fsync-cutpoint recovery, not
@@ -295,7 +304,7 @@ allowed/denied matrix, TLS issuance and renewal, and
 route rehearsal requires a proved final dark state; `*_rollback_uncertain` is
 `STOP/UNKNOWN`, not dark evidence. Exact protected-main source
 `bf5e712071e3174a67fdb22ff3794003fa3ab32b` has a signed, attested immutable
-candidate. The owner reports that exact digest now runs dark from a later
+candidate. The owner first reported that exact digest running dark from a later
 operator release tree with intentional mounted J2/J3/J3B configs, the
 unchanged security envelope, and no API host port. Final `/health` and `/ready`
 returned 200; all four P1S/H2D-QUOTE catalogue entries exposed their inclusive
@@ -305,9 +314,17 @@ a real slice. The retained previous release and candidate each became healthy
 within 15 seconds during the owner-host round trip, and the recovery set plus
 pricing-state snapshot stayed intact. Automatic no-deploy run `33450012850`
 remains failed closed on configs compatibility; the host round trip is accepted
-application-rollback evidence, not a CI pass. The public route remains disabled
-and its full external rehearsal is `BLOCKED / NOT RUN`. This repository turn
-makes no host or route mutation; permanent activation remains owner-controlled.
+application-rollback evidence, not a CI pass. A later owner-supplied record
+reports exact `router_activation=PASS phase=leadpilot-only entries=1`, an issued
+certificate, approved-source HTTP 200, unlisted-source HTTP 403 with
+`Content-Length: 9`, body `Forbidden`, and no `Content-Type`, plus
+redirect-follow completion on public 443. That plain 403 is an intentional
+edge/source rejection distinct from the backend 401 application envelope; it
+does not prove the separate firewall TCP-reset/counter boundary. HTTP-01
+validation succeeded with the global redirect enabled, proving issuance-path
+compatibility but not forced renewal. This repository turn is documentation-only
+and makes no host or route mutation. Public router rollback, monitoring,
+recovery acceptance, and customer readiness remain unverified.
 
 Calibration has nine numeric Bambu Studio reference rows plus the `M03`
 P1S-overheight rejection boundary. The comparison fixes Orca at `--orient 0`,
@@ -451,7 +468,7 @@ per-engine failure/recovery need a separate implementation and Docker/VPS
 evidence; raw last-N HTTP 5xx is not a safe readiness rule. See
 [`docs/codex/evidence/j1c-slice-contract-corrective.md`](docs/codex/evidence/j1c-slice-contract-corrective.md).
 
-### I12 Hostinger production-qualification checkpoint
+### Historical I12 Hostinger production-qualification checkpoint
 
 The deployed API image source is the protected-main checkpoint
 `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`; its no-deploy Source/Image,
@@ -473,12 +490,15 @@ reconciled, the old proxy is intentionally retained stopped for rollback, and
 ACME bytes are unchanged. The operator commits did not rebuild, relabel, or
 republish the API image.
 
-This remains a dark deployment: the dynamic slicer router is absent. Approved
+At that checkpoint the deployment remained dark and the dynamic slicer router
+was absent. Approved
 hostname/DNS, intended public caller/CIDR, firewall acceptance, certificate
 issuance/continuity, route activation, monitoring/recovery acceptance, customer
-traffic, and public production completeness remain unverified and separately
-authorized.
-See [`ops/hostinger/RUNBOOK.md`](ops/hostinger/RUNBOOK.md).
+traffic, and public production completeness were unverified and separately
+authorized at that checkpoint. See the historical
+[`I12 evidence`](docs/codex/evidence/i12-wave3-hostinger-production-qualification.md)
+and the current
+[`LeadPilot-only activation evidence`](docs/codex/evidence/hostinger-leadpilot-route-activation.md).
 
 ### Immutable candidate image contract
 
@@ -1407,9 +1427,12 @@ bridge. Historical Docker Desktop 29.6.1 A/B proved that topology retains
 API/native DNS/TCP/UDP egress. I6 then selected the internal private-peer model,
 and I7's production manifest implements the API half without inventing a proxy.
 I12 adds point-in-time dark-host proof for the exact deployed digest, private
-peer, API/native egress denial and socketless proxy. Public caller/CIDR,
-firewall, DNS/certificate, complete secret lifecycle, route activation and
-customer-production evidence are still required; no production-ready state is
+peer, API/native egress denial and socketless proxy. A later owner-supplied
+record adds the LeadPilot-only route, certificate issuance, approved-source
+HTTP 200, unlisted-source HTTP 403, and redirect-follow completion on public
+443. Exact host-firewall identity/counters, forced renewal, public router
+rollback, complete secret lifecycle, monitoring/recovery, and customer-
+production evidence remain separate; no fully production-ready state is
 implied.
 
 ---

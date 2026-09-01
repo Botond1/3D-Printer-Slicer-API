@@ -163,6 +163,34 @@ to its attested API-image source SHA. Merging the later operator pack does not
 relabel that image or by itself require a new candidate; a new publication is
 required only before claiming that the image was built from the later source.
 
+The operator pack must be a real Git checkout or linked Git worktree of this
+repository, with its exact `HEAD`, index, repository root, and tracked private-
+storage sentinels available. An extracted release tarball, copied source tree,
+or any other pack without that Git identity is invalid. `loadOperatorPack()`
+calls `validateRepositoryPrivateStorageContract()`, which runs
+`git rev-parse --show-toplevel` and requires the result to equal the expected
+repository root before it checks the `HEAD` and index identities. A tarball or
+plain copy
+therefore fails immediately with the visible top-level error
+`operator_pack_file_invalid`; treat that error as an operator-pack checkout
+prerequisite failure when Git metadata is absent, and never bypass or patch out
+the repository-identity check.
+
+Host-installed Node.js exactly `v20.20.2` is mandatory for every lock-bearing
+router command in Sections 4 and 5. Running those commands inside a container is
+not an approved substitute: the approved ordinary Docker/Compose invocation
+cannot preserve and prove the already-held host FD 9 as the exact lock inode and
+same open-file-description lock. A custom OCI `preserve-fds` design would be a
+new, unverified concurrency contract and is forbidden by this runbook. The
+minimal host preparation used here is to copy `/usr/local/bin/node` from an
+already verified, immutable-digest, full `node:20-bookworm` image into a private
+host staging path, verify the copied binary reports exactly `v20.20.2`, and
+install only that binary on the host as root:root mode `0755`; do not add an APT
+source. The `node:20-bookworm-slim` variant does not contain Git. Validation-
+only helper steps that do not require the inherited router lock may run in a
+container, but they require the immutable-digest full `node:20-bookworm` image
+so both Node and Git are present.
+
 Identify the existing Traefik ACME account contact and the exact existing named
 volume that owns its `/letsencrypt/acme.json`. Set their metadata-only operator
 values as `ACME_EMAIL` and `TRAEFIK_ACME_VOLUME`. The volume must already exist;
@@ -741,6 +769,13 @@ restart, shortened lifetime, deleted state, or guessed renewal claim is not a
 renewal proof. Until the external record is complete, stop with
 `STOP_ACME_RENEWAL_REHEARSAL_UNPROVEN` and keep the slicer route dark.
 
+The owner-supplied 2026-09-01 production issuance record observed
+`Validations succeeded; requesting certificates` while the global HTTP-to-HTTPS
+redirect was enabled. That proves the pinned issuance path's HTTP-01 challenge
+remained reachable alongside the corrected external-443 redirect. It does not
+close or weaken the separate forced-renewal rehearsal requirement above; see
+[`Hostinger LeadPilot-only route activation evidence`](../../docs/codex/evidence/hostinger-leadpilot-route-activation.md).
+
 ## 4. Atomically enable the exact route
 
 Keep the router disabled while the approved hostname or its DNS result is
@@ -759,6 +794,41 @@ or tracked live router. A broader ignore,
 negation, missing rule, different winning rule, tracked target, or Git failure is
 a stop; ignore status is defence against accidental `git add -A`, not permission
 to weaken filesystem privacy.
+
+### Per-release filesystem preparation
+
+Git does not guarantee or preserve these exact directory and non-executable
+file modes. A fresh clone or linked worktree will normally have `dynamic` as
+`0755` and `.gitkeep` as `0644`, while `.runtime-private`, its children, and the
+lock do not exist. Even if a particular umask happens to produce one expected
+mode, perform this normalization after **every** new release checkout and before
+the first render:
+
+```sh
+verified_checkout="$(git rev-parse --show-toplevel)" || exit 1
+verified_checkout="$(cd "$verified_checkout" && pwd -P)" || exit 1
+dynamic_dir="$verified_checkout/ops/hostinger/dynamic"
+runtime_private="$verified_checkout/ops/hostinger/.runtime-private"
+route_rehearsal_lock="$runtime_private/route-rehearsal.lock"
+
+chown root:root "$dynamic_dir" "$dynamic_dir/.gitkeep" || exit 1
+chmod 0700 "$dynamic_dir" || exit 1
+chmod 0600 "$dynamic_dir/.gitkeep" || exit 1
+install -d -o root -g root -m 0700 \
+  "$runtime_private" \
+  "$runtime_private/staging" \
+  "$runtime_private/rollback" || exit 1
+if [ ! -e "$route_rehearsal_lock" ]; then
+  install -o root -g root -m 0600 /dev/null "$route_rehearsal_lock" || exit 1
+fi
+```
+
+The guarded `install` is create-only. Never run an unguarded `install`, redirect,
+`touch`, or other operation that can truncate or replace an existing lock file;
+if it already exists, leave its bytes and inode intact and let the lock contract
+validate its root:root, mode `0600`, regular, non-link, single-link, empty-file
+identity. The later lock-acquisition block deliberately retains the same
+create-only guard.
 
 Create the exact `.runtime-private/staging` and `.runtime-private/rollback`
 children as canonical, non-link, root:root-owned mode `0700` directories. No
@@ -803,9 +873,12 @@ exec 9<>"$route_rehearsal_lock"
 ```
 
 After the mandatory external pre-spawn path gate, select an unpredictable,
-address-free, absent direct child
-of the exact staging directory whose basename matches
-`slicer-api-<run-token>.yml.tmp`; never reuse a fixed file. The renderer refuses
+address-free, absent, canonical absolute direct child of the exact staging
+directory whose basename matches `slicer-api-<run-token>.yml.tmp`; never reuse a
+fixed file. A relative path, a non-canonical absolute path, a nested child, or a
+different basename fails with `router_private_storage_path_invalid`. In the
+validator-required command below, `<create-new-temporary-file>` means that full
+canonical absolute staging path, not a relative filename. The renderer refuses
 the rollback subtree. Render the file directly
 from the root-private allowlist without printing any address. The renderer uses
 create-new mode `0600`, replaces only `slicer-api.invalid` and the exact
@@ -1005,3 +1078,9 @@ do not perform another activation in the same operation. Permanent route
 activation is a separate owner-controlled stop after the owner independently
 proves allowed and denied sources, TLS issuance and renewal, and rollback. This
 runbook never classifies the public production route active or customer-ready.
+
+The later owner-controlled permanent activation is recorded separately in
+[`Hostinger LeadPilot-only route activation evidence`](../../docs/codex/evidence/hostinger-leadpilot-route-activation.md).
+That record does not retroactively turn this mandatory-dark rehearsal into an
+active terminal state or prove its still-open firewall, renewal, or public
+router-rollback boundaries.

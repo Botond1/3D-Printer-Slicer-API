@@ -531,21 +531,22 @@ and the J1C correction in
 and the historical J0 contract in
 [`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).
 
-## I12 Wave 3 Hostinger production-qualification checkpoint
+## Historical I12 Wave 3 Hostinger production-qualification checkpoint
 
-Status:
+Checkpoint status:
 `I12_API_F710_DARK_N1_VERIFIED;
 OPERATOR_MAIN_7C8AEE_RESIDUAL_RECONCILIATION_COMPLETE;
 CORRECTED_TRAEFIK_DARK_CUTOVER_VERIFIED; PUBLIC_ROUTE_DISABLED`.
 Exact protected operator main `7c8aee0728fc8462c67b4c6d85636bffb7afcdf8`
-passed Source `32804297840` and Image `32804297658`. The separate deployed API
-image source checkpoint `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`
-retains its green Source/Image,
+passed Source `32804297840` and Image `32804297658`. At that checkpoint, the
+separate deployed API image source
+`f71069cb3ba5ddeb97e69ca1414a00a72a20ce28` retained its green Source/Image,
 signed publication, and automatic no-deploy rehearsal. Its exact signed digest
 `sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`
-is healthy and dark-running on the authorized Hostinger VPS at retained N=1.
+was healthy and dark-running on the authorized Hostinger VPS at retained N=1.
 
-Completed exits include concurrency/quarantine/readiness/retention controls,
+Completed exits at that checkpoint included concurrency/quarantine/readiness/
+retention controls,
 bounded capacity and cleanup evidence, protected integration, signed
 publication/rehearsal, exact dark deployment, retained N=1, repeated private
 readiness/auth/egress, synthetic Prusa/Orca proof, protected operator-pack
@@ -553,7 +554,7 @@ integration, exact residual reconciliation, and the corrected dark Traefik
 cutover. Runtime proof observed ingress/private `GwPriority=1/0`, ingress-owned
 default routing, exact effective read-only config, file-provider-only operation,
 IPv4 and IPv6 80/443 host listeners, and an absent public router. The old proxy
-is retained stopped for rollback and ACME bytes are unchanged.
+was retained stopped for rollback and ACME bytes were unchanged.
 
 Corrective commits `7a490c150bb8c4c1ec6c22561421202152070fbc` and
 `1fe89d7508f5bbd59a75256ec43722f3f19ae1c2` are not API-image sources.
@@ -562,35 +563,45 @@ ingress `internal: false`, runtime gateway/default-route proof, and effective
 read-only bind proof through exact paths plus `RW=false`. The existing `f710`
 API image was not relabeled, rebuilt, or republished for this operator change.
 
-Remaining public-activation order:
+Later owner-reported public-activation result and remaining exits:
 
 1. retain the owner-reported dark deployment of the successfully published
-   exact `bf5e712071e3174a67fdb22ff3794003fa3ab32b` signed digest, keep its
+   exact `bf5e712071e3174a67fdb22ff3794003fa3ab32b` signed digest, and keep its
    image-source identity separate from the later mounted operator-pack commit
-   and file hashes, and keep the public route disabled;
+   and file hashes;
 2. leave automatic rehearsal run `33450012850` correctly failed closed for its
    intentional `configs/` incompatibility. The owner-reported actual-host
    candidate-to-previous-to-candidate switch closes only the application
    rollback-readiness question under the runbook's dark-route substitute; it
    does not make the CI run green or prove the public route path;
-3. require hostname/DNS, approved private sources, firewall, certificate
-   continuity, monitoring and recovery inputs before any public activation;
-4. run the J2 external-orchestrator rehearsal first with only the LeadPilot
-   `/32`; prove the allowed source, denied source, distinct deny classification,
-   TLS issuance/renewal, rollback, and the final dark readback. Treat rollback
-   uncertainty as `STOP/UNKNOWN`, not a successful dark terminal state;
-5. require the HTTP redirect to target external `:443` and prove the running
-   Traefik dynamic bind source equals the executing operator pack before every
-   router action; a different release is a hard stop;
-6. keep the host `DOCKER-USER` second layer single-host only; any second HTTPS
+3. record the later supplied exact
+   `router_activation=PASS phase=leadpilot-only entries=1`, issued certificate,
+   approved-source HTTP 200, unlisted-source HTTP 403, and redirect-follow
+   completion on public 443 as owner-reported live activation evidence;
+4. record successful production HTTP-01 validation alongside the global
+   HTTP-to-HTTPS redirect as issuance-path compatibility, without relabeling it
+   as the separate forced-renewal rehearsal;
+5. preserve the denial-layer boundary: the observed HTTP 403 had
+   `Content-Length: 9`, body `Forbidden`, and no `Content-Type`, while backend
+   wrong-key rejection remains HTTP 401 with the API envelope. The 403 does not
+   prove the separately designed `DOCKER-USER` TCP-reset identity or counters;
+6. require every operator pack to be a real Git clone or linked worktree,
+   normalize root-private modes after every new release, run lock-bearing router
+   helpers with host Node v20.20.2 under the inherited FD 9, and pass canonical
+   absolute staging paths;
+7. keep any host `DOCKER-USER` second layer single-host only; any second HTTPS
    hostname requires a separately designed boundary rather than a 443-wide rule;
-7. measure real workload and N=2/N=3 capacity before increasing retained
+8. retain public router rollback/final-dark, forced renewal, monitoring,
+   backup/recovery acceptance, and customer-traffic readiness as separate exits;
+9. measure real workload and N=2/N=3 capacity before increasing retained
    concurrency above one;
-8. reconcile the resulting evidence without claiming production completeness
+10. reconcile the resulting evidence without claiming production completeness
    for any unverified public, monitoring, backup or recovery control.
 
-See
-[`evidence/i12-wave3-hostinger-production-qualification.md`](evidence/i12-wave3-hostinger-production-qualification.md).
+See the current
+[`LeadPilot-only route-activation evidence`](evidence/hostinger-leadpilot-route-activation.md)
+and the historical
+[`I12 Wave 3 qualification evidence`](evidence/i12-wave3-hostinger-production-qualification.md).
 
 ## Historical I11 protected-main signed-candidate checkpoint
 
@@ -989,9 +1000,9 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `VERIFIED_REPOSITORY_AND_HOSTED; REAL_WORKLOAD_CAPACITY_OPEN` | S1a/S1b/S1c and S3a image controls | I4 supplies bounded resource/archive/artifact/pricing/container controls; I12 retains dark N=1 | I4 exact-SHA Source/Image and full suites passed. I12 proves small synthetic N=1 mechanics on the target host. Real customer models and N=2/N=3 remain unqualified; retained concurrency stays one. |
 | S3a - repository build/provenance and automatic-deploy separation | `BF5E712_SIGNED_CANDIDATE_PUBLISHED; OWNER_REPORTED_DARK_DEPLOYED; AUTOMATIC_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY` | S0.1; exact hosted I7/I8 and protected-main I10 evidence green | I8 provides build-once digest-bound GHCR publication and attestations; I10 provides strict protected-main Source/Image governance; I11 productizes manual main publication/recovery and automatic no-deploy rehearsal | Historical I11 at main SHA `65706e381b907c6ba09a8eba504af3adaacac86b` completed publication and automatic rehearsal. Exact source `bf5e712071e3174a67fdb22ff3794003fa3ab32b` passed Candidate Publication run `33449382579`; the owner separately reports its exact digest deployed dark with a later operator pack. Automatic run `33450012850` remains correctly failed closed before registry/runtime work because `configs/` differs intentionally from the fixed previous policy source. The host report does not turn that run green or relabel the image. |
-| S4 - service trust and topology | `OWNER_REPORTED_CURRENT_DARK_API; PUBLIC_REHEARSAL_BLOCKED_NOT_RUN` | S1a/S1b/S1c/S2 security surfaces and S3a evidence | I5 supplies scoped trust; I6 selects the private-peer topology; I12 proves one historical exact dark host state; the deploy-preparation correction narrows activation to one canonical `/32`, external `:443`, and exact live-bind/operator-pack equality | The owner reports the exact signed BF5E712 digest healthy and ready with no API host port and the route still dark. Current repository controls distinguish network/application denial and document machine-level trust, silent address-reassignment risk, and the single-host `DOCKER-USER` limit. External TLS, allowlist/firewall, allowed/denied caller matrix, router rollback, and final-dark proof remain blocked and were not performed by this repository change. |
-| S3b - staging and promotion drill | `VERIFIED_HISTORICAL_FOUNDATION; BF5E712_AUTOMATIC_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY; OWNER_REPORTED_APPLICATION_ROLLBACK_COMPLETE; J2_LIVE_ACTIVATION_BLOCKED` | signed S3a candidate and S4/S5 repository controls | Historical I9 read-only and I11 publication-triggered rehearsals are verified; the current automatic rehearsal remains failed closed; the runbook permits a separately bounded owner-host application rollback substitute while dark; J2 live route rehearsal remains separate | Automatic run `33450012850` remains failed for intentional `configs/` compatibility drift. The owner reports an actual-host candidate-to-previous-to-candidate switch with each target healthy within 15 seconds and the recovery set retained, accepted only as the dark-host application rollback substitute. It is not a source-compatibility pass, public route rehearsal, TLS/allowlist proof, or customer-traffic evidence. |
-| S5 - topology/optional async worker decision | `PRIVATE_PEER_TOPOLOGY_VERIFIED_DARK; ASYNC_WORKER_DEFERRED` | I5 trust controls and S4 topology evidence | private-peer topology selected and dark-host verified; async API/worker deferred | Exact dark API/private-peer/egress and proxy gateway behavior are verified. Complete public caller, firewall, DNS/certificate, secret lifecycle and activation evidence without changing current endpoints. |
+| S4 - service trust and topology | `OWNER_REPORTED_LIVE_LEADPILOT_ONLY_ROUTE; EXTERNAL_ALLOWED_200_UNLISTED_403` | S1a/S1b/S1c/S2 security surfaces and S3a evidence | I5 supplies scoped trust; I6 selects the private-peer topology; I12 proves one historical exact dark host state; the current owner record adds one canonical `/32`, external `:443`, issued TLS, and the external caller matrix | The owner reports exact `router_activation=PASS phase=leadpilot-only entries=1`, approved-source HTTP 200, unlisted-source HTTP 403 without an application envelope, and redirect-follow completion on 443. This repository task is documentation-only. The external 403 does not prove the separate host-firewall TCP-reset/counter boundary; router rollback, forced renewal, monitoring, and customer readiness remain open. |
+| S3b - staging and promotion drill | `VERIFIED_HISTORICAL_FOUNDATION; BF5E712_AUTOMATIC_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY; OWNER_REPORTED_APPLICATION_ROLLBACK_COMPLETE; OWNER_REPORTED_ROUTE_ACTIVATION_COMPLETE` | signed S3a candidate and S4/S5 repository controls | Historical I9 read-only and I11 publication-triggered rehearsals are verified; the current automatic rehearsal remains failed closed; the runbook permits the bounded owner-host application rollback substitute and separately records the later permanent activation | Automatic run `33450012850` remains failed for intentional `configs/` compatibility drift. The owner reports the dark candidate-to-previous-to-candidate application switch and a later LeadPilot-only route activation with certificate and external allow/deny observations. Neither record is a source-compatibility pass; public router rollback/final-dark and customer-traffic evidence remain separate. |
+| S5 - topology/optional async worker decision | `PRIVATE_PEER_TOPOLOGY_VERIFIED; OWNER_REPORTED_PUBLIC_EDGE_ACTIVE; ASYNC_WORKER_DEFERRED` | I5 trust controls and S4 topology evidence | private-peer topology selected and dark-host verified; later owner-supplied route evidence recorded; async API/worker deferred | Exact historical dark API/private-peer/egress and proxy gateway behavior remain verified. The later owner record covers route/TLS/allowed-200/unlisted-403/redirect-443 only; exact firewall identity/counters, forced renewal, monitoring, and recovery acceptance remain open. |
 
 ## Current S0.1 verification checkpoint
 
@@ -1374,14 +1385,19 @@ S1b and S1c are integrated at I1: real queue deadlines, abort propagation,
 graceful runtime shutdown, process-tree cancellation, exact command integrity,
 and subprocess-environment minimization are locally verified.
 I4 completed the repository/hosted S2 artifact, pricing and container envelope;
-I12 adds only bounded synthetic dark N=1 host evidence. I5 supplies
+historical I12 evidence added only bounded synthetic dark N=1 host evidence.
+I5 supplies
 repository-tested scoped credentials, Origin/proxy/request identity, readiness,
-events, and metrics. I6 selects the private-peer/no-host-port topology; I12
-verifies one exact dark deployed digest, private peer, API/native egress denial
-and corrected proxy gateway topology. Public DNS/certificate/caller/firewall,
-complete secret lifecycle, monitoring/backup acceptance, route activation and
-customer traffic remain separate gates. An agent cannot grant itself an
-exception to those gates.
+events, and metrics. I6 selects the private-peer/no-host-port topology;
+historical I12 evidence verifies one exact dark deployed digest, private peer,
+API/native egress denial, and corrected proxy gateway topology. The later
+owner-supplied record reports exact
+`router_activation=PASS phase=leadpilot-only entries=1`, an issued certificate,
+approved-source HTTP 200, unlisted-source HTTP 403, and redirect-follow
+completion on public 443. Exact firewall identity/counters, forced renewal,
+public router rollback, complete secret lifecycle, monitoring/backup/recovery
+acceptance, and customer readiness remain separate gates. An agent cannot grant
+itself an exception to those gates.
 
 ## Decision and risk log
 
@@ -1398,15 +1414,15 @@ exception to those gates.
 | D-009 | Native compromise is contained only partially. | Non-root/cap-drop/PID exist, but code/config/state and network remain writable/available. | S2/S5 |
 | D-010 | Promotion to `main` was not part of S0 completion. | At S0 the workflow could deploy every `main` push. S3a has since removed that repository path without creating a replacement promotion mechanism. | S4 then separately authorized S3b promotion design |
 | D-011 | S0.1 remediated the registry/audit findings, but that result alone did not complete the application mitigation for deeply nested multipart fields. | Commit `f9ed1ee6791e531670d5d7703f994bfb51986ebb` locks Multer 2.2.0 and the other verified non-major fixes, and its production audit is zero. S1a commit `e7a409566bb8795a22f38bbf9f514b42c51bda74` separately configures and live-tests fixed `limits.fieldNestingDepth: 0`. | S0.1 registry/audit remediation and S1a application mitigation locally verified |
-| D-012 | Native children require both secret minimization and egress control. | I1 supplies a tested minimal environment excluding API secrets. I12 verifies API/native egress denial for one exact dark deployed digest; drift after image/network/firewall changes remains a risk. | Re-prove exact egress denial after relevant changes and before public activation. |
-| D-013 | I3 established a separate slice credential; I5 superseded the wider service-trust contract and J0 separates the two slice principals. | I5 tests scoped audiences, rotation/revocation, finite admin migration, Origin/proxy/request identity, readiness, events and metrics. J0 adds explicit `legacy`/`migration`/`principals` slice modes with a <=90-day shared-key migration deadline. The final local J0 aggregate and exact-image proof pass; hosted exact-SHA validation remains unverified, and external production activation is outside repository evidence and authority. | Preserve the green local J0 gates; hosted validation and external production activation require separate authority. |
+| D-012 | Native children require both secret minimization and egress control. | I1 supplies a tested minimal environment excluding API secrets. Historical I12 evidence verifies API/native egress denial for one exact dark deployed digest; drift after image/network/firewall changes remains a risk. | Re-prove exact egress denial after relevant image/network/firewall changes. The later activation record does not refresh that point-in-time proof. |
+| D-013 | I3 established a separate slice credential; I5 superseded the wider service-trust contract and J0 separates the two slice principals. | I5 tests scoped audiences, rotation/revocation, finite admin migration, Origin/proxy/request identity, readiness, events and metrics. J0 adds explicit `legacy`/`migration`/`principals` slice modes with a <=90-day shared-key migration deadline. The final local J0 aggregate and exact-image proof pass; hosted exact-SHA validation remains unverified, and external production activation remains outside repository authority even when owner-supplied evidence is recorded here. | Preserve the green local J0 gates; the completed owner-controlled activation and every future live mutation remain separately authorized from repository work. |
 | D-014 | `fileSize` alone was not a complete multipart/HTTP resource envelope. | I4 completes bounded upload/archive/artifact/pricing/container controls. I12 proves only small synthetic N=1 host mechanics; arbitrary model duration and N=2/N=3 CPU/RAM/disk behavior remain open. | Keep N=1 until real workload and higher-concurrency envelopes are measured. |
-| D-015 | A `main` push could historically deploy independently of validation CI. | S3a removed that path; I11 completes protected manual signed-candidate publication and automatic no-deploy rehearsal. I12 separately verifies one exact dark deployment and corrected proxy cutover, without public route activation. | Keep publication, dark deployment and public activation as separately authorized identities and stages. |
+| D-015 | A `main` push could historically deploy independently of validation CI. | S3a removed that path; I11 completes protected manual signed-candidate publication and automatic no-deploy rehearsal. Historical I12 evidence separately verified one exact dark deployment and corrected proxy cutover without route activation; a later owner record reports the LeadPilot-only activation. | Keep publication, dark deployment, and owner-controlled public activation as separately authorized identities and stages. |
 | D-016 | The manifest/lock freeze was limited to the S1a/S3a parallel wave. | The dependency patch is now integrated once by patch ID; duplicate `306b799` was not picked. | Future advisory work requires a new serialized owner and audit evidence |
 | D-017 | Parallel lanes return evidence; the integrator owns canonical reconciliation. | I1 reconciliation supersedes historical stage status without rewriting historical evidence files. | Integrator maintains `AGENTS.md` and `docs/codex/**` after integration |
 | D-018 | Graceful shutdown must drain both HTTP and queue work without early capacity release. | `SIGTERM`/`SIGINT` are single-flight; queue shutdown aborts queued/active work, closes HTTP, and awaits both drains while active slots remain owned until task settlement. | I1 runtime lifecycle locally verified |
 | D-019 | A known image advisory does not explain away an independent liveness failure. | Hosted Image run `29957927370` shows both persistent liveness exit 1 and the HIGH scanner path. Swiper 7.2.0 is known, but S3a-V2C is not integrated. | S3a remains blocked; diagnose/fix both paths without weakening gates |
 | D-020 | I2 separates the verified tmpfs liveness root cause from the Swiper advisory. | Exact A/B/C and main-container evidence proves root-owned tmpfs mount roots caused startup `EACCES`; V2C independently produces zero `GHSA-hmx5-qpq5-p643` findings. Dynamic nonzero UID/GID plus kernel cross-check and mode `0700` fix liveness without root or world-writable state. | I2 repository image validation closed; external policy, provenance/promotion, S4/S3b, and production evidence remain required |
 | D-021 | Application defaults do not prove arbitrary host or proxy capacity. | I12 observes the target host and passes bounded small synthetic N=1 traffic, but does not qualify customer models, N=2/N=3, or final public proxy timeouts. | Retain N=1 and verify public timeouts plus real-workload capacity before increasing load. |
-| D-022 | I5's loopback-published topology could not combine ingress with egress denial; I6 replaces it. | I12 verifies the selected internal API/private peer with no API host port/default route, denied API/native egress, and a socketless dual-attached proxy whose default route is ingress. | Verify intended public caller, proxy CIDR, firewall, DNS/certificate, secret lifecycle and route rollback before activation. Async worker remains deferred. |
-| D-023 | Activation evidence must come from an external observer and must not collapse a network deny into application HTTP 401. | The repository contract distinguishes router 403 and host-firewall TCP reset/private `J2_ALLOWLIST_DENY` from application 401, admits exactly one canonical `/32`, targets external `:443`, and stops if the live dynamic bind belongs to another release. Success requires a proved final-dark state; `*_rollback_uncertain` is `STOP/UNKNOWN`. | The external orchestrator proves allowed/denied sources, TLS issuance/renewal, rollback, final dark readback, current address ownership, and single-host firewall scope. No caller expansion is authorized. |
+| D-022 | I5's loopback-published topology could not combine ingress with egress denial; I6 replaces it. | Historical I12 evidence verifies the selected internal API/private peer with no API host port/default route, denied API/native egress, and a socketless dual-attached proxy whose default route is ingress. The later owner record reports the intended caller's HTTP 200, unlisted-source HTTP 403, certificate issuance, and redirect completion on public 443. | Exact firewall identity/counters, forced renewal, public router rollback, secret lifecycle, monitoring/recovery acceptance, and customer readiness remain open. Async worker remains deferred. |
+| D-023 | Activation evidence must come from an external observer and must not collapse a network deny into application HTTP 401. | The repository contract distinguishes router 403 and host-firewall TCP reset/private `J2_ALLOWLIST_DENY` from application 401, admits exactly one canonical `/32`, targets external `:443`, and stops if the live dynamic bind belongs to another release. The owner record confirms allowed-source HTTP 200 and exact unlisted-source HTTP 403 without `Content-Type`; the historical rehearsal contract still treats `*_rollback_uncertain` as `STOP/UNKNOWN`. | Retain public router rollback/final-dark, forced renewal, firewall identity/counters, current address ownership, and single-host firewall scope as separate exits. No caller expansion is authorized. |

@@ -17,14 +17,16 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
-## Current Hostinger dark deployment and Traefik activation preparation
+## Current Hostinger deployment and LeadPilot-only route activation
 
 Current classification:
 `SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED;
 AUTOMATIC_EPHEMERAL_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY;
 OWNER_REPORTED_BF5E712_DARK_API_DEPLOYMENT_COMPLETE;
 OWNER_REPORTED_APPLICATION_ROLLBACK_ROUND_TRIP_COMPLETE;
-PUBLIC_ROUTE_DISABLED`.
+OWNER_REPORTED_ROUTER_ACTIVATION_PASS_LEADPILOT_ONLY_ENTRIES_1;
+OWNER_REPORTED_TLS_AND_EXTERNAL_CALLER_MATRIX_PASS;
+PUBLIC_ROUTE_ACTIVE_LEADPILOT_ONLY`.
 
 Exact protected-main source
 `bf5e712071e3174a67fdb22ff3794003fa3ab32b` was published once by successful
@@ -42,7 +44,15 @@ rejected Orca `254.0` with schema-2
 `MODEL_OUT_OF_PRINTER_BOUNDS`, and sliced Orca `253.9` successfully. The owner
 also switched to the retained previous release and back; each became healthy
 within 15 seconds, the recovery set and pricing-state snapshot remained intact,
-and the public route remained dark.
+and the public route remained dark during that rollback round trip. A later
+owner-supplied activation record reports exact
+`router_activation=PASS phase=leadpilot-only entries=1`, certificate issuance,
+HTTP 200 from the sole approved `/32`, HTTP 403 from an external unlisted
+source, and redirect-follow completion on public port 443. The 403 response had
+`Content-Length: 9`, body `Forbidden`, and no `Content-Type`; this is an
+intentional edge/source rejection distinct from the backend HTTP 401
+application envelope for a wrong key. It is not evidence that the separate
+`DOCKER-USER` TCP-reset/counter boundary passed.
 
 Automatic no-deploy rehearsal `33450012850` separately failed closed at
 rehearsal-input materialization: the fixed previous source is an ancestor and
@@ -54,10 +64,12 @@ CI run green or prove the public route rehearsal. The local operator correction
 narrows the router to one canonical `/32`,
 direct-peer Traefik v3 `ipAllowList`, external redirect `:443`, exact live
 dynamic-bind/operator-release equality, and the accepted shared-machine,
-address-reassignment, and single-host `DOCKER-USER` risks. This repository turn
-performs no VPS, container, router, DNS, firewall, mounted-directory, or
-consumer mutation. See
-`docs/codex/evidence/hostinger-traefik-deploy-preparation.md`.
+address-reassignment, and single-host `DOCKER-USER` risks. Successful HTTP-01
+validation while the global redirect remained enabled proves redirect/challenge
+compatibility for issuance, not the separate forced-renewal rehearsal. This
+repository turn is documentation-only and performs no VPS, container, router,
+DNS, firewall, mounted-directory, or consumer mutation. See
+`docs/codex/evidence/hostinger-leadpilot-route-activation.md`.
 
 ## Current J3B native-envelope and original-dimension corrective candidate
 
@@ -191,7 +203,7 @@ declared and largest-passing fields, and per-engine machine/fleet resolution.
 The generic SLA fallback is never a machine; Elegoo values remain owner-profile
 future work.
 
-The current dark route contract accepts exactly one canonical IPv4 `/32` in its
+The J2 repository route contract accepts exactly one canonical IPv4 `/32` in its
 sole `leadpilot-only` phase. A second address, broader prefix (especially the
 provider-shared `/24`), `ipStrategy`, or forwarded-header identity fails closed;
 Traefik evaluates the direct TCP peer. Network denial remains distinct from
@@ -202,9 +214,11 @@ happen. All route actions require one inherited root-private rehearsal lock,
 stable root-owned protected ancestors, and exact equality between the running
 Traefik dynamic-bind source and the executing operator pack. The HTTP redirect
 targets external `:443`, never internal `:8443`. The planned `DOCKER-USER`
-second layer is valid only while Traefik serves this single hostname. Terminal
-acceptance requires strict dark assertion. Repository preparation does not
-mutate the live route or prove the VPS firewall, mount, redirect, or allowlist.
+second layer is valid only while Traefik serves this single hostname. Rehearsal
+acceptance requires strict dark assertion. The historical repository-preparation
+turn did not mutate the live route or prove the VPS firewall, mount, redirect,
+or allowlist; the later owner-supplied activation is recorded in the current
+Hostinger section above.
 
 Calibration records nine numeric Bambu references plus the `M03` boundary. Its
 Orca runner enforces `--orient 0`, support off before digest/native work, and
@@ -248,45 +262,45 @@ smokes and typed rolling per-engine failure/recovery require a separate wave.
 See
 [`docs/codex/evidence/j1c-slice-contract-corrective.md`](docs/codex/evidence/j1c-slice-contract-corrective.md).
 
-## Current I12 Wave 3 Hostinger qualification checkpoint
+## Historical I12 Wave 3 Hostinger qualification checkpoint
 
-Current classification:
+Checkpoint classification:
 `I12_API_F710_DARK_N1_VERIFIED;
 OPERATOR_MAIN_7C8AEE_RESIDUAL_RECONCILIATION_COMPLETE;
 CORRECTED_TRAEFIK_DARK_CUTOVER_VERIFIED; PUBLIC_ROUTE_DISABLED`.
 Protected operator main `7c8aee0728fc8462c67b4c6d85636bffb7afcdf8`
-passed Source `32804297840` and Image `32804297658` after PR `#5`. The deployed
-API image source remains the protected-main checkpoint
+passed Source `32804297840` and Image `32804297658` after PR `#5`. At that
+checkpoint, the deployed API image source was protected-main
 `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`,
 whose Source `32749722709`, Image `32749722715`, Candidate Publication
-`32750334897`, and automatic no-deploy rehearsal `32751148223` passed. Its
-exact signed API image remains
+`32750334897`, and automatic no-deploy rehearsal `32751148223` passed. Its exact
+signed API image was
 `ghcr.io/botond1/3d-printer-slicer-api@sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
-The API container remains healthy and dark at retained concurrency one on only
+The API container was healthy and dark at retained concurrency one on only
 the internal private network, with no API host port or default route.
 
-The corrected socketless Traefik candidate is running and healthy on the exact
+The corrected socketless Traefik candidate was running and healthy on the exact
 file-provider-only image, with no Docker socket or Docker provider. Runtime
 inspection proved ingress/private gateway priorities `1/0`, an ingress-owned
 IPv4 default route, no container IPv6 default route, the exact effective
 read-only configs bind, and one Docker-owned host listener per port `80`/`443`
 on both IPv4 and IPv6. The container networks themselves remain IPv6-disabled;
 host listener families and container-network IPv6 are separate facts. The
-dynamic route directory contains only `.gitkeep`, unknown HTTPS hosts return
-404, and no public slicer router is active. ACME bytes remain unchanged.
+dynamic route directory contained only `.gitkeep`, unknown HTTPS hosts returned
+404, and no public slicer router was active. ACME bytes were unchanged.
 
 The prior failed residual set was reconciled by exact identity; the corrected
-resumable cutover then established the current candidate/network identities.
-The former dedicated proxy is intentionally retained stopped for bounded
-rollback; the root-private recovery ledger and success evidence are retained,
+resumable cutover then established the checkpoint candidate/network identities.
+The former dedicated proxy was intentionally retained stopped for bounded
+rollback; the root-private recovery ledger and success evidence were retained,
 while exact helper/upload/temp cleanup passed. Broad
 Docker cleanup or prune remains forbidden. Corrective commit `7a490c150bb8c4c1ec6c22561421202152070fbc`
 and evidence commit `1fe89d7508f5bbd59a75256ec43722f3f19ae1c2` remain distinct
 from the API-image source and did not relabel, rebuild, publish, or replace the
-`f71069c` image. Hostname/DNS, approved public caller/CIDR, firewall acceptance,
-certificate issuance/continuity, route activation, monitoring/recovery
-acceptance, customer traffic, and public production completeness remain
-`UNVERIFIED` and separately authorized. See
+`f71069c` image. At that checkpoint, hostname/DNS, approved public caller/CIDR,
+firewall acceptance, certificate issuance/continuity, route activation,
+monitoring/recovery acceptance, customer traffic, and public production
+completeness were `UNVERIFIED` and separately authorized. See
 `docs/codex/evidence/i12-wave3-hostinger-production-qualification.md`.
 
 ## Historical I11 protected-main signed-candidate checkpoint

@@ -7,10 +7,17 @@ SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED
 AUTOMATIC_EPHEMERAL_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY
 OWNER_REPORTED_BF5E712_DARK_API_DEPLOYMENT_COMPLETE
 OWNER_REPORTED_APPLICATION_ROLLBACK_ROUND_TRIP_COMPLETE
-PUBLIC_ROUTE_DISABLED
+PUBLIC_ROUTE_DISABLED_AT_PREPARATION_CHECKPOINT
 HOSTINGER_TRAEFIK_DEPLOY_PREPARATION_LOCAL_GATES_PASS
 THIS_REPOSITORY_CHANGE_NO_HOST_ROUTE_DNS_FIREWALL_OR_CONSUMER_MUTATION
 ```
+
+This document preserves the route-dark deploy-preparation checkpoint. The later
+owner-supplied LeadPilot-only activation supersedes only its route-state
+classification; see
+[`hostinger-leadpilot-route-activation.md`](hostinger-leadpilot-route-activation.md).
+The preparation facts and the time-qualified `NOT VERIFIED` list below remain
+historical evidence for this checkpoint, not claims about the current route.
 
 This corrective starts from exact protected-main source
 `bf5e712071e3174a67fdb22ff3794003fa3ab32b`. The repository branch prepares and
@@ -185,7 +192,11 @@ commit `f681b8368f40a7efa84110df24350545aab87c65` adds the mandatory Compose
 project identity and the bounded dark-host rollback substitute without changing
 the image, route, host, or automatic rehearsal guard.
 
-## NOT VERIFIED
+## NOT VERIFIED at the preparation checkpoint
+
+The following list records what this preparation task had not verified at its
+route-dark stop point. It is intentionally preserved rather than rewritten with
+later activation facts.
 
 - independent repetition by this repository task of the owner-reported API
   deployment, profile/bounds/slice observations, or application rollback;

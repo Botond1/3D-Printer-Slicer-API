@@ -184,17 +184,30 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   completed route rehearsal requires proven terminal dark; any
   `*_rollback_uncertain` result is `STOP/UNKNOWN`. Exact protected-main source
   `bf5e712071e3174a67fdb22ff3794003fa3ab32b` has a signed, attested candidate.
-  The owner reports that exact digest now runs dark with the intentional mounted
-  J2/J3/J3B configs, no API host port, final `/health` and `/ready` 200, and all
-  four catalogue entries with their inclusive values alongside the declared
+  The operator pack must be a real Git clone or linked worktree; a tarball fails
+  as `operator_pack_file_invalid`. Every new release must normalize the private
+  directory/file modes. Lock-bearing router helpers require host Node v20.20.2
+  because the supported container path cannot preserve and prove the already-
+  held host FD 9; `--render-router` requires a canonical absolute staging path.
+  The owner first reported that exact digest running dark with the intentional
+  mounted J2/J3/J3B configs, no API host port, final `/health` and `/ready` 200,
+  and all four catalogue entries with their inclusive values alongside the declared
   values. Orca `254.0` was rejected with schema-2 bounds, and
   Orca `253.9` sliced successfully. The previous and candidate releases each
   became healthy within 15 seconds during an owner-host round trip; rollback
   assets and pricing-state stayed intact. Automatic no-deploy run `33450012850`
   remains failed closed on its fixed previous-policy `configs/` guard; the host
-  round trip is accepted application-rollback evidence, not a CI pass. The
-  public route remains disabled and its full external rehearsal is
-  `BLOCKED / NOT RUN`. Never infer permanent activation from repository gates.
+  round trip is accepted application-rollback evidence, not a CI pass. A later
+  owner-supplied record reports exact
+  `router_activation=PASS phase=leadpilot-only entries=1`, an issued
+  certificate, approved-source HTTP 200, unlisted-source HTTP 403 with body
+  `Forbidden` and no `Content-Type`, and redirect-follow completion on public
+  443. The edge 403 is intentionally distinct from the backend 401 envelope and
+  does not prove the separate firewall TCP-reset/counter boundary. Successful
+  HTTP-01 alongside the redirect proves issuance compatibility, not forced
+  renewal. This repository turn is documentation-only; public router rollback,
+  monitoring, recovery acceptance, and customer readiness remain unverified.
+  See `docs/codex/evidence/hostinger-leadpilot-route-activation.md`.
 - Calibration now has nine numeric Bambu reference cases and the `M03`
   P1S-overheight rejection. Measurement fixes Orca `--orient 0`, disables
   support in the measurement-only runtime profile, and reuses the production
@@ -280,21 +293,21 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   calibration remains `BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`; no automatic-
   pricing acceptance is inferred.
 
-## I12 Hostinger production-qualification boundary
+## Historical I12 Hostinger production-qualification boundary
 
-- Status is `I12_API_F710_DARK_N1_VERIFIED;
+- Checkpoint status was `I12_API_F710_DARK_N1_VERIFIED;
   OPERATOR_MAIN_7C8AEE_RESIDUAL_RECONCILIATION_COMPLETE;
   CORRECTED_TRAEFIK_DARK_CUTOVER_VERIFIED; PUBLIC_ROUTE_DISABLED`.
-- The deployed API image source remains the protected-main checkpoint
+- At that checkpoint the deployed API image source was protected-main
   `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`; its exact signed image digest is
   `sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
-  It remains healthy and dark at retained concurrency one, without a host API
+  It was healthy and dark at retained concurrency one, without a host API
   port or API default route.
 - Corrective operator main
   `7c8aee0728fc8462c67b4c6d85636bffb7afcdf8` passed Source `32804297840` and
   Image `32804297658` after protected PR `#5`. Its operator commits are separate
   from the API-image source and did not rebuild, relabel, or republish that image.
-- The corrected socketless Traefik is healthy with exact ingress/private
+- The corrected socketless Traefik was healthy with exact ingress/private
   `gw_priority: 1/0`, ingress-owned default routing, effective read-only config,
   file provider only, and no Docker socket/provider. Docker owns exact IPv4 and
   IPv6 host listeners for ports 80/443 while the container networks remain
@@ -302,10 +315,10 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
 - Failed-cutover resources were reconciled by exact identity into the resumed
   successful state. The old proxy is intentionally retained stopped for
   rollback, task-owned remote temp residue is absent, and ACME bytes are unchanged.
-- No public slicer router is active. Hostname/DNS, approved caller/CIDR,
+- At that checkpoint no public slicer router was active. Hostname/DNS, approved caller/CIDR,
   firewall acceptance, certificate issuance/continuity, route activation,
   monitoring/recovery acceptance, customer traffic, and public production
-  completeness remain unverified and separately authorized.
+  completeness were unverified and separately authorized.
 
 ## Candidate image publication boundary
 

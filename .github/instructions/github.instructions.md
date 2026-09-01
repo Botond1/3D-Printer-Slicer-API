@@ -4,7 +4,7 @@ applyTo: ".github/**"
 
 # GitHub Folder Instructions
 
-Last synchronized: 2026-08-26
+Last synchronized: 2026-09-01
 
 ## Scope
 - Keep Copilot instructions centralized in .github/copilot-instructions.md.
@@ -67,8 +67,8 @@ Last synchronized: 2026-08-26
   dark N=1 API digest and corrected proxy topology on the authorized VPS.
 - Protected main `bf5e712071e3174a67fdb22ff3794003fa3ab32b` passed the
   read-only/no-deploy Source and Image workflows and Candidate Publication run
-  `33449382579`. The owner separately reports that exact signed digest deployed
-  dark with the later J2/J3/J3B operator pack: `/health` and `/ready` returned
+  `33449382579`. The owner first reported that exact signed digest deployed dark
+  with the later J2/J3/J3B operator pack: `/health` and `/ready` returned
   200, all four catalogue entries exposed their inclusive values alongside the
   declared values, the Orca 254.0 mm
   negative returned schema-2 `MODEL_OUT_OF_PRINTER_BOUNDS`, and the 253.9 mm
@@ -79,10 +79,15 @@ Last synchronized: 2026-08-26
   closed with `source_compatibility_verification_failure` for the intentional
   `configs/` change. The owner-host round trip is accepted only as the runbook's
   dark-route application rollback substitute; it does not make CI green or
-  prove source compatibility. J2's external route rehearsal remains
-  `BLOCKED / NOT RUN`: public caller, firewall, DNS/certificate/route, live
-  allowed/denied matrix, router rollback, final-dark readback, customer traffic,
-  and full production acceptance remain unverified and separately authorized.
+  prove source compatibility. A later owner-supplied execution record reports
+  exact `router_activation=PASS phase=leadpilot-only entries=1`, certificate
+  issuance, allowed-source HTTP 200, external unlisted-source plain HTTP 403,
+  and redirect-follow completion on public 443. The 403 does not prove the
+  separate host-firewall TCP-reset/counter gate, and successful HTTP-01 issuance
+  does not prove the forced-renewal rehearsal. This repository change is
+  documentation-only. Public router rollback/final-dark, monitoring,
+  backup/recovery acceptance, customer traffic, and full production acceptance
+  remain unverified and separately authorized.
 
 ## Required Sync Targets
 When changing rules here, synchronize:

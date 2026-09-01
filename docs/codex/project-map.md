@@ -227,14 +227,16 @@ for the schema and evidence boundary. J1/J2 orientation statements retained
 below describe their historical checkpoints; the J3B section above is the
 current candidate contract.
 
-## Current Hostinger dark deployment and Traefik activation preparation
+## Current Hostinger deployment and LeadPilot-only route activation
 
 Current classification:
 `SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED;
 AUTOMATIC_EPHEMERAL_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY;
 OWNER_REPORTED_BF5E712_DARK_API_DEPLOYMENT_COMPLETE;
 OWNER_REPORTED_APPLICATION_ROLLBACK_ROUND_TRIP_COMPLETE;
-PUBLIC_ROUTE_DISABLED`.
+OWNER_REPORTED_ROUTER_ACTIVATION_PASS_LEADPILOT_ONLY_ENTRIES_1;
+OWNER_REPORTED_TLS_AND_EXTERNAL_CALLER_MATRIX_PASS;
+PUBLIC_ROUTE_ACTIVE_LEADPILOT_ONLY`.
 
 Exact protected-main source
 `bf5e712071e3174a67fdb22ff3794003fa3ab32b` was published once through
@@ -256,6 +258,19 @@ round trip made each selected release healthy within 15 seconds; the previous
 image/release/operator environment, pricing-state snapshot, and route-dark
 state were retained. These are owner-supplied host observations, not actions
 performed by this repository turn.
+
+A later owner-supplied external record reports exact
+`router_activation=PASS phase=leadpilot-only entries=1`, an issued certificate,
+HTTP 200 from the approved `/32`, HTTP 403 from an unlisted external source,
+and a redirect-following client terminating on public port 443. The blocked
+response was `HTTP/1.1 403 Forbidden` with `Content-Length: 9`, body
+`Forbidden`, and no `Content-Type`. Consumers intentionally map that edge
+response to an unknown source address; backend HTTP 401 with the API envelope
+continues to mean a recognized source supplied a wrong key. The external 403
+does not prove the separate host-firewall TCP-reset rule or its counters.
+Production HTTP-01 validation succeeded while the global redirect remained
+enabled, proving challenge/redirect compatibility for issuance but not the
+separate forced-renewal rehearsal.
 
 The automatic no-deploy rehearsal run `33450012850` separately failed closed
 at input materialization. Its previous policy source is an ancestor and the
@@ -290,12 +305,14 @@ caller without any configuration change; no repository control detects it.
 The consumer must announce migration in advance and the owner must rebind both
 live network layers before use. No real caller address is committed.
 
-This repository turn performs no deploy, container replacement, mounted-
-directory write, router activation, DNS/allowlist/firewall mutation, consumer
-change, or customer traffic. The public live mount equality, redirect,
-middleware, firewall, TLS, external caller behavior, and route rollback matrix
-remain `NOT VERIFIED`. See
-[`evidence/hostinger-traefik-deploy-preparation.md`](evidence/hostinger-traefik-deploy-preparation.md).
+This repository turn is documentation-only and performs no deploy, container
+replacement, mounted-directory write, router activation, DNS/allowlist/firewall
+mutation, consumer change, or customer traffic. It does not independently
+repeat the owner-supplied live observations. Exact host-firewall identity and
+counters, forced-renewal rehearsal, public router rollback, monitoring,
+backup/recovery acceptance, and customer-traffic readiness remain
+`NOT VERIFIED`. See
+[`evidence/hostinger-leadpilot-route-activation.md`](evidence/hostinger-leadpilot-route-activation.md).
 
 ## Historical J2 bounds, catalogue, network, and calibration candidate
 
@@ -691,23 +708,23 @@ Hosted exact-SHA validation remains unverified. External production activation
 is outside repository evidence and authority. See
 [`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).
 
-## Current I12 Wave 3 Hostinger qualification map
+## Historical I12 Wave 3 Hostinger qualification map
 
-Observed status:
+Checkpoint status:
 `I12_API_F710_DARK_N1_VERIFIED;
 OPERATOR_MAIN_7C8AEE_RESIDUAL_RECONCILIATION_COMPLETE;
 CORRECTED_TRAEFIK_DARK_CUTOVER_VERIFIED; PUBLIC_ROUTE_DISABLED`.
 Protected operator main `7c8aee0728fc8462c67b4c6d85636bffb7afcdf8`
-passed Source `32804297840` and Image `32804297658` after PR `#5`. The deployed
-API image source remains protected-main checkpoint
+passed Source `32804297840` and Image `32804297658` after PR `#5`. At that
+checkpoint, the deployed API image source was protected-main checkpoint
 `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`, with its previously
 green Source/Image/publication/rehearsal chain and exact signed image
 `ghcr.io/botond1/3d-printer-slicer-api@sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
 The separate operator-pack commits `7a490c150bb8c4c1ec6c22561421202152070fbc`
-and `1fe89d7508f5bbd59a75256ec43722f3f19ae1c2` do not change, rebuild,
-publish, or relabel that API image.
+and `1fe89d7508f5bbd59a75256ec43722f3f19ae1c2` did not change, rebuild,
+publish, or relabel that API image at that checkpoint.
 
-Direct executable-source map:
+Historical executable-source map at that checkpoint:
 
 ```text
 f710 source -> signed d50c72 API image -> healthy dark N=1 API
@@ -727,25 +744,25 @@ f710 source -> signed d50c72 API image -> healthy dark N=1 API
   -> post-link failure -> exact dark rollback or bounded uncertainty
 ```
 
-On the authorized Ubuntu 24.04 Hostinger KVM 4 host, the `f710` API remains
-healthy and dark at N=1. Private-peer access, API/native egress denial, and
-synthetic Prusa/Orca slicing remain proven. The corrected Traefik candidate
+On the authorized Ubuntu 24.04 Hostinger KVM 4 host, the `f710` API was healthy
+and dark at N=1 at that checkpoint. Private-peer access, API/native egress
+denial, and synthetic Prusa/Orca slicing were proven. The corrected Traefik candidate
 `91e043fbc05a55cac7f7b826a121581fc905975159a070c806a76c426bde7b57`
-is running and healthy with restart count zero and OOM false. The old dedicated
+was running and healthy with restart count zero and OOM false. The old dedicated
 proxy `673a657b0b240c1fa467e7358c956723cab29ad0bd2200c6f5903fdb0dad9d25`
-is intentionally retained stopped for rollback. The prior failed residual set
+was intentionally retained stopped for rollback. The prior failed residual set
 was identity-bound reconciled; the corrected resumable cutover then established
-the current candidate/network identities. The root-private recovery bundle
-remains bounded and exact cleanup removed only task-owned helpers/uploads/temp
+the checkpoint candidate/network identities. The root-private recovery bundle
+was bounded and exact cleanup removed only task-owned helpers/uploads/temp
 paths. ACME SHA-256
 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
-is unchanged, and the final read-only audit passed 30/30 checks.
+was unchanged, and the final read-only audit passed 30/30 checks.
 
-Public route activation remains blocked on approved hostname/DNS, caller
+At that checkpoint, public route activation was blocked on approved hostname/DNS, caller
 identity/CIDR, firewall acceptance, certificate issuance/continuity, monitoring
 and recovery acceptance, and authenticated synthetic route proof. Active
 80/443 listeners are the dark proxy transport boundary, not evidence of an
-active slicer router or customer production readiness.
+active slicer router or customer production readiness at that checkpoint.
 
 No new graph output is retained. Existing graph knowledge was consulted first;
 the queue, artifact, Compose and operator direct sources above are authoritative.
@@ -1553,10 +1570,14 @@ Runtime route registration, not README lists, is canonical:
   `migration`, or the `principals` final state;
   WooCommerce and LeadPilot active/previous rotation and revocation are
   repository-tested. `GET /health`, `GET /ready`, `GET /pricing`, and
-  `GET /profiles` remain public. I12 verifies
-  one exact dark private binding, proxy topology and API/native egress denial;
-  public caller/firewall/DNS/certificate and complete secret lifecycle remain
-  `UNVERIFIED`;
+  `GET /profiles` remain public. Historical I12 evidence verifies one exact dark
+  private binding, proxy topology and API/native egress denial. The later
+  owner-supplied record reports exact
+  `router_activation=PASS phase=leadpilot-only entries=1`, certificate issuance,
+  approved-source HTTP 200, external unlisted-source HTTP 403 without a
+  `Content-Type`, and redirect-follow completion on public 443. Exact firewall
+  identity/counters, forced renewal, public router rollback,
+  monitoring/recovery acceptance, and customer readiness remain `UNVERIFIED`;
 - `choosenFile`, stable status/error mappings, Prusa FDM/SLA, Orca FDM-only,
   profile pairing, pricing behavior, and argument semantics are compatibility
   invariants for behavior-preserving stages;
@@ -1594,11 +1615,14 @@ governance, signed candidate publication and automatic no-deploy rehearsal are
 verified. I4 closes the repository/hosted S2 resource-state envelope; I12 adds
 only small synthetic N=1 host evidence, not arbitrary workload capacity. I5/I6
 implement the credential lifecycle, protected Origin/proxy/request identity,
-readiness/observability and private-peer topology; I12 verifies one exact dark
-deployment with denied API/native egress and corrected proxy gateway behavior.
-Public DNS/certificate/caller/firewall, complete secret lifecycle,
-monitoring/backup acceptance, route activation and customer production remain
-separately authorized and `UNVERIFIED`.
+readiness/observability and private-peer topology; historical I12 evidence
+verifies one exact dark deployment with denied API/native egress and corrected
+proxy gateway behavior. The later owner-supplied record reports a live
+LeadPilot-only route, issued certificate, approved-source HTTP 200,
+unlisted-source HTTP 403, and redirect-follow completion on public 443. Exact
+firewall identity/counters, forced renewal, public router rollback,
+monitoring/backup/recovery acceptance, and customer readiness remain separately
+authorized and `UNVERIFIED`.
 
 ## Historical S0 test and CI capability matrix
 
@@ -1668,17 +1692,21 @@ delta above for present test and audit status.
 - `VERIFIED_DARK_POINT_IN_TIME`: exact `f71069c` signed image, private API
   binding, API/native egress denial, dark N=1 readiness/slicing, corrected
   Traefik gateway/listener topology, retained-old rollback and ACME continuity.
-- `UNVERIFIED`: intended public callers, exact public proxy CIDRs/hops/timeouts,
-  capacity beyond small synthetic N=1, firewall acceptance, public DNS and
-  certificate, quotas under real workloads, backups, monitoring, route
-  activation and customer-facing rollback readiness.
+- `OWNER_REPORTED_LIVE_LEADPILOT_ONLY`: exact
+  `router_activation=PASS phase=leadpilot-only entries=1`, issued certificate,
+  approved-source HTTP 200, unlisted-source HTTP 403 without `Content-Type`,
+  and redirect-follow completion on public 443.
+- `UNVERIFIED`: exact public proxy CIDRs/hops/timeouts, capacity beyond small
+  synthetic N=1, exact firewall identity/counters, DNS configuration lifecycle,
+  forced renewal, quotas under real workloads, backups, monitoring, public
+  router rollback, and customer readiness.
 - `UNVERIFIED`: production secret source, ownership, filesystem mode, and
   current/previous/revoked key state.
 - Locally tested process-tree cancellation and the bounded dark host probes do
   not verify hostile archive/model parser behavior, arbitrary Prusa/Orca
   metadata variants, or post-change egress drift.
 - Product/browser policy now has separate protected-audience Origin controls;
-  the actual deployed allowlists remain `UNVERIFIED`.
+  the actual deployed browser Origin allowlists remain `UNVERIFIED`.
 
 The S1a/S3a manifest freeze was wave-scoped and is closed. The serialized
 dependency-maintenance patch is integrated exactly once. Future advisory work

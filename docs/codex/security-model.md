@@ -73,29 +73,32 @@ the later J3B owner production-identical VPS rerun also passed on exact tree
 `db42b93`. See
 [`evidence/j3-orientation-visibility.md`](evidence/j3-orientation-visibility.md).
 
-## Current Hostinger dark-deployment and activation-preparation control delta
+## Current Hostinger deployment and LeadPilot-only activation control delta
 
 Current classification:
 `SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED;
 AUTOMATIC_EPHEMERAL_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY;
 OWNER_REPORTED_BF5E712_DARK_API_DEPLOYMENT_COMPLETE;
 OWNER_REPORTED_APPLICATION_ROLLBACK_ROUND_TRIP_COMPLETE;
-PUBLIC_ROUTE_DISABLED`.
+OWNER_REPORTED_ROUTER_ACTIVATION_PASS_LEADPILOT_ONLY_ENTRIES_1;
+OWNER_REPORTED_TLS_AND_EXTERNAL_CALLER_MATRIX_PASS;
+PUBLIC_ROUTE_ACTIVE_LEADPILOT_ONLY`.
 
 | Control | Current classification | Fail-closed boundary |
 | --- | --- | --- |
 | Signed candidate | `PUBLISHED_ATTESTED_VERIFIED; OWNER_REPORTED_DARK_DEPLOYED` | Candidate Publication run `33449382579` produced exact subject `ghcr.io/botond1/3d-printer-slicer-api@sha256:153987840361d60c365da7b105769bb112de807db39a737548b725ea857918ca`. Registry round trip, SLSA/SPDX verification, wrong-subject/repository rejection, and bounded cleanup passed. The publication itself was no-deploy; the owner later reported this exact digest running dark with no API host port. |
 | Automatic rehearsal | `BLOCKED_SIGNED_MAIN_CANDIDATE_REHEARSAL_INPUT` | Automatic run `33450012850` stopped before registry/runtime work because the fixed I8 previous source and the candidate differ under `configs/`; ancestry and production Compose compatibility still pass. Publication is not reclassified as failure, but the automatic ephemeral staging/rollback rehearsal for this candidate remains unverified. |
 | Application deployment and rollback | `OWNER_REPORTED_DARK_DEPLOYMENT_AND_ROUND_TRIP_COMPLETE` | The owner reports that the later, separately identified operator release supplies intentional mounted J2/J3/J3B configs apart from the `bf5e712` image source. Final candidate `/health` and `/ready` returned 200, accepted catalogue/bounds/slice probes passed, and the previous and candidate releases each became healthy within 15 seconds. Recovery assets and pricing-state stayed intact. This accepted host report does not turn the automatic CI run green or prove public-route rollback. |
-| Router source allowlist | `REPOSITORY_LOCAL_TESTED; LIVE_NOT_RUN` | The router attaches Traefik v3 `ipAllowList` and accepts exactly one owner-supplied canonical IPv4 `/32` through one singular placeholder. A second row, wider prefix, expanded phase, v2 `ipWhiteList`, `ipStrategy`, or forwarded-header identity fails closed. Direct TCP peer identity is authoritative and the application key remains mandatory. |
+| Router source allowlist | `OWNER_REPORTED_LIVE_PASS; LEADPILOT_ONLY; ENTRIES_1` | The router attaches Traefik v3 `ipAllowList` and accepts exactly one owner-supplied canonical IPv4 `/32` through one singular placeholder. The supplied execution record is `router_activation=PASS phase=leadpilot-only entries=1`. A second row, wider prefix, expanded phase, v2 `ipWhiteList`, `ipStrategy`, or forwarded-header identity remains fail closed. Direct TCP peer identity is authoritative and the application key remains mandatory. |
 | Shared-machine and address-lifecycle risk | `OWNER_ACCEPTED_DOCUMENTED; NOT_DETECTED` | The allowed address trusts every process on a shared host, not one application. The address has no verified reservation; rebuild/migration can silently admit a future assignee while excluding the intended caller. Advance consumer notice plus owner re-verification/rebinding is mandatory because no repository control detects reassignment. |
-| External redirect | `REPOSITORY_LOCAL_TESTED; LIVE_NOT_RUN` | EntryPoint HTTP redirect targets literal external `:443`; internal `:8443` is never a public redirect authority. External `Location` and redirect-follow behavior still require owner proof. |
-| Dynamic-source identity | `REPOSITORY_LOCAL_TESTED; LIVE_NOT_RUN` | Before any router render/mutation/recovery/dark assertion, exactly one absolute canonical live bind source for `/etc/traefik/dynamic` must equal the helper release's canonical directory. Relative, stale-release, missing, symlink, and mismatch paths stop with `STOP_LIVE_DYNAMIC_RELEASE_MISMATCH`. The repository does not correct or prove the live mount. |
-| Host-network second layer | `OWNER_OBSERVED_INPUT; MUTATION_NOT_RUN` | Empty `DOCKER-USER`, inactive UFW, and Docker-proxy bypass are owner observations that must be freshly re-read. The planned port-443 rule cannot distinguish Host/SNI and is accepted only while this Traefik serves exactly one hostname; a second hostname requires stop/redesign. |
-| Authority boundary | `THIS_REPOSITORY_TURN_NO_ROUTE_OR_HOST_MUTATION` | The owner-supplied completed host operation is recorded, but this repository turn performs no deploy, container replacement, mounted-directory write, router activation, DNS/allowlist/firewall mutation, consumer change, or customer traffic. The public route remains disabled. |
+| External redirect and ACME HTTP-01 | `OWNER_REPORTED_LIVE_PASS_FOR_ISSUANCE` | EntryPoint HTTP redirect targets literal external `:443`; internal `:8443` is never a public redirect authority. A supplied external redirect-following observation terminated on public 443, while production HTTP-01 reported `Validations succeeded; requesting certificates` and issued the certificate with the global redirect enabled. This proves challenge/redirect compatibility for issuance, not the separate forced-renewal rehearsal. |
+| Dynamic-source identity | `REPOSITORY_LOCAL_TESTED; LIVE_NOT_INDEPENDENTLY_REPEATED` | Before any router render/mutation/recovery/dark assertion, exactly one absolute canonical live bind source for `/etc/traefik/dynamic` must equal the helper release's canonical directory. Relative, stale-release, missing, symlink, and mismatch paths stop with `STOP_LIVE_DYNAMIC_RELEASE_MISMATCH`. The documentation-only task does not independently repeat the live mount proof. |
+| Denial-layer separation | `OWNER_REPORTED_EXTERNAL_403; APPLICATION_401_ENVELOPE_PRESERVED` | The unlisted external response was exact HTTP 403 with `Content-Length: 9`, body `Forbidden`, and no `Content-Type`; consumers intentionally classify it as an edge/source rejection. A recognized source with a wrong key reaches the backend and receives HTTP 401 with the API envelope. Network rejection must not imitate that application envelope. |
+| Host-network second layer | `NOT_PROVEN_BY_EXTERNAL_403` | The observed external HTTP 403 proves a Traefik/edge rejection, not the separately documented `DOCKER-USER` TCP-reset rule, identity, or counters. A destination-port rule still cannot distinguish Host/SNI and is accepted only while this Traefik serves exactly one hostname; a second hostname requires stop/redesign. |
+| Authority boundary | `THIS_REPOSITORY_TURN_DOCUMENTATION_ONLY_NO_LIVE_MUTATION` | The owner-supplied completed host operation is recorded, but this repository turn performs no deploy, container replacement, mounted-directory write, router activation, DNS/allowlist/firewall mutation, consumer change, or customer traffic. It does not independently repeat the live record; public router rollback, forced renewal, monitoring, and customer readiness remain separate. |
 
 See
-[`evidence/hostinger-traefik-deploy-preparation.md`](evidence/hostinger-traefik-deploy-preparation.md).
+[`evidence/hostinger-leadpilot-route-activation.md`](evidence/hostinger-leadpilot-route-activation.md).
 
 ## Historical J2 bounds, catalogue, private-route, and calibration control delta
 
@@ -169,23 +172,23 @@ and the partial J1C corrective record in
 and the historical J0 record in
 [`evidence/j0-w2-w3-response-auth-contract.md`](evidence/j0-w2-w3-response-auth-contract.md).
 
-## I12 Wave 3 Hostinger capacity and ingress control delta
+## Historical I12 Wave 3 Hostinger capacity and ingress control delta
 
-Current classification:
+Checkpoint classification:
 `I12_API_F710_DARK_N1_VERIFIED;
 OPERATOR_MAIN_7C8AEE_RESIDUAL_RECONCILIATION_COMPLETE;
 CORRECTED_TRAEFIK_DARK_CUTOVER_VERIFIED; PUBLIC_ROUTE_DISABLED`.
 Protected operator main `7c8aee0728fc8462c67b4c6d85636bffb7afcdf8`
-passed Source `32804297840` and Image `32804297658`. The distinct deployed API
-image source remains protected-main checkpoint
+passed Source `32804297840` and Image `32804297658`. At that checkpoint, the
+distinct deployed API image source was protected-main checkpoint
 `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`; its exact signed digest
 `sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`
-remains healthy and dark-running on the authorized VPS at retained concurrency
-one. Operator commits `7a490c150bb8c4c1ec6c22561421202152070fbc` and
-`1fe89d7508f5bbd59a75256ec43722f3f19ae1c2` remain separate source
-identities and did not relabel or rebuild the API image.
+was healthy and dark-running on the authorized VPS at retained concurrency one.
+Operator commits `7a490c150bb8c4c1ec6c22561421202152070fbc` and
+`1fe89d7508f5bbd59a75256ec43722f3f19ae1c2` were separate source identities
+and did not relabel or rebuild the API image.
 
-| Control | Current classification | Boundary |
+| Control | Checkpoint classification | Boundary |
 | --- | --- | --- |
 | Concurrency policy | `IMPLEMENTED_HOST_VERIFIED_AT_N1` | Default remains one; only canonical decimal 1..3 is accepted. Startup rejects invalid explicit values. Retained host value is one; broader arbitrary-workload capacity is not claimed. |
 | Native-runtime quarantine | `IMPLEMENTED_AND_HOSTED_TESTED` | Admission closes synchronously, queued/new work receives shutdown, active work retains ownership until settlement, and the subscriber is released exactly once after drain. |
@@ -194,11 +197,11 @@ identities and did not relabel or rebuild the API image.
 | Capacity evidence | `HOST_VERIFIED_SYNTHETIC_N1` | Bounded authenticated queue/artifact evidence and exact cleanup passed at retained N=1. Tiny synthetic mechanics do not establish arbitrary-model safety. |
 | Producer credential handoff | `HOST_VERIFIED_SYNTHETIC` | A root-started helper opens exactly four canonical root:root 0600 single-link files, drops privilege, and directly execs absolute Python with four environment entries. Secret values remain outside argv and evidence. |
 | Synthetic artifact cleanup | `HOST_VERIFIED_SYNTHETIC` | Producer and manifest are dynamic-service-owned; API is cleanly stopped. The exact-image non-root/network-none helper can delete only fully correlated regular artifact/marker pairs. |
-| Traefik control plane | `HOST_VERIFIED_DARK_CUTOVER` | The corrected socketless/file-provider-only proxy is running and healthy. Exact ingress/private `GwPriority=1/0`, an ingress-owned IPv4 default route, no container IPv6 default route, no Docker socket/provider, and retained-old rollback were proved. |
+| Traefik control plane | `HOST_VERIFIED_DARK_CUTOVER` | At that checkpoint, the corrected socketless/file-provider-only proxy was running and healthy. Exact ingress/private `GwPriority=1/0`, an ingress-owned IPv4 default route, no container IPv6 default route, no Docker socket/provider, and retained-old rollback were proved. |
 | Read-only proxy config bind | `HOST_VERIFIED_EFFECTIVE_READ_ONLY` | Exact source/destination plus `RW=false` proves effective read-only. Docker may report empty `Mode`; literal `Mode=ro` is not required. Missing, duplicate, wrong-path, or `RW=true` binds fail closed. |
-| Residual reconciliation | `COMPLETE_IDENTITY_BOUND; OLD_PROXY_RETAINED_STOPPED` | The prior failed residual set was identity-bound reconciled; the corrected resumable cutover then established the current candidate/network identities. The old proxy and root-private recovery evidence remain intentionally retained for rollback; task-owned helpers/uploads/temp paths are absent and no prune occurred. |
-| Public ingress | `LISTENERS_ACTIVE; SLICER_ROUTE_DISABLED_PENDING_EXTERNAL_PROOF` | Docker owns exactly one IPv4 and one IPv6 host listener for each of 80/443 while the container networks remain IPv6-disabled. The dynamic route directory is still the exact dark sentinel; no slicer route may activate without hostname/DNS, intended caller, proxy CIDR, firewall, certificate continuity and authenticated synthetic route evidence. |
-| Host runtime | `DARK_F710_N1_VERIFIED` | Exact signed digest, 999:999, internal-only bridge, no API default route, denied API/native egress, health/readiness and Prusa/Orca synthetic slices passed. |
+| Residual reconciliation | `COMPLETE_IDENTITY_BOUND; OLD_PROXY_RETAINED_STOPPED` | The prior failed residual set was identity-bound reconciled; the corrected resumable cutover then established the checkpoint candidate/network identities. The old proxy and root-private recovery evidence were intentionally retained for rollback; task-owned helpers/uploads/temp paths were absent and no prune occurred. |
+| Public ingress | `LISTENERS_ACTIVE; SLICER_ROUTE_DISABLED_PENDING_EXTERNAL_PROOF` | At that checkpoint, Docker owned exactly one IPv4 and one IPv6 host listener for each of 80/443 while the container networks remained IPv6-disabled. The dynamic route directory was the exact dark sentinel; no slicer route was activated by that checkpoint. |
+| Host runtime | `DARK_F710_N1_VERIFIED` | At that checkpoint, the exact signed digest, 999:999, internal-only bridge, no API default route, denied API/native egress, health/readiness, and Prusa/Orca synthetic slices passed. |
 
 The capacity cleanup sequence is intentionally stop-the-world for synthetic
 evidence deletion: runner/postflight observation, graceful API stop, exact
@@ -206,12 +209,13 @@ exited/exit-zero/non-OOM proof, non-root exact-image cleanup, absence proof,
 same-digest restart and two repeated dark gates. Cleanup success cannot convert
 a failed capacity run into a pass.
 
-The corrected Traefik candidate is running and healthy; the former dedicated
-proxy is retained stopped. The slicer route remains absent, unknown HTTPS hosts
-return 404 over both listener families, and ACME bytes are unchanged. Final
-read-only audit `i12-final-live-audit-v1` passed 30/30 checks. This is a
-successful dark cutover and identity-bound residual reconciliation, not public
-route activation or full customer-production qualification.
+At that checkpoint, the corrected Traefik candidate was running and healthy and
+the former dedicated proxy was retained stopped. The slicer route was absent,
+unknown HTTPS hosts returned 404 over both listener families, and ACME bytes
+were unchanged. Final
+read-only audit `i12-final-live-audit-v1` passed 30/30 checks. This was a
+historical successful dark cutover and identity-bound residual reconciliation,
+not public route activation or full customer-production qualification.
 
 Secrets stay in root-owned external files and are never emitted. The SSH key,
 API keys, ACME content and full container environment/inspect/logs are outside
@@ -295,7 +299,7 @@ classification is intentionally limited to the ephemeral runner boundary.
 | Meaningful readiness | `HOSTED_VERIFIED_EPHEMERAL` | Two consecutive private-peer passes proved liveness, minimal and operations readiness, fresh detailed Python/storage/native/config/pricing/retention/queue health, idle queue, and exact auth rejection. |
 | Controlled failure and rollback | `HOSTED_VERIFIED_EPHEMERAL` | Candidate pricing state changed `0700 -> 0500 -> 0700`; liveness survived, readiness failed only with `STORAGE_UNSAFE`, and automatic rollback restored the exact previous digest under a new container/PID. |
 | Evidence and cleanup | `HOSTED_VERIFIED_EPHEMERAL` | Exact-key bounded JSON, allowlisted upload, run-owned state/image/container/network cleanup, no prune, remote immutable digests preserved, and final fail-closed aggregation all passed. |
-| Production topology/promotion | `UNVERIFIED_NOT_AUTHORIZED` | At the I9 boundary no VPS or deployed topology proof existed. I12 now separately verifies one exact dark digest, private peer, egress denial, readiness and socketless proxy; public caller/firewall/DNS/certificate, complete secret lifecycle, approval window, route activation and live public rollback remain unverified. |
+| Production topology/promotion | `UNVERIFIED_NOT_AUTHORIZED` | At the I9 boundary no VPS or deployed topology proof existed. Historical I12 evidence later verified one exact dark digest, private peer, egress denial, readiness, and socketless proxy. The current owner-supplied record reports exact `router_activation=PASS phase=leadpilot-only entries=1`, certificate issuance, approved-source HTTP 200, external unlisted-source HTTP 403, and redirect-follow completion on public 443. Exact firewall identity/counters, forced renewal, public router rollback, monitoring/recovery acceptance, and customer readiness remain unverified. |
 
 The rehearsal uses only synthetic geometry and freshly generated inert,
 audience-scoped credentials. Credentials and environment dumps are excluded
@@ -790,14 +794,14 @@ delta above when reading test classifications.
 
 | Risk | Severity | Current evidence | Required exit / owner |
 | --- | --- | --- | --- |
-| Native Python/slicer compromise can use unintended egress if deployment drifts. | Critical | I12 verifies API/native DNS/TCP/UDP denial for the exact dark deployed digest and private topology. This remains a point-in-time proof; firewall or network drift can invalidate it. | **Public-activation gate:** re-prove the exact digest, topology, denied egress and intended/denied callers after any network/firewall change. |
-| Scoped service trust is repository-tested and the dark private topology is host-verified, but public controls are incomplete. | Critical | I5 tests active/previous audiences, two-restart revocation, finite legacy migration, Origin policy, proxy identity, readiness, and observability. I12 verifies the exact dark private peer, auth rejection, digest and API/native egress; public caller/proxy CIDR, firewall, DNS/certificate and complete production secret lifecycle remain `UNVERIFIED`. | **Public route + secret lifecycle gate:** prove the intended public caller, denied unintended caller, firewall, hostname/certificate, secret ownership/mode/state and exact digest before route activation. An agent cannot grant an exception. |
+| Native Python/slicer compromise can use unintended egress if deployment drifts. | Critical | Historical I12 evidence verifies API/native DNS/TCP/UDP denial for the exact dark deployed digest and private topology. This remains a point-in-time proof; firewall or network drift can invalidate it. | **Change gate:** re-prove the exact digest, topology, and denied egress after any image/network/firewall change. The later route activation does not refresh this proof. |
+| Scoped service trust is repository-tested and the private topology is host-verified, but residual public controls remain incomplete. | Critical | I5 tests active/previous audiences, two-restart revocation, finite legacy migration, Origin policy, proxy identity, readiness, and observability. Historical I12 verifies the private peer, auth rejection, digest, and API/native egress. The later owner record reports route activation, certificate issuance, approved-source HTTP 200, unlisted-source HTTP 403, and redirect-follow completion on public 443. | **Residual live gate:** exact firewall identity/counters, forced renewal, public router rollback, complete secret lifecycle, monitoring/recovery acceptance, and customer readiness remain open. An agent cannot grant an exception. |
 | Multipart/HTTP ingress can exhaust resources beyond the application subset. | High | S1a covers bounded multipart fields and cleanup. I3 applies bounded Node header/request/keep-alive timeouts, headers, connections, and requests/socket with fallback. Actual VPS capacity/proxy timeouts, total streamed upload duration, and measured memory/disk/CPU envelopes remain unverified. | **S2:** measure and enforce host/proxy upload duration, connection/concurrency, memory, CPU, and disk envelopes under synthetic load. |
-| Verified repository and dark-host evidence is not public production acceptance. | Critical | I11 completed automatic no-deploy rehearsal at run `32669484893`. I12 verifies one exact dark API digest and corrected proxy topology, but does not verify public DNS/certificate/caller/firewall, customer traffic, full secret lifecycle, monitoring/backup acceptance or a public change window. | **Public activation gate:** separately authorize and prove every remaining public control, authenticated hostname route and rollback before customer traffic. |
+| Owner-supplied route activation is not full production acceptance. | Critical | I11 completed automatic no-deploy rehearsal at run `32669484893`, and historical I12 verifies one exact dark API digest and corrected proxy topology. The later owner record adds the live LeadPilot-only route, issued certificate, approved-source HTTP 200, unlisted-source HTTP 403, and redirect-follow completion on public 443. | **Residual acceptance gate:** exact firewall identity/counters, forced renewal, public router rollback, complete secret lifecycle, monitoring/backup/recovery acceptance, and customer readiness remain open. |
 | The single allowlisted address trusts a shared machine and can be silently reassigned. | Critical | The repository now structurally permits only one `/32` and keeps service authentication mandatory, but cannot restrict which process on that machine originates traffic or detect provider reassignment. | **Address-lifecycle gate:** consumer announces migration in advance; owner verifies ownership and rebinds the live router and host-firewall identities before use. Never widen to the shared provider prefix. |
 | A stale release mount can make an apparently successful router write inert. | Critical | The helper now requires the running `/etc/traefik/dynamic` source to be one absolute canonical path equal to its own release directory and stops on mismatch. The current VPS source and any correction are not repository-verified. | **Live mount gate:** inspect exactly one read-only bind, pass its absolute source to `--check-live-dynamic-source`, and repeat immediately before every route action and terminal-dark assertion. |
 | A port-wide `DOCKER-USER` rule can silently block a later hostname. | High | Owner inputs say UFW is inactive and `DOCKER-USER` is empty; Docker-published traffic can bypass UFW. A 443 rule cannot distinguish HTTP Host or TLS SNI. | **Single-host gate:** re-read the host firewall before mutation and use the rule only while Traefik serves exactly one hostname. A second hostname requires stop/redesign. |
-| An allowlist block can be misdiagnosed as a bad application key. | High | The current repository contract separates router HTTP 403 and host-firewall TCP reset/private `J2_ALLOWLIST_DENY` from application HTTP 401. Route mutation also requires one whole-rehearsal lock, protected ancestors, exact live-source identity, and strict terminal-dark assertion. Live firewall/router behavior and real crash/power-loss durability are not observed. | **External rehearsal gate:** prove denied and permitted sources from outside, correlate the private deny event, verify target-filesystem durability, and preserve terminal dark rollback. |
+| An allowlist block can be misdiagnosed as a bad application key. | High | The current repository contract separates router HTTP 403 and host-firewall TCP reset/private `J2_ALLOWLIST_DENY` from application HTTP 401. The owner-supplied live record confirms approved-source HTTP 200 and exact unlisted-source HTTP 403 with `Content-Length: 9`, body `Forbidden`, and no `Content-Type`. It does not observe the separate firewall identity/counters or TCP-reset path. | **Residual rehearsal gate:** prove the firewall path, public router rollback, target-filesystem durability, and real crash/power-loss recovery without collapsing edge 403 into the application 401 envelope. |
 
 ## Historical S0 control inventory
 
