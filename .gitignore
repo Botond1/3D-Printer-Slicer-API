@@ -45,3 +45,7 @@ configs/pricing-state/*
 # Hostinger operator runtime-private router state
 /ops/hostinger/.runtime-private/
 /ops/hostinger/dynamic/slicer-api.yml
+
+# Local operator and research notes. These carry host addresses, key paths and
+# partner infrastructure details; this repository is public.
+/docs/research/
