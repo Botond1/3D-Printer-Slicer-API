@@ -17,6 +17,48 @@ Canonical Codex knowledge:
 - `docs/codex/security-model.md` - threats, controls, and accepted risks.
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
+## Current Hostinger dark deployment and Traefik activation preparation
+
+Current classification:
+`SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED;
+AUTOMATIC_EPHEMERAL_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY;
+OWNER_REPORTED_BF5E712_DARK_API_DEPLOYMENT_COMPLETE;
+OWNER_REPORTED_APPLICATION_ROLLBACK_ROUND_TRIP_COMPLETE;
+PUBLIC_ROUTE_DISABLED`.
+
+Exact protected-main source
+`bf5e712071e3174a67fdb22ff3794003fa3ab32b` was published once by successful
+Candidate Publication run `33449382579`. Its signed immutable subject is
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:153987840361d60c365da7b105769bb112de807db39a737548b725ea857918ca`.
+The registry round trip, SLSA/SPDX verification, negative subject/repository
+probes, and bounded cleanup passed. That publication run performed no deploy.
+
+On 2026-09-01 the owner separately reported that this exact digest is running
+from a later operator release tree with the intentional J2/J3/J3B mounted
+configs, the unchanged security envelope, and no published API port. The final
+candidate returned `/health` and `/ready` 200, exposed all four P1S/H2D-QUOTE
+catalogue entries with their inclusive values alongside the declared values,
+rejected Orca `254.0` with schema-2
+`MODEL_OUT_OF_PRINTER_BOUNDS`, and sliced Orca `253.9` successfully. The owner
+also switched to the retained previous release and back; each became healthy
+within 15 seconds, the recovery set and pricing-state snapshot remained intact,
+and the public route remained dark.
+
+Automatic no-deploy rehearsal `33450012850` separately failed closed at
+rehearsal-input materialization: the fixed previous source is an ancestor and
+production Compose is unchanged, but `configs/` changed. Therefore publication
+is verified while automatic staging/rollback rehearsal for this candidate is
+still failed closed. The runbook accepts the separate owner-host round trip as
+candidate-specific application rollback evidence only; it does not turn that
+CI run green or prove the public route rehearsal. The local operator correction
+narrows the router to one canonical `/32`,
+direct-peer Traefik v3 `ipAllowList`, external redirect `:443`, exact live
+dynamic-bind/operator-release equality, and the accepted shared-machine,
+address-reassignment, and single-host `DOCKER-USER` risks. This repository turn
+performs no VPS, container, router, DNS, firewall, mounted-directory, or
+consumer mutation. See
+`docs/codex/evidence/hostinger-traefik-deploy-preparation.md`.
+
 ## Current J3B native-envelope and original-dimension corrective candidate
 
 J3's production-identical owner matrix passed on exact tree `58c0ccb`, including
@@ -91,11 +133,10 @@ layer-height profiles. The catalogue exposes 18 managed profile rows plus six
 engine-scoped resolution rows; the profile rows keep declared and inclusive
 largest-passing values separate.
 
-Customer exposure is zero. The owner chose one merge and one deploy for
-J2+J3+J3B after verification. One branch push, one PR into `main`, and that PR's
-merge are now authorized but are not yet claimed complete. Deploy, registry
-publication/image promotion, route/DNS/allowlist mutation, production-container
-changes, and consumer-repository work remain unauthorized. See
+Customer exposure is zero. J2+J3+J3B merged as protected main `bf5e712`; the
+later owner-reported dark API deployment is recorded in the Hostinger section
+above. Route/DNS/allowlist mutation and consumer-repository work remain
+unauthorized. See
 `docs/codex/evidence/j3b-native-envelope-and-original-dimensions.md`.
 
 ## Historical J3 orientation-visibility checkpoint
@@ -150,12 +191,20 @@ declared and largest-passing fields, and per-engine machine/fleet resolution.
 The generic SLA fallback is never a machine; Elegoo values remain owner-profile
 future work.
 
-The dark route contract accepts one through four unique `/32` callers, with
-LeadPilot alone in phase one. Network denial is distinct from backend HTTP 401.
-All route actions require one inherited root-private rehearsal lock and stable
-root-owned protected ancestors; terminal acceptance requires strict dark
-assertion. J2 did not mutate the live route because the exact J0-capable deploy,
-private inputs, and external allowlist/TLS/rollback observations are absent.
+The current dark route contract accepts exactly one canonical IPv4 `/32` in its
+sole `leadpilot-only` phase. A second address, broader prefix (especially the
+provider-shared `/24`), `ipStrategy`, or forwarded-header identity fails closed;
+Traefik evaluates the direct TCP peer. Network denial remains distinct from
+backend HTTP 401. The allowlist trusts every process on the approved shared
+machine and silently loses that identity if its unreserved address is
+reassigned, so the consumer must report rebuilds or migrations before they
+happen. All route actions require one inherited root-private rehearsal lock,
+stable root-owned protected ancestors, and exact equality between the running
+Traefik dynamic-bind source and the executing operator pack. The HTTP redirect
+targets external `:443`, never internal `:8443`. The planned `DOCKER-USER`
+second layer is valid only while Traefik serves this single hostname. Terminal
+acceptance requires strict dark assertion. Repository preparation does not
+mutate the live route or prove the VPS firewall, mount, redirect, or allowlist.
 
 Calibration records nine numeric Bambu references plus the `M03` boundary. Its
 Orca runner enforces `--orient 0`, support off before digest/native work, and

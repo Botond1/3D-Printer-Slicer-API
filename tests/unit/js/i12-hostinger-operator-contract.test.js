@@ -167,7 +167,11 @@ test('committed Hostinger pack satisfies the bounded operator contract', () => {
     assert.equal((sources.compose.match(/^      - --/gm) || []).length, TRAEFIK_COMMANDS.length);
     assert.doesNotMatch(sources.compose, /providers\.docker|docker\.sock/);
     assert.match(sources.compose, /--providers\.file=true/);
-    assert.match(sources.compose, /--entryPoints\.web\.http\.redirections\.entryPoint\.to=websecure/);
+    assert.match(sources.compose, /--entryPoints\.web\.http\.redirections\.entryPoint\.to=:443/);
+    assert.doesNotMatch(
+        sources.compose,
+        /--entryPoints\.web\.http\.redirections\.entryPoint\.to=(?:websecure|:8443)/
+    );
     assert.match(sources.compose, /--certificatesResolvers\.letsencrypt\.acme\.storage=\/letsencrypt\/acme\.json/);
     assert.equal(sources.compose.split('\n').filter((line) => line === TRAEFIK_HEALTHCHECK).length, 1);
     assert.equal(sources.compose.split(TRAEFIK_SERVICE_NETWORKS_BLOCK).length - 1, 1);
@@ -195,6 +199,15 @@ test('committed Hostinger pack satisfies the bounded operator contract', () => {
     assert.match(sources.runbook, /actual default\nroute uses `traefik-ingress`/);
     assert.match(sources.runbook, /effective `RW=false`/);
     assert.match(sources.runbook, /`Mode=""` or `Mode="ro"`/);
+    assert.match(sources.runbook, /exactly one unique IPv4 `\/32` line/);
+    assert.match(sources.runbook, /Only phase `leadpilot-only` exists/);
+    assert.match(sources.runbook, /machine-level perimeter control/);
+    assert.match(sources.runbook, /no verified provider reservation/);
+    assert.match(sources.runbook, /consumer must notify the owner before any rebuild or migration/);
+    assert.match(sources.runbook, /--check-live-dynamic-source "\$live_dynamic_source"/);
+    assert.match(sources.runbook, /STOP_LIVE_DYNAMIC_RELEASE_MISMATCH/);
+    assert.match(sources.runbook, /Published Docker ports can bypass UFW/);
+    assert.match(sources.runbook, /second hostname is therefore a\nstop/);
     assert.match(sources.runbook, /API-image source commit[\s\S]+operator-pack source commit/);
     assert.equal(fs.existsSync(path.join(PACK_ROOT, 'traefik.yml')), false);
 });
@@ -205,6 +218,9 @@ test('router is inert by default and uses only the exact private backend', () =>
     assert.equal((sources.routerTemplate.match(new RegExp(BACKEND_URL, 'g')) || []).length, 1);
     assert.match(sources.routerTemplate, new RegExp(`Host\\(\\\`${DISABLED_HOST}\\\`\\)`));
     assert.match(sources.routerTemplate, /certResolver: letsencrypt/);
+    assert.equal((sources.routerTemplate.match(/ipAllowList:/g) || []).length, 1);
+    assert.match(sources.routerTemplate, /sourceRange:\n          - "__J2_SOURCE_RANGE__"/);
+    assert.doesNotMatch(sources.routerTemplate, /ipWhiteList|ipStrategy|forwardedHeaders/);
     assert.deepEqual(fs.readdirSync(path.join(PACK_ROOT, 'dynamic')), ['.gitkeep']);
     assert.ok(!path.resolve(PACK_ROOT, 'templates', 'slicer-api-router.yml.disabled')
         .startsWith(`${path.resolve(PACK_ROOT, 'dynamic')}${path.sep}`));

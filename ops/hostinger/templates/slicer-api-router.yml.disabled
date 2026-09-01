@@ -1,6 +1,6 @@
 # The committed .disabled template is outside the mounted dynamic directory.
 # Render only through scripts/i12-hostinger-operator-contract.js. It replaces
-# the exact .invalid hostname and __J2_SOURCE_RANGES__ placeholder from private
+# the exact .invalid hostname and __J2_SOURCE_RANGE__ placeholder from private
 # inputs.
 http:
   routers:
@@ -17,7 +17,7 @@ http:
     slicer-api-source-allowlist:
       ipAllowList:
         sourceRange:
-          __J2_SOURCE_RANGES__
+          - "__J2_SOURCE_RANGE__"
   services:
     slicer-api:
       loadBalancer:

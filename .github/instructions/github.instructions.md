@@ -63,17 +63,26 @@ Last synchronized: 2026-08-26
   evidence and exact cleanup with read permissions only. The exact I11 hosted
   result is the successful run above.
 - Candidate publication is no-deploy. Hosted S4/S5/I9 evidence remains
-  ephemeral repository proof. I12 separately verifies one exact dark N=1 API
-  digest and corrected proxy topology on the authorized VPS; public caller,
-  firewall, DNS/certificate/route, secret lifecycle, live rollback and full
-  production acceptance remain unverified and separately authorized.
-- Protected main `0dedbe1e9e4c32a0373982a45bf788cdcdb4f024` passed the
-  read-only/no-deploy Source and Image workflows, but no Candidate Publication
-  or deployment exists for that J0/J1C state. Therefore J2's external route
-  rehearsal remains `BLOCKED / NOT RUN` and J2 performs no route mutation. The
-  latest prior I12 evidence was dark, but current live state was not re-read;
-  no repository result may claim the allowed/denied caller matrix, TLS renewal,
-  rollback, or final-dark state complete.
+  ephemeral repository proof. I12 separately verifies one historical exact
+  dark N=1 API digest and corrected proxy topology on the authorized VPS.
+- Protected main `bf5e712071e3174a67fdb22ff3794003fa3ab32b` passed the
+  read-only/no-deploy Source and Image workflows and Candidate Publication run
+  `33449382579`. The owner separately reports that exact signed digest deployed
+  dark with the later J2/J3/J3B operator pack: `/health` and `/ready` returned
+  200, all four catalogue entries exposed their inclusive values alongside the
+  declared values, the Orca 254.0 mm
+  negative returned schema-2 `MODEL_OUT_OF_PRINTER_BOUNDS`, and the 253.9 mm
+  boundary completed a real slice. The owner also reports an actual-host
+  candidate-to-previous-to-candidate application rollback with each target
+  healthy within 15 seconds and the recovery set retained.
+- Automatic no-deploy rehearsal run `33450012850` remains correctly failed
+  closed with `source_compatibility_verification_failure` for the intentional
+  `configs/` change. The owner-host round trip is accepted only as the runbook's
+  dark-route application rollback substitute; it does not make CI green or
+  prove source compatibility. J2's external route rehearsal remains
+  `BLOCKED / NOT RUN`: public caller, firewall, DNS/certificate/route, live
+  allowed/denied matrix, router rollback, final-dark readback, customer traffic,
+  and full production acceptance remain unverified and separately authorized.
 
 ## Required Sync Targets
 When changing rules here, synchronize:

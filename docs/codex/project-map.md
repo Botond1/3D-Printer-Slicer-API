@@ -227,6 +227,76 @@ for the schema and evidence boundary. J1/J2 orientation statements retained
 below describe their historical checkpoints; the J3B section above is the
 current candidate contract.
 
+## Current Hostinger dark deployment and Traefik activation preparation
+
+Current classification:
+`SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED;
+AUTOMATIC_EPHEMERAL_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY;
+OWNER_REPORTED_BF5E712_DARK_API_DEPLOYMENT_COMPLETE;
+OWNER_REPORTED_APPLICATION_ROLLBACK_ROUND_TRIP_COMPLETE;
+PUBLIC_ROUTE_DISABLED`.
+
+Exact protected-main source
+`bf5e712071e3174a67fdb22ff3794003fa3ab32b` was published once through
+successful Candidate Publication run `33449382579`. The signed immutable
+subject is
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:153987840361d60c365da7b105769bb112de807db39a737548b725ea857918ca`.
+Registry readback, SLSA/SPDX verification, negative subject/repository probes,
+and bounded cleanup passed. This was publication only; the evidence explicitly
+records no deployed digest.
+
+The owner later reported a separate 2026-09-01 host operation: the exact signed
+digest above runs from a later operator release tree with the intentional
+J2/J3/J3B mounted configs, unchanged security envelope, and no API host port.
+The final candidate returned `/health` and `/ready` 200; all four P1S/H2D-QUOTE
+catalogue entries exposed their inclusive values alongside the declared values;
+it rejected Orca `254.0` with schema-2 bounds,
+and completed a real Orca `253.9` slice. A candidate-to-previous-to-candidate
+round trip made each selected release healthy within 15 seconds; the previous
+image/release/operator environment, pricing-state snapshot, and route-dark
+state were retained. These are owner-supplied host observations, not actions
+performed by this repository turn.
+
+The automatic no-deploy rehearsal run `33450012850` separately failed closed
+at input materialization. Its previous policy source is an ancestor and the
+production Compose file is unchanged, but `configs/` changed between that I8
+source and the new candidate, so the policy emitted
+`source_compatibility_verification_failure` before registry or runtime work.
+The publication remains verified; automatic staging/rollback rehearsal for the
+new candidate remains failed closed. Under the hardened runbook, the separate
+host round trip closes only the candidate-specific application rollback
+question; it does not reclassify the CI run or complete the public-route
+rehearsal.
+
+The corrective operator path is now:
+
+```text
+one owner-supplied canonical IPv4 /32
+  -> singular template placeholder + Traefik v3 router ipAllowList
+  -> direct TCP peer only; no ipStrategy or forwarded-header identity
+  -> HTTP redirect target literal external :443, never internal :8443
+running Traefik /etc/traefik/dynamic bind source
+  -> exactly one absolute canonical bind path
+  -> must equal this helper release's canonical ops/hostinger/dynamic
+  -> mismatch/missing/symlink/relative path: STOP_LIVE_DYNAMIC_RELEASE_MISMATCH
+owner-observed empty DOCKER-USER + inactive UFW
+  -> re-read before mutation; repository does not prove current host state
+  -> port-443 second layer is valid only while Traefik serves one hostname
+```
+
+The allowlist is explicitly machine-level trust for a shared host. Address
+reassignment is fail-open for a future holder and fail-closed for the intended
+caller without any configuration change; no repository control detects it.
+The consumer must announce migration in advance and the owner must rebind both
+live network layers before use. No real caller address is committed.
+
+This repository turn performs no deploy, container replacement, mounted-
+directory write, router activation, DNS/allowlist/firewall mutation, consumer
+change, or customer traffic. The public live mount equality, redirect,
+middleware, firewall, TLS, external caller behavior, and route rollback matrix
+remain `NOT VERIFIED`. See
+[`evidence/hostinger-traefik-deploy-preparation.md`](evidence/hostinger-traefik-deploy-preparation.md).
+
 ## Historical J2 bounds, catalogue, network, and calibration candidate
 
 Current classification:

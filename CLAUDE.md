@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Operating Guide
 
-Last synchronized: 2026-08-31
+Last synchronized: 2026-09-01
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -164,22 +164,37 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   bed, quoting only. Measurement A established and exact local final-admission B
   confirmed Prusa `350 x 320 x 324.9 mm` and Orca
   `347.9 x 317.9 x 324.9 mm`.
-- The J2 Hostinger preparation reads one through four unique private IPv4 `/32`
-  rows. Initial phase `leadpilot-only` requires exactly one row; expansion to
-  other callers is separately authorized. A host-firewall TCP reset and fixed
+- The Hostinger route preparation accepts exactly one canonical private IPv4
+  `/32` row in the sole `leadpilot-only` phase. A second row, broader prefix,
+  `ipStrategy`, or forwarded-header identity fails closed. The allowance is
+  machine-level: every process on the shared caller host inherits it, and an
+  unreserved-address reassignment silently admits the next holder unless the
+  consumer reports rebuilds or migrations in advance. A host-firewall TCP reset and fixed
   private `J2_ALLOWLIST_DENY` event, or router HTTP 403, remain distinct from
   backend HTTP 401. Every route action requires one inherited root-private FD9
   lock held across the whole rehearsal plus unchanged canonical, root-owned,
-  non-writable ancestor chains. Terminal proof uses strict
+  non-writable ancestor chains and equality between the running Traefik dynamic
+  bind source and the executing operator pack. HTTP redirects target external
+  `:443`, never internal `:8443`; the `DOCKER-USER` second layer is valid only
+  while Traefik serves one hostname. Terminal proof uses strict
   `--assert-router-dark`; only logical fsync-cutpoint recovery is locally proved,
   while real crash/power-loss durability remains external `NOT_VERIFIED`. The
   external orchestrator must prove intended/denied callers, TLS issuance/
-  renewal, and the repeated activation/rollback sequence. A completed rehearsal requires proven terminal dark; any
-  `*_rollback_uncertain` result is `STOP/UNKNOWN`. Live rehearsal is
-  `BLOCKED / NOT RUN` because no exact J0-capable main image has been
-  published/deployed and private live evidence is absent. J2 performs no route
-  mutation; the latest prior I12 dark state was
-  not re-verified. Never infer permanent activation from repository gates.
+  renewal, and the repeated public-route activation/rollback sequence. A
+  completed route rehearsal requires proven terminal dark; any
+  `*_rollback_uncertain` result is `STOP/UNKNOWN`. Exact protected-main source
+  `bf5e712071e3174a67fdb22ff3794003fa3ab32b` has a signed, attested candidate.
+  The owner reports that exact digest now runs dark with the intentional mounted
+  J2/J3/J3B configs, no API host port, final `/health` and `/ready` 200, and all
+  four catalogue entries with their inclusive values alongside the declared
+  values. Orca `254.0` was rejected with schema-2 bounds, and
+  Orca `253.9` sliced successfully. The previous and candidate releases each
+  became healthy within 15 seconds during an owner-host round trip; rollback
+  assets and pricing-state stayed intact. Automatic no-deploy run `33450012850`
+  remains failed closed on its fixed previous-policy `configs/` guard; the host
+  round trip is accepted application-rollback evidence, not a CI pass. The
+  public route remains disabled and its full external rehearsal is
+  `BLOCKED / NOT RUN`. Never infer permanent activation from repository gates.
 - Calibration now has nine numeric Bambu reference cases and the `M03`
   P1S-overheight rejection. Measurement fixes Orca `--orient 0`, disables
   support in the measurement-only runtime profile, and reuses the production

@@ -1,12 +1,17 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const test = require('node:test');
 const {
+    ALLOWLIST_PLACEHOLDER,
     DISABLED_HOST,
+    LIVE_DYNAMIC_RELEASE_MISMATCH,
+    PACK_ROOT,
     loadOperatorPack,
     validateCapacityProducerSource,
     validateComposeSource,
+    validateLiveDynamicSource,
     validateRouterSource,
     validateRunbookSource
 } = require('../../../scripts/i12-hostinger-operator-contract');
@@ -29,6 +34,36 @@ function assertRejected(validator, source, label) {
     assert.equal(typeof result, 'string', `${label} must fail closed`);
     assert.match(result, /^[a-z][a-z0-9_]*$/, `${label} must return a stable reason code`);
 }
+
+test('live dynamic source release mutations fail closed', async (t) => {
+    const expected = path.join(PACK_ROOT, 'dynamic');
+    const differentRelease = path.join(path.dirname(PACK_ROOT), 'different-release', 'dynamic');
+    const cases = [
+        ['different release', differentRelease, undefined],
+        ['relative source', path.relative(PACK_ROOT, expected), undefined],
+        ['trailing separator alias', `${expected}${path.sep}`, undefined],
+        ['dot-dot alias', `${expected}${path.sep}..${path.sep}dynamic`, undefined],
+        ['realpath mismatch', expected, {
+            lstatSync: () => ({ isDirectory: () => true, isSymbolicLink: () => false }),
+            realpathSync: () => differentRelease
+        }],
+        ['non-directory source', expected, {
+            lstatSync: () => ({ isDirectory: () => false, isSymbolicLink: () => false }),
+            realpathSync: () => expected
+        }],
+        ['symlink source', expected, {
+            lstatSync: () => ({ isDirectory: () => true, isSymbolicLink: () => true }),
+            realpathSync: () => expected
+        }]
+    ];
+    assert.equal(validateLiveDynamicSource(expected), null);
+    for (const [label, source, runtimeFs] of cases) await t.test(label, () => {
+        assert.equal(
+            validateLiveDynamicSource(source, runtimeFs),
+            LIVE_DYNAMIC_RELEASE_MISMATCH
+        );
+    });
+});
 
 test('Compose mutations cannot widen publication, privilege, mount, or network scope', async (t) => {
     const compose = SOURCES.compose;
@@ -148,6 +183,12 @@ test('CLI-only static and ACME mutations fail closed', async (t) => {
     const compose = SOURCES.compose;
     const cases = [
         ['redirect removed', replaceRequired(compose, /^      - --entryPoints\.web\.http\.redirections\.entryPoint\.to=.*\n/m, '')],
+        ['redirect reverted to internal entrypoint', replaceRequired(
+            compose, /entryPoint\.to=:443/, 'entryPoint.to=websecure'
+        )],
+        ['redirect leaked internal port', replaceRequired(
+            compose, /entryPoint\.to=:443/, 'entryPoint.to=:8443'
+        )],
         ['redirect scheme weakened', replaceRequired(compose, /entryPoint\.scheme=https/, 'entryPoint.scheme=http')],
         ['redirect permanence weakened', replaceRequired(compose, /entryPoint\.permanent=true/, 'entryPoint.permanent=false')],
         ['file provider disabled', replaceRequired(compose, /providers\.file=true/, 'providers.file=false')],
@@ -230,6 +271,43 @@ test('router mutations cannot become a generic proxy or drift from the exact API
     }
 });
 
+test('router allowlist mutations cannot widen the direct-peer single-/32 boundary', async (t) => {
+    const router = SOURCES.routerTemplate;
+    const cases = [
+        ['legacy IPWhiteList', replaceRequired(router, /ipAllowList:/, 'ipWhiteList:')],
+        ['ipStrategy depth', replaceRequired(
+            router,
+            '        sourceRange:',
+            '        ipStrategy:\n          depth: 1\n        sourceRange:'
+        )],
+        ['forwarded headers', replaceRequired(
+            router,
+            '        sourceRange:',
+            '        forwardedHeaders:\n          insecure: true\n        sourceRange:'
+        )],
+        ['X-Forwarded-For', replaceRequired(
+            router,
+            '        sourceRange:',
+            '        x-forwarded-for: true\n        sourceRange:'
+        )],
+        ['plural source ranges', replaceRequired(
+            router,
+            `          - "${ALLOWLIST_PLACEHOLDER}"`,
+            `          - "${ALLOWLIST_PLACEHOLDER}"\n          - "198.51.100.20/32"`
+        )],
+        ['shared /24', replaceRequired(
+            router, `"${ALLOWLIST_PLACEHOLDER}"`, '"192.0.2.0/24"'
+        )]
+    ];
+    for (const [label, source] of cases) await t.test(label, () => {
+        assertRejected(
+            (candidate) => validateRouterSource(candidate, DISABLED_HOST, true),
+            source,
+            label
+        );
+    });
+});
+
 test('runbook mutations cannot skip identity, hash, atomic activation, or safe rollback', async (t) => {
     const runbook = SOURCES.runbook;
     const cases = [
@@ -251,6 +329,21 @@ test('runbook mutations cannot skip identity, hash, atomic activation, or safe r
             /\[ "\$rendered_api_image" = "\$candidate_image" \] \|\| exit 1/,
             '[ -n "$rendered_api_image" ] || true'
         )],
+        ['production Compose project name omitted', replaceRequired(
+            runbook,
+            /docker compose -p slicer-api --env-file/,
+            'docker compose --env-file'
+        )],
+        ['production Compose project name changed', replaceRequired(
+            runbook,
+            /docker compose -p slicer-api --env-file/,
+            'docker compose -p release-directory --env-file'
+        )],
+        ['production Compose project label proof removed', replaceRequired(
+            runbook,
+            /\[ "\$api_compose_project" = "slicer-api" \] \|\| exit 1/,
+            '[ -n "$api_compose_project" ] || true'
+        )],
         ['root identity accepted', replaceRequired(runbook, /reject UID 0 or GID 0/, 'accept UID 0 or GID 0')],
         ['hardcoded API identity', `${runbook}\nSLICER_UID=999\n`],
         ['single qualification pass', replaceRequired(runbook, /matrix twice/, 'matrix once')],
@@ -268,6 +361,36 @@ test('runbook mutations cannot skip identity, hash, atomic activation, or safe r
             runbook,
             /API-image source commit and signed digest separately from the\nexact operator-pack source commit/,
             'repository commit'
+        )],
+        ['operator rollback substitute removed', replaceRequired(
+            runbook,
+            /operator-host rehearsal is an accepted\nsubstitute for the blocked automatic\nruntime rehearsal only/,
+            'operator-host rehearsal is informational only'
+        )],
+        ['operator rollback substitute allowed an active route', replaceRequired(
+            runbook,
+            /route is proved dark before, throughout, and after the operation/,
+            'route state is not relevant'
+        )],
+        ['operator rollback substitute reclassified CI green', replaceRequired(
+            runbook,
+            /does not turn the CI run green or weaken its source\ncompatibility guard/,
+            'turns the CI run green'
+        )],
+        ['operator rollback substitute skipped exact HEAD and Compose predicates', replaceRequired(
+            runbook,
+            /exact commits exist; the checked-out `HEAD` equals the candidate source SHA/,
+            'the current checkout is assumed compatible'
+        )],
+        ['operator rollback substitute conflated the two release digests', replaceRequired(
+            runbook,
+            /For each direction, bind that release's separately recorded exact signed image\ndigest/,
+            'For both directions, bind the exact signed image digest'
+        )],
+        ['operator rollback substitute omitted the candidate health deadline', replaceRequired(
+            runbook,
+            /Require both the previous release and the restored\ncandidate to become healthy within the same bounded deadline/,
+            'Require only the previous release to meet the bounded health deadline'
         )],
         ['file-provider-only gate removed', replaceRequired(
             runbook,
@@ -423,7 +546,7 @@ test('runbook mutations cannot skip identity, hash, atomic activation, or safe r
         )],
         ['API stop before cleanup removed', replaceRequired(
             runbook,
-            /docker compose --env-file "\$operator_values_file" -f docker-compose\.production\.yml stop --timeout 30 slicer-api/,
+            /docker compose -p slicer-api --env-file "\$operator_values_file" -f docker-compose\.production\.yml stop --timeout 30 slicer-api/,
             'skip API stop'
         )],
         ['stopped container proof weakened', replaceRequired(
@@ -433,13 +556,13 @@ test('runbook mutations cannot skip identity, hash, atomic activation, or safe r
         )],
         ['cleanup moved before API stop', runbook
             .replace(
-                'docker compose --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api',
+                'docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api',
                 'deferred API stop'
             )
             .replace(
                 'docker run --rm --pull never --network none --read-only \\\n  --user "$resolved_slicer_uid:$resolved_slicer_gid"',
                 'docker run --rm --pull never --network none --read-only \\\n'
-                    + 'docker compose --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api\n'
+                    + 'docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api\n'
                     + '  --user "$resolved_slicer_uid:$resolved_slicer_gid"'
             )],
         ['cleanup exit initialization removed', replaceRequired(

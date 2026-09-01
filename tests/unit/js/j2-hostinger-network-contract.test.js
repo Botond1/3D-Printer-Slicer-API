@@ -9,9 +9,12 @@ const { spawnSync } = require('node:child_process');
 const test = require('node:test');
 const {
     ALLOWLIST_MIDDLEWARE,
+    ALLOWLIST_PHASES,
     ALLOWLIST_PLACEHOLDER,
     ACTIVE_ROUTER_IGNORE_PATTERN,
     DISABLED_HOST,
+    LIVE_DYNAMIC_RELEASE_MISMATCH,
+    MAX_ALLOWLIST_ENTRIES,
     PACK_ROOT,
     PRIVATE_ROLLBACK_DIRECTORY,
     PRIVATE_RUNTIME_DIRECTORY,
@@ -34,6 +37,7 @@ const {
     secureRouterFileMetadata,
     sameRouterSecurityBoundary,
     validateActiveRouter,
+    validateLiveDynamicSource,
     validateRepositoryPrivateStorageContract,
     validateRouterSource,
     validateRunbookSource,
@@ -43,12 +47,7 @@ const {
 
 const ROOT = path.resolve(__dirname, '../../..');
 const LEADPILOT = '192.0.2.10/32';
-const EXPANDED = Object.freeze([
-    LEADPILOT,
-    '198.51.100.20/32',
-    '203.0.113.30/32',
-    '192.0.2.40/32'
-]);
+const SECOND_DOCUMENTATION_CIDR = '198.51.100.20/32';
 
 function fileStat(overrides = {}) {
     return {
@@ -190,7 +189,9 @@ function withPrivateRouterMetadata(fixture, filePaths, callback) {
     }
 }
 
-test('private allowlist accepts only unique canonical phase-bounded IPv4 /32 lines', () => {
+test('private allowlist accepts exactly one canonical IPv4 /32 in the only phase', () => {
+    assert.deepEqual(ALLOWLIST_PHASES, ['leadpilot-only']);
+    assert.equal(MAX_ALLOWLIST_ENTRIES, 1);
     assert.equal(canonicalIpv4Cidr(LEADPILOT), true);
     assert.equal(canonicalIpv4Cidr('192.000.2.10/32'), false);
     assert.equal(canonicalIpv4Cidr('192.0.2.10/24'), false);
@@ -199,19 +200,14 @@ test('private allowlist accepts only unique canonical phase-bounded IPv4 /32 lin
         error: null,
         cidrs: [LEADPILOT]
     });
-    assert.deepEqual(parsePrivateAllowlist(`${EXPANDED.join('\n')}\n`, 'expanded'), {
-        error: null,
-        cidrs: EXPANDED
-    });
-
     const rejected = [
         ['', 'leadpilot-only', 'j2_allowlist_file_malformed'],
         [LEADPILOT, 'leadpilot-only', 'j2_allowlist_file_malformed'],
-        [`${LEADPILOT}\n${LEADPILOT}\n`, 'expanded', 'j2_allowlist_cidr_invalid'],
-        [`${LEADPILOT}\n198.51.100.20/32\n`, 'leadpilot-only', 'j2_leadpilot_phase_count_invalid'],
-        [`${LEADPILOT}\n`, 'expanded', 'j2_expanded_phase_count_invalid'],
-        [`${EXPANDED.join('\n')}\n203.0.113.50/32\n`, 'expanded', 'j2_allowlist_cidr_invalid'],
+        [`${LEADPILOT}\n${LEADPILOT}\n`, 'leadpilot-only', 'j2_allowlist_cidr_invalid'],
+        [`${LEADPILOT}\n${SECOND_DOCUMENTATION_CIDR}\n`, 'leadpilot-only', 'j2_allowlist_cidr_invalid'],
+        [`${LEADPILOT}\n`, 'expanded', 'j2_allowlist_phase_invalid'],
         [`192.000.2.10/32\n`, 'leadpilot-only', 'j2_allowlist_cidr_invalid'],
+        [`192.0.2.0/24\n`, 'leadpilot-only', 'j2_allowlist_cidr_invalid'],
         [`${LEADPILOT}\n`, 'future', 'j2_allowlist_phase_invalid']
     ];
     for (const [source, phase, error] of rejected) {
@@ -744,15 +740,15 @@ test('rendered router binds one router-scoped IPAllowList with no forwarded-IP s
     assert.equal(validateRouterSource(template), null);
     assert.match(template, new RegExp(ALLOWLIST_PLACEHOLDER));
     const hostname = 'api.example.test';
-    const rendered = renderRouterSource(template, hostname, EXPANDED);
+    const rendered = renderRouterSource(template, hostname, [LEADPILOT]);
     assert.equal(rendered.error, null);
-    assert.equal(validateRouterSource(rendered.source, hostname, false, EXPANDED), null);
+    assert.equal(validateRouterSource(rendered.source, hostname, false, [LEADPILOT]), null);
     assert.equal(rendered.source.split(ALLOWLIST_MIDDLEWARE).length - 1, 2);
     assert.equal(rendered.source.split('ipAllowList:').length - 1, 1);
     assert.doesNotMatch(rendered.source, /ipStrategy|forwardedHeaders/);
-    for (const cidr of EXPANDED) assert.equal(rendered.source.split(`"${cidr}"`).length - 1, 1);
+    assert.equal(rendered.source.split(`"${LEADPILOT}"`).length - 1, 1);
 
-    const wrongIdentity = [LEADPILOT, '198.51.100.99/32'];
+    const wrongIdentity = [SECOND_DOCUMENTATION_CIDR];
     assert.equal(
         validateRouterSource(rendered.source, hostname, false, wrongIdentity),
         'traefik_allowlist_identity_mismatch'
@@ -784,7 +780,7 @@ test('router weakening mutations fail closed', async (t) => {
     const cases = [
         ['renderer boundary comment drifted', mutateRequired(
             template,
-            '# the exact .invalid hostname and __J2_SOURCE_RANGES__ placeholder from private',
+            '# the exact .invalid hostname and __J2_SOURCE_RANGE__ placeholder from private',
             '# replace any configuration token from private'
         )],
         ['middleware detached', mutateRequired(
@@ -792,15 +788,32 @@ test('router weakening mutations fail closed', async (t) => {
             `      middlewares:\n        - ${ALLOWLIST_MIDDLEWARE}\n`,
             ''
         )],
-        ['IPAllowList replaced', mutateRequired(template, '      ipAllowList:', '      forwardedHeaders:')],
+        ['IPAllowList replaced by legacy IPWhiteList', mutateRequired(
+            template, '      ipAllowList:', '      ipWhiteList:'
+        )],
         ['forwarded strategy added', mutateRequired(
             template,
             '        sourceRange:',
             '        ipStrategy:\n          depth: 1\n        sourceRange:'
         )],
+        ['forwarded headers added', mutateRequired(
+            template,
+            '        sourceRange:',
+            '        forwardedHeaders:\n          insecure: true\n        sourceRange:'
+        )],
+        ['X-Forwarded-For strategy added', mutateRequired(
+            template,
+            '        sourceRange:',
+            '        x-forwarded-for: true\n        sourceRange:'
+        )],
+        ['second source range added', mutateRequired(
+            template,
+            `          - "${ALLOWLIST_PLACEHOLDER}"`,
+            `          - "${ALLOWLIST_PLACEHOLDER}"\n          - "${SECOND_DOCUMENTATION_CIDR}"`
+        )],
         ['placeholder widened', mutateRequired(
             template,
-            `          ${ALLOWLIST_PLACEHOLDER}`,
+            `          - "${ALLOWLIST_PLACEHOLDER}"`,
             '          - "192.0.2.0/24"'
         )],
         ['middleware promoted to another router', mutateRequired(
@@ -812,6 +825,47 @@ test('router weakening mutations fail closed', async (t) => {
     for (const [name, source] of cases) await t.test(name, () => {
         assert.notEqual(validateRouterSource(source, DISABLED_HOST, true), null);
     });
+});
+
+test('live dynamic source guard and CLI bind only the canonical current release path', () => {
+    const expected = path.join(PACK_ROOT, 'dynamic');
+    assert.equal(validateLiveDynamicSource(expected), null);
+
+    const otherRelease = path.join(path.dirname(PACK_ROOT), 'other-release', 'dynamic');
+    const nonCanonical = `${expected}${path.sep}..${path.sep}dynamic`;
+    for (const candidate of [
+        '', path.relative(ROOT, expected), `${expected}${path.sep}`, nonCanonical, otherRelease
+    ]) {
+        assert.equal(
+            validateLiveDynamicSource(candidate),
+            LIVE_DYNAMIC_RELEASE_MISMATCH,
+            JSON.stringify(candidate)
+        );
+    }
+    assert.equal(validateLiveDynamicSource(expected, {
+        lstatSync: () => ({ isDirectory: () => true, isSymbolicLink: () => false }),
+        realpathSync: () => otherRelease
+    }), LIVE_DYNAMIC_RELEASE_MISMATCH);
+
+    const pass = spawnSync(process.execPath, [
+        'scripts/i12-hostinger-operator-contract.js', '--check-live-dynamic-source', expected
+    ], { cwd: ROOT, encoding: 'utf8', timeout: 10_000, windowsHide: true });
+    assert.equal(pass.status, 0, pass.stderr);
+    assert.equal(pass.stdout.trim(), 'live_dynamic_source_contract=PASS');
+    assert.equal(pass.stderr, '');
+
+    for (const argv of [
+        ['--check-live-dynamic-source', otherRelease],
+        ['--check-live-dynamic-source', path.relative(ROOT, expected)],
+        ['--check-live-dynamic-source']
+    ]) {
+        const reject = spawnSync(process.execPath, [
+            'scripts/i12-hostinger-operator-contract.js', ...argv
+        ], { cwd: ROOT, encoding: 'utf8', timeout: 10_000, windowsHide: true });
+        assert.equal(reject.status, 2, reject.stdout);
+        assert.equal(reject.stdout, '');
+        assert.equal(reject.stderr.trim(), LIVE_DYNAMIC_RELEASE_MISMATCH);
+    }
 });
 
 test('Docker firewall backend gate accepts iptables only and CLI stops otherwise', () => {
@@ -836,6 +890,75 @@ test('Docker firewall backend gate accepts iptables only and CLI stops otherwise
 test('runbook mutations cannot weaken DNS-only, firewall, ACME, or final-dark gates', async (t) => {
     const runbook = loadOperatorPack().runbook;
     const cases = [
+        ['single /32 contract widened', mutateRequired(
+            runbook,
+            'canonical format is exactly one unique IPv4 `/32` line',
+            'canonical format is one to four IPv4 CIDR lines'
+        )],
+        ['expanded phase reintroduced', mutateRequired(
+            runbook, 'Only phase `leadpilot-only` exists.', 'Phase `expanded` also exists.'
+        )],
+        ['/24 widening admitted', mutateRequired(
+            runbook,
+            'A second address,\nanother phase, `/24`, or any prefix other than `/32` is forbidden.',
+            'A shared provider `/24` may be admitted.'
+        )],
+        ['machine perimeter mislabeled as application identity', mutateRequired(
+            runbook,
+            'machine-level perimeter control, not an application-level',
+            'application-level identity, not a machine perimeter control'
+        )],
+        ['shared-host reachability scope removed', mutateRequired(
+            runbook,
+            'approved address belongs to a shared host that currently carries',
+            'approved address belongs only to the consumer process'
+        )],
+        ['provider reservation assumed', mutateRequired(
+            runbook,
+            'no verified provider reservation. Rebuild, migration, or',
+            'a verified permanent provider reservation. Rebuild, migration, or'
+        )],
+        ['silent reassignment detector invented', mutateRequired(
+            runbook, 'No current control detects this event. The', 'The control detects reassignment. The'
+        )],
+        ['migration notice obligation removed', mutateRequired(
+            runbook,
+            'consumer must notify the owner before any rebuild or migration',
+            'consumer need not notify the owner before rebuild or migration'
+        )],
+        ['redirect reverted to internal entrypoint name', mutateRequired(
+            runbook,
+            'entrypoint redirect target must be the literal external port `:443`',
+            'entrypoint redirect target may be the internal entrypoint `websecure`'
+        )],
+        ['redirect may leak internal 8443', mutateRequired(
+            runbook,
+            'Location authority with no explicit `:8443`',
+            'Location authority may include explicit `:8443`'
+        )],
+        ['live dynamic source equality command removed', mutateRequired(
+            runbook,
+            '--check-live-dynamic-source "$live_dynamic_source" || exit 1',
+            'skip live dynamic release equality'
+        )],
+        ['live dynamic release mismatch continued', mutateRequired(
+            runbook,
+            'STOP_LIVE_DYNAMIC_RELEASE_MISMATCH',
+            'CONTINUE_WITH_DIFFERENT_DYNAMIC_RELEASE'
+        )],
+        ['owner-observed empty DOCKER-USER state omitted', mutateRequired(
+            runbook,
+            'owner-observed starting state is an empty `DOCKER-USER` chain with inactive',
+            'starting firewall state is inferred from the repository with active'
+        )],
+        ['published ports assumed to obey UFW', mutateRequired(
+            runbook, 'Published Docker ports can bypass UFW', 'Published Docker ports always obey UFW'
+        )],
+        ['second hostname silently admitted', mutateRequired(
+            runbook,
+            'second hostname is therefore a\nstop requiring a separately designed per-host boundary',
+            'second hostname is therefore allowed by the existing destination-port rule'
+        )],
         ['Cloudflare proxy accepted', mutateRequired(
             runbook, '`proxied` field is boolean `false`', '`proxied` field may be true'
         )],

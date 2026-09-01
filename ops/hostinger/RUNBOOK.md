@@ -155,6 +155,14 @@ from a later operator-only commit. The API image must use the canonical
 in this pack as
 `traefik:v3.7.11@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144`.
 
+The API-image source SHA and operator-pack source SHA are deliberately not an
+equality pair. A later verified operator-pack checkout may supply the runbook,
+helpers, Compose source, and hash-bound host-mounted configs while the API stays
+pinned to an older signed digest. The running image may still be attributed only
+to its attested API-image source SHA. Merging the later operator pack does not
+relabel that image or by itself require a new candidate; a new publication is
+required only before claiming that the image was built from the later source.
+
 Identify the existing Traefik ACME account contact and the exact existing named
 volume that owns its `/letsencrypt/acme.json`. Set their metadata-only operator
 values as `ACME_EMAIL` and `TRAEFIK_ACME_VOLUME`. The volume must already exist;
@@ -174,10 +182,12 @@ network merely to make a probe pass.
 
 Keep the J2 caller allowlist in a separate absolute, root:root-owned, mode
 `0600`, regular, non-link, single-link private file outside the repository. Its
-canonical format is one unique IPv4 `/32` per line, one final LF, no comments
-or blank lines, and at most four entries. Phase `leadpilot-only` requires
-exactly one line. Phase `expanded` requires two through four lines and is a
-later owner-authorized change; never pre-enable a future caller. Before any
+canonical format is exactly one unique IPv4 `/32` line, one final LF, and no
+comments or blank lines. Only phase `leadpilot-only` exists. A second address,
+another phase, `/24`, or any prefix other than `/32` is forbidden. In
+particular, never widen the approved host address to its provider's shared
+`/24`; that would admit unrelated tenants rather than identify the approved
+machine. Before any
 Node helper process is spawned, the external orchestrator must validate every
 expanded path argument in root-private state and with command logging disabled:
 the allowlist and every staging or rollback source/target must have an opaque,
@@ -189,6 +199,22 @@ remove a caller-supplied raw pathname from `/proc/<pid>/cmdline`. Under this
 required pre-spawn contract, the exact addresses and rendered router remain
 private operator state and must not enter source control, command traces,
 uploaded evidence, or shared logs.
+
+This allowlist is a machine-level perimeter control, not an application-level
+identity. The approved address belongs to a shared host that currently carries
+the consumer stack, a separate development stack, a shared Traefik, and another
+project. Any process already running there, or deployed there later, can reach
+the network perimeter. The owner accepted that scope explicitly; the separate
+application API key remains mandatory.
+
+The address has no verified provider reservation. Rebuild, migration, or
+reassignment can silently admit the address's next holder while excluding the
+legitimate consumer, with no repository or configuration change. The API key
+still protects the application, but the network layer has then stopped
+identifying the intended machine. No current control detects this event. The
+consumer must notify the owner before any rebuild or migration, and the owner
+must re-verify and replace the private allowlist and firewall source before the
+new host is allowed to call the service.
 
 ### Existing proxy recovery boundary
 
@@ -248,7 +274,7 @@ case "$resolved_slicer_uid" in ''|0|0*|*[!0-9]*) exit 1 ;; esac
 case "$resolved_slicer_gid" in ''|0|0*|*[!0-9]*) exit 1 ;; esac
 export SLICER_UID="$resolved_slicer_uid" SLICER_GID="$resolved_slicer_gid"
 SLICER_API_IMAGE="$candidate_image" node scripts/i7-production-compose-contract.js || exit 1
-rendered_api_image="$(SLICER_API_IMAGE="$candidate_image" docker compose --env-file "$operator_values_file" -f docker-compose.production.yml config --images)"
+rendered_api_image="$(SLICER_API_IMAGE="$candidate_image" docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml config --images)"
 [ "$rendered_api_image" = "$candidate_image" ] || exit 1
 ```
 
@@ -265,8 +291,17 @@ Create the canonical `slicer-api-private` internal network by bringing up only
 attaching Traefik. The API has no published host port and the committed
 `ops/hostinger/dynamic/` directory contains no router.
 
+The production Compose project name is always the literal `slicer-api`. Every
+production API Compose command must pass explicit `-p slicer-api` before
+`--env-file`; deriving the project from the current release directory or from an
+ambient value is forbidden because release directory names change while the
+service project identity does not. After start, prove the resulting Compose
+project label before accepting the container.
+
 ```sh
-SLICER_API_IMAGE="$candidate_image" docker compose --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api
+SLICER_API_IMAGE="$candidate_image" docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api
+api_compose_project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' 3d-psa-backend-server)" || exit 1
+[ "$api_compose_project" = "slicer-api" ] || exit 1
 ```
 
 Use a disposable, explicitly authorized peer on `slicer-api-private` to prove
@@ -368,7 +403,7 @@ not run cleanup against a running, absent, ambiguously identified, nonzero-exit,
 or OOM-killed API container.
 
 ```sh
-docker compose --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api
+docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api
 api_stop_state="$(docker inspect --format '{{.State.Status}} {{.State.Running}} {{.State.ExitCode}} {{.State.OOMKilled}}' 3d-psa-backend-server)"
 [ "$api_stop_state" = "exited false 0 false" ] || exit 1
 ```
@@ -405,7 +440,7 @@ and runtime image ID against the candidate, and require healthy/running with zer
 restarts and no OOM.
 
 ```sh
-SLICER_API_IMAGE="$candidate_image" docker compose --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api
+SLICER_API_IMAGE="$candidate_image" docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api
 candidate_image_id="$(docker image inspect --format '{{.Id}}' "$candidate_image")"
 api_runtime_identity="$(docker inspect --format '{{.Config.Image}} {{.Image}} {{.State.Status}} {{.State.Running}} {{.RestartCount}} {{.State.OOMKilled}}' 3d-psa-backend-server)"
 [ "$api_runtime_identity" = "$candidate_image $candidate_image_id running true 0 false" ] || exit 1
@@ -422,6 +457,50 @@ to be exact decimal zero before any Traefik action:
 [ "$qualification_exit" -eq 0 ] || exit 1
 [ "$cleanup_exit" -eq 0 ] || exit 1
 ```
+
+### Dark-route operator substitute for an intentional configs compatibility stop
+
+An automatic no-deploy rehearsal that stops with exact
+`source_compatibility_verification_failure` because `configs/` intentionally
+differs from the fixed previous policy source remains correctly failed closed;
+the operator substitute does not turn the CI run green or weaken its source
+compatibility guard. When that configs difference is the only compatibility
+predicate that failed, publication and attestations are already verified, and
+the route is proved dark before, throughout, and after the operation, the owner
+may close the candidate-specific rollback-readiness question with a bounded
+actual-host `candidate -> previous -> candidate` switch.
+
+Because the CI classification is generic, independently re-run and record every
+source predicate in a separate clean compatibility-verification checkout pinned
+to the candidate source, not in the later live operator-pack checkout: both
+exact commits exist; the checked-out `HEAD` equals the candidate source SHA; the
+previous source is its ancestor; `docker-compose.production.yml` is unchanged;
+and the reviewed, intentional `configs/` diff is the only nonzero compatibility
+predicate. Any malformed or equal SHA, Git failure, `HEAD` mismatch, ancestry
+failure, or production Compose drift forbids the substitute.
+
+For each direction, bind that release's separately recorded exact signed image
+digest, matching operator-pack commit and file hashes, explicit `-p slicer-api`,
+exact operator environment, configs source, pricing-state snapshot, and
+container/image identity. Require both the previous release and the restored
+candidate to become healthy within the same bounded deadline; after returning
+to the candidate, also require the normal dark `/health`, `/ready`, and candidate
+contract probes. Keep the previous
+image, previous release directory, previous operator environment, and pricing-
+state recovery snapshot intact. Any identity mismatch, active route,
+unavailable recovery input, missed health deadline, or failed candidate
+readiness observation is a stop. This operator-host rehearsal is an accepted
+substitute for the blocked automatic
+runtime rehearsal only; it is not a source-compatibility pass, public-route
+approval, or customer-traffic evidence. The dark state is what makes the real
+host switch bounded and low-impact.
+
+The owner-reported 2026-09-01 precedent used the signed `bf5e712` API image with
+the intentional J2/J3/J3B configs, restored the previous release to healthy in
+15 seconds, and restored the candidate to healthy in 15 seconds while the route
+remained dark and the recovery set remained intact. The bounded observations
+are recorded in
+[`Hostinger Traefik deploy-preparation evidence`](../../docs/codex/evidence/hostinger-traefik-deploy-preparation.md#owner-reported-dark-host-deployment-and-rollback-precedent).
 
 ### J0 principal-only slice-authentication activation gate
 
@@ -514,10 +593,34 @@ that only ports 80 and 443 are published, the dashboard is disabled, and the
 file-provider directory is read-only; Docker provider and Engine socket are absent,
 and the `letsencrypt` resolver still points to
 `/letsencrypt/acme.json` before continuing. The file provider is the only discovery mechanism.
+The entrypoint redirect target must be the literal external port `:443`, not the
+container entrypoint name `websecure` and not the internal port `:8443`. Prove
+that an HTTP request retains the requested hostname and path and returns a
+Location authority with no explicit `:8443`; a client that follows redirects
+must reach the public 443 listener.
 For the exact dynamic bind, require the recorded source, destination, bind type,
 propagation and effective `RW=false`; accept Docker's `Mode=""` or `Mode="ro"`
 projection only under that effective read-only proof. Keep the ACME volume
 strictly `RW=true` and `Mode="rw"`; never weaken either contract.
+
+The Compose bind is release-relative, so a running Traefik can otherwise keep
+watching an older release while a helper writes a newer release. Resolve the
+one live bind source directly from the running container, keep the resulting
+absolute path only in the root-private ledger, and require it to equal the
+canonical `ops/hostinger/dynamic` directory beside the helper being executed:
+
+```sh
+live_dynamic_sources="$(docker inspect --format '{{range .Mounts}}{{if and (eq .Type "bind") (eq .Destination "/etc/traefik/dynamic")}}{{println .Source}}{{end}}{{end}}' 3d-psa-traefik)" || exit 1
+[ "$(printf '%s\n' "$live_dynamic_sources" | awk 'NF { count += 1 } END { print count + 0 }')" -eq 1 ] || exit 1
+live_dynamic_source="$(printf '%s\n' "$live_dynamic_sources" | awk 'NF { print; exit }')" || exit 1
+node scripts/i12-hostinger-operator-contract.js --check-live-dynamic-source "$live_dynamic_source" || exit 1
+```
+
+Re-run that exact inspection and equality gate immediately before every render,
+validation, activation, disable, recovery, and terminal-dark helper call. Any
+missing, duplicate, relative, non-canonical, different-release, wrong-type, or
+writable bind is `STOP_LIVE_DYNAMIC_RELEASE_MISMATCH`; writing the apparent
+"current" release directory is never evidence that Traefik loaded it.
 Its exact backend resolves through Docker DNS on
 `slicer-api-private`; Traefik does not require Docker Engine API access or label
 discovery.
@@ -563,6 +666,19 @@ the accepted backend, capture root-private `iptables-save` and
 `ip6tables-save` recovery inputs, require both `DOCKER-USER` chains to exist,
 and inventory their exact pre-existing order. Never flush, replace, or broadly
 accept either chain.
+
+The owner-observed starting state is an empty `DOCKER-USER` chain with inactive
+UFW. Published Docker ports can bypass UFW, so under the observed topology
+`DOCKER-USER` is the only host network-layer enforcement point. Treat this as
+owner-supplied preflight data and re-read it immediately before mutation; do
+not infer it from the repository.
+
+This second layer is safe only while this Traefik serves exactly the one
+approved hostname. A destination-port 443 rule cannot distinguish HTTP Host or
+TLS SNI and would silently block every later HTTPS hostname on the shared
+Traefik. The presence or planned addition of a second hostname is therefore a
+stop requiring a separately designed per-host boundary; never carry this
+single-host `DOCKER-USER` rule forward unchanged.
 
 The external root-only orchestrator must build a new dedicated chain completely
 before adding one create-new, uniquely commented jump at the start of
@@ -693,7 +809,7 @@ of the exact staging directory whose basename matches
 the rollback subtree. Render the file directly
 from the root-private allowlist without printing any address. The renderer uses
 create-new mode `0600`, replaces only `slicer-api.invalid` and the exact
-`__J2_SOURCE_RANGES__` placeholder, fsyncs the file and parent, and validates
+`__J2_SOURCE_RANGE__` placeholder, fsyncs the file and parent, and validates
 the router-scoped middleware against the same private file. The renderer
 invocation below and every later router helper invocation must be a descendant
 of that still-locked shell:
@@ -731,8 +847,9 @@ Confirm the loaded file hash only through the helper's internal exact-byte
 comparison; do not copy it to shared evidence. Confirm the exact Host rule, `letsencrypt`
 certificate resolver, issued certificate, backend, HTTPS redirect, and
 authenticated synthetic request. A health probe alone is not acceptance.
-The first activation rehearsal admits only the LeadPilot `/32`; all future
-caller rows remain absent even if their addresses are already known.
+Every activation rehearsal admits exactly the sole approved `/32`. No future
+caller row or expansion phase exists in this contract; a second row is a hard
+stop even if its address is already known.
 
 ## 5. Disable and roll back without destroying state
 
@@ -822,8 +939,8 @@ image digest intact for diagnosis or an exact-digest restart. Keep the external
 ACME volume and `acme.json` intact even when Traefik itself is rolled back.
 
 ```sh
-docker compose --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api
-docker compose --env-file "$operator_values_file" -f docker-compose.production.yml rm --force slicer-api
+docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api
+docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml rm --force slicer-api
 ```
 
 Never perform a project-wide Compose teardown, engine-wide pruning, volume
