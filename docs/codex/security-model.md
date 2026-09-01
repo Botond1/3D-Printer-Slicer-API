@@ -73,24 +73,26 @@ the later J3B owner production-identical VPS rerun also passed on exact tree
 `db42b93`. See
 [`evidence/j3-orientation-visibility.md`](evidence/j3-orientation-visibility.md).
 
-## Current Hostinger Traefik deploy-preparation control delta
+## Current Hostinger dark-deployment and activation-preparation control delta
 
 Current classification:
-`SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED_NO_DEPLOY;
+`SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED;
 AUTOMATIC_EPHEMERAL_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY;
-HOSTINGER_TRAEFIK_DEPLOY_PREPARATION_LOCAL_GATES_PASS;
-LIVE_HOST_CONTROLS_NOT_VERIFIED`.
+OWNER_REPORTED_BF5E712_DARK_API_DEPLOYMENT_COMPLETE;
+OWNER_REPORTED_APPLICATION_ROLLBACK_ROUND_TRIP_COMPLETE;
+PUBLIC_ROUTE_DISABLED`.
 
 | Control | Current classification | Fail-closed boundary |
 | --- | --- | --- |
-| Signed candidate | `PUBLISHED_ATTESTED_VERIFIED_NO_DEPLOY` | Candidate Publication run `33449382579` produced exact subject `ghcr.io/botond1/3d-printer-slicer-api@sha256:153987840361d60c365da7b105769bb112de807db39a737548b725ea857918ca`. Registry round trip, SLSA/SPDX verification, wrong-subject/repository rejection, and bounded cleanup passed. The evidence records no deployed digest. |
-| Automatic rehearsal | `BLOCKED_SIGNED_MAIN_CANDIDATE_REHEARSAL_INPUT` | Automatic run `33450012850` stopped before registry/runtime work because the fixed I8 previous source and the candidate differ under `configs/`; ancestry and production Compose compatibility still pass. Publication is not reclassified as failure, but staging/rollback rehearsal for this candidate is unverified. |
+| Signed candidate | `PUBLISHED_ATTESTED_VERIFIED; OWNER_REPORTED_DARK_DEPLOYED` | Candidate Publication run `33449382579` produced exact subject `ghcr.io/botond1/3d-printer-slicer-api@sha256:153987840361d60c365da7b105769bb112de807db39a737548b725ea857918ca`. Registry round trip, SLSA/SPDX verification, wrong-subject/repository rejection, and bounded cleanup passed. The publication itself was no-deploy; the owner later reported this exact digest running dark with no API host port. |
+| Automatic rehearsal | `BLOCKED_SIGNED_MAIN_CANDIDATE_REHEARSAL_INPUT` | Automatic run `33450012850` stopped before registry/runtime work because the fixed I8 previous source and the candidate differ under `configs/`; ancestry and production Compose compatibility still pass. Publication is not reclassified as failure, but the automatic ephemeral staging/rollback rehearsal for this candidate remains unverified. |
+| Application deployment and rollback | `OWNER_REPORTED_DARK_DEPLOYMENT_AND_ROUND_TRIP_COMPLETE` | The owner reports that the later, separately identified operator release supplies intentional mounted J2/J3/J3B configs apart from the `bf5e712` image source. Final candidate `/health` and `/ready` returned 200, accepted catalogue/bounds/slice probes passed, and the previous and candidate releases each became healthy within 15 seconds. Recovery assets and pricing-state stayed intact. This accepted host report does not turn the automatic CI run green or prove public-route rollback. |
 | Router source allowlist | `REPOSITORY_LOCAL_TESTED; LIVE_NOT_RUN` | The router attaches Traefik v3 `ipAllowList` and accepts exactly one owner-supplied canonical IPv4 `/32` through one singular placeholder. A second row, wider prefix, expanded phase, v2 `ipWhiteList`, `ipStrategy`, or forwarded-header identity fails closed. Direct TCP peer identity is authoritative and the application key remains mandatory. |
 | Shared-machine and address-lifecycle risk | `OWNER_ACCEPTED_DOCUMENTED; NOT_DETECTED` | The allowed address trusts every process on a shared host, not one application. The address has no verified reservation; rebuild/migration can silently admit a future assignee while excluding the intended caller. Advance consumer notice plus owner re-verification/rebinding is mandatory because no repository control detects reassignment. |
 | External redirect | `REPOSITORY_LOCAL_TESTED; LIVE_NOT_RUN` | EntryPoint HTTP redirect targets literal external `:443`; internal `:8443` is never a public redirect authority. External `Location` and redirect-follow behavior still require owner proof. |
 | Dynamic-source identity | `REPOSITORY_LOCAL_TESTED; LIVE_NOT_RUN` | Before any router render/mutation/recovery/dark assertion, exactly one absolute canonical live bind source for `/etc/traefik/dynamic` must equal the helper release's canonical directory. Relative, stale-release, missing, symlink, and mismatch paths stop with `STOP_LIVE_DYNAMIC_RELEASE_MISMATCH`. The repository does not correct or prove the live mount. |
 | Host-network second layer | `OWNER_OBSERVED_INPUT; MUTATION_NOT_RUN` | Empty `DOCKER-USER`, inactive UFW, and Docker-proxy bypass are owner observations that must be freshly re-read. The planned port-443 rule cannot distinguish Host/SNI and is accepted only while this Traefik serves exactly one hostname; a second hostname requires stop/redesign. |
-| Authority boundary | `NO_DEPLOY_NO_ROUTE_OR_HOST_MUTATION` | No deploy, container replacement, mounted-directory write, router activation, DNS/allowlist/firewall mutation, consumer change, or customer traffic is authorized or claimed. |
+| Authority boundary | `THIS_REPOSITORY_TURN_NO_ROUTE_OR_HOST_MUTATION` | The owner-supplied completed host operation is recorded, but this repository turn performs no deploy, container replacement, mounted-directory write, router activation, DNS/allowlist/firewall mutation, consumer change, or customer traffic. The public route remains disabled. |
 
 See
 [`evidence/hostinger-traefik-deploy-preparation.md`](evidence/hostinger-traefik-deploy-preparation.md).

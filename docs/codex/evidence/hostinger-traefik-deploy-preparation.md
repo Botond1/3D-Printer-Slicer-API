@@ -3,18 +3,23 @@
 ## Classification
 
 ```text
-SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED_NO_DEPLOY
+SIGNED_MAIN_CANDIDATE_BF5E712_PUBLISHED_ATTESTED_VERIFIED
 AUTOMATIC_EPHEMERAL_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY
+OWNER_REPORTED_BF5E712_DARK_API_DEPLOYMENT_COMPLETE
+OWNER_REPORTED_APPLICATION_ROLLBACK_ROUND_TRIP_COMPLETE
+PUBLIC_ROUTE_DISABLED
 HOSTINGER_TRAEFIK_DEPLOY_PREPARATION_LOCAL_GATES_PASS
-LIVE_MOUNT_REDIRECT_ALLOWLIST_FIREWALL_NOT_VERIFIED
-NO_DEPLOY_NO_CONTAINER_ROUTE_DNS_FIREWALL_OR_CONSUMER_MUTATION
+THIS_REPOSITORY_CHANGE_NO_HOST_ROUTE_DNS_FIREWALL_OR_CONSUMER_MUTATION
 ```
 
 This corrective starts from exact protected-main source
-`bf5e712071e3174a67fdb22ff3794003fa3ab32b`. It prepares repository controls
-for a later owner-run VPS change. It does not deploy or replace a container,
-activate a router, write the mounted dynamic directory, change DNS/firewall or
-the live allowlist, or modify a consumer repository.
+`bf5e712071e3174a67fdb22ff3794003fa3ab32b`. The repository branch prepares and
+hardens operator controls only: this change does not deploy or replace a
+container, activate a router, write the mounted dynamic directory, change
+DNS/firewall or the live allowlist, or modify a consumer repository. The later
+dark deployment and application rollback observations below are an explicit
+owner-supplied host report, not actions run or independently repeated by this
+repository task.
 
 ## Signed candidate publication
 
@@ -49,6 +54,62 @@ is an ancestor and `docker-compose.production.yml` is unchanged, but `configs/`
 differs from the candidate. This failure does not invalidate the successful
 publication/attestation result, but it means the automatic ephemeral staging
 and rollback rehearsal is not verified for this candidate.
+
+## Owner-reported dark-host deployment and rollback precedent
+
+On 2026-09-01 the owner reported that the production API was already running
+the exact published, signed BF5E712 subject:
+
+```text
+ghcr.io/botond1/3d-printer-slicer-api@sha256:153987840361d60c365da7b105769bb112de807db39a737548b725ea857918ca
+```
+
+The image remained pinned to and attested for source
+`bf5e712071e3174a67fdb22ff3794003fa3ab32b`; a later release tree supplied the
+mounted J2/J3/J3B configs as separately identified operator input. The safety
+envelope was unchanged, the API still published no host port, and the public
+route remained disabled. The owner observed `/health` and `/ready` at HTTP 200;
+`/profiles` returned all four catalogue entries with these inclusive values
+alongside their declared values: Orca P1S `253.9/253.9/249.9`, Prusa P1S
+`256/256/249.9`, and the two H2D-QUOTE entries `347.9/317.9/324.9` and
+`350/320/324.9`. A 254.0 mm Orca model returned HTTP
+422 with schema 2 and `MODEL_OUT_OF_PRINTER_BOUNDS`; the 253.9 mm boundary
+completed a real slice with HTTP 200.
+
+The first deployment attempt stopped safely before replacing the old container:
+Compose derived a new project name from the release-specific working directory
+and encountered the existing container name. The successful, repeatable form
+pins the stable project identity explicitly:
+
+```sh
+docker compose -p slicer-api --env-file <new-operator-env> -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api
+```
+
+The release directory may change for every release; the Compose project name
+must not. The runbook and executable operator contract now require literal
+`-p slicer-api` on every production Compose invocation and verify the running
+container's `com.docker.compose.project=slicer-api` label.
+
+Automatic run `33450012850` remains correctly failed closed with
+`source_compatibility_verification_failure`: the intentional `configs/` change
+does not become a CI pass. Under the route-dark substitute documented in the
+runbook, the owner switched the actual host from the candidate to the previous
+release and back to the candidate. The previous release became healthy within
+15 seconds, the candidate became healthy again within 15 seconds, the route
+remained dark, and the recovery set remained intact: the old image, prior
+release directory and operator environment were retained, and pricing state was
+saved. This closes only the candidate-specific application rollback-readiness
+question. It does not verify source compatibility, public routing, TLS,
+allowlisting, firewall behavior, the external allowed/denied caller matrix, or
+customer traffic.
+
+The operator contract deliberately keeps the API image source SHA, immutable
+image digest, operator-pack commit, and mounted-file hashes as distinct
+identities. It does not require the later operator release-tree commit to equal
+the running image's source SHA. The live Traefik dynamic bind is a separate
+path identity: router helpers must execute from the exact operator pack whose
+`ops/hostinger/dynamic` directory is currently mounted, or stop with
+`STOP_LIVE_DYNAMIC_RELEASE_MISMATCH`.
 
 ## Repository corrections
 
@@ -105,25 +166,29 @@ After that controlled setup, all final local gates passed:
 | Gate | Result |
 | --- | --- |
 | Operator-pack validator | `i12_hostinger_operator_contract=PASS` |
-| Focused Hostinger/instruction tests | 308/308 pass |
-| Complete JavaScript suite | 2419/2419 pass; 2 suites; 0 skipped |
+| Focused Hostinger/instruction tests | 317/317 pass across operator contract, mutations, J2 network contract, and instruction mirrors |
+| Complete JavaScript suite | 2428/2428 pass; 2 suites; 0 skipped |
 | Complete Python suite | 166 run; 165 pass; 1 expected Windows POSIX-permission skip |
 | JavaScript syntax | 262 tracked files |
 | Python syntax | 46 tracked files |
-| Tracked repository safety | 445 indexed files |
-| Staged repository safety | 18 indexed task files |
+| Tracked repository safety | 446 indexed files |
+| Final documentation-stage safety | 11 indexed task files |
+| Production dependency audit | 0 vulnerabilities |
 | Compose interpolation | pass with inert `.invalid` email and existing-volume placeholder |
 | Live-source CLI positive contract | `live_dynamic_source_contract=PASS` for the local canonical directory |
 | Diff whitespace | pass |
 | Privacy scan | no supplied/live IPv4 value; added literals are RFC 5737 fixtures only |
 
 Implementation commit `0121502609191347e67b44c1f51155d2c7ba9d8c` is the
-exact frozen 18-file deploy-preparation tree. The following evidence-only
-commit records that identity without changing the implementation.
+original frozen 18-file deploy-preparation tree. Runbook/contract correction
+commit `f681b8368f40a7efa84110df24350545aab87c65` adds the mandatory Compose
+project identity and the bounded dark-host rollback substitute without changing
+the image, route, host, or automatic rehearsal guard.
 
 ## NOT VERIFIED
 
-- deployment or replacement of the running API or Traefik container;
+- independent repetition by this repository task of the owner-reported API
+  deployment, profile/bounds/slice observations, or application rollback;
 - the running Traefik bind source or correction of a stale release mount;
 - installation or behavior of the live `ipAllowList` middleware;
 - live redirect `Location` and redirect-following client behavior;

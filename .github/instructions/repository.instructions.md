@@ -117,9 +117,10 @@ Last synchronized: 2026-09-01
   parity lane. The owner production-identical VPS matrix from exact tree
   `db42b93` later confirmed all four inclusive boundaries, full K2 422 mapping,
   zero-normal false/null degradation, and the Orca mass/no-yaw guards. The
-  separate owner image ID is not byte-identical-image evidence. Merge is
-  authorized but not yet claimed complete; deploy and every external mutation
-  remain unauthorized.
+  separate owner image ID is not byte-identical-image evidence. J2+J3+J3B is
+  merged at protected main `bf5e712`; the later owner-reported dark API deploy
+  is recorded below. Consumer-repository and public-route mutations remain
+  unauthorized.
 - Hostinger public-route preparation accepts exactly one canonical private IPv4
   `/32` entry in the sole `leadpilot-only` phase. A second entry, broader
   prefix, forwarded identity, or `ipStrategy` fails closed. This is
@@ -137,13 +138,16 @@ Last synchronized: 2026-09-01
   internal `:8443`; a `DOCKER-USER` 443 rule is valid only for one hosted name. Any
   `*_rollback_uncertain` result is `STOP/UNKNOWN`, not dark evidence. Exact
   protected-main source `bf5e712071e3174a67fdb22ff3794003fa3ab32b` has a
-  signed, attested immutable candidate,
-  but it is not deployed and its automatic no-deploy rehearsal stopped on the
-  fixed previous-policy `configs/` compatibility guard. Live route rehearsal
-  remains `BLOCKED / NOT RUN` until the owner deploys the exact digest and
-  supplies private evidence. This repository work performs no route mutation
-  and does not freshly verify the prior I12 dark state; repository gates cannot
-  authorize permanent activation.
+  signed, attested immutable candidate. The owner reports that exact digest now
+  runs dark from a later operator release tree with intentional mounted
+  configs, no API host port, final `/health` and `/ready` 200, and a completed
+  previous/candidate health round trip within 15 seconds per direction. The
+  recovery set and pricing-state snapshot remain intact. Automatic run
+  `33450012850` stays failed closed on configs compatibility; the operator-host
+  round trip is separate application-rollback evidence, not a CI pass. The full
+  public-route rehearsal remains `BLOCKED / NOT RUN`, and this repository turn
+  performs no route mutation or host action; repository gates cannot authorize
+  permanent activation.
 - No-Origin requests are allowed. Browser-origin protected calls use only their
   SLICE_, PRICING_, ARTIFACT_, or OPERATIONS_CORS_ALLOWED_ORIGINS list.
 - Protected x-api-key routes remain IP-rate-limited.

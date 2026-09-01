@@ -177,15 +177,21 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   `--assert-router-dark`; only logical fsync-cutpoint recovery is locally proved,
   while real crash/power-loss durability remains external `NOT_VERIFIED`. The
   external orchestrator must prove intended/denied callers, TLS issuance/
-  renewal, and the repeated activation/rollback sequence. A completed rehearsal requires proven terminal dark; any
-  `*_rollback_uncertain` result is `STOP/UNKNOWN`. Live rehearsal is
-  `BLOCKED / NOT RUN`. Exact protected-main source
-  `bf5e712071e3174a67fdb22ff3794003fa3ab32b` has a signed, attested candidate,
-  but it is not deployed and its automatic no-deploy rehearsal stopped on the
-  fixed previous-policy `configs/` compatibility check. Private live evidence
-  is also absent. J2 performs no route
-  mutation; the latest prior I12 dark state was
-  not re-verified. Never infer permanent activation from repository gates.
+  renewal, and the repeated public-route activation/rollback sequence. A
+  completed route rehearsal requires proven terminal dark; any
+  `*_rollback_uncertain` result is `STOP/UNKNOWN`. Exact protected-main source
+  `bf5e712071e3174a67fdb22ff3794003fa3ab32b` has a signed, attested candidate.
+  The owner reports that exact digest now runs dark with the intentional mounted
+  J2/J3/J3B configs, no API host port, final `/health` and `/ready` 200, and all
+  four catalogue entries with their inclusive values alongside the declared
+  values. Orca `254.0` was rejected with schema-2 bounds, and
+  Orca `253.9` sliced successfully. The previous and candidate releases each
+  became healthy within 15 seconds during an owner-host round trip; rollback
+  assets and pricing-state stayed intact. Automatic no-deploy run `33450012850`
+  remains failed closed on its fixed previous-policy `configs/` guard; the host
+  round trip is accepted application-rollback evidence, not a CI pass. The
+  public route remains disabled and its full external rehearsal is
+  `BLOCKED / NOT RUN`. Never infer permanent activation from repository gates.
 - Calibration now has nine numeric Bambu reference cases and the `M03`
   P1S-overheight rejection. Measurement fixes Orca `--orient 0`, disables
   support in the measurement-only runtime profile, and reuses the production

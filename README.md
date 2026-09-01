@@ -21,7 +21,8 @@ operator-verified gates rather than repository claims.
 The dedicated production contract is `docker-compose.production.yml`. It never
 builds locally and has no published API port. Before any production Compose
 command, export an immutable image reference plus the operator-managed
-environment and runtime identity, then run:
+environment and runtime identity. The Compose project is always the literal
+`slicer-api`; it must never be derived from the release directory. Then run:
 
 ```sh
 export SLICER_API_IMAGE='registry.example.invalid/owner/3d-printer-slicer-api@sha256:0000000000000000000000000000000000000000000000000000000000000000'
@@ -29,7 +30,7 @@ export SLICER_ENV_FILE='./operator/service.env'
 export SLICER_UID='10001'
 export SLICER_GID='10001'
 node scripts/i7-production-compose-contract.js &&
-  docker compose -f docker-compose.production.yml config --quiet
+  docker compose -p slicer-api --env-file "$SLICER_ENV_FILE" -f docker-compose.production.yml config --quiet
 ```
 
 The all-zero digest and host paths above are inert documentation values, not a
@@ -38,7 +39,7 @@ verified values and use the same fail-closed preflight before startup:
 
 ```sh
 node scripts/i7-production-compose-contract.js &&
-  docker compose -f docker-compose.production.yml up -d --pull always
+  docker compose -p slicer-api --env-file "$SLICER_ENV_FILE" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api
 ```
 
 The external reverse proxy may join the named private bridge from its own
@@ -290,16 +291,23 @@ is valid only while the shared Traefik serves one hostname. Terminal acceptance 
 `--assert-router-dark`. Local tests prove logical fsync-cutpoint recovery, not
 real process/kernel/power-loss durability. The external orchestrator must prove the
 allowed/denied matrix, TLS issuance and renewal, and
-`dark -> active -> dark -> active -> dark` rollback. A completed rehearsal
-requires a proved final dark state; `*_rollback_uncertain` is `STOP/UNKNOWN`,
-not dark evidence. Exact protected-main source
-`bf5e712071e3174a67fdb22ff3794003fa3ab32b` now has a signed,
-attested immutable candidate, but it is not deployed; its automatic no-deploy
-rehearsal stopped on the fixed previous-policy `configs/` compatibility guard.
-The live rehearsal therefore remains `BLOCKED / NOT RUN` pending the owner-run
-deploy and private external evidence. This repository correction makes no route
-mutation. The latest prior I12 evidence was dark, but this work does not re-read
-current live state; permanent activation is a later owner-controlled decision.
+`dark -> active -> dark -> active -> dark` public-route rollback. A completed
+route rehearsal requires a proved final dark state; `*_rollback_uncertain` is
+`STOP/UNKNOWN`, not dark evidence. Exact protected-main source
+`bf5e712071e3174a67fdb22ff3794003fa3ab32b` has a signed, attested immutable
+candidate. The owner reports that exact digest now runs dark from a later
+operator release tree with intentional mounted J2/J3/J3B configs, the
+unchanged security envelope, and no API host port. Final `/health` and `/ready`
+returned 200; all four P1S/H2D-QUOTE catalogue entries exposed their inclusive
+values alongside the declared values; Orca
+`254.0` returned schema-2 `MODEL_OUT_OF_PRINTER_BOUNDS`, while `253.9` completed
+a real slice. The retained previous release and candidate each became healthy
+within 15 seconds during the owner-host round trip, and the recovery set plus
+pricing-state snapshot stayed intact. Automatic no-deploy run `33450012850`
+remains failed closed on configs compatibility; the host round trip is accepted
+application-rollback evidence, not a CI pass. The public route remains disabled
+and its full external rehearsal is `BLOCKED / NOT RUN`. This repository turn
+makes no host or route mutation; permanent activation remains owner-controlled.
 
 Calibration has nine numeric Bambu Studio reference rows plus the `M03`
 P1S-overheight rejection boundary. The comparison fixes Orca at `--orient 0`,
