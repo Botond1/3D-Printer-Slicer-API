@@ -237,8 +237,11 @@ Implemented local candidate exits:
 3. Render exactly one canonical private IPv4 `/32` source in the sole
    `leadpilot-only` phase. Reject a second row, every broader prefix, forwarded
    identity and `ipStrategy`; never widen the approved host to its provider-
-   shared `/24`. Keep allowlist rejection visibly distinct from application HTTP 401:
-   router 403 or host-firewall TCP reset plus private `J2_ALLOWLIST_DENY`.
+   shared `/24`. The historical plan required visible separation from
+   application HTTP 401 and assumed router 403 or a caller-visible host reset.
+   Current owner evidence supersedes the reset assumption with three distinct
+   results: host-firewall timeout plus private diagnostic/counter, router 403,
+   and backend 401; IPv6 443 uses a separate `INPUT` seam.
 4. Constrain activation to an external-orchestrator rehearsal. Repository-local
    gates prepare the attempt but never self-promote. Hold one inherited
    root-private FD9 lock across every action and external observation; re-prove
@@ -581,21 +584,30 @@ Later owner-reported public-activation result and remaining exits:
 4. record successful production HTTP-01 validation alongside the global
    HTTP-to-HTTPS redirect as issuance-path compatibility, without relabeling it
    as the separate forced-renewal rehearsal;
-5. preserve the denial-layer boundary: the observed HTTP 403 had
+5. preserve the three-level denial boundary: the host-network deny increments
+   its exact counter but is caller-visible as a timeout; the observed HTTP 403 had
    `Content-Length: 9`, body `Forbidden`, and no `Content-Type`, while backend
-   wrong-key rejection remains HTTP 401 with the API envelope. The 403 does not
-   prove the separately designed `DOCKER-USER` TCP-reset identity or counters;
+   wrong-key rejection remains HTTP 401 with the API envelope. Do not reopen
+   `REJECT` versus `DROP` without new evidence: three variants were measured;
 6. require every operator pack to be a real Git clone or linked worktree,
    normalize root-private modes after every new release, run lock-bearing router
    helpers with host Node v20.20.2 under the inherited FD 9, and pass canonical
    absolute staging paths;
-7. keep any host `DOCKER-USER` second layer single-host only; any second HTTPS
-   hostname requires a separately designed boundary rather than a 443-wide rule;
-8. retain public router rollback/final-dark, forced renewal, monitoring,
+7. version the exact perimeter script, loopback probe, and systemd unit under
+   `ops/hostinger/perimeter/`; require root-private path inputs and a real probe
+   hostname as operator input rather than release-SHA/hostname defaults;
+8. keep the IPv4 `DOCKER-USER` second layer single-host only and block IPv6 443
+   in `ip6tables INPUT` because docker-proxy bypasses `DOCKER-USER`; keep port 80
+   untouched and require redesign for any `AAAA`, IPv6 caller, or second host;
+9. record owner-supplied conntrack original-destination/443 identity, exact
+   three-IPv4 plus one-IPv6 idempotency, Docker-service restart survival,
+   allowed 200 in about 0.1 seconds, IPv6 no-response, port-80 reachability, and
+   loopback 403; keep real host reboot `NOT_VERIFIED`;
+10. retain public router rollback/final-dark, forced renewal, monitoring,
    backup/recovery acceptance, and customer-traffic readiness as separate exits;
-9. measure real workload and N=2/N=3 capacity before increasing retained
+11. measure real workload and N=2/N=3 capacity before increasing retained
    concurrency above one;
-10. reconcile the resulting evidence without claiming production completeness
+12. reconcile the resulting evidence without claiming production completeness
    for any unverified public, monitoring, backup or recovery control.
 
 See the current
@@ -1000,9 +1012,9 @@ This plan was initialized 2026-07-18 from historical code baseline
 | S1c - native process lifecycle and environment | `VERIFIED` | S1b AbortSignal contract | integrated command/native process lane | Exact arrays, minimal environment, absolute helper paths, bounded TERM-to-KILL exact-tree cancellation, fail-closed unverifiable-tree quarantine, and no post-abort success/artifact have deterministic local evidence. |
 | S2 - resource/state envelope | `VERIFIED_REPOSITORY_AND_HOSTED; REAL_WORKLOAD_CAPACITY_OPEN` | S1a/S1b/S1c and S3a image controls | I4 supplies bounded resource/archive/artifact/pricing/container controls; I12 retains dark N=1 | I4 exact-SHA Source/Image and full suites passed. I12 proves small synthetic N=1 mechanics on the target host. Real customer models and N=2/N=3 remain unqualified; retained concurrency stays one. |
 | S3a - repository build/provenance and automatic-deploy separation | `BF5E712_SIGNED_CANDIDATE_PUBLISHED; OWNER_REPORTED_DARK_DEPLOYED; AUTOMATIC_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY` | S0.1; exact hosted I7/I8 and protected-main I10 evidence green | I8 provides build-once digest-bound GHCR publication and attestations; I10 provides strict protected-main Source/Image governance; I11 productizes manual main publication/recovery and automatic no-deploy rehearsal | Historical I11 at main SHA `65706e381b907c6ba09a8eba504af3adaacac86b` completed publication and automatic rehearsal. Exact source `bf5e712071e3174a67fdb22ff3794003fa3ab32b` passed Candidate Publication run `33449382579`; the owner separately reports its exact digest deployed dark with a later operator pack. Automatic run `33450012850` remains correctly failed closed before registry/runtime work because `configs/` differs intentionally from the fixed previous policy source. The host report does not turn that run green or relabel the image. |
-| S4 - service trust and topology | `OWNER_REPORTED_LIVE_LEADPILOT_ONLY_ROUTE; EXTERNAL_ALLOWED_200_UNLISTED_403` | S1a/S1b/S1c/S2 security surfaces and S3a evidence | I5 supplies scoped trust; I6 selects the private-peer topology; I12 proves one historical exact dark host state; the current owner record adds one canonical `/32`, external `:443`, issued TLS, and the external caller matrix | The owner reports exact `router_activation=PASS phase=leadpilot-only entries=1`, approved-source HTTP 200, unlisted-source HTTP 403 without an application envelope, and redirect-follow completion on 443. This repository task is documentation-only. The external 403 does not prove the separate host-firewall TCP-reset/counter boundary; router rollback, forced renewal, monitoring, and customer readiness remain open. |
+| S4 - service trust and topology | `OWNER_REPORTED_LIVE_LEADPILOT_ONLY_ROUTE; EXTERNAL_ALLOWED_200_UNLISTED_403; DUAL_STACK_PERIMETER_PASS; REAL_REBOOT_OPEN` | S1a/S1b/S1c/S2 security surfaces and S3a evidence | I5 supplies scoped trust; I6 selects the private-peer topology; I12 proves one historical exact dark host state; current owner records add one canonical `/32`, external `:443`, issued TLS, caller matrix, and versioned dual-stack perimeter | The owner reports exact `router_activation=PASS phase=leadpilot-only entries=1`, approved-source HTTP 200, unlisted-source HTTP 403, caller-visible host-firewall timeout with counters, IPv6 `INPUT` blocking, three-IPv4 plus one-IPv6 idempotency, and Docker-service restart survival. This repository task is documentation-only. Real reboot, router rollback, forced renewal, monitoring, and customer readiness remain open. |
 | S3b - staging and promotion drill | `VERIFIED_HISTORICAL_FOUNDATION; BF5E712_AUTOMATIC_REHEARSAL_BLOCKED_CONFIG_COMPATIBILITY; OWNER_REPORTED_APPLICATION_ROLLBACK_COMPLETE; OWNER_REPORTED_ROUTE_ACTIVATION_COMPLETE` | signed S3a candidate and S4/S5 repository controls | Historical I9 read-only and I11 publication-triggered rehearsals are verified; the current automatic rehearsal remains failed closed; the runbook permits the bounded owner-host application rollback substitute and separately records the later permanent activation | Automatic run `33450012850` remains failed for intentional `configs/` compatibility drift. The owner reports the dark candidate-to-previous-to-candidate application switch and a later LeadPilot-only route activation with certificate and external allow/deny observations. Neither record is a source-compatibility pass; public router rollback/final-dark and customer-traffic evidence remain separate. |
-| S5 - topology/optional async worker decision | `PRIVATE_PEER_TOPOLOGY_VERIFIED; OWNER_REPORTED_PUBLIC_EDGE_ACTIVE; ASYNC_WORKER_DEFERRED` | I5 trust controls and S4 topology evidence | private-peer topology selected and dark-host verified; later owner-supplied route evidence recorded; async API/worker deferred | Exact historical dark API/private-peer/egress and proxy gateway behavior remain verified. The later owner record covers route/TLS/allowed-200/unlisted-403/redirect-443 only; exact firewall identity/counters, forced renewal, monitoring, and recovery acceptance remain open. |
+| S5 - topology/optional async worker decision | `PRIVATE_PEER_TOPOLOGY_VERIFIED; OWNER_REPORTED_PUBLIC_EDGE_AND_PERIMETER_ACTIVE; ASYNC_WORKER_DEFERRED` | I5 trust controls and S4 topology evidence | private-peer topology selected and dark-host verified; later owner-supplied route/perimeter evidence recorded; async API/worker deferred | Exact historical dark API/private-peer/egress and proxy gateway behavior remain verified. Later owner records cover route/TLS/caller matrix plus IPv4/IPv6 perimeter identity, idempotency, and Docker-service restart. Real reboot, forced renewal, monitoring, and recovery acceptance remain open. |
 
 ## Current S0.1 verification checkpoint
 
@@ -1394,10 +1406,11 @@ API/native egress denial, and corrected proxy gateway topology. The later
 owner-supplied record reports exact
 `router_activation=PASS phase=leadpilot-only entries=1`, an issued certificate,
 approved-source HTTP 200, unlisted-source HTTP 403, and redirect-follow
-completion on public 443. Exact firewall identity/counters, forced renewal,
-public router rollback, complete secret lifecycle, monitoring/backup/recovery
-acceptance, and customer readiness remain separate gates. An agent cannot grant
-itself an exception to those gates.
+completion on public 443. A later supplied record adds IPv4 timeout/counters,
+IPv6 `INPUT` blocking, idempotency, and Docker-service restart survival. Real
+host reboot, forced renewal, public router rollback, complete secret lifecycle,
+monitoring/backup/recovery acceptance, and customer readiness remain separate
+gates. An agent cannot grant itself an exception to those gates.
 
 ## Decision and risk log
 
@@ -1424,5 +1437,5 @@ itself an exception to those gates.
 | D-019 | A known image advisory does not explain away an independent liveness failure. | Hosted Image run `29957927370` shows both persistent liveness exit 1 and the HIGH scanner path. Swiper 7.2.0 is known, but S3a-V2C is not integrated. | S3a remains blocked; diagnose/fix both paths without weakening gates |
 | D-020 | I2 separates the verified tmpfs liveness root cause from the Swiper advisory. | Exact A/B/C and main-container evidence proves root-owned tmpfs mount roots caused startup `EACCES`; V2C independently produces zero `GHSA-hmx5-qpq5-p643` findings. Dynamic nonzero UID/GID plus kernel cross-check and mode `0700` fix liveness without root or world-writable state. | I2 repository image validation closed; external policy, provenance/promotion, S4/S3b, and production evidence remain required |
 | D-021 | Application defaults do not prove arbitrary host or proxy capacity. | I12 observes the target host and passes bounded small synthetic N=1 traffic, but does not qualify customer models, N=2/N=3, or final public proxy timeouts. | Retain N=1 and verify public timeouts plus real-workload capacity before increasing load. |
-| D-022 | I5's loopback-published topology could not combine ingress with egress denial; I6 replaces it. | Historical I12 evidence verifies the selected internal API/private peer with no API host port/default route, denied API/native egress, and a socketless dual-attached proxy whose default route is ingress. The later owner record reports the intended caller's HTTP 200, unlisted-source HTTP 403, certificate issuance, and redirect completion on public 443. | Exact firewall identity/counters, forced renewal, public router rollback, secret lifecycle, monitoring/recovery acceptance, and customer readiness remain open. Async worker remains deferred. |
-| D-023 | Activation evidence must come from an external observer and must not collapse a network deny into application HTTP 401. | The repository contract distinguishes router 403 and host-firewall TCP reset/private `J2_ALLOWLIST_DENY` from application 401, admits exactly one canonical `/32`, targets external `:443`, and stops if the live dynamic bind belongs to another release. The owner record confirms allowed-source HTTP 200 and exact unlisted-source HTTP 403 without `Content-Type`; the historical rehearsal contract still treats `*_rollback_uncertain` as `STOP/UNKNOWN`. | Retain public router rollback/final-dark, forced renewal, firewall identity/counters, current address ownership, and single-host firewall scope as separate exits. No caller expansion is authorized. |
+| D-022 | I5's loopback-published topology could not combine ingress with egress denial; I6 replaces it. | Historical I12 evidence verifies the selected internal API/private peer with no API host port/default route, denied API/native egress, and a socketless dual-attached proxy whose default route is ingress. Later owner records add route/TLS/caller evidence and measured IPv4/IPv6 perimeter behavior through Docker-service restart. | Real reboot, forced renewal, public router rollback, secret lifecycle, monitoring/recovery acceptance, and customer readiness remain open. Async worker remains deferred. |
+| D-023 | Activation evidence must not collapse host-network timeout, router HTTP 403, or application HTTP 401. | The measured host-network deny increments exact counters but times out at the caller; Traefik returns plain 403 only when reached; the backend returns its 401 envelope for a wrong key. IPv4 uses conntrack original destination/443 in `DOCKER-USER`; IPv6 docker-proxy bypasses that chain and is blocked in `INPUT`. The historical rehearsal contract still treats `*_rollback_uncertain` as `STOP/UNKNOWN`. | Retain the diagnostic log, real reboot, public router rollback/final-dark, forced renewal, current address ownership, and single-host firewall scope as separate exits. Do not reopen `REJECT` versus `DROP` absent new evidence, and authorize no caller expansion. |

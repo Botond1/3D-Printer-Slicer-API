@@ -9,6 +9,11 @@ OWNER_SUPPLIED_CERTIFICATE_ISSUED
 OWNER_SUPPLIED_EXTERNAL_ALLOWED_SOURCE_200
 OWNER_SUPPLIED_EXTERNAL_UNLISTED_SOURCE_403
 OWNER_SUPPLIED_REDIRECT_FOLLOW_REACHED_PUBLIC_443
+OWNER_SUPPLIED_IPV4_PERIMETER_CALLER_TIMEOUT_WITH_DENY_COUNTERS
+OWNER_SUPPLIED_IPV6_INPUT_443_BLOCK_PASS
+OWNER_SUPPLIED_PERIMETER_IDEMPOTENT_3_IPV4_1_IPV6
+OWNER_SUPPLIED_DOCKER_SERVICE_RESTART_SURVIVAL_PASS
+REAL_HOST_REBOOT_NOT_VERIFIED
 THIS_REPOSITORY_TURN_DOCUMENTATION_ONLY_NO_LIVE_MUTATION
 INDEPENDENT_REPETITION_NOT_PERFORMED
 ```
@@ -65,20 +70,95 @@ There was no `Content-Type` header. This exact header/body shape is live edge
 evidence for the currently pinned Traefik behavior; it is not derivable from the
 router template alone.
 
-The consumer's intentional layer mapping is therefore:
+The complete caller-visible layer mapping is therefore:
 
-- HTTP 403 with no `Content-Type`: the edge does not recognize the caller's
-  source address;
+- connection timeout with no response: the host-network perimeter did not
+  admit the source;
+- HTTP 403 with no `Content-Type`: the request reached Traefik, whose router
+  allowlist does not recognize the caller's source address;
 - HTTP 401 with the API's structured application envelope: the source passed
   the edge, but the supplied application key is wrong.
 
 The network rejection deliberately does not imitate an application envelope.
-This separation is a contract, not a missing response header.
+This separation is a contract, not a missing response header. The owner reports
+that the consumer was separately updated to recognize the timeout as a third
+outcome; that consumer implementation is outside this repository and was not
+verified by this documentation change.
 
 The external HTTP 403 proves the Traefik `ipAllowList` denial path only. It is
-not the runbook's separate host-firewall evidence: a qualified `DOCKER-USER`
-deny requires the expected TCP reset plus exact rule/counter observations, not
-an HTTP status.
+not the host-firewall result documented below.
+
+## Host-firewall correction and caller-visible timeout
+
+The owner measured the IPv4 deny three ways on the same host. All three waited
+the complete client timeout and returned no bytes:
+
+1. internal destination port `8443` with `REJECT --reject-with
+   icmp-admin-prohibited`;
+2. internal destination port `8443` with `REJECT --reject-with tcp-reset`;
+3. conntrack original destination plus original port `443` with
+   `REJECT --reject-with tcp-reset`, repeated twice with a 15-second timeout.
+
+The rules were active in every case: the exact deny counter increased for each
+SYN, while the allowlisted source continued to receive HTTP 200 in about 0.1
+seconds. The measured structural explanation is that IPv4 `DOCKER-USER` runs
+in `FORWARD` after Docker DNAT. A rejection generated there carries the private
+container address as source and is not translated back to the connection that
+never completed, so it is discarded in transit or by the caller's network
+stack. From the caller's perspective the host perimeter behaves as a drop even
+though the installed terminal action remains `REJECT --reject-with tcp-reset`.
+The caller sees "API unreachable" by timeout, not an immediate refusal or HTTP
+status.
+
+This corrects the earlier runbook assumption that the caller would receive a
+TCP reset. `REJECT` versus `DROP` must not be reopened without new contrary
+evidence: both rejection forms and all three matching forms above were tried
+and measured.
+
+## IPv6 enforcement seam
+
+Before the IPv6 correction, an arbitrary IPv6 client completed the TLS
+handshake and received Traefik HTTP 403. The application edge denied it, but the
+IPv4-only network perimeter did not observe it. The owner reported that this
+host performs no IPv6 DNAT for the public listener: Docker serves `[::]:443`
+through `docker-proxy`, so inbound IPv6 reaches the host `INPUT` chain and does
+not traverse `DOCKER-USER`. An IPv6 rule in `DOCKER-USER` would therefore be a
+non-enforcing control.
+
+With no `AAAA` record and no approved IPv6 caller, the installed correction
+rejects every new inbound IPv6 TCP connection to port 443 in `ip6tables INPUT`.
+IPv6 port 80 remains untouched; production ACME HTTP-01 validated over IPv4 in
+the no-`AAAA` topology. After the correction, the IPv6 observation changed from
+Traefik HTTP 403 to no response, while SSH and the IPv4 path remained unchanged.
+
+## Versioned perimeter artifacts and operational observations
+
+The exact tested host artifacts, normalized to remove the real hostname and
+release-SHA path defaults, are now versioned at:
+
+- `ops/hostinger/perimeter/r3d-perimeter.sh`;
+- `ops/hostinger/perimeter/r3d-allowlist-probe.sh`;
+- `ops/hostinger/perimeter/r3d-perimeter.service`.
+
+The perimeter script requires `R3D_ALLOWLIST_FILE` and
+`R3D_PUBLIC_IPV4_FILE` as explicit operator inputs. The probe defaults only to
+`slicer-api.invalid`; the approved hostname is operator input. Real addresses,
+hostnames, and root-private paths are not stored in the repository.
+
+The owner reported these point-in-time installation observations:
+
+- IPv4 matching uses conntrack original destination and original destination
+  port 443, without a plain destination-port match;
+- three consecutive applications remained idempotent at exactly three owned
+  IPv4 rules and one owned IPv6 rule;
+- the policy and rule counts survived a Docker-service restart;
+- the approved source returned HTTP 200 in about 0.1 seconds;
+- blocked IPv6 port 443 returned no response;
+- port 80 remained reachable;
+- the loopback Traefik-only probe returned HTTP 403.
+
+These observations do not prove state after a real host reboot. That boundary
+remains `NOT_VERIFIED`.
 
 ## Operator blockers captured in the runbook
 
@@ -111,9 +191,10 @@ literal validator-required helper placeholders remain in
 ## NOT VERIFIED by this documentation turn
 
 - independent repetition of the owner-supplied route, certificate, redirect,
-  allowed-source 200, or blocked-source 403 observations;
-- exact `DOCKER-USER` rule identity, TCP-reset behavior, packet-counter change,
-  UFW/Docker-proxy interaction, or host-firewall rollback;
+  allowed-source 200, blocked-source 403, firewall timeout, IPv6 block,
+  idempotency, Docker-restart, port-80, or loopback observations;
+- state after a real host reboot, real crash/power loss, or boot-time ordering;
+- host-firewall rollback from the currently installed policy;
 - forced ACME renewal, renewal continuity, certificate rollback, or ACME-state
   recovery rehearsal;
 - a complete active-to-dark-to-active router rollback/recovery rehearsal after

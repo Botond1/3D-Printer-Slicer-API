@@ -108,8 +108,14 @@ function allowlistFilesystem(target, pathStates, descriptorStates) {
 }
 
 function mutateRequired(source, from, to) {
-    assert.ok(source.includes(from), `missing mutation seam: ${from}`);
-    return source.replace(from, to);
+    if (typeof from === 'string') {
+        assert.ok(source.includes(from), `missing mutation seam: ${from}`);
+    } else {
+        assert.match(source, from, `missing mutation seam: ${from}`);
+    }
+    const mutated = source.replace(from, to);
+    assert.notEqual(mutated, source, `mutation did not change source: ${from}`);
+    return mutated;
 }
 
 function runGit(repositoryRoot, args) {
@@ -946,10 +952,10 @@ test('runbook mutations cannot weaken DNS-only, firewall, ACME, or final-dark ga
             'STOP_LIVE_DYNAMIC_RELEASE_MISMATCH',
             'CONTINUE_WITH_DIFFERENT_DYNAMIC_RELEASE'
         )],
-        ['owner-observed empty DOCKER-USER state omitted', mutateRequired(
+        ['owner-observed empty IPv4 DOCKER-USER state omitted', mutateRequired(
             runbook,
-            'owner-observed starting state is an empty `DOCKER-USER` chain with inactive',
-            'starting firewall state is inferred from the repository with active'
+            'owner-observed starting state was an empty IPv4 `DOCKER-USER` chain with\ninactive UFW',
+            'current IPv4 firewall state is inferred from the repository with active UFW'
         )],
         ['published ports assumed to obey UFW', mutateRequired(
             runbook, 'Published Docker ports can bypass UFW', 'Published Docker ports always obey UFW'
@@ -970,12 +976,30 @@ test('runbook mutations cannot weaken DNS-only, firewall, ACME, or final-dark ga
             'STOP_DOCKER_FIREWALL_BACKEND_UNSUPPORTED',
             'CONTINUE_WITH_UNKNOWN_FIREWALL_BACKEND'
         )],
-        ['INPUT substituted', mutateRequired(runbook, '`DOCKER-USER` chains', '`INPUT` chains')],
-        ['post-DNAT port used', mutateRequired(runbook, '`--ctorigdstport 443`', '`--dport 443`')],
+        ['IPv6 listener incorrectly assumed to traverse DOCKER-USER', mutateRequired(
+            runbook,
+            'Docker exposes\n`[::]:443` through `docker-proxy` without IPv6 DNAT',
+            'Docker exposes\n`[::]:443` through IPv6 DNAT and `DOCKER-USER`'
+        )],
+        ['dedicated IPv4 chain reintroduced', mutateRequired(
+            runbook,
+            'installs directly in IPv4 `DOCKER-USER`, in this\norder',
+            'installs through a dedicated chain jumped from IPv4 `DOCKER-USER`, in this\norder'
+        )],
+        ['original-destination conntrack replaced by post-DNAT port', mutateRequired(
+            runbook,
+            'every IPv4 rule must\nuse conntrack `--ctorigdst <verified-public-VPS-IPv4>` together with\n`--ctorigdstport 443`',
+            'every IPv4 rule may instead use the post-DNAT internal `--dport 8443`'
+        )],
         ['original destination is not owner-bound public input', mutateRequired(
             runbook,
             '`--ctorigdst <verified-public-VPS-IPv4>`',
             '`--ctorigdst <private-VPS-IPv4>`'
+        )],
+        ['original port 80 filtering admitted', mutateRequired(
+            runbook,
+            'Plain `--dport 443`, internal `--dport 8443`, and any\nrule matching original port 80 are forbidden',
+            'Original-destination port 80 may use the same perimeter rule'
         )],
         ['retained parent becomes writable', mutateRequired(
             runbook,
@@ -1129,26 +1153,63 @@ test('runbook mutations cannot weaken DNS-only, firewall, ACME, or final-dark ga
         )],
         ['HTTP-01 restricted', mutateRequired(
             runbook,
-            'Port 80 remains globally reachable over IPv4',
+            'Port 80 remains globally\nreachable over IPv4',
             'Port 80 uses the caller allowlist'
         )],
-        ['HTTPS opened', mutateRequired(
+        ['HTTPS source scope widened', mutateRequired(
             runbook,
-            'Port 443 accepts only the currently rendered `/32` entries',
-            'Port 443 accepts every source'
+            'for the current singular `/32`',
+            'for every IPv4 source'
         )],
         ['deny event loses fixed classification', mutateRequired(
-            runbook, '`J2_ALLOWLIST_DENY`', '`NETWORK_EVENT`'
+            runbook, 'exact fixed prefix `r3d-perimeter-deny: `', 'variable prefix `NETWORK_EVENT`'
         )],
-        ['firewall deny becomes silent drop', mutateRequired(
+        ['installed deny target changes to DROP', mutateRequired(
             runbook, '`REJECT --reject-with tcp-reset`', '`DROP`'
         )],
-        ['firewall rejection misreported as HTTP', mutateRequired(
+        ['drop-like caller behavior changed to immediate refusal', mutateRequired(
             runbook,
-            'receives a TCP reset and no HTTP status',
-            'receives HTTP 403 from the firewall'
+            "From the caller's perspective this layer therefore behaves\nas a drop",
+            "From the caller's perspective this layer behaves as an immediate refusal"
         )],
-        ['403 and 401 conflated', mutateRequired(runbook, 'Traefik HTTP 403', 'backend HTTP 401')],
+        ['firewall timeout misreported as HTTP', mutateRequired(
+            runbook,
+            'connection timeout, no reset,\nand no HTTP status',
+            'caller-visible HTTP 403 response'
+        )],
+        ['measured REJECT-versus-DROP boundary reopened without evidence', mutateRequired(
+            runbook,
+            'Do not reopen `REJECT` versus `DROP` without new contrary\nevidence',
+            'Prefer `REJECT` over `DROP` without additional evidence'
+        )],
+        ['IPv6 deny moved from INPUT to DOCKER-USER', mutateRequired(
+            runbook,
+            'places one rule at the start of `ip6tables INPUT` to reject every new inbound\nTCP connection to port 443',
+            'places one rule in IPv6 `DOCKER-USER` for every new inbound TCP connection to port 443'
+        )],
+        ['IPv6 deny moved from 443 to 80', mutateRequired(
+            runbook,
+            'TCP connection to port 443. Putting that rule in IPv6 `DOCKER-USER`',
+            'TCP connection to port 80. Putting that rule in IPv6 `DOCKER-USER`'
+        )],
+        ['IPv6 port 80 filtered', mutateRequired(
+            runbook,
+            'IPv6 port 80 remains\nuntouched',
+            'IPv6 port 80 is rejected'
+        )],
+        ['perimeter idempotence rule count widened', mutateRequired(
+            runbook,
+            'exactly three IPv4 rules and one IPv6 rule',
+            'an arbitrary number of IPv4 and IPv6 rules'
+        )],
+        ['real host reboot falsely claimed verified', mutateRequired(
+            runbook,
+            'State after a real host reboot remains `NOT_VERIFIED`',
+            'State after a real host reboot is `VERIFIED`'
+        )],
+        ['403 and 401 conflated', mutateRequired(
+            runbook, /Traefik HTTP 403/g, 'backend HTTP 401'
+        )],
         ['ACME ambiguity ignored', mutateRequired(
             runbook, 'STOP_ACME_VOLUME_IDENTITY_UNPROVEN', 'CONTINUE_WITH_ANY_ACME_VOLUME'
         )],

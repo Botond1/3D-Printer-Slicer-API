@@ -84,8 +84,11 @@ Last synchronized: 2026-09-01
   allowed-source HTTP 200, external unlisted-source HTTP 403 without a
   `Content-Type`, and redirect-follow completion on public 443. This
   documentation-only repository change does not independently repeat or mutate
-  that live state; firewall TCP-reset/counter proof, public router rollback,
-  forced renewal, monitoring, and customer readiness remain separate.
+  that live state. A later owner-supplied record proves the IPv4 deny counters
+  with caller-visible timeout, IPv6 `INPUT` blocking, idempotent three-IPv4 plus
+  one-IPv6 rule identity, and Docker-service restart survival. Real reboot,
+  public router rollback, forced renewal, monitoring, and customer readiness
+  remain separate.
 - Keep `/profiles` unauthenticated, startup-built, immutable, informational,
   and independent of slicing availability. Preserve the strong ETag,
   conditional 304, body `catalogue_sha256`, typed non-critical 503, and the
@@ -132,16 +135,18 @@ Last synchronized: 2026-09-01
   prefix, forwarded identity, or `ipStrategy` fails closed. This is
   machine-level trust, and unreserved-address reassignment is a silent perimeter
   failure unless the consumer reports rebuilds or migrations in advance.
-  Host-firewall TCP rejection and
-  fixed private `J2_ALLOWLIST_DENY`, or router HTTP 403, must remain distinct
-  from backend HTTP 401. The external orchestrator owns allowed/denied, TLS
+  Caller-visible host-firewall timeout with an incremented deny counter and
+  fixed private `r3d-perimeter-deny: ` diagnostic, router HTTP 403, and backend
+  HTTP 401 must remain distinct. The external orchestrator owns allowed/denied, TLS
   issuance/renewal, rollback, and final-dark proof. One inherited root-private
   FD9 lock must span the complete rehearsal; each action re-proves canonical,
   root-owned, non-writable ancestors plus exact running dynamic-bind/operator-
   pack equality, and terminal proof uses strict
   `--assert-router-dark`. Local evidence covers logical fsync cutpoints, not
   real crash/power-loss durability. Redirects target external `:443`, never
-  internal `:8443`; a `DOCKER-USER` 443 rule is valid only for one hosted name.
+  internal `:8443`; the IPv4 `DOCKER-USER` 443 rule is valid only for one hosted
+  name. IPv6 `[::]:443` bypasses that chain through docker-proxy on this host
+  and is blocked in `ip6tables INPUT`; port 80 stays untouched.
   Any `*_rollback_uncertain` result is `STOP/UNKNOWN`, not dark evidence. The
   operator pack must be a Git clone or linked worktree; a tarball surfaces
   `operator_pack_file_invalid`. Normalize root-private modes after every new
@@ -158,8 +163,14 @@ Last synchronized: 2026-09-01
   owner-supplied record reports
   `router_activation=PASS phase=leadpilot-only entries=1`, issued TLS,
   approved-source HTTP 200, unlisted-source plain HTTP 403, and redirect-follow
-  completion on public 443. That 403 is not host-firewall TCP-reset/counter
-  proof, and successful HTTP-01 issuance is not the forced-renewal rehearsal.
+  completion on public 443. A later perimeter record corrects the reset
+  assumption: all three tested IPv4 `REJECT` variants timed out while counters
+  increased. The final original-destination/443 rules remained exactly three
+  IPv4 plus one IPv6 `INPUT` rule across three applications and survived a
+  Docker-service restart; real reboot remains unverified. Version the exact
+  script, probe, and unit under `ops/hostinger/perimeter/`, with private paths
+  and the real probe hostname supplied only by the operator. Successful HTTP-01
+  issuance is not the forced-renewal rehearsal.
   This documentation-only repository turn performs no route mutation or host
   action. Public router rollback, monitoring, recovery acceptance, and customer
   readiness remain separate.
@@ -281,9 +292,10 @@ Last synchronized: 2026-09-01
   digest and Traefik topology on the authorized VPS. A later owner-supplied
   record adds the LeadPilot-only route, certificate issuance, approved-source
   HTTP 200, unlisted-source HTTP 403, and redirect-follow completion on public
-  443. Exact firewall identity/counters, forced renewal, public router rollback,
-  secret lifecycle, monitoring/recovery, customer readiness, and full production
-  acceptance remain unverified and separately authorized.
+  443, plus later owner-supplied IPv4/IPv6 perimeter, idempotency, and
+  Docker-service restart evidence. Real host reboot, forced renewal, public
+  router rollback, secret lifecycle, monitoring/recovery, customer readiness,
+  and full production acceptance remain unverified and separately authorized.
 
 ## Testing
 - Use Python test runners under tests/testing-scripts/.

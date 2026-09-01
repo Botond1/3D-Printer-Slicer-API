@@ -166,14 +166,17 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   `ipStrategy`, or forwarded-header identity fails closed. The allowance is
   machine-level: every process on the shared caller host inherits it, and an
   unreserved-address reassignment silently admits the next holder unless the
-  consumer reports rebuilds or migrations in advance. A host-firewall TCP reset and fixed
-  private `J2_ALLOWLIST_DENY` event, or router HTTP 403, remain distinct from
-  backend HTTP 401. Every route action requires one inherited root-private FD9
+  consumer reports rebuilds or migrations in advance. A caller-visible
+  host-firewall timeout with an incremented deny counter and fixed private
+  `r3d-perimeter-deny: ` diagnostic, router HTTP 403, and backend HTTP 401 are
+  distinct layers. Every route action requires one inherited root-private FD9
   lock held across the whole rehearsal plus unchanged canonical, root-owned,
   non-writable ancestor chains and equality between the running Traefik dynamic
   bind source and the executing operator pack. HTTP redirects target external
-  `:443`, never internal `:8443`; the `DOCKER-USER` second layer is valid only
-  while Traefik serves one hostname. Terminal proof uses strict
+  `:443`, never internal `:8443`; the IPv4 `DOCKER-USER` second layer is valid
+  only while Traefik serves one hostname. IPv6 `[::]:443` uses docker-proxy
+  without DNAT on this host and is therefore blocked in `ip6tables INPUT`, not
+  `DOCKER-USER`; IPv6 port 80 remains untouched. Terminal proof uses strict
   `--assert-router-dark`; only logical fsync-cutpoint recovery is locally proved,
   while real crash/power-loss durability remains external `NOT_VERIFIED`. The
   external orchestrator must prove intended/denied callers, TLS issuance/
@@ -199,8 +202,16 @@ Provide a stable and secure slicing API with strict fail-fast validation and pro
   `router_activation=PASS phase=leadpilot-only entries=1`, an issued
   certificate, approved-source HTTP 200, unlisted-source HTTP 403 with body
   `Forbidden` and no `Content-Type`, and redirect-follow completion on public
-  443. The edge 403 is intentionally distinct from the backend 401 envelope and
-  does not prove the separate firewall TCP-reset/counter boundary. Successful
+  443. The edge 403 is intentionally distinct from the backend 401 envelope. A
+  later owner-supplied perimeter record corrects the earlier reset assumption:
+  three `REJECT` variants incremented the IPv4 deny counter but produced only a
+  caller timeout. The installed conntrack/original-port-443 rules remained
+  idempotent at three IPv4 plus one IPv6 `INPUT` rule across three applications
+  and survived a Docker-service restart; allowed traffic returned 200 in about
+  0.1 seconds, port 80 stayed reachable, and the loopback probe returned 403.
+  Exact artifacts are versioned under `ops/hostinger/perimeter/`; their real
+  paths and hostname are mandatory operator input. Real host reboot remains
+  `NOT_VERIFIED`. Successful
   HTTP-01 alongside the redirect proves issuance compatibility, not forced
   renewal. This repository turn is documentation-only; public router rollback,
   monitoring, recovery acceptance, and customer readiness remain unverified.

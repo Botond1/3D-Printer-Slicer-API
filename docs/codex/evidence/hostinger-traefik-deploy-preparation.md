@@ -155,11 +155,17 @@ migration can silently admit a future assignee and exclude the intended caller.
 The consumer must notify migration in advance, and the owner must re-verify and
 replace the live allowlist/firewall identity before the new host is used.
 
-The owner-observed empty `DOCKER-USER` chain and inactive UFW are inputs, not
-repository-verified current state. Docker-published ports can bypass UFW, so
-the planned `DOCKER-USER` rule is the only host-network second layer. A port-443
-rule cannot distinguish Host/SNI and is accepted only while this Traefik serves
-exactly one hostname; a second hostname is a mandatory stop and redesign.
+The owner-observed empty `DOCKER-USER` chain and inactive UFW were preparation
+inputs, not repository-verified current state. This checkpoint treated the
+planned `DOCKER-USER` rule as the IPv4 host-network second layer. Later target-
+host measurement showed that `[::]:443` uses docker-proxy without IPv6 DNAT and
+therefore bypasses `DOCKER-USER`; the live dual-stack correction uses
+`ip6tables INPUT` for IPv6 443. The current timeout/IPv6 mechanism and versioned
+perimeter artifacts are recorded in
+[`hostinger-leadpilot-route-activation.md`](hostinger-leadpilot-route-activation.md).
+A port-443 policy cannot distinguish Host/SNI and remains accepted only while
+this Traefik serves exactly one hostname; a second hostname is a mandatory stop
+and redesign.
 
 ## Local evidence
 

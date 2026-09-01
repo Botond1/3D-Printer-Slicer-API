@@ -689,59 +689,167 @@ node scripts/i12-hostinger-operator-contract.js --check-firewall-backend "$firew
 
 An empty, unknown, or `nftables` result is
 `STOP_DOCKER_FIREWALL_BACKEND_UNSUPPORTED`; the nftables backend has no
-`DOCKER-USER` chain and needs a separately designed and tested boundary. For
-the accepted backend, capture root-private `iptables-save` and
-`ip6tables-save` recovery inputs, require both `DOCKER-USER` chains to exist,
-and inventory their exact pre-existing order. Never flush, replace, or broadly
-accept either chain.
+supported `DOCKER-USER` contract and needs a separately designed and tested
+boundary. For the accepted backend, capture root-private `iptables-save` and
+`ip6tables-save` recovery inputs. Require and inventory the IPv4
+`DOCKER-USER` chain, and separately inventory the IPv6 `INPUT` chain. Never
+flush, replace, or broadly accept either ruleset. On this host an
+`ip6tables` `DOCKER-USER` rule is not an IPv6 enforcement seam: Docker exposes
+`[::]:443` through `docker-proxy` without IPv6 DNAT, so that traffic reaches
+the host `INPUT` chain and never traverses `DOCKER-USER`.
 
-The owner-observed starting state is an empty `DOCKER-USER` chain with inactive
-UFW. Published Docker ports can bypass UFW, so under the observed topology
-`DOCKER-USER` is the only host network-layer enforcement point. Treat this as
-owner-supplied preflight data and re-read it immediately before mutation; do
-not infer it from the repository.
+The owner-observed starting state was an empty IPv4 `DOCKER-USER` chain with
+inactive UFW. Published Docker ports can bypass UFW, so `DOCKER-USER` is the
+IPv4 network-layer enforcement point for the DNAT path on this host. The
+separate IPv6 listener requires `ip6tables INPUT` enforcement as described
+below. Treat these as owner-supplied host observations and re-read them
+immediately before mutation; do not infer current host state from the
+repository.
 
-This second layer is safe only while this Traefik serves exactly the one
+The IPv4 second layer is safe only while this Traefik serves exactly the one
 approved hostname. A destination-port 443 rule cannot distinguish HTTP Host or
 TLS SNI and would silently block every later HTTPS hostname on the shared
 Traefik. The presence or planned addition of a second hostname is therefore a
 stop requiring a separately designed per-host boundary; never carry this
 single-host `DOCKER-USER` rule forward unchanged.
 
-The external root-only orchestrator must build a new dedicated chain completely
-before adding one create-new, uniquely commented jump at the start of
-`DOCKER-USER`. Scope the jump to the verified public ingress interface and
-the owner-supplied, verified public VPS IPv4 destination; keep that value in
-root-private operator input and out of repository, logs, and evidence. Docker
-has already performed DNAT when packets reach this chain, so the policy must use
-conntrack `--ctorigdst <verified-public-VPS-IPv4>` together with
-`--ctorigdstport 80` and
-`--ctorigdstport 443`; plain `--dport 80` or `--dport 443` is forbidden.
-Port 80 remains globally reachable over IPv4 for ACME HTTP-01 and the HTTPS
-redirect. Port 443 accepts only the currently rendered `/32` entries, then
-emits a rate-bounded root-private event with the exact fixed prefix
-`J2_ALLOWLIST_DENY`, then uses `REJECT --reject-with tcp-reset` for every other
-source. The external caller receives a TCP reset and no HTTP status; it cannot
-be confused with a backend HTTP 401. Do not place a generic
-`ESTABLISHED,RELATED` accept before the source test because a connection
-established before activation must not bypass the new boundary. With no
-approved IPv6 callers and no `AAAA` record, reject
-new public IPv6 traffic to both 80 and 443; an absent IPv6 enforcement seam is
-a stop condition because Docker currently owns IPv6 host listeners too.
+The versioned perimeter implementation is kept without shortened comments in:
+
+- `ops/hostinger/perimeter/r3d-perimeter.sh`;
+- `ops/hostinger/perimeter/r3d-allowlist-probe.sh`;
+- `ops/hostinger/perimeter/r3d-perimeter.service`.
+
+The root-only orchestrator must install those reviewed repository files rather
+than recreating rules by hand. The perimeter script requires the root-private
+allowlist path and public-IPv4 path as explicit operator input; neither may
+have any built-in path default, especially one tied to a release SHA. The
+probe's repository default hostname is
+the deliberate non-routable `slicer-api.invalid` placeholder, so the approved
+hostname must be supplied explicitly for a real probe. Keep every real address,
+hostname, and path value out of the repository and shared evidence.
+
+From a verified Git operator pack, install the exact scripts as mode `0755` and
+the unit as mode `0644`. The unit deliberately requires, without an optional
+`-` prefix, `/etc/rocket3d/slicer-api/r3d-perimeter.env`; systemd does not
+inherit the invoking shell's environment. Create that file root:root mode
+`0600` outside the repository and evidence, containing absolute, release-local
+root-private paths for both mandatory variables. `R3D_PUBLIC_IFACE` may remain
+the reviewed `eth0` default only after interface verification.
+
+```sh
+verified_checkout="$(git rev-parse --show-toplevel)" || exit 1
+verified_checkout="$(cd "$verified_checkout" && pwd -P)" || exit 1
+install -o root -g root -m 0755 \
+  "$verified_checkout/ops/hostinger/perimeter/r3d-perimeter.sh" \
+  /usr/local/sbin/r3d-perimeter.sh || exit 1
+install -o root -g root -m 0755 \
+  "$verified_checkout/ops/hostinger/perimeter/r3d-allowlist-probe.sh" \
+  /usr/local/sbin/r3d-allowlist-probe.sh || exit 1
+install -o root -g root -m 0644 \
+  "$verified_checkout/ops/hostinger/perimeter/r3d-perimeter.service" \
+  /etc/systemd/system/r3d-perimeter.service || exit 1
+install -d -o root -g root -m 0700 /etc/rocket3d/slicer-api || exit 1
+[ -e /etc/rocket3d/slicer-api/r3d-perimeter.env ] || \
+  install -o root -g root -m 0600 /dev/null \
+    /etc/rocket3d/slicer-api/r3d-perimeter.env || exit 1
+```
+
+The private environment file must supply both values and no defaults:
+
+```text
+R3D_ALLOWLIST_FILE=<absolute-release-local-root-private-allowlist-file>
+R3D_PUBLIC_IPV4_FILE=<absolute-release-local-root-private-public-ipv4-file>
+R3D_PUBLIC_IFACE=eth0
+```
+
+Before enabling the unit, validate those paths without printing their contents,
+then, only in the authorized host window, reload systemd, enable/start the exact
+unit, prove it enabled and active, and run the probe with the real hostname only
+as operator input:
+
+```sh
+systemctl daemon-reload || exit 1
+systemctl enable --now r3d-perimeter.service || exit 1
+systemctl is-enabled --quiet r3d-perimeter.service || exit 1
+systemctl is-active --quiet r3d-perimeter.service || exit 1
+R3D_PROBE_HOST='<approved-hostname>' /usr/local/sbin/r3d-allowlist-probe.sh || exit 1
+```
+
+Do not run the install, reload, enable, start, or probe actions from a
+documentation-only change. They are host mutations and require the separately
+authorized operator window.
+
+The IPv4 script removes only its own comment-tagged rules, by rule number in
+descending order, before rebuilding the policy. Deleting by reconstructed rule
+text is forbidden: measured shell splitting of the quoted LOG prefix corrupts
+that command. The script then installs directly in IPv4 `DOCKER-USER`, in this
+order, one allow `RETURN`, one rate-limited diagnostic `LOG`, and one deny
+`REJECT` for the current singular `/32`. All three rules are scoped to the
+verified public ingress interface and root-private public VPS IPv4. Docker has
+already performed DNAT when packets reach this chain, so every IPv4 rule must
+use conntrack `--ctorigdst <verified-public-VPS-IPv4>` together with
+`--ctorigdstport 443`. Plain `--dport 443`, internal `--dport 8443`, and any
+rule matching original port 80 are forbidden. Port 80 remains globally
+reachable over IPv4 for ACME HTTP-01 and the HTTPS redirect. Do not place a
+generic `ESTABLISHED,RELATED` accept before the source test because a connection
+established before activation must not bypass the new boundary.
+
+The diagnostic line uses the exact fixed prefix `r3d-perimeter-deny: ` and is
+rate bounded. It is the operator-side detector for an otherwise silent timeout;
+raw journal lines and denied addresses remain root-private and never enter
+shared evidence.
+
+`REJECT --reject-with tcp-reset` is retained as the exact installed deny
+action, but it does not produce a caller-visible reset on this host. Three
+owner-supplied measurements all waited for the full client timeout and received
+nothing: internal `--dport 8443` with `icmp-admin-prohibited`, internal
+`--dport 8443` with `tcp-reset`, and conntrack original-destination port 443
+with `tcp-reset` (the latter repeated twice with a 15-second timeout). In every
+case the exact deny counter increased for each SYN and the allowlisted caller
+still received HTTP 200 in about 0.1 seconds. The measured structural cause is
+that the rejection is generated in `FORWARD` after DNAT with the private
+container address as source and is not translated back to the never-established
+caller connection. From the caller's perspective this layer therefore behaves
+as a drop: an address outside the allowlist sees a connection timeout, no reset,
+and no HTTP status. Do not reopen `REJECT` versus `DROP` without new contrary
+evidence; both caller-visible outcomes were tried and measured here.
+
+The IPv6 rule is separate. Before it existed, an arbitrary IPv6 client
+completed TLS and received Traefik HTTP 403, proving that an IPv4-only
+`DOCKER-USER` policy was half a control. With no approved IPv6 caller and no
+`AAAA` record, the script deletes only its own comment-tagged IPv6 rules and
+places one rule at the start of `ip6tables INPUT` to reject every new inbound
+TCP connection to port 443. Putting that rule in IPv6 `DOCKER-USER` would look
+plausible but enforce nothing on this docker-proxy path. IPv6 port 80 remains
+untouched because HTTP-01 validation uses IPv4 in the no-`AAAA` topology. Any
+approved IPv6 caller, new `AAAA`, or second HTTPS hostname is a stop requiring
+a redesigned dual-stack policy.
 
 Prove the installed policy by exact rule identity and counters before route
-activation. From the approved LeadPilot origin, 443 must pass. From a distinct
-external origin it must receive the expected TCP rejection while the exact
-firewall deny counter increments.
+activation. From the approved LeadPilot origin, 443 must return HTTP 200 within
+the accepted timing bound. From a distinct external IPv4 origin, the exact deny
+counter must increment for each SYN while the caller receives no bytes and
+reaches its bounded connection timeout. From an external IPv6 origin, port 443
+must likewise return no response after the `INPUT` rule is installed, while
+IPv4 behavior, SSH, and port 80 remain unchanged.
 Separately, from a run-owned peer that reaches Traefik without traversing the
 host-public firewall, an unlisted source must receive Traefik HTTP 403. From the
 allowed LeadPilot origin, a missing or wrong `x-slicer-api-key` must reach the
 backend and return HTTP 401 / `SLICE_SERVICE_AUTH_REQUIRED`. These observations
-make source rejection distinguishable from credential rejection without
-publishing an address. Rollback removes only the exact owned jump, proves it
-absent, then removes only the exact empty owned chain and rechecks the original
-ruleset identity. Rule persistence and the same positive/negative matrix must
-also survive the separately authorized Docker-service restart rehearsal.
+make three layers distinguishable without publishing an address: host-firewall
+timeout, Traefik HTTP 403, and backend HTTP 401. Rollback or re-application may
+remove only the exact owned comment-tagged rules, by descending rule number,
+and must recheck every unrelated pre-existing rule. Rule persistence and the
+same positive/negative matrix must also survive the separately authorized
+Docker-service restart rehearsal.
+
+The owner-supplied 2026-09-01 record reports that three successive applications
+remained idempotent at exactly three IPv4 rules and one IPv6 rule; the policy
+survived a Docker-service restart; the allowed caller returned HTTP 200 in about
+0.1 seconds; IPv6 port 443 returned no response; IPv4 port 80 remained
+reachable; and the loopback Traefik-only probe returned HTTP 403. These are
+point-in-time owner observations, not actions repeated by this documentation
+change. State after a real host reboot remains `NOT_VERIFIED`.
 
 ### J2 W3 ACME state and renewal boundary
 
@@ -1044,7 +1152,9 @@ record. During the first bounded activation it must correlate: authoritative
 DNS-only proof; exact firewall identity and counters; LeadPilot-origin
 authless `/health` and `/pricing`; one LeadPilot-principal synthetic slice;
 allowed-source wrong-key HTTP 401; Traefik-local unlisted-source HTTP 403; an
-external unlisted-source TCP rejection; certificate identity; queue idle; and
+external unlisted-source IPv4 timeout with exact deny-counter increment; an
+external IPv6 443 timeout through the `INPUT` seam; port-80 reachability;
+certificate identity; queue idle; and
 exact synthetic artifact cleanup. Record only fixed probe names, statuses,
 stable error codes, bounded counts, timings and boolean classifications. Raw
 addresses, credentials, Cloudflare records, firewall lines and access logs stay

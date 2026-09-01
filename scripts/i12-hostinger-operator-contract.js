@@ -60,8 +60,13 @@ const ROOT_ROUTER_METADATA_POLICY = Object.freeze({
     parentMode: 0o700
 });
 const CAPACITY_PRODUCER_EXEC = path.join('scripts', 'i12-capacity-producer-exec.py');
+const PERIMETER_COMMENT_SHA256 = '00079a0e680b63b43c6e13af60c2bf2409cce0c7011313e63addbbe58b745e1d';
+const ALLOWLIST_PROBE_COMMENT_SHA256 = '9a4ea7ea7344b8a7ec72a13091ca02f6a81e9535a86962641948a46bb4b3739e';
 const FILES = Object.freeze({
     compose: 'docker-compose.traefik.yml',
+    perimeterScript: path.join('perimeter', 'r3d-perimeter.sh'),
+    allowlistProbe: path.join('perimeter', 'r3d-allowlist-probe.sh'),
+    perimeterService: path.join('perimeter', 'r3d-perimeter.service'),
     routerTemplate: path.join('templates', 'slicer-api-router.yml.disabled'),
     runbook: 'RUNBOOK.md'
 });
@@ -103,6 +108,12 @@ function normalize(source) {
 
 function activeSource(source) {
     return normalize(source).split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
+}
+
+function commentSourceDigest(source) {
+    const comments = normalize(source).split('\n')
+        .filter((line) => /^\s*#/.test(line)).join('\n') + '\n';
+    return crypto.createHash('sha256').update(comments, 'utf8').digest('hex');
 }
 
 function occurrences(source, fragment) {
@@ -432,6 +443,124 @@ function renderRouterSource(template, hostname, cidrs) {
     return Object.freeze({ error, source: error ? null : source });
 }
 
+function validatePerimeterScriptSource(source) {
+    if (!safeSource(source)) return 'hostinger_perimeter_script_source_malformed';
+    const normalized = normalize(source);
+    const executable = activeSource(source);
+    if (commentSourceDigest(source) !== PERIMETER_COMMENT_SHA256) {
+        return 'hostinger_perimeter_script_comment_contract_mismatch';
+    }
+    for (const fragment of [
+        '#!/bin/sh', 'set -eu',
+        ': "${R3D_ALLOWLIST_FILE:?Set R3D_ALLOWLIST_FILE to the absolute root-private allowlist path}"',
+        ': "${R3D_PUBLIC_IPV4_FILE:?Set R3D_PUBLIC_IPV4_FILE to the absolute root-private public-IPv4 path}"',
+        'ALLOWLIST_FILE="$R3D_ALLOWLIST_FILE"', 'PUBIP_FILE="$R3D_PUBLIC_IPV4_FILE"',
+        'IFACE="${R3D_PUBLIC_IFACE:-eth0}"',
+        'DOCKER-USER sits in the FORWARD chain, which runs AFTER nat/PREROUTING.',
+        'Deleted BY RULE NUMBER, highest first -- not by reconstructing the rule text',
+        "sort -rn); do\n        iptables -D DOCKER-USER \"$n\"",
+        'iptables -I DOCKER-USER "$pos" -i "$IFACE" -p tcp -m conntrack --ctorigdst "$PUBIP" --ctorigdstport 443',
+        'iptables -A DOCKER-USER -i "$IFACE" -p tcp -m conntrack --ctorigdst "$PUBIP" --ctorigdstport 443',
+        '--comment "$TAG_ALLOW" -j RETURN',
+        '-m limit --limit 6/min --limit-burst 10',
+        '--comment "$TAG_LOG" -j LOG --log-prefix "r3d-perimeter-deny: " --log-level 6',
+        '--comment "$TAG_DENY" -j REJECT --reject-with tcp-reset',
+        'waits the full timeout and receives nothing',
+        'FROM THE CALLER\'S POINT OF VIEW THIS', 'BEHAVES AS A DROP.',
+        'Do not re-litigate REJECT vs DROP here without new',
+        'Docker binds [::]:443 through docker-proxy and there is NO IPv6 DNAT on',
+        'it arrives\n#   as INPUT to the host',
+        'putting it in DOCKER-USER would look right and do nothing',
+        "sort -rn); do\n        ip6tables -D INPUT \"$n\"",
+        'ip6tables -I INPUT 1 -p tcp --dport 443 -m conntrack --ctstate NEW',
+        '--comment "$TAG_V6DENY" -j REJECT --reject-with tcp-reset',
+        'Port 80 over IPv6 is deliberately untouched',
+        'if iptables -S DOCKER-USER | grep -qE -- "--dport $HTTP_CPORT|--ctorigdstport 80"; then',
+        'FATAL that breaks ACME HTTP-01 renewal. Refusing to leave this state.'
+    ]) {
+        if (!normalized.includes(fragment)) return 'hostinger_perimeter_script_contract_mismatch';
+    }
+    if (occurrences(executable, '--ctorigdst "$PUBIP" --ctorigdstport 443') !== 3
+        || occurrences(executable, 'iptables -A DOCKER-USER') !== 2
+        || occurrences(executable, 'ip6tables -I INPUT 1') !== 1
+        || /R3D_(?:ALLOWLIST_FILE|PUBLIC_IPV4_FILE):-/.test(executable)
+        || /^iptables\s.*--dport\s+(?:443|"?\$HTTPS_CPORT"?)/m.test(executable)
+        || /^ip6tables\s.*DOCKER-USER/m.test(executable)
+        || /^ip6tables\s.*--dport\s+80(?:\s|$)/m.test(executable)
+        || /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/.test(normalized)
+        || /\b[0-9a-f]{40}\b/i.test(executable)) {
+        return 'hostinger_perimeter_script_contract_mismatch';
+    }
+    const allowIndex = executable.indexOf('--comment "$TAG_ALLOW" -j RETURN');
+    const logIndex = executable.indexOf('--comment "$TAG_LOG" -j LOG');
+    const denyIndex = executable.indexOf('--comment "$TAG_DENY" -j REJECT');
+    if (allowIndex < 0 || logIndex <= allowIndex || denyIndex <= logIndex) {
+        return 'hostinger_perimeter_rule_order_mismatch';
+    }
+    return null;
+}
+
+function validateAllowlistProbeSource(source) {
+    if (!safeSource(source)) return 'hostinger_allowlist_probe_source_malformed';
+    const normalized = normalize(source);
+    const executable = activeSource(source);
+    if (commentSourceDigest(source) !== ALLOWLIST_PROBE_COMMENT_SHA256) {
+        return 'hostinger_allowlist_probe_comment_contract_mismatch';
+    }
+    for (const fragment of [
+        '#!/bin/sh', 'set -eu',
+        'WHY THIS EXISTS, AND WHY IT MATTERS MORE THAN THE IPTABLES LAYER',
+        'WHY 127.0.0.1 AND NOT THE PUBLIC NAME',
+        'HOST="${R3D_PROBE_HOST:-slicer-api.invalid}"',
+        '[ "$HOST" != "slicer-api.invalid" ]',
+        'set R3D_PROBE_HOST to the approved hostname',
+        '--resolve "$HOST:443:127.0.0.1"',
+        '403)', 'OK (403) -- Traefik allowlist is refusing non-allowlisted callers',
+        '200)', 'THE TRAEFIK ALLOWLIST HAS FAILED OPEN.',
+        '000)', 'FAIL (no response) -- Traefik not answering on 443 locally'
+    ]) {
+        if (!normalized.includes(fragment)) return 'hostinger_allowlist_probe_contract_mismatch';
+    }
+    const withoutLoopback = normalized.replaceAll('127.0.0.1', 'loopback');
+    if (occurrences(executable, 'slicer-api.invalid') !== 2
+        || exactLineCount(normalized, '    403)') !== 1
+        || exactLineCount(normalized, '    200)') !== 1
+        || exactLineCount(normalized, '    000)') !== 1
+        || /\b[a-z0-9.-]+\.hu\b/i.test(normalized)
+        || /\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b/.test(withoutLoopback)) {
+        return 'hostinger_allowlist_probe_contract_mismatch';
+    }
+    return null;
+}
+
+function validatePerimeterServiceSource(source) {
+    if (!safeSource(source)) return 'hostinger_perimeter_service_source_malformed';
+    const normalized = normalize(source);
+    const required = [
+        '[Unit]',
+        'Description=R3D network-layer perimeter for the public HTTPS listener',
+        'Documentation=file:///usr/local/sbin/r3d-perimeter.sh',
+        'After=docker.service', 'Requires=docker.service', 'PartOf=docker.service',
+        '[Service]', 'Type=oneshot', 'RemainAfterExit=yes',
+        'EnvironmentFile=/etc/rocket3d/slicer-api/r3d-perimeter.env',
+        'ExecStart=/usr/local/sbin/r3d-perimeter.sh',
+        '[Install]', 'WantedBy=multi-user.target'
+    ];
+    let prior = -1;
+    for (const fragment of required) {
+        const index = normalized.indexOf(fragment);
+        if (index <= prior || occurrences(normalized, fragment) !== 1) {
+            return 'hostinger_perimeter_service_contract_mismatch';
+        }
+        prior = index;
+    }
+    if (/^EnvironmentFile=-/m.test(normalized) || /^Environment=/m.test(normalized)
+        || /^ExecStop=/m.test(normalized)) {
+        return 'hostinger_perimeter_service_contract_mismatch';
+    }
+    return null;
+}
+
 function validateRunbookSource(source) {
     if (!safeSource(source)) return 'hostinger_runbook_source_malformed';
     const required = [
@@ -608,20 +737,41 @@ function validateRunbookSource(source) {
         'authoritative read-only API response', '`proxied` field is boolean `false`',
         'STOP_DNS_ONLY_BOUNDARY_UNPROVEN', 'deliberately has no `ipStrategy`',
         '--check-firewall-backend "$firewall_backend" || exit 1',
-        'STOP_DOCKER_FIREWALL_BACKEND_UNSUPPORTED', '`DOCKER-USER` chains',
-        'owner-observed starting state is an empty `DOCKER-USER` chain with inactive',
+        'STOP_DOCKER_FIREWALL_BACKEND_UNSUPPORTED',
+        'Require and inventory the IPv4\n`DOCKER-USER` chain',
+        '`ip6tables` `DOCKER-USER` rule is not an IPv6 enforcement seam',
+        'owner-observed starting state was an empty IPv4 `DOCKER-USER` chain with\ninactive UFW',
         'Published Docker ports can bypass UFW',
         'only while this Traefik serves exactly the one',
         'second hostname is therefore a\nstop requiring a separately designed per-host boundary',
-        'owner-supplied, verified public VPS IPv4 destination',
-        'root-private operator input and out of repository, logs, and evidence',
-        '`--ctorigdst <verified-public-VPS-IPv4>`',
-        '`--ctorigdstport 80`', '`--ctorigdstport 443`',
-        'plain `--dport 80` or `--dport 443` is forbidden',
-        'Port 80 remains globally reachable over IPv4',
-        'Port 443 accepts only the currently rendered `/32` entries',
-        '`J2_ALLOWLIST_DENY`', '`REJECT --reject-with tcp-reset`',
-        'receives a TCP reset and no HTTP status',
+        'ops/hostinger/perimeter/r3d-perimeter.sh',
+        'ops/hostinger/perimeter/r3d-allowlist-probe.sh',
+        'ops/hostinger/perimeter/r3d-perimeter.service',
+        '`-` prefix, `/etc/rocket3d/slicer-api/r3d-perimeter.env`',
+        'R3D_ALLOWLIST_FILE=<absolute-release-local-root-private-allowlist-file>',
+        'R3D_PUBLIC_IPV4_FILE=<absolute-release-local-root-private-public-ipv4-file>',
+        '`slicer-api.invalid` placeholder',
+        'systemd does not\ninherit the invoking shell\'s environment',
+        'verified public ingress interface and root-private public VPS IPv4',
+        'Keep every real address,\nhostname, and path value out of the repository and shared evidence',
+        'removes only its own comment-tagged rules, by rule number in\ndescending order',
+        'installs directly in IPv4 `DOCKER-USER`, in this\norder',
+        '`--ctorigdst <verified-public-VPS-IPv4>`', '`--ctorigdstport 443`',
+        'Plain `--dport 443`, internal `--dport 8443`, and any\nrule matching original port 80 are forbidden',
+        'Port 80 remains globally\nreachable over IPv4',
+        'for the current singular `/32`',
+        'exact fixed prefix `r3d-perimeter-deny: `',
+        '`REJECT --reject-with tcp-reset` is retained as the exact installed deny',
+        'waited for the full client timeout and received\nnothing',
+        'From the caller\'s perspective this layer therefore behaves\nas a drop',
+        'connection timeout, no reset,\nand no HTTP status',
+        'Do not reopen `REJECT` versus `DROP` without new contrary\nevidence',
+        'Docker exposes\n`[::]:443` through `docker-proxy` without IPv6 DNAT',
+        'places one rule at the start of `ip6tables INPUT` to reject every new inbound\nTCP connection to port 443',
+        'IPv6 port 80 remains\nuntouched',
+        'exactly three IPv4 rules and one IPv6 rule',
+        'the loopback Traefik-only probe returned HTTP 403',
+        'State after a real host reboot remains `NOT_VERIFIED`',
         'Traefik HTTP 403', 'HTTP 401 / `SLICE_SERVICE_AUTH_REQUIRED`',
         '`traefik-letsencrypt`', '`traefik_traefik-letsencrypt`',
         'STOP_ACME_VOLUME_IDENTITY_UNPROVEN', 'STOP_ACME_RENEWAL_REHEARSAL_UNPROVEN',
@@ -1478,6 +1628,9 @@ function loadOperatorPack() {
 
 function validateOperatorPack(sources) {
     return validateComposeSource(sources.compose) || validateRouterSource(sources.routerTemplate)
+        || validatePerimeterScriptSource(sources.perimeterScript)
+        || validateAllowlistProbeSource(sources.allowlistProbe)
+        || validatePerimeterServiceSource(sources.perimeterService)
         || validateRunbookSource(sources.runbook)
         || validateCapacityProducerSource(sources.capacityProducerExec);
 }
@@ -2418,7 +2571,9 @@ module.exports = Object.freeze({
     inspectRouterSecurityBoundary, sameRouterSecurityBoundary,
     secureRootPrivateFileMetadata, secureRouterDirectoryMetadata, secureRouterFileMetadata,
     validateActiveRouter, validateAllowlistCidrs, validateCapacityProducerSource,
-    validateComposeSource, validateOperatorPack, validateDarkDynamicDirectory, validateRouterSource,
+    validateAllowlistProbeSource, validateComposeSource, validateOperatorPack,
+    validateDarkDynamicDirectory, validatePerimeterScriptSource,
+    validatePerimeterServiceSource, validateRouterSource,
     validateRepositoryPrivateStorageContract, validateRouterStagingMetadata,
     validateLiveDynamicSource, validateRunbookSource, verifyRouterRehearsalLock,
     validComposeVersion, validFirewallBackend

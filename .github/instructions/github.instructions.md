@@ -82,8 +82,10 @@ Last synchronized: 2026-09-01
   prove source compatibility. A later owner-supplied execution record reports
   exact `router_activation=PASS phase=leadpilot-only entries=1`, certificate
   issuance, allowed-source HTTP 200, external unlisted-source plain HTTP 403,
-  and redirect-follow completion on public 443. The 403 does not prove the
-  separate host-firewall TCP-reset/counter gate, and successful HTTP-01 issuance
+  and redirect-follow completion on public 443. A later owner-supplied record
+  proves the separate IPv4 deny counters with caller-visible timeout, IPv6
+  `INPUT` block, three-IPv4 plus one-IPv6 idempotency, and Docker-service restart
+  survival; real host reboot remains unverified. Successful HTTP-01 issuance
   does not prove the forced-renewal rehearsal. This repository change is
   documentation-only. Public router rollback/final-dark, monitoring,
   backup/recovery acceptance, customer traffic, and full production acceptance

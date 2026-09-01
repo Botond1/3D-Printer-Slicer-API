@@ -26,6 +26,9 @@ OWNER_REPORTED_BF5E712_DARK_API_DEPLOYMENT_COMPLETE;
 OWNER_REPORTED_APPLICATION_ROLLBACK_ROUND_TRIP_COMPLETE;
 OWNER_REPORTED_ROUTER_ACTIVATION_PASS_LEADPILOT_ONLY_ENTRIES_1;
 OWNER_REPORTED_TLS_AND_EXTERNAL_CALLER_MATRIX_PASS;
+OWNER_REPORTED_PERIMETER_IPV4_IPV6_PASS;
+OWNER_REPORTED_DOCKER_SERVICE_RESTART_SURVIVAL_PASS;
+REAL_HOST_REBOOT_NOT_VERIFIED;
 PUBLIC_ROUTE_ACTIVE_LEADPILOT_ONLY`.
 
 Exact protected-main source
@@ -51,8 +54,15 @@ HTTP 200 from the sole approved `/32`, HTTP 403 from an external unlisted
 source, and redirect-follow completion on public port 443. The 403 response had
 `Content-Length: 9`, body `Forbidden`, and no `Content-Type`; this is an
 intentional edge/source rejection distinct from the backend HTTP 401
-application envelope for a wrong key. It is not evidence that the separate
-`DOCKER-USER` TCP-reset/counter boundary passed.
+application envelope for a wrong key. A later owner-supplied perimeter record
+corrects the prior TCP-reset assumption: three IPv4 `REJECT` variants all
+incremented the deny counter but produced only a caller timeout. The installed
+IPv4 rules use conntrack original destination plus port 443, while IPv6 443 is
+blocked in `ip6tables INPUT` because this host's `[::]:443` docker-proxy path
+bypasses `DOCKER-USER`. Three applications remained exactly three IPv4 plus one
+IPv6 rule, Docker-service restart survival passed, allowed traffic returned 200
+in about 0.1 seconds, port 80 remained reachable, and the loopback Traefik probe
+returned 403. State after a real host reboot remains `NOT_VERIFIED`.
 
 Automatic no-deploy rehearsal `33450012850` separately failed closed at
 rehearsal-input materialization: the fixed previous source is an ancestor and
@@ -64,11 +74,16 @@ CI run green or prove the public route rehearsal. The local operator correction
 narrows the router to one canonical `/32`,
 direct-peer Traefik v3 `ipAllowList`, external redirect `:443`, exact live
 dynamic-bind/operator-release equality, and the accepted shared-machine,
-address-reassignment, and single-host `DOCKER-USER` risks. Successful HTTP-01
+address-reassignment, single-host IPv4 `DOCKER-USER`, and IPv6 `INPUT` risks.
+The exact perimeter script, probe, and systemd unit are versioned under
+`ops/hostinger/perimeter/`; their address and release paths remain mandatory
+root-private operator inputs. Successful HTTP-01
 validation while the global redirect remained enabled proves redirect/challenge
 compatibility for issuance, not the separate forced-renewal rehearsal. This
 repository turn is documentation-only and performs no VPS, container, router,
-DNS, firewall, mounted-directory, or consumer mutation. See
+DNS, firewall, mounted-directory, or consumer mutation. Real reboot, public
+router rollback, forced renewal, monitoring, backup/recovery acceptance, and
+customer readiness remain separate. See
 `docs/codex/evidence/hostinger-leadpilot-route-activation.md`.
 
 ## Current J3B native-envelope and original-dimension corrective candidate
@@ -214,7 +229,10 @@ happen. All route actions require one inherited root-private rehearsal lock,
 stable root-owned protected ancestors, and exact equality between the running
 Traefik dynamic-bind source and the executing operator pack. The HTTP redirect
 targets external `:443`, never internal `:8443`. The planned `DOCKER-USER`
-second layer is valid only while Traefik serves this single hostname. Rehearsal
+second layer was an IPv4-only preparation contract, not live reset evidence;
+the current section above supersedes it with measured timeout behavior and the
+separate IPv6 `INPUT` seam. It is valid only while Traefik serves this single
+hostname. Rehearsal
 acceptance requires strict dark assertion. The historical repository-preparation
 turn did not mutate the live route or prove the VPS firewall, mount, redirect,
 or allowlist; the later owner-supplied activation is recorded in the current

@@ -236,6 +236,9 @@ OWNER_REPORTED_BF5E712_DARK_API_DEPLOYMENT_COMPLETE;
 OWNER_REPORTED_APPLICATION_ROLLBACK_ROUND_TRIP_COMPLETE;
 OWNER_REPORTED_ROUTER_ACTIVATION_PASS_LEADPILOT_ONLY_ENTRIES_1;
 OWNER_REPORTED_TLS_AND_EXTERNAL_CALLER_MATRIX_PASS;
+OWNER_REPORTED_PERIMETER_IPV4_IPV6_PASS;
+OWNER_REPORTED_DOCKER_SERVICE_RESTART_SURVIVAL_PASS;
+REAL_HOST_REBOOT_NOT_VERIFIED;
 PUBLIC_ROUTE_ACTIVE_LEADPILOT_ONLY`.
 
 Exact protected-main source
@@ -266,8 +269,11 @@ and a redirect-following client terminating on public port 443. The blocked
 response was `HTTP/1.1 403 Forbidden` with `Content-Length: 9`, body
 `Forbidden`, and no `Content-Type`. Consumers intentionally map that edge
 response to an unknown source address; backend HTTP 401 with the API envelope
-continues to mean a recognized source supplied a wrong key. The external 403
-does not prove the separate host-firewall TCP-reset rule or its counters.
+continues to mean a recognized source supplied a wrong key. A separate
+owner-supplied perimeter record corrects the prior reset assumption: three IPv4
+`REJECT` variants all incremented the exact deny counter but produced a caller
+timeout with no response. That timeout is the host-network outcome; HTTP 403 is
+the Traefik outcome; HTTP 401 is the backend credential outcome.
 Production HTTP-01 validation succeeded while the global redirect remained
 enabled, proving challenge/redirect compatibility for issuance but not the
 separate forced-renewal rehearsal.
@@ -294,9 +300,17 @@ running Traefik /etc/traefik/dynamic bind source
   -> exactly one absolute canonical bind path
   -> must equal this helper release's canonical ops/hostinger/dynamic
   -> mismatch/missing/symlink/relative path: STOP_LIVE_DYNAMIC_RELEASE_MISMATCH
-owner-observed empty DOCKER-USER + inactive UFW
-  -> re-read before mutation; repository does not prove current host state
-  -> port-443 second layer is valid only while Traefik serves one hostname
+versioned ops/hostinger/perimeter artifacts
+  -> mandatory root-private allowlist/public-IPv4 path inputs
+  -> probe default slicer-api.invalid; real hostname is operator input
+IPv4 Docker DNAT path
+  -> DOCKER-USER + conntrack original destination/original port 443
+  -> one allow RETURN + bounded LOG + terminal REJECT
+  -> blocked caller times out even though deny counters increment
+IPv6 docker-proxy path
+  -> no IPv6 DNAT; never traverses DOCKER-USER
+  -> ip6tables INPUT blocks NEW/443; port 80 remains untouched
+  -> any AAAA/approved IPv6 caller requires redesign
 ```
 
 The allowlist is explicitly machine-level trust for a shared host. Address
@@ -309,9 +323,10 @@ This repository turn is documentation-only and performs no deploy, container
 replacement, mounted-directory write, router activation, DNS/allowlist/firewall
 mutation, consumer change, or customer traffic. It does not independently
 repeat the owner-supplied live observations. Exact host-firewall identity and
-counters, forced-renewal rehearsal, public router rollback, monitoring,
-backup/recovery acceptance, and customer-traffic readiness remain
-`NOT VERIFIED`. See
+counter behavior, IPv6 block, idempotency, and Docker-service restart survival
+are owner-reported point-in-time evidence. Real host reboot, forced-renewal
+rehearsal, public router rollback, monitoring, backup/recovery acceptance, and
+customer-traffic readiness remain `NOT VERIFIED`. See
 [`evidence/hostinger-leadpilot-route-activation.md`](evidence/hostinger-leadpilot-route-activation.md).
 
 ## Historical J2 bounds, catalogue, network, and calibration candidate
@@ -373,9 +388,9 @@ GET /profiles
   -> 304 on matching If-None-Match
   -> typed non-cacheable 503 when catalogue initialization is unavailable
   -> never gates readiness or slicing
-one private source /32 -> LeadPilot-only first activation phase
-two through four private /32s -> later caller expansion
-  -> router deny 403 or host-firewall TCP reset/J2_ALLOWLIST_DENY
+historical J2 source plan -> one to four private /32s
+  -> historical planned router 403 / host-firewall reset split
+  -> superseded by current single-/32 timeout + IPv6 INPUT evidence above
   -> application principal failure remains a distinct 401
   -> one inherited root-private FD9 flock spans the complete rehearsal
   -> stable canonical/root-owned/non-writable ancestor chains around each action
@@ -1575,9 +1590,11 @@ Runtime route registration, not README lists, is canonical:
   owner-supplied record reports exact
   `router_activation=PASS phase=leadpilot-only entries=1`, certificate issuance,
   approved-source HTTP 200, external unlisted-source HTTP 403 without a
-  `Content-Type`, and redirect-follow completion on public 443. Exact firewall
-  identity/counters, forced renewal, public router rollback,
-  monitoring/recovery acceptance, and customer readiness remain `UNVERIFIED`;
+  `Content-Type`, and redirect-follow completion on public 443. A later supplied
+  perimeter record adds IPv4 timeout/counters, IPv6 `INPUT` blocking,
+  idempotency, and Docker-service restart survival. Real reboot, forced renewal,
+  public router rollback, monitoring/recovery acceptance, and customer readiness
+  remain `UNVERIFIED`;
 - `choosenFile`, stable status/error mappings, Prusa FDM/SLA, Orca FDM-only,
   profile pairing, pricing behavior, and argument semantics are compatibility
   invariants for behavior-preserving stages;
@@ -1619,10 +1636,11 @@ readiness/observability and private-peer topology; historical I12 evidence
 verifies one exact dark deployment with denied API/native egress and corrected
 proxy gateway behavior. The later owner-supplied record reports a live
 LeadPilot-only route, issued certificate, approved-source HTTP 200,
-unlisted-source HTTP 403, and redirect-follow completion on public 443. Exact
-firewall identity/counters, forced renewal, public router rollback,
-monitoring/backup/recovery acceptance, and customer readiness remain separately
-authorized and `UNVERIFIED`.
+unlisted-source HTTP 403, and redirect-follow completion on public 443. A later
+owner-supplied record adds IPv4 timeout/counters, IPv6 `INPUT` blocking,
+idempotency, and Docker-service restart survival. Real reboot, forced renewal,
+public router rollback, monitoring/backup/recovery acceptance, and customer
+readiness remain separately authorized and `UNVERIFIED`.
 
 ## Historical S0 test and CI capability matrix
 
@@ -1695,11 +1713,12 @@ delta above for present test and audit status.
 - `OWNER_REPORTED_LIVE_LEADPILOT_ONLY`: exact
   `router_activation=PASS phase=leadpilot-only entries=1`, issued certificate,
   approved-source HTTP 200, unlisted-source HTTP 403 without `Content-Type`,
-  and redirect-follow completion on public 443.
+  redirect-follow completion on public 443, later measured IPv4 timeout/counters,
+  IPv6 `INPUT` blocking, idempotency, and Docker-service restart survival.
 - `UNVERIFIED`: exact public proxy CIDRs/hops/timeouts, capacity beyond small
-  synthetic N=1, exact firewall identity/counters, DNS configuration lifecycle,
-  forced renewal, quotas under real workloads, backups, monitoring, public
-  router rollback, and customer readiness.
+  synthetic N=1, DNS configuration lifecycle, real host reboot, forced renewal,
+  quotas under real workloads, backups, monitoring, public router rollback, and
+  customer readiness.
 - `UNVERIFIED`: production secret source, ownership, filesystem mode, and
   current/previous/revoked key state.
 - Locally tested process-tree cancellation and the bounded dark host probes do

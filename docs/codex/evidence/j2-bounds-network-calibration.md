@@ -124,8 +124,8 @@ the first activation phase.
 An allowlist rejection is distinguishable from application principal failure:
 
 - the Traefik router rejection is HTTP `403`;
-- the host-firewall rejection is a TCP reset with the private
-  `J2_ALLOWLIST_DENY` event class;
+- the historical repository design expected a host-firewall TCP reset with the
+  private `J2_ALLOWLIST_DENY` event class;
 - application principal rejection remains HTTP `401`.
 
 The repository operator prepares and validates the dark-to-active rehearsal,
@@ -140,6 +140,13 @@ The local contract is sourced from
 `ops/hostinger/templates/slicer-api-router.yml.disabled`,
 `scripts/i12-hostinger-operator-contract.js`, and their unit tests. It is
 preparation evidence only, not a live network observation.
+
+That expected reset was later disproved on the target host. The installed
+`REJECT` action increments its deny counters but is caller-visible as a timeout,
+and IPv6 `[::]:443` requires a separate `ip6tables INPUT` rule because its
+docker-proxy path bypasses `DOCKER-USER`. This historical J2 preparation claim
+is superseded by
+[`hostinger-leadpilot-route-activation.md`](hostinger-leadpilot-route-activation.md).
 
 The no-clobber helper also binds the live dynamic directory to exact root:root
 mode `0700`, its `.gitkeep` sentinel to exact root:root mode `0600`, and proves
