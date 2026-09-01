@@ -35,5 +35,8 @@
     "compatible_printers": [
         "MyMarlin 0.4 nozzle",
         "MyH2D 0.4 nozzle"
+    ],
+    "filament_max_volumetric_speed": [
+        "12"
     ]
 }

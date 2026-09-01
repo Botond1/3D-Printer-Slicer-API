@@ -36,7 +36,14 @@ test('repository Orca profiles resolve the exact v2.3.1 Custom parent chain', ()
     );
     assert.equal(Object.hasOwn(processProfile, 'inherits'), false);
     assert.equal(processProfile.layer_height, '0.2');
-    assert.equal(processProfile.outer_wall_acceleration, '1000');
+    // A key we deliberately override with the Bambu P1S vendor value. The
+    // vendored parent still carries 1000; seeing 1000 here would mean our
+    // override stopped being applied, which is exactly the silent regression
+    // that made every Orca quote several times too slow.
+    assert.equal(processProfile.outer_wall_acceleration, '5000');
+    // A key we do NOT override, so it must still arrive from the vendored
+    // parent chain. Together with the line above this proves the resolver
+    // both inherits and lets the child win, rather than one or the other.
     assert.equal(processProfile.slowdown_for_curled_perimeters, '1');
     assert.deepEqual(processProfile.compatible_printers, ['MyMarlin 0.4 nozzle']);
 
