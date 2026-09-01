@@ -155,6 +155,14 @@ from a later operator-only commit. The API image must use the canonical
 in this pack as
 `traefik:v3.7.11@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144`.
 
+The API-image source SHA and operator-pack source SHA are deliberately not an
+equality pair. A later verified operator-pack checkout may supply the runbook,
+helpers, Compose source, and hash-bound host-mounted configs while the API stays
+pinned to an older signed digest. The running image may still be attributed only
+to its attested API-image source SHA. Merging the later operator pack does not
+relabel that image or by itself require a new candidate; a new publication is
+required only before claiming that the image was built from the later source.
+
 Identify the existing Traefik ACME account contact and the exact existing named
 volume that owns its `/letsencrypt/acme.json`. Set their metadata-only operator
 values as `ACME_EMAIL` and `TRAEFIK_ACME_VOLUME`. The volume must already exist;
@@ -266,7 +274,7 @@ case "$resolved_slicer_uid" in ''|0|0*|*[!0-9]*) exit 1 ;; esac
 case "$resolved_slicer_gid" in ''|0|0*|*[!0-9]*) exit 1 ;; esac
 export SLICER_UID="$resolved_slicer_uid" SLICER_GID="$resolved_slicer_gid"
 SLICER_API_IMAGE="$candidate_image" node scripts/i7-production-compose-contract.js || exit 1
-rendered_api_image="$(SLICER_API_IMAGE="$candidate_image" docker compose --env-file "$operator_values_file" -f docker-compose.production.yml config --images)"
+rendered_api_image="$(SLICER_API_IMAGE="$candidate_image" docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml config --images)"
 [ "$rendered_api_image" = "$candidate_image" ] || exit 1
 ```
 
@@ -283,8 +291,17 @@ Create the canonical `slicer-api-private` internal network by bringing up only
 attaching Traefik. The API has no published host port and the committed
 `ops/hostinger/dynamic/` directory contains no router.
 
+The production Compose project name is always the literal `slicer-api`. Every
+production API Compose command must pass explicit `-p slicer-api` before
+`--env-file`; deriving the project from the current release directory or from an
+ambient value is forbidden because release directory names change while the
+service project identity does not. After start, prove the resulting Compose
+project label before accepting the container.
+
 ```sh
-SLICER_API_IMAGE="$candidate_image" docker compose --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api
+SLICER_API_IMAGE="$candidate_image" docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api
+api_compose_project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' 3d-psa-backend-server)" || exit 1
+[ "$api_compose_project" = "slicer-api" ] || exit 1
 ```
 
 Use a disposable, explicitly authorized peer on `slicer-api-private` to prove
@@ -386,7 +403,7 @@ not run cleanup against a running, absent, ambiguously identified, nonzero-exit,
 or OOM-killed API container.
 
 ```sh
-docker compose --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api
+docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api
 api_stop_state="$(docker inspect --format '{{.State.Status}} {{.State.Running}} {{.State.ExitCode}} {{.State.OOMKilled}}' 3d-psa-backend-server)"
 [ "$api_stop_state" = "exited false 0 false" ] || exit 1
 ```
@@ -423,7 +440,7 @@ and runtime image ID against the candidate, and require healthy/running with zer
 restarts and no OOM.
 
 ```sh
-SLICER_API_IMAGE="$candidate_image" docker compose --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api
+SLICER_API_IMAGE="$candidate_image" docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api
 candidate_image_id="$(docker image inspect --format '{{.Id}}' "$candidate_image")"
 api_runtime_identity="$(docker inspect --format '{{.Config.Image}} {{.Image}} {{.State.Status}} {{.State.Running}} {{.RestartCount}} {{.State.OOMKilled}}' 3d-psa-backend-server)"
 [ "$api_runtime_identity" = "$candidate_image $candidate_image_id running true 0 false" ] || exit 1
@@ -440,6 +457,50 @@ to be exact decimal zero before any Traefik action:
 [ "$qualification_exit" -eq 0 ] || exit 1
 [ "$cleanup_exit" -eq 0 ] || exit 1
 ```
+
+### Dark-route operator substitute for an intentional configs compatibility stop
+
+An automatic no-deploy rehearsal that stops with exact
+`source_compatibility_verification_failure` because `configs/` intentionally
+differs from the fixed previous policy source remains correctly failed closed;
+the operator substitute does not turn the CI run green or weaken its source
+compatibility guard. When that configs difference is the only compatibility
+predicate that failed, publication and attestations are already verified, and
+the route is proved dark before, throughout, and after the operation, the owner
+may close the candidate-specific rollback-readiness question with a bounded
+actual-host `candidate -> previous -> candidate` switch.
+
+Because the CI classification is generic, independently re-run and record every
+source predicate in a separate clean compatibility-verification checkout pinned
+to the candidate source, not in the later live operator-pack checkout: both
+exact commits exist; the checked-out `HEAD` equals the candidate source SHA; the
+previous source is its ancestor; `docker-compose.production.yml` is unchanged;
+and the reviewed, intentional `configs/` diff is the only nonzero compatibility
+predicate. Any malformed or equal SHA, Git failure, `HEAD` mismatch, ancestry
+failure, or production Compose drift forbids the substitute.
+
+For each direction, bind that release's separately recorded exact signed image
+digest, matching operator-pack commit and file hashes, explicit `-p slicer-api`,
+exact operator environment, configs source, pricing-state snapshot, and
+container/image identity. Require both the previous release and the restored
+candidate to become healthy within the same bounded deadline; after returning
+to the candidate, also require the normal dark `/health`, `/ready`, and candidate
+contract probes. Keep the previous
+image, previous release directory, previous operator environment, and pricing-
+state recovery snapshot intact. Any identity mismatch, active route,
+unavailable recovery input, missed health deadline, or failed candidate
+readiness observation is a stop. This operator-host rehearsal is an accepted
+substitute for the blocked automatic
+runtime rehearsal only; it is not a source-compatibility pass, public-route
+approval, or customer-traffic evidence. The dark state is what makes the real
+host switch bounded and low-impact.
+
+The owner-reported 2026-09-01 precedent used the signed `bf5e712` API image with
+the intentional J2/J3/J3B configs, restored the previous release to healthy in
+15 seconds, and restored the candidate to healthy in 15 seconds while the route
+remained dark and the recovery set remained intact. The bounded observations
+are recorded in
+[`Hostinger Traefik deploy-preparation evidence`](../../docs/codex/evidence/hostinger-traefik-deploy-preparation.md#owner-reported-dark-host-deployment-and-rollback-precedent).
 
 ### J0 principal-only slice-authentication activation gate
 
@@ -878,8 +939,8 @@ image digest intact for diagnosis or an exact-digest restart. Keep the external
 ACME volume and `acme.json` intact even when Traefik itself is rolled back.
 
 ```sh
-docker compose --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api
-docker compose --env-file "$operator_values_file" -f docker-compose.production.yml rm --force slicer-api
+docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api
+docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml rm --force slicer-api
 ```
 
 Never perform a project-wide Compose teardown, engine-wide pruning, volume

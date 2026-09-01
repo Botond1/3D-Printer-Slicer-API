@@ -329,6 +329,21 @@ test('runbook mutations cannot skip identity, hash, atomic activation, or safe r
             /\[ "\$rendered_api_image" = "\$candidate_image" \] \|\| exit 1/,
             '[ -n "$rendered_api_image" ] || true'
         )],
+        ['production Compose project name omitted', replaceRequired(
+            runbook,
+            /docker compose -p slicer-api --env-file/,
+            'docker compose --env-file'
+        )],
+        ['production Compose project name changed', replaceRequired(
+            runbook,
+            /docker compose -p slicer-api --env-file/,
+            'docker compose -p release-directory --env-file'
+        )],
+        ['production Compose project label proof removed', replaceRequired(
+            runbook,
+            /\[ "\$api_compose_project" = "slicer-api" \] \|\| exit 1/,
+            '[ -n "$api_compose_project" ] || true'
+        )],
         ['root identity accepted', replaceRequired(runbook, /reject UID 0 or GID 0/, 'accept UID 0 or GID 0')],
         ['hardcoded API identity', `${runbook}\nSLICER_UID=999\n`],
         ['single qualification pass', replaceRequired(runbook, /matrix twice/, 'matrix once')],
@@ -346,6 +361,36 @@ test('runbook mutations cannot skip identity, hash, atomic activation, or safe r
             runbook,
             /API-image source commit and signed digest separately from the\nexact operator-pack source commit/,
             'repository commit'
+        )],
+        ['operator rollback substitute removed', replaceRequired(
+            runbook,
+            /operator-host rehearsal is an accepted\nsubstitute for the blocked automatic\nruntime rehearsal only/,
+            'operator-host rehearsal is informational only'
+        )],
+        ['operator rollback substitute allowed an active route', replaceRequired(
+            runbook,
+            /route is proved dark before, throughout, and after the operation/,
+            'route state is not relevant'
+        )],
+        ['operator rollback substitute reclassified CI green', replaceRequired(
+            runbook,
+            /does not turn the CI run green or weaken its source\ncompatibility guard/,
+            'turns the CI run green'
+        )],
+        ['operator rollback substitute skipped exact HEAD and Compose predicates', replaceRequired(
+            runbook,
+            /exact commits exist; the checked-out `HEAD` equals the candidate source SHA/,
+            'the current checkout is assumed compatible'
+        )],
+        ['operator rollback substitute conflated the two release digests', replaceRequired(
+            runbook,
+            /For each direction, bind that release's separately recorded exact signed image\ndigest/,
+            'For both directions, bind the exact signed image digest'
+        )],
+        ['operator rollback substitute omitted the candidate health deadline', replaceRequired(
+            runbook,
+            /Require both the previous release and the restored\ncandidate to become healthy within the same bounded deadline/,
+            'Require only the previous release to meet the bounded health deadline'
         )],
         ['file-provider-only gate removed', replaceRequired(
             runbook,
@@ -501,7 +546,7 @@ test('runbook mutations cannot skip identity, hash, atomic activation, or safe r
         )],
         ['API stop before cleanup removed', replaceRequired(
             runbook,
-            /docker compose --env-file "\$operator_values_file" -f docker-compose\.production\.yml stop --timeout 30 slicer-api/,
+            /docker compose -p slicer-api --env-file "\$operator_values_file" -f docker-compose\.production\.yml stop --timeout 30 slicer-api/,
             'skip API stop'
         )],
         ['stopped container proof weakened', replaceRequired(
@@ -511,13 +556,13 @@ test('runbook mutations cannot skip identity, hash, atomic activation, or safe r
         )],
         ['cleanup moved before API stop', runbook
             .replace(
-                'docker compose --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api',
+                'docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api',
                 'deferred API stop'
             )
             .replace(
                 'docker run --rm --pull never --network none --read-only \\\n  --user "$resolved_slicer_uid:$resolved_slicer_gid"',
                 'docker run --rm --pull never --network none --read-only \\\n'
-                    + 'docker compose --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api\n'
+                    + 'docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api\n'
                     + '  --user "$resolved_slicer_uid:$resolved_slicer_gid"'
             )],
         ['cleanup exit initialization removed', replaceRequired(

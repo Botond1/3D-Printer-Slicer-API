@@ -47,6 +47,8 @@ const MAX_ALLOWLIST_ENTRIES = 1;
 const MAX_ALLOWLIST_FILE_BYTES = 256;
 const MAX_PRIVATE_INPUT_PATH_BYTES = 4096;
 const LIVE_DYNAMIC_RELEASE_MISMATCH = 'STOP_LIVE_DYNAMIC_RELEASE_MISMATCH';
+const PRODUCTION_COMPOSE_PREFIX = 'docker compose -p slicer-api '
+    + '--env-file "$operator_values_file" -f docker-compose.production.yml';
 const PRIVATE_INPUT_BASENAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/;
 const RAW_IPV4_PATH_PATTERN = /(?:^|[^0-9])(?:[0-9]{1,3}[._-]){3}[0-9]{1,3}(?:[^0-9]|$)/;
 const ROOT_ROUTER_METADATA_POLICY = Object.freeze({
@@ -492,17 +494,22 @@ function validateRunbookSource(source) {
         'same exact signed API digest', 'resolved non-root UID:GID',
         'exact API-image source commit and signed digest separately from the\nexact operator-pack source commit',
         'Never relabel an older verified API image as if it were built\nfrom a later operator-only commit.',
+        'API-image source SHA and operator-pack source SHA are deliberately not an\nequality pair.',
+        'Merging the later operator pack does not\nrelabel that image or by itself require a new candidate',
         'Allow exactly three binds', '/usr/bin/node',
         '/run/i12-capacity-artifact-cleanup.js',
         'SLICER_API_IMAGE="$candidate_image" node scripts/i7-production-compose-contract.js || exit 1',
-        'rendered_api_image="$(SLICER_API_IMAGE="$candidate_image" docker compose',
+        'rendered_api_image="$(SLICER_API_IMAGE="$candidate_image" docker compose -p slicer-api',
         '[ "$rendered_api_image" = "$candidate_image" ] || exit 1',
+        'production Compose project name is always the literal `slicer-api`',
+        'must pass explicit `-p slicer-api` before\n`--env-file`',
+        '[ "$api_compose_project" = "slicer-api" ] || exit 1',
         'mktemp -d -p "$evidence_parent"',
         '--user "$resolved_slicer_uid:$resolved_slicer_gid"',
         '--mount type=bind,src="$slicer_output_dir",dst=/app/output,rw',
         '--mount type=bind,src="$run_owned_private_dir/queue-cleanup.json",dst=/run/i12-cleanup.json,ro',
         '--mount type=bind,src="$verified_checkout/scripts/i12-capacity-artifact-cleanup.js",dst=/run/i12-capacity-artifact-cleanup.js,ro',
-        'docker compose --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api',
+        'docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api',
         "docker inspect --format '{{.State.Status}} {{.State.Running}} {{.State.ExitCode}} {{.State.OOMKilled}}' 3d-psa-backend-server",
         '[ "$api_stop_state" = "exited false 0 false" ] || exit 1',
         'successful\ncleanup never converts a failed capacity qualification into a pass',
@@ -513,6 +520,20 @@ function validateRunbookSource(source) {
         'repeat the full dark readiness, negative-authentication,\nAPI/native egress-denial and private-peer matrix twice',
         '[ "$qualification_exit" -eq 0 ] || exit 1',
         '[ "$cleanup_exit" -eq 0 ] || exit 1',
+        '`source_compatibility_verification_failure` because `configs/` intentionally\ndiffers',
+        'does not turn the CI run green or weaken its source\ncompatibility guard',
+        'route is proved dark before, throughout, and after the operation',
+        'actual-host `candidate -> previous -> candidate` switch',
+        'separate clean compatibility-verification checkout pinned\nto the candidate source',
+        'not in the later live operator-pack checkout',
+        'exact commits exist; the checked-out `HEAD` equals the candidate source SHA',
+        'previous source is its ancestor; `docker-compose.production.yml` is unchanged',
+        'intentional `configs/` diff is the only nonzero compatibility\npredicate',
+        'production Compose drift forbids the substitute',
+        "For each direction, bind that release's separately recorded exact signed image\ndigest",
+        'Require both the previous release and the restored\ncandidate to become healthy within the same bounded deadline',
+        'operator-host rehearsal is an accepted\nsubstitute for the blocked automatic\nruntime rehearsal only',
+        'owner-reported 2026-09-01 precedent used the signed `bf5e712` API image',
         'same-filesystem, no-clobber hard\nlink',
         "helper's `--disable-router` mode",
         'only repository-resident private router-state\nroot is the exact\n`ops/hostinger/.runtime-private` directory',
@@ -652,9 +673,16 @@ function validateRunbookSource(source) {
         || /(?:SLICER_BASE_URL|SLICE_SERVICE_API_KEY|OPERATIONS_API_KEY|ARTIFACT_API_KEY)="\$/.test(source)) {
         return 'hostinger_capacity_producer_environment_mismatch';
     }
+    const productionComposeCommands = normalize(source).split('\n').filter(
+        (line) => line.includes('docker compose') && line.includes('docker-compose.production.yml')
+    );
+    if (productionComposeCommands.length !== 6
+        || productionComposeCommands.some((line) => !line.includes(PRODUCTION_COMPOSE_PREFIX))) {
+        return 'hostinger_compose_project_name_mismatch';
+    }
     if (occurrences(
         source,
-        'SLICER_API_IMAGE="$candidate_image" docker compose --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api'
+        'SLICER_API_IMAGE="$candidate_image" docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api'
     ) !== 2) return 'hostinger_api_restart_contract_mismatch';
     if (occurrences(source, 'qualification_exit=0') !== 1
         || occurrences(source, '|| qualification_exit=$?') !== 1
@@ -667,7 +695,7 @@ function validateRunbookSource(source) {
     const capacityOrder = [
         'qualification_exit=0',
         'postflight queue idle',
-        'docker compose --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api',
+        'docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml stop --timeout 30 slicer-api',
         '[ "$api_stop_state" = "exited false 0 false" ] || exit 1',
         'docker run --rm --pull never --network none --read-only \\\n  --user "$resolved_slicer_uid:$resolved_slicer_gid"'
     ].map((fragment) => source.indexOf(fragment));
@@ -692,7 +720,7 @@ function validateRunbookSource(source) {
     const composeIdentityOrder = [
         'SLICER_API_IMAGE="$candidate_image" node scripts/i7-production-compose-contract.js || exit 1',
         '[ "$rendered_api_image" = "$candidate_image" ] || exit 1',
-        'SLICER_API_IMAGE="$candidate_image" docker compose --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api'
+        'SLICER_API_IMAGE="$candidate_image" docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api'
     ].map((fragment) => source.indexOf(fragment));
     if (composeIdentityOrder.some((index) => index < 0)
         || composeIdentityOrder.some((index, position) => position > 0
@@ -703,7 +731,7 @@ function validateRunbookSource(source) {
         'docker run --rm --pull never --network none --read-only \\\n  --user "$resolved_slicer_uid:$resolved_slicer_gid"'
     );
     const restartIndex = source.lastIndexOf(
-        'SLICER_API_IMAGE="$candidate_image" docker compose --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api'
+        'SLICER_API_IMAGE="$candidate_image" docker compose -p slicer-api --env-file "$operator_values_file" -f docker-compose.production.yml up --detach --no-deps --pull never slicer-api'
     );
     const restartedIdentityIndex = source.indexOf('api_runtime_identity="$(docker inspect --format');
     const traefikSectionIndex = source.indexOf('## 3. Start Traefik with routing still disabled');
