@@ -21,7 +21,10 @@ const {
     canonicalizeJsonValue,
     DIGEST_SCHEMA
 } = require('./profile-digest');
-const { readOrcaFilamentProfileMetadata } = require('./filament-profile');
+const {
+    readOrcaFilamentProfileMetadata,
+    resolveMaterialFilamentMetadata
+} = require('./filament-profile');
 const { readIniKeyValues } = require('./profile-readers');
 const { parseNumberLike } = require('./value-parsers');
 
@@ -217,13 +220,21 @@ function createPresetDefinitions() {
     return Object.freeze(definitions);
 }
 
-function readPrusaFilamentMetadata(profilePath, technology) {
+/**
+ * The repository Prusa profiles are material-agnostic, so diameter comes from
+ * the profile while density comes from the shared material catalogue -- the
+ * same source the runtime profile is built from. Reporting null here once the
+ * runtime injects a real density would make the catalogue describe a service
+ * that no longer exists.
+ */
+function readPrusaFilamentMetadata(profilePath, technology, material = null) {
     if (technology !== 'FDM') return null;
     const diameterMm = parseNumberLike(readIniKeyValues(profilePath).filament_diameter);
     if (!Number.isFinite(diameterMm) || diameterMm <= 0) {
         throw new Error('Prusa FDM profile filament diameter is unavailable.');
     }
-    return Object.freeze({ diameterMm, densityGcm3: null });
+    const densityGcm3 = resolveMaterialFilamentMetadata(material)?.densityGcm3 ?? null;
+    return Object.freeze({ diameterMm, densityGcm3 });
 }
 
 function buildEntryId(definition, selection) {
@@ -252,19 +263,25 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
     const snapshots = await dependencies.snapshotProfileSelection(
         definition.engine, selection, workspace
     );
+    const metadata = definition.engine === 'orca'
+        ? dependencies.readOrcaFilamentProfileMetadata(
+            snapshots.orcaFilamentConfigFile, definition.material
+        )
+        : readPrusaFilamentMetadata(
+            snapshots.baseConfigFile, definition.technology, definition.material
+        );
+    // The density must be injected here exactly as the slice path injects it,
+    // or the catalogue would digest a runtime profile that no real request ever
+    // produces and every effective_profile_sha256 comparison would diverge.
     const runtimeConfigFile = await dependencies.createRuntimeSlicerProfile(
         definition.engine,
         snapshots.baseConfigFile,
         definition.technology,
         definition.layerHeight,
         `${DEFAULTS.DEFAULT_INFIL_PERCENT}%`,
-        workspace
+        workspace,
+        { filamentDensityGcm3: metadata?.densityGcm3 }
     );
-    const metadata = definition.engine === 'orca'
-        ? dependencies.readOrcaFilamentProfileMetadata(
-            snapshots.orcaFilamentConfigFile, definition.material
-        )
-        : readPrusaFilamentMetadata(snapshots.baseConfigFile, definition.technology);
     const limits = dependencies.resolveBuildVolumeLimits(
         definition.engine,
         definition.technology,

@@ -9,7 +9,10 @@ const { resolveSlicerExecutable, buildSlicerCommandArgs } = require('./engine');
 const { getSlicerEngineVersion } = require('./engine-version');
 const { createRuntimeSlicerProfile, logEngineProfileSelection } = require('./profiles');
 const { calculateEffectiveProfileSha256 } = require('./profile-digest');
-const { readOrcaFilamentProfileMetadata } = require('./filament-profile');
+const {
+    readOrcaFilamentProfileMetadata,
+    resolveMaterialFilamentMetadata
+} = require('./filament-profile');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { invalidOutput } = require('./resource-errors');
 const { cleanupManagedArtifacts } = require('../artifact-store');
@@ -61,13 +64,17 @@ async function runSlicerAndParseStats(context) {
     const { signal } = context;
     throwIfAborted(signal);
     const engineVersion = getSlicerEngineVersion(engine);
-    const runtimeConfigFile = await createRuntimeSlicerProfile(
-        engine, baseConfigFile, technology, layerHeight, infillPercentage, workspace
-    );
-    throwIfAborted(signal);
+    // Resolved before the runtime profile, because the Prusa profile needs the
+    // density written into it: Orca is handed a filament profile directly,
+    // Prusa has no per-material profile and would otherwise report no mass.
     const filamentProfileMetadata = engine === 'orca'
         ? readOrcaFilamentProfileMetadata(orcaFilamentConfigFile, material)
-        : null;
+        : resolveMaterialFilamentMetadata(material);
+    const runtimeConfigFile = await createRuntimeSlicerProfile(
+        engine, baseConfigFile, technology, layerHeight, infillPercentage, workspace,
+        { filamentDensityGcm3: filamentProfileMetadata?.densityGcm3 }
+    );
+    throwIfAborted(signal);
     const effectiveProfileSha256 = calculateEffectiveProfileSha256({
         engine,
         technology,
@@ -140,7 +147,11 @@ async function runSlicerAndParseStats(context) {
         effectiveModelInfo.height_mm,
         engine,
         {
-            requireFilamentGrams: engine === 'orca' && orcaFilamentConfigFile !== null
+            // Loud whenever we actually supplied the density. If the engine had
+            // what it needed to report mass and still did not, that is a defect
+            // and must not degrade quietly into manual pricing -- the same
+            // discipline J1C applied to the G-code metrics parser.
+            requireFilamentGrams: filamentProfileMetadata !== null
         }
     );
     throwIfAborted(signal);

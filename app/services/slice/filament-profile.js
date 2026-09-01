@@ -68,8 +68,28 @@ function readOrcaFilamentProfileMetadata(profilePath, material) {
     });
 }
 
+/**
+ * Resolve diameter and density for one material, independently of the engine.
+ *
+ * The per-material files live under the Orca configs directory because Orca is
+ * the engine that consumes them directly, but their contents are the material
+ * catalogue for the whole service. PrusaSlicer has no per-material profile of
+ * its own and cannot report mass without a density, so it reads the same source
+ * rather than carrying a second copy that could drift.
+ *
+ * @param {string} material Requested material key.
+ * @param {{orcaFilamentProfile?: string | null}} [profileOverrides] Profile overrides.
+ * @returns {{diameterMm:number,densityGcm3:number}|null} Null when the material has no catalogue entry.
+ */
+function resolveMaterialFilamentMetadata(material, profileOverrides = {}) {
+    const profilePath = resolveOrcaFilamentConfigPath(material, profileOverrides);
+    if (profilePath === null) return null;
+    return readOrcaFilamentProfileMetadata(profilePath, material);
+}
+
 module.exports = {
     normalizeMaterial,
     readOrcaFilamentProfileMetadata,
+    resolveMaterialFilamentMetadata,
     resolveOrcaFilamentConfigPath
 };

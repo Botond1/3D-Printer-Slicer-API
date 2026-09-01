@@ -440,6 +440,18 @@ async function createPrusaRuntimeProfile(baseConfigPath, technology, layerHeight
         iniContent = upsertIniKey(iniContent, 'fill_density', infillPercentage);
     }
 
+    // PrusaSlicer emits "total filament used [g]" only when it knows the
+    // density, and the repository Prusa profiles carry none because they are
+    // material-agnostic — one profile serves every material. Without this the
+    // engine reports length but no mass, every FDM quote falls through to
+    // manual pricing, and the consumer that actually calls this route gets no
+    // price at all. The value comes from the shared material catalogue rather
+    // than being written into the profiles, because it is material-dependent
+    // and a fixed number would silently misprice everything but PLA.
+    if (Number.isFinite(options.filamentDensityGcm3) && options.filamentDensityGcm3 > 0) {
+        iniContent = upsertIniKey(iniContent, 'filament_density', `${options.filamentDensityGcm3}`);
+    }
+
     const runtimeProfilePath = resolveRuntimeProfilePath(workspace, 'prusa-runtime', '.ini', options.pathFactory);
     await fsPromises.writeFile(runtimeProfilePath, iniContent, {
         flag: 'wx',

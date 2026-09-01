@@ -260,10 +260,17 @@ test('Prusa and Orca execution append only the processable model to exact engine
         ['orca-slicer', expectedOrca],
         ['orca-slicer', expectedOrcaManual]
     ]);
+    // Prusa now requires grams too. The repository Prusa profiles are
+    // material-agnostic and carry no density, so the runtime profile is given
+    // one from the shared material catalogue; once the engine has what it needs
+    // to report mass, a missing mass is a defect rather than a reason to fall
+    // back to manual pricing. The third row stays false because that request
+    // asks for a material with no catalogue entry, so nothing was supplied.
     assert.deepEqual(parseCalls.map((args) => [args[4], args[5]]), [
-        ['prusa', { requireFilamentGrams: false }],
+        ['prusa', { requireFilamentGrams: true }],
         ['orca', { requireFilamentGrams: true }],
         ['orca', { requireFilamentGrams: false }]
     ]);
+    assert.equal(prusaResult.filamentProfileMetadata.densityGcm3 > 0, true);
     assert.ok(calls.every((call) => call.signal === signal));
 });
