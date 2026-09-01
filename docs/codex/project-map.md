@@ -238,7 +238,9 @@ OWNER_REPORTED_ROUTER_ACTIVATION_PASS_LEADPILOT_ONLY_ENTRIES_1;
 OWNER_REPORTED_TLS_AND_EXTERNAL_CALLER_MATRIX_PASS;
 OWNER_REPORTED_PERIMETER_IPV4_IPV6_PASS;
 OWNER_REPORTED_DOCKER_SERVICE_RESTART_SURVIVAL_PASS;
-REAL_HOST_REBOOT_NOT_VERIFIED;
+OWNER_REPORTED_REAL_HOST_REBOOT_SURVIVAL_PASS;
+OWNER_REPORTED_PERIMETER_PERSISTENCE_COMPLETE_AT_NORMAL_REBOOT;
+POINT_IN_TIME_NORMAL_REBOOT_ONLY_NO_FUTURE_GENERALIZATION;
 PUBLIC_ROUTE_ACTIVE_LEADPILOT_ONLY`.
 
 Exact protected-main source
@@ -278,6 +280,21 @@ Production HTTP-01 validation succeeded while the global redirect remained
 enabled, proving challenge/redirect compatibility for issuance but not the
 separate forced-renewal rehearsal.
 
+The owner then observed one real normal host reboot at
+`2026-09-01 13:14:41`. The host returned in about 40 seconds;
+`r3d-perimeter.service` was active and enabled and reapplied the policy; the
+post-boot counts matched the pre-boot three IPv4 plus one IPv6 rules; and both
+current service containers were healthy at `t+5s`. The API remained on the
+deployed candidate, recorded for this reboot only as image prefix
+`sha256:153987840361...`. The approved caller received HTTP 200 with valid TLS
+in 0.13 seconds, IPv6/443 remained blocked, port 80 remained reachable with
+ACME unaffected, and the loopback probe returned HTTP 403. The retained old
+`traefik-traefik-1` still existed and remained stopped with exit 0,
+`unless-stopped`, and runtime `ports={}`, without owning ports 80/443. This closes the
+last open perimeter-persistence element for this exact point-in-time host
+configuration; future reboots and crash/power-loss recovery require repeat
+proof rather than inference.
+
 The automatic no-deploy rehearsal run `33450012850` separately failed closed
 at input materialization. Its previous policy source is an ancestor and the
 production Compose file is unchanged, but `configs/` changed between that I8
@@ -303,6 +320,8 @@ running Traefik /etc/traefik/dynamic bind source
 versioned ops/hostinger/perimeter artifacts
   -> mandatory root-private allowlist/public-IPv4 path inputs
   -> probe default slicer-api.invalid; real hostname is operator input
+  -> systemd active+enabled boot re-application owner-observed once
+  -> every later boot requires retained-old-proxy and listener inventory
 IPv4 Docker DNAT path
   -> DOCKER-USER + conntrack original destination/original port 443
   -> one allow RETURN + bounded LOG + terminal REJECT
@@ -323,8 +342,10 @@ This repository turn is documentation-only and performs no deploy, container
 replacement, mounted-directory write, router activation, DNS/allowlist/firewall
 mutation, consumer change, or customer traffic. It does not independently
 repeat the owner-supplied live observations. Exact host-firewall identity and
-counter behavior, IPv6 block, idempotency, and Docker-service restart survival
-are owner-reported point-in-time evidence. Real host reboot, forced-renewal
+counter behavior, IPv6 block, idempotency, Docker-service restart survival, and
+one real normal reboot are owner-reported point-in-time evidence. That reboot
+closes the perimeter-persistence exit for the observed configuration but does
+not generalize to a future reboot or crash/power-loss recovery. Forced-renewal
 rehearsal, public router rollback, monitoring, backup/recovery acceptance, and
 customer-traffic readiness remain `NOT VERIFIED`. See
 [`evidence/hostinger-leadpilot-route-activation.md`](evidence/hostinger-leadpilot-route-activation.md).
@@ -1592,9 +1613,11 @@ Runtime route registration, not README lists, is canonical:
   approved-source HTTP 200, external unlisted-source HTTP 403 without a
   `Content-Type`, and redirect-follow completion on public 443. A later supplied
   perimeter record adds IPv4 timeout/counters, IPv6 `INPUT` blocking,
-  idempotency, and Docker-service restart survival. Real reboot, forced renewal,
-  public router rollback, monitoring/recovery acceptance, and customer readiness
-  remain `UNVERIFIED`;
+  idempotency, Docker-service restart survival, and one normal-reboot survival
+  observation that closes the point-in-time perimeter-persistence exit. Future
+  reboot after relevant drift and crash/power-loss recovery require repeat
+  proof; forced renewal, public router rollback, monitoring/recovery acceptance,
+  and customer readiness remain `UNVERIFIED`;
 - `choosenFile`, stable status/error mappings, Prusa FDM/SLA, Orca FDM-only,
   profile pairing, pricing behavior, and argument semantics are compatibility
   invariants for behavior-preserving stages;
@@ -1638,9 +1661,12 @@ proxy gateway behavior. The later owner-supplied record reports a live
 LeadPilot-only route, issued certificate, approved-source HTTP 200,
 unlisted-source HTTP 403, and redirect-follow completion on public 443. A later
 owner-supplied record adds IPv4 timeout/counters, IPv6 `INPUT` blocking,
-idempotency, and Docker-service restart survival. Real reboot, forced renewal,
-public router rollback, monitoring/backup/recovery acceptance, and customer
-readiness remain separately authorized and `UNVERIFIED`.
+idempotency, Docker-service restart survival, and one point-in-time normal-
+reboot survival observation. That closes the perimeter-persistence exit for the
+observed configuration without generalizing to future reboots or crash/power-
+loss recovery. Forced renewal, public router rollback, monitoring/backup/
+recovery acceptance, and customer readiness remain separately authorized and
+`UNVERIFIED`.
 
 ## Historical S0 test and CI capability matrix
 
@@ -1714,11 +1740,14 @@ delta above for present test and audit status.
   `router_activation=PASS phase=leadpilot-only entries=1`, issued certificate,
   approved-source HTTP 200, unlisted-source HTTP 403 without `Content-Type`,
   redirect-follow completion on public 443, later measured IPv4 timeout/counters,
-  IPv6 `INPUT` blocking, idempotency, and Docker-service restart survival.
+  IPv6 `INPUT` blocking, idempotency, Docker-service restart survival, and one
+  real normal-reboot survival observation that closes the point-in-time
+  perimeter-persistence exit.
 - `UNVERIFIED`: exact public proxy CIDRs/hops/timeouts, capacity beyond small
-  synthetic N=1, DNS configuration lifecycle, real host reboot, forced renewal,
-  quotas under real workloads, backups, monitoring, public router rollback, and
-  customer readiness.
+  synthetic N=1, DNS configuration lifecycle, forced renewal, quotas under real
+  workloads, backups, monitoring, public router rollback, and customer
+  readiness. Future reboots after relevant drift and crash/power-loss recovery
+  require repeat proof; the one normal reboot is not a general guarantee.
 - `UNVERIFIED`: production secret source, ownership, filesystem mode, and
   current/previous/revoked key state.
 - Locally tested process-tree cancellation and the bounded dark host probes do

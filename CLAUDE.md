@@ -210,11 +210,18 @@ Provide a reliable slicing and pricing API for 3D printing workflows with strict
   three `REJECT` variants incremented the IPv4 deny counter but produced only a
   caller timeout. The installed conntrack/original-port-443 rules remained
   idempotent at three IPv4 plus one IPv6 `INPUT` rule across three applications
-  and survived a Docker-service restart; allowed traffic returned 200 in about
-  0.1 seconds, port 80 stayed reachable, and the loopback probe returned 403.
-  Exact artifacts are versioned under `ops/hostinger/perimeter/`; their real
-  paths and hostname are mandatory operator input. Real host reboot remains
-  `NOT_VERIFIED`. Successful
+  and survived a Docker-service restart. The owner then observed one normal
+  reboot at `2026-09-01 13:14:41`: the perimeter service was active/enabled and
+  reapplied the same 3+1 rules, both current containers were healthy at `t+5s`,
+  and the API remained on candidate-image prefix `sha256:153987840361...`.
+  Allowed traffic returned 200 with valid TLS in 0.13 seconds, IPv6/443 stayed
+  blocked, port 80 and ACME were unaffected, and the loopback probe returned
+  403. Retained `traefik-traefik-1` stayed stopped/exit 0 with
+  `unless-stopped`, runtime `ports={}`, and no 80/443 listener. This closes the
+  exact point-in-time perimeter-persistence exit but does not generalize to
+  future reboots or crash/power-loss recovery. Exact artifacts are versioned
+  under `ops/hostinger/perimeter/`; their real paths and hostname are mandatory
+  operator input. Successful
   HTTP-01 alongside the redirect proves issuance compatibility, not forced
   renewal. This repository turn is documentation-only; public router rollback,
   monitoring, recovery acceptance, and customer readiness remain unverified.

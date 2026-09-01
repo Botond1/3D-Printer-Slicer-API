@@ -85,9 +85,14 @@ Last synchronized: 2026-09-01
   and redirect-follow completion on public 443. A later owner-supplied record
   proves the separate IPv4 deny counters with caller-visible timeout, IPv6
   `INPUT` block, three-IPv4 plus one-IPv6 idempotency, and Docker-service restart
-  survival; real host reboot remains unverified. Successful HTTP-01 issuance
-  does not prove the forced-renewal rehearsal. This repository change is
-  documentation-only. Public router rollback/final-dark, monitoring,
+  survival. One owner-observed normal reboot then preserved the active/enabled
+  perimeter service, same 3+1 rules, healthy current containers, allowed
+  200/TLS, IPv6/443 block, port-80/ACME path, loopback 403, and the stopped old
+  proxy's empty runtime port map. It closes the exact point-in-time perimeter-
+  persistence exit but does not generalize to future reboots or crash/power-
+  loss recovery. Successful
+  HTTP-01 issuance does not prove the forced-renewal rehearsal. This repository
+  change is documentation-only. Public router rollback/final-dark, monitoring,
   backup/recovery acceptance, customer traffic, and full production acceptance
   remain unverified and separately authorized.
 

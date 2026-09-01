@@ -52,7 +52,9 @@ proxy; its public caller/firewall/DNS/certificate/route and complete secret-
 lifecycle evidence were separate gates. A later owner-supplied activation
 record adds the route, certificate, allowed-source 200, unlisted-source 403,
 redirect-to-443 observations, and later owner-supplied IPv4/IPv6 perimeter,
-idempotency, and Docker-service restart evidence. Real host reboot, forced
+idempotency, Docker-service restart, and one real normal-reboot survival record.
+That point-in-time reboot closes the last open perimeter-persistence element but
+does not generalize to future reboots or crash/power-loss recovery. Forced
 renewal, public router rollback, monitoring/recovery, and customer readiness
 remain separate.
 
@@ -333,9 +335,17 @@ later owner-supplied perimeter record reports that three IPv4 `REJECT` variants
 all produced a timeout while the deny counter increased; the final conntrack
 original-destination/original-port-443 policy was idempotent at exactly three
 IPv4 plus one IPv6 `INPUT` rule after three applications and survived a
-Docker-service restart. The allowed caller returned 200 in about 0.1 seconds,
-blocked IPv6 returned no response, port 80 stayed reachable, and the loopback
-probe returned 403. Real host reboot remains `NOT_VERIFIED`. HTTP-01
+Docker-service restart. One owner-observed normal reboot at
+`2026-09-01 13:14:41` then preserved the same 3+1 policy: the host returned in
+about 40 seconds, `r3d-perimeter.service` was active/enabled and reapplied the
+rules, both current service containers were healthy at `t+5s`, and the API
+remained on candidate-image prefix `sha256:153987840361...`. The allowed caller
+returned 200 with valid TLS in 0.13 seconds, blocked IPv6 returned no response,
+port 80 and ACME remained unaffected, and the loopback probe returned 403. The
+retained `traefik-traefik-1` remained stopped/exit 0 with `unless-stopped` and
+runtime `ports={}` and did not own 80/443. This closes the exact point-in-time
+perimeter-persistence exit, without generalizing to future reboots or
+crash/power-loss recovery. HTTP-01
 validation succeeded with the global redirect enabled, proving issuance-path
 compatibility but not forced renewal. This repository turn is documentation-only
 and makes no host or route mutation. Public router rollback, monitoring,
@@ -1447,9 +1457,15 @@ record adds the LeadPilot-only route, certificate issuance, approved-source
 HTTP 200, unlisted-source HTTP 403, and redirect-follow completion on public
 443. A later owner-supplied record adds the measured host-firewall timeout,
 dual-stack rule identity and counters, idempotency, and Docker-service restart
-survival. Real host reboot, forced renewal, public router rollback, complete
-secret lifecycle, monitoring/recovery, and customer-production evidence remain
-separate; no fully production-ready state is implied.
+survival. One later owner-observed normal reboot preserved the same 3+1 rules,
+active/enabled perimeter service, healthy current containers, approved-caller
+200/TLS, IPv6/443 block, port-80/ACME path, loopback 403, and the stopped old
+proxy's empty runtime port map. This closes the point-in-time perimeter-
+persistence exit but does not generalize to future reboots or crash/power-loss
+recovery. Forced renewal,
+public router rollback, complete secret lifecycle, monitoring/recovery, and
+customer-production evidence remain separate; no fully production-ready state
+is implied.
 
 ---
 

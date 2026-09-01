@@ -86,9 +86,11 @@ Last synchronized: 2026-09-01
   documentation-only repository change does not independently repeat or mutate
   that live state. A later owner-supplied record proves the IPv4 deny counters
   with caller-visible timeout, IPv6 `INPUT` blocking, idempotent three-IPv4 plus
-  one-IPv6 rule identity, and Docker-service restart survival. Real reboot,
-  public router rollback, forced renewal, monitoring, and customer readiness
-  remain separate.
+  one-IPv6 rule identity, Docker-service restart survival, and one normal-
+  reboot survival observation that closes the exact point-in-time perimeter-
+  persistence exit. Future reboot after relevant drift and crash/power-loss
+  recovery require repeat proof; public router rollback, forced renewal,
+  monitoring, and customer readiness remain separate.
 - Keep `/profiles` unauthenticated, startup-built, immutable, informational,
   and independent of slicing availability. Preserve the strong ETag,
   conditional 304, body `catalogue_sha256`, typed non-critical 503, and the
@@ -167,9 +169,16 @@ Last synchronized: 2026-09-01
   assumption: all three tested IPv4 `REJECT` variants timed out while counters
   increased. The final original-destination/443 rules remained exactly three
   IPv4 plus one IPv6 `INPUT` rule across three applications and survived a
-  Docker-service restart; real reboot remains unverified. Version the exact
-  script, probe, and unit under `ops/hostinger/perimeter/`, with private paths
-  and the real probe hostname supplied only by the operator. Successful HTTP-01
+  Docker-service restart. One owner-observed normal reboot then preserved the
+  same 3+1 policy, active/enabled perimeter service, healthy current containers,
+  candidate-image prefix `sha256:153987840361...`, allowed 200/valid TLS in
+  0.13 seconds, IPv6/443 blocking, port-80/ACME continuity, and loopback 403.
+  Retained `traefik-traefik-1` stayed stopped/exit 0 with `unless-stopped`,
+  runtime `ports={}`, and no 80/443 listener. This closes the exact point-in-time
+  perimeter-persistence exit but does not generalize to future reboots or
+  crash/power-loss recovery. Version the exact script, probe, and unit under
+  `ops/hostinger/perimeter/`, with private paths and the real probe hostname
+  supplied only by the operator. Successful HTTP-01
   issuance is not the forced-renewal rehearsal.
   This documentation-only repository turn performs no route mutation or host
   action. Public router rollback, monitoring, recovery acceptance, and customer
@@ -293,9 +302,12 @@ Last synchronized: 2026-09-01
   record adds the LeadPilot-only route, certificate issuance, approved-source
   HTTP 200, unlisted-source HTTP 403, and redirect-follow completion on public
   443, plus later owner-supplied IPv4/IPv6 perimeter, idempotency, and
-  Docker-service restart evidence. Real host reboot, forced renewal, public
-  router rollback, secret lifecycle, monitoring/recovery, customer readiness,
-  and full production acceptance remain unverified and separately authorized.
+  Docker-service restart evidence. One later owner-observed normal reboot closes
+  the point-in-time perimeter-persistence exit; future reboot after relevant
+  drift and crash/power-loss recovery require repeat proof. Forced renewal,
+  public router rollback, secret lifecycle, monitoring/recovery, customer
+  readiness, and full production acceptance remain unverified and separately
+  authorized.
 
 ## Testing
 - Use Python test runners under tests/testing-scripts/.

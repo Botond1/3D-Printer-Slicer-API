@@ -13,7 +13,9 @@ OWNER_SUPPLIED_IPV4_PERIMETER_CALLER_TIMEOUT_WITH_DENY_COUNTERS
 OWNER_SUPPLIED_IPV6_INPUT_443_BLOCK_PASS
 OWNER_SUPPLIED_PERIMETER_IDEMPOTENT_3_IPV4_1_IPV6
 OWNER_SUPPLIED_DOCKER_SERVICE_RESTART_SURVIVAL_PASS
-REAL_HOST_REBOOT_NOT_VERIFIED
+OWNER_SUPPLIED_REAL_HOST_REBOOT_SURVIVAL_PASS
+OWNER_SUPPLIED_PERIMETER_PERSISTENCE_COMPLETE_AT_NORMAL_REBOOT
+POINT_IN_TIME_NORMAL_REBOOT_ONLY_NO_FUTURE_GENERALIZATION
 THIS_REPOSITORY_TURN_DOCUMENTATION_ONLY_NO_LIVE_MUTATION
 INDEPENDENT_REPETITION_NOT_PERFORMED
 ```
@@ -157,8 +159,36 @@ The owner reported these point-in-time installation observations:
 - port 80 remained reachable;
 - the loopback Traefik-only probe returned HTTP 403.
 
-These observations do not prove state after a real host reboot. That boundary
-remains `NOT_VERIFIED`.
+The owner then supplied one real normal-host-reboot observation:
+
+- the boot timestamp was `2026-09-01 13:14:41`, and the host was reachable in
+  about 40 seconds;
+- `r3d-perimeter.service` was both `active` and `enabled` and reapplied its
+  rules at boot;
+- the post-boot policy was exactly three owned IPv4 rules plus one owned IPv6
+  rule, the same counts as before reboot;
+- the current API and Traefik containers were both `healthy` at `t+5s`;
+- the API remained on the deployed candidate image, identified in this reboot
+  record only by prefix `sha256:153987840361...`;
+- the approved caller received HTTP 200 with valid TLS in 0.13 seconds;
+- IPv6 port 443 remained blocked, while port 80 remained reachable and ACME
+  was unaffected;
+- the loopback Traefik-only probe returned HTTP 403;
+- the retained old `traefik-traefik-1` container still existed, remained
+  stopped with exit code 0 and restart policy `unless-stopped`, reported
+  runtime `ports={}`, and did not occupy host ports 80 or 443.
+
+This one owner-observed normal reboot closes the last open perimeter-
+persistence element for this exact host configuration. It is point-in-time
+evidence, was not independently repeated by this documentation task, and does
+not prove continuity of pre-reboot counters or rule objects, freedom from every
+boot-order race, a future reboot, Docker-crash recovery, or crash/power-loss
+recovery. The observed mechanism is the enabled service reapplying the policy
+at this one normal boot. The stopped container's runtime `ports={}` does not
+prove empty saved `HostConfig.PortBindings` or `Config.ExposedPorts`, inability
+to reclaim 80/443 if later started manually, or rollback usability; exact
+identity, recovery-ledger, saved-configuration, and fresh listener inventory
+remain mandatory.
 
 ## Operator blockers captured in the runbook
 
@@ -192,8 +222,11 @@ literal validator-required helper placeholders remain in
 
 - independent repetition of the owner-supplied route, certificate, redirect,
   allowed-source 200, blocked-source 403, firewall timeout, IPv6 block,
-  idempotency, Docker-restart, port-80, or loopback observations;
-- state after a real host reboot, real crash/power loss, or boot-time ordering;
+  idempotency, Docker-restart, normal-reboot, boot-time service/rule/container
+  state, port-80, retained-old-proxy, or loopback observations;
+- any future reboot after relevant image/network/service/firewall change, real
+  crash/power-loss recovery, or general boot-order guarantee beyond this one
+  normal-reboot observation;
 - host-firewall rollback from the currently installed policy;
 - forced ACME renewal, renewal continuity, certificate rollback, or ACME-state
   recovery rehearsal;

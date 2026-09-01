@@ -28,7 +28,9 @@ OWNER_REPORTED_ROUTER_ACTIVATION_PASS_LEADPILOT_ONLY_ENTRIES_1;
 OWNER_REPORTED_TLS_AND_EXTERNAL_CALLER_MATRIX_PASS;
 OWNER_REPORTED_PERIMETER_IPV4_IPV6_PASS;
 OWNER_REPORTED_DOCKER_SERVICE_RESTART_SURVIVAL_PASS;
-REAL_HOST_REBOOT_NOT_VERIFIED;
+OWNER_REPORTED_REAL_HOST_REBOOT_SURVIVAL_PASS;
+OWNER_REPORTED_PERIMETER_PERSISTENCE_COMPLETE_AT_NORMAL_REBOOT;
+POINT_IN_TIME_NORMAL_REBOOT_ONLY_NO_FUTURE_GENERALIZATION;
 PUBLIC_ROUTE_ACTIVE_LEADPILOT_ONLY`.
 
 Exact protected-main source
@@ -60,9 +62,17 @@ incremented the deny counter but produced only a caller timeout. The installed
 IPv4 rules use conntrack original destination plus port 443, while IPv6 443 is
 blocked in `ip6tables INPUT` because this host's `[::]:443` docker-proxy path
 bypasses `DOCKER-USER`. Three applications remained exactly three IPv4 plus one
-IPv6 rule, Docker-service restart survival passed, allowed traffic returned 200
-in about 0.1 seconds, port 80 remained reachable, and the loopback Traefik probe
-returned 403. State after a real host reboot remains `NOT_VERIFIED`.
+IPv6 rule, and Docker-service restart survival passed. The owner then observed
+one real normal reboot at `2026-09-01 13:14:41`: the host returned in about 40
+seconds, `r3d-perimeter.service` was active/enabled and reapplied the same 3+1
+rules, both current service containers were healthy at `t+5s`, and the API
+remained on candidate-image prefix `sha256:153987840361...`. The allowed caller
+returned HTTP 200 with valid TLS in 0.13 seconds, IPv6/443 remained blocked,
+port 80 and ACME remained unaffected, and the loopback probe returned 403. The
+retained `traefik-traefik-1` stayed stopped with exit 0, `unless-stopped`, and
+runtime `ports={}`, without owning 80/443. This closes the last open perimeter-
+persistence element for this exact point-in-time configuration; it does not
+generalize to future reboots or crash/power-loss recovery.
 
 Automatic no-deploy rehearsal `33450012850` separately failed closed at
 rehearsal-input materialization: the fixed previous source is an ancestor and
@@ -81,9 +91,10 @@ root-private operator inputs. Successful HTTP-01
 validation while the global redirect remained enabled proves redirect/challenge
 compatibility for issuance, not the separate forced-renewal rehearsal. This
 repository turn is documentation-only and performs no VPS, container, router,
-DNS, firewall, mounted-directory, or consumer mutation. Real reboot, public
-router rollback, forced renewal, monitoring, backup/recovery acceptance, and
-customer readiness remain separate. See
+DNS, firewall, mounted-directory, or consumer mutation. Future reboot after
+relevant drift and crash/power-loss recovery require repeat proof; public router
+rollback, forced renewal, monitoring, backup/recovery acceptance, and customer
+readiness remain separate. See
 `docs/codex/evidence/hostinger-leadpilot-route-activation.md`.
 
 ## Current J3B native-envelope and original-dimension corrective candidate

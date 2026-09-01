@@ -279,6 +279,21 @@ must differ from `3d-psa-traefik`; a name collision is a stop condition because
 this procedure must retain the stopped previous container for rollback rather
 than rename, remove, or recreate it.
 
+After every real host reboot, re-inventory the retained old proxy before
+accepting public service. For the current topology the retained container must
+exist as exactly `traefik-traefik-1`, remain stopped/exited with
+`Running=false` and `ExitCode=0`, retain restart policy `unless-stopped`, and
+report an empty runtime port map as `ports={}`. Prove separately that it owns no
+listener on host ports 80 or 443 and that the approved current Traefik owns the
+expected listeners. `ports={}` on a stopped container does not prove that saved
+`HostConfig.PortBindings` or `Config.ExposedPorts` is empty, that a later manual
+start cannot reclaim 80/443, or that rollback configuration remains usable. It
+does not replace exact container-ID, image, configuration, network, recovery-
+ledger, or fresh host-listener checks. Any identity drift, running/restarting
+state, nonzero exit, changed restart policy, unexpected saved/runtime binding,
+or listener ownership is a stop. Retain the old proxy stopped; do not start,
+remove, rename, or recreate it.
+
 ## 1. Verify sources and resolve the API identity
 
 Verify the checked-out commit and the SHA-256 of every repository source file
@@ -601,6 +616,10 @@ procedure intact. Prove that both old listeners are closed before creating or
 starting the candidate. If the ports were initially free, record that bounded
 proof instead; do not stop an unrelated process.
 
+After a host reboot, the retained-old-proxy boot inventory in the recovery
+boundary above must pass before listener or public-route acceptance. Mere
+container existence or restart policy is not sufficient evidence.
+
 Only after those preconditions pass, start the `traefik` service from
 `ops/hostinger/docker-compose.traefik.yml`, using the operator values file that
 names the verified existing ACME volume:
@@ -844,12 +863,27 @@ same positive/negative matrix must also survive the separately authorized
 Docker-service restart rehearsal.
 
 The owner-supplied 2026-09-01 record reports that three successive applications
-remained idempotent at exactly three IPv4 rules and one IPv6 rule; the policy
-survived a Docker-service restart; the allowed caller returned HTTP 200 in about
-0.1 seconds; IPv6 port 443 returned no response; IPv4 port 80 remained
-reachable; and the loopback Traefik-only probe returned HTTP 403. These are
+remained idempotent at exactly three IPv4 rules and one IPv6 rule, and that the
+policy survived a Docker-service restart. The later owner-supplied normal-host-
+reboot observation is timestamped `2026-09-01 13:14:41`: the host was reachable
+in about 40 seconds; `r3d-perimeter.service` was both `active` and `enabled` and
+reapplied the rules at boot; and the post-boot policy remained exactly three
+IPv4 rules plus one IPv6 rule, identical in count to the pre-reboot policy. The
+current API and Traefik containers were both `healthy` at `t+5s`; the API
+remained on the deployed candidate image recorded for this reboot only as
+prefix `sha256:153987840361...`. The allowed caller received HTTP 200 with valid
+TLS in 0.13 seconds; IPv6 port 443 remained blocked; port 80 remained reachable
+with ACME unaffected; and the loopback Traefik-only probe returned HTTP 403.
+The retained old `traefik-traefik-1` container remained stopped with exit code
+0, restart policy `unless-stopped`, and runtime `ports={}`, and did not own
+ports 80 or 443. This single normal reboot closes the last open perimeter-
+persistence element for this exact observed host configuration. These are
 point-in-time owner observations, not actions repeated by this documentation
-change. State after a real host reboot remains `NOT_VERIFIED`.
+change, and do
+not prove continuity of pre-reboot counters or rule objects, freedom from every
+boot-order race, a future reboot, Docker-crash recovery, or crash/power-loss
+recovery. The verified persistence mechanism is the enabled service reapplying
+the policy at this one observed normal boot.
 
 ### J2 W3 ACME state and renewal boundary
 
