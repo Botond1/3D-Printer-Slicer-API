@@ -79,8 +79,23 @@ function sumNumericList(rawList) {
     return Number.isFinite(total) ? total : null;
 }
 
-/** Ordered print-time patterns, strongest first. */
+/**
+ * Ordered print-time patterns, strongest first.
+ *
+ * Bambu Studio and OrcaSlicer both write the wall-clock total on the SAME line
+ * as the model time: `; model printing time: 5m 38s; total estimated time:
+ * 11m 54s`. A line-anchored `^; total estimated time` pattern therefore never
+ * matched and Orca silently fell through to `M73 P0 R<minutes>`, which is the
+ * model time WITHOUT the start sequence. The GUI "total time" a customer is
+ * quoted against is the total estimated time, so that unanchored marker ranks
+ * first; `M73` remains the fallback for engines that emit no total.
+ */
 const PRINT_TIME_PATTERNS = Object.freeze([
+    {
+        id: 'total_estimated_time',
+        regex: /;\s*total estimated time\s*[:=]\s*([0-9dhms ]+)/i,
+        toSeconds: (match) => parseDurationText(match[1])
+    },
     {
         id: 'm73_p0_r_minutes',
         regex: /^M73 P0 R(\d+)\s*$/im,
@@ -89,11 +104,6 @@ const PRINT_TIME_PATTERNS = Object.freeze([
     {
         id: 'estimated_printing_time',
         regex: /^;\s*estimated printing time(?:\s*\([^)]*\))?\s*=\s*([^\r\n]+)$/im,
-        toSeconds: (match) => parseDurationText(match[1])
-    },
-    {
-        id: 'total_estimated_time',
-        regex: /^;\s*total estimated time\s*[:=]\s*([^\r\n]+)$/im,
         toSeconds: (match) => parseDurationText(match[1])
     },
     {
@@ -108,6 +118,11 @@ const FILAMENT_GRAM_PATTERNS = Object.freeze([
     {
         id: 'filament_used_g',
         regex: /^;\s*filament used \[g\]\s*=\s*([0-9.,\s]+?)\s*$/im,
+        toGrams: (match) => sumNumericList(match[1])
+    },
+    {
+        id: 'total_filament_weight_g',
+        regex: /^;\s*total filament weight \[g\]\s*[:=]\s*([0-9.,\s]+?)\s*$/im,
         toGrams: (match) => sumNumericList(match[1])
     },
     {
@@ -127,6 +142,11 @@ const FILAMENT_LENGTH_PATTERNS = Object.freeze([
     {
         id: 'filament_used_mm',
         regex: /^;\s*filament used \[mm\]\s*=\s*([0-9.,\s]+?)\s*$/im,
+        toMillimeters: (match) => sumNumericList(match[1])
+    },
+    {
+        id: 'total_filament_length_mm',
+        regex: /^;\s*total filament length \[mm\]\s*[:=]\s*([0-9.,\s]+?)\s*$/im,
         toMillimeters: (match) => sumNumericList(match[1])
     },
     {

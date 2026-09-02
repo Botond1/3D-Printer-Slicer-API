@@ -1,0 +1,42 @@
+{
+    "type": "filament",
+    "setting_id": "ORCA_FIL_TPU_LOCAL",
+    "name": "Generic TPU @R3D",
+    "from": "user",
+    "instantiation": "true",
+    "inherits": "fdm_filament_tpu",
+    "filament_type": [
+        "TPU"
+    ],
+    "filament_vendor": [
+        "Generic"
+    ],
+    "filament_density": [
+        "1.24"
+    ],
+    "filament_diameter": [
+        "1.75"
+    ],
+    "filament_cost": [
+        "30"
+    ],
+    "nozzle_temperature": [
+        "230"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "230"
+    ],
+    "hot_plate_temp": [
+        "40"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "40"
+    ],
+    "compatible_printers": [
+        "MyMarlin 0.4 nozzle",
+        "MyH2D 0.4 nozzle"
+    ],
+    "filament_max_volumetric_speed": [
+        "3.6"
+    ]
+}

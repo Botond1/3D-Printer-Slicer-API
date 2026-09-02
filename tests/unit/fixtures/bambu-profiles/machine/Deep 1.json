@@ -1,0 +1,5 @@
+{
+    "type": "machine",
+    "name": "Deep 1",
+    "inherits": "fdm_machine_common"
+}

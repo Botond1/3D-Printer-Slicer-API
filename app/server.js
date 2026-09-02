@@ -38,6 +38,9 @@ const { auditStaleWorkspaces, auditWorkspacesThenListen } = require('./services/
 const { cleanupManagedArtifacts } = require('./services/artifact-store');
 const { beginSliceQueueShutdown } = require('./services/slice/queue');
 const { initializeSlicerEngineVersions } = require('./services/slice/engine-version');
+const { getBambuPrinterRegistry } = require('./services/slice/bambu-printer-registry');
+const { verifyBambuRegistryChains } = require('./services/slice/bambu-profile-chain');
+const { configureRetentionObserver } = require('./services/slice/output-lifecycle');
 const { createProfileCatalogueService } = require('./services/slice/profile-catalogue');
 const { createRuntimeLifecycle } = require('./services/runtime-lifecycle');
 const { createReadinessService } = require('./services/readiness.service');
@@ -224,6 +227,12 @@ const httpServer = createBoundedHttpServer(app);
  */
 async function startServer() {
     const engineVersions = await initializeSlicerEngineVersions();
+    // The Bambu registry and every vendor chain it references must flatten
+    // before listen; a typed failure here refuses startup rather than letting
+    // /bambu/slice answer 500 on its first request. The catalogue below stays
+    // non-critical and merely re-exercises the same chains.
+    verifyBambuRegistryChains({ registry: getBambuPrinterRegistry() });
+    configureRetentionObserver(readinessService);
     await profileCatalogueService.initialize({ engineVersions });
     const scratchCleanup = await auditStaleWorkspaces({
         jobsRoot: JOB_SCRATCH_DIR,
@@ -279,10 +288,16 @@ async function startServer() {
     });
 }
 
+const TYPED_STARTUP_FAILURE_CODES = new Set([
+    'STARTUP_SLICER_VERSION_FAILED',
+    'STARTUP_BAMBU_REGISTRY_INVALID',
+    'STARTUP_BAMBU_PROFILE_CHAIN_FAILED'
+]);
+
 runtimeLifecycle.run(startServer).catch((error) => {
     emitEvent('startup.completed', {
         outcome: 'failure',
-        error_code: error?.code === 'STARTUP_SLICER_VERSION_FAILED'
+        error_code: TYPED_STARTUP_FAILURE_CODES.has(error?.code)
             ? error.code
             : 'STARTUP_AUDIT_FAILED'
     });

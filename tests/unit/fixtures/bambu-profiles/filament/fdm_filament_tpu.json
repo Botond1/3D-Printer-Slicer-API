@@ -1,0 +1,16 @@
+{
+    "type": "filament",
+    "name": "fdm_filament_tpu",
+    "inherits": "fdm_filament_common",
+    "from": "system",
+    "instantiation": "false",
+    "filament_type": [
+        "TPU"
+    ],
+    "filament_density": [
+        "1.24"
+    ],
+    "nozzle_temperature": [
+        "230"
+    ]
+}

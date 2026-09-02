@@ -1,0 +1,7 @@
+{
+    "type": "machine",
+    "name": "Include Wrong Role",
+    "include": [
+        "Process Template"
+    ]
+}

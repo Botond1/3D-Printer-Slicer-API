@@ -14,18 +14,22 @@ const versionRunner = createStartupProbeRunner({
 const versionCache = new Map();
 const initializedVersions = new Map();
 
+const SUPPORTED_ENGINES = Object.freeze(['prusa', 'orca', 'bambu']);
 const VERSION_QUERY_ARGS = Object.freeze({
     prusa: Object.freeze(['--help']),
-    orca: Object.freeze(['--help'])
+    orca: Object.freeze(['--help']),
+    bambu: Object.freeze(['--help'])
 });
 
 const VERSION_PATTERNS = Object.freeze({
     prusa: /PrusaSlicer(?:-|\s+(?:Version\s+)?)([0-9]+(?:\.[0-9]+){2}(?:[-+][A-Za-z0-9._-]+)?)/i,
-    orca: /OrcaSlicer(?:-|\s+(?:Version\s+)?)([0-9]+(?:\.[0-9]+){2,3}(?:[-+][A-Za-z0-9._-]+)?)/i
+    orca: /OrcaSlicer(?:-|\s+(?:Version\s+)?)([0-9]+(?:\.[0-9]+){2,3}(?:[-+][A-Za-z0-9._-]+)?)/i,
+    bambu: /BambuStudio(?:-|\s+(?:Version\s+)?)([0-9]+(?:\.[0-9]+){2,3})/i
 });
 const HELP_SENTINELS = Object.freeze({
     prusa: /Usage:\s+prusa-slicer[\s\S]*--help/i,
-    orca: /Usage:\s+orca-slicer[\s\S]*OPTIONS:[\s\S]*--help/i
+    orca: /Usage:\s+orca-slicer[\s\S]*OPTIONS:[\s\S]*--help/i,
+    bambu: /Usage:\s+bambu-studio[\s\S]*OPTIONS:[\s\S]*--help/i
 });
 
 function parseEngineVersionOutput(engine, result) {
@@ -81,32 +85,31 @@ function resolveSlicerEngineVersion(engine, options = {}) {
 }
 
 /**
- * Verify both supported binaries before the HTTP listener can accept traffic.
+ * Verify all three supported binaries before the HTTP listener can accept traffic.
  * The published map changes only after every native query has succeeded.
  * @param {{runner?: Function, cache?: Map, initialized?: Map}} [options] Test seams.
- * @returns {Promise<Readonly<{prusa: string, orca: string}>>} Atomic version snapshot.
+ * @returns {Promise<Readonly<{prusa: string, orca: string, bambu: string}>>} Atomic version snapshot.
  */
 async function initializeSlicerEngineVersions(options = {}) {
     const cache = options.cache || versionCache;
     const initialized = options.initialized || initializedVersions;
-    let prusa;
-    let orca;
+    const versions = {};
     try {
-        prusa = await resolveSlicerEngineVersion('prusa', { runner: options.runner, cache });
-        orca = await resolveSlicerEngineVersion('orca', { runner: options.runner, cache });
+        for (const engine of SUPPORTED_ENGINES) {
+            versions[engine] = await resolveSlicerEngineVersion(engine, { runner: options.runner, cache });
+        }
     } catch (cause) {
         const error = new Error('Slicer engine startup version verification failed.', { cause });
         error.code = 'STARTUP_SLICER_VERSION_FAILED';
         throw error;
     }
-    initialized.set('prusa', prusa);
-    initialized.set('orca', orca);
-    return Object.freeze({ prusa, orca });
+    for (const engine of SUPPORTED_ENGINES) initialized.set(engine, versions[engine]);
+    return Object.freeze({ ...versions });
 }
 
 /**
  * Read the startup-verified version without launching a request-owned process.
- * @param {'prusa'|'orca'} engine Slicer engine key.
+ * @param {'prusa'|'orca'|'bambu'} engine Slicer engine key.
  * @param {{initialized?: Map}} [options] Test seam.
  * @returns {string} Startup-verified native version.
  */
@@ -121,6 +124,7 @@ function getSlicerEngineVersion(engine, options = {}) {
 
 module.exports = {
     MAX_VERSION_OUTPUT_BYTES,
+    SUPPORTED_ENGINES,
     VERSION_QUERY_ARGS,
     VERSION_TIMEOUT_MS,
     getSlicerEngineVersion,

@@ -8,13 +8,17 @@ const { resolveResourcePolicy } = require('../config/resource-policy');
 const { OUTPUT_DIR } = require('../config/paths');
 const { readFileSyncBounded } = require('../utils/bounded-file');
 const { emitEvent } = require('./observability/events');
+const {
+    OUTPUT_ARTIFACT_EXTENSIONS,
+    hasOutputArtifactExtension
+} = require('./slice/common');
 
-const ALLOWED_OUTPUT_EXTENSIONS = new Set(['.gcode', '.sl1']);
+const ALLOWED_OUTPUT_EXTENSIONS = new Set(OUTPUT_ARTIFACT_EXTENSIONS);
 const BULK_DOWNLOAD_ALL_TOKEN = 'ALL';
 const RESOURCE_POLICY = resolveResourcePolicy(process.env);
 const MAX_BULK_DOWNLOAD_ENTRIES = RESOURCE_POLICY.MAX_ZIP_ENTRIES;
 const MAX_BULK_DOWNLOAD_BYTES = RESOURCE_POLICY.MAX_ZIP_UNCOMPRESSED_BYTES;
-const MANAGED_FILE_PATTERN = /-output-(artifact-[a-f0-9]{32})\.(?:gcode|sl1)$/;
+const MANAGED_FILE_PATTERN = /-output-(artifact-[a-f0-9]{32})\.(?:gcode|sl1|gcode\.3mf)$/;
 const PRIVATE_METADATA_PATTERN = /^\.artifact-[a-f0-9]{32}\.json$/;
 
 function readManagedCorrelation(fileName, resolvedOutputDir, sizeBytes) {
@@ -56,7 +60,9 @@ function createFailure(status, error, errorCode) {
 
 function isAllowedOutputFileName(fileName) {
     if (!fileName || fileName.includes('/') || fileName.includes('\\')) return false;
-    return ALLOWED_OUTPUT_EXTENSIONS.has(path.extname(fileName).toLowerCase());
+    // `.gcode.3mf` is a compound extension, so the allowlist is matched as a
+    // case-insensitive suffix rather than through path.extname().
+    return hasOutputArtifactExtension(fileName);
 }
 
 function isPathWithin(parentPath, candidatePath) {
@@ -248,7 +254,10 @@ function validateBulkDownloadLimits(files) {
 }
 
 module.exports = {
+    ALLOWED_OUTPUT_EXTENSIONS,
     BULK_DOWNLOAD_ALL_TOKEN,
+    MANAGED_FILE_PATTERN,
+    isAllowedOutputFileName,
     resolveValidatedOutputFile,
     getValidatedOutputFile,
     getValidatedOutputFiles,

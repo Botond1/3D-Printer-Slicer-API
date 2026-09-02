@@ -1,0 +1,23 @@
+{
+    "type": "filament",
+    "name": "Generic ABS @BBL H2D",
+    "inherits": "Generic ABS @base",
+    "from": "system",
+    "instantiation": "true",
+    "setting_id": "GFS_ABS_H2D",
+    "filament_type": [
+        "ABS",
+        "ABS"
+    ],
+    "filament_density": [
+        "1.04",
+        "1.04"
+    ],
+    "filament_diameter": [
+        "1.75",
+        "1.75"
+    ],
+    "compatible_printers": [
+        "Bambu Lab H2D 0.4 nozzle"
+    ]
+}

@@ -1,9 +1,14 @@
 'use strict';
 
+/**
+ * Repository file basenames and Bambu vendor profile names share one contract:
+ * a leading alphanumeric, then letters, digits, spaces, `@`, `.`, `_`, `+`, `-`;
+ * never a path separator.
+ */
 function basenameSchema() {
     return {
         type: 'string', minLength: 1, maxLength: 128,
-        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+        pattern: '^[A-Za-z0-9][A-Za-z0-9 @._+-]{0,127}$'
     };
 }
 
@@ -237,7 +242,7 @@ function catalogueEntrySchema() {
                         minItems: 1,
                         maxItems: 16,
                         uniqueItems: true,
-                        description: 'Deterministically ordered, uniquely named multipart selector parameters derived from profile_components.',
+                        description: 'Deterministically ordered, uniquely named multipart selector parameters. Prusa and Orca derive them from profile_components; Bambu rows lead with printerProfile (registry id), layerHeight (registry key), and material, followed by the component-derived processProfile vendor name.',
                         items: {
                             type: 'object',
                             required: ['name', 'value'],
@@ -255,7 +260,7 @@ function catalogueEntrySchema() {
                 minItems: 1,
                 maxItems: 16,
                 uniqueItems: true,
-                description: 'Deterministically ordered, path-free profile components used to derive the effective digest.',
+                description: 'Deterministically ordered, path-free profile components used to derive the effective digest. Prusa/Orca basenames are repository file names; Bambu basenames are the official vendor profile names flattened from the bundled BBL resources.',
                 items: {
                     type: 'object',
                     required: ['role', 'basename', 'selector_parameter'],
@@ -325,7 +330,7 @@ function createProfileCataloguePaths() {
             get: {
                 tags: ['Profiles'],
                 summary: 'Get the startup profile catalogue.',
-                description: 'Public informational catalogue whose current v2 rows are machine-bound server-owned FDM presets. Every per-printer, per-engine preset row remains visible, with physical/profile-declared dimensions separated from the authoritative configured inclusive admission ceiling. Machine and fleet envelopes are resolved independently for each technology and native engine; cross-engine values are never merged or silently minimized. H2D-QUOTE is explicitly a H2D-sized quoting chain with P1S physics, not a production H2D G-code profile. Slice endpoints remain authoritative and keep enforcing the published largest-passing ceiling. Fallback-only SLA presets are never published as machine entries; a later real machine-bound SLA profile fits the same v2 entry schema and adds separate per-engine SLA fleet resolutions. Custom overrides and dynamic materials are outside this catalogue, and catalogue availability never gates slicing.',
+                description: 'Public informational catalogue whose current v2 rows are machine-bound server-owned FDM presets. Every per-printer, per-engine preset row remains visible, with physical/profile-declared dimensions separated from the authoritative configured inclusive admission ceiling. Machine and fleet envelopes are resolved independently for each technology and native engine; cross-engine values are never merged or silently minimized. H2D-QUOTE is explicitly a H2D-sized quoting chain with P1S physics, not a production H2D G-code profile. Bambu Studio rows (engine `bambu`, endpoint `/bambu/slice`) name the official vendor machine/process/filament profiles for the P1S and H2D; their largest-passing ceilings are provisional until the native envelope sweep replaces them. Slice endpoints remain authoritative and keep enforcing the published largest-passing ceiling. Fallback-only SLA presets are never published as machine entries; a later real machine-bound SLA profile fits the same v2 entry schema and adds separate per-engine SLA fleet resolutions. Custom overrides and dynamic materials are outside this catalogue, and catalogue availability never gates slicing.',
                 parameters: [{
                     name: 'If-None-Match',
                     in: 'header',

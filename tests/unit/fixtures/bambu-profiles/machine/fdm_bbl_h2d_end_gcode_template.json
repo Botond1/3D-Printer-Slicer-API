@@ -1,0 +1,4 @@
+{
+    "machine_end_gcode": ";===== h2d end template =====\nM104 S0",
+    "template_marker": "end-template-wins"
+}

@@ -71,8 +71,16 @@ const ORCA_PROCESS_PROFILE_BY_LAYER = {
 /** Orca filament profiles selected by normalized FDM material key. */
 const ORCA_FILAMENT_PROFILE_BY_MATERIAL = Object.freeze({
     PLA: 'PLA_generic.json',
-    PETG: 'PETG_generic.json'
+    PETG: 'PETG_generic.json',
+    ABS: 'ABS_generic.json',
+    TPU: 'TPU_generic.json'
 });
+
+/**
+ * Bambu Studio vendor-profile resources bundled inside the AppImage.
+ * Overridable through `BAMBU_PROFILES_ROOT` for tests and alternative layouts.
+ */
+const BAMBU_DEFAULT_PROFILES_ROOT = '/opt/bambustudio/resources/profiles/BBL';
 
 /**
  * Default fallback pricing matrix in HUF/hour.
@@ -136,12 +144,30 @@ Object.freeze({
 });
 
 /**
+ * PROVISIONAL Bambu Studio admission ceilings, inclusive on every axis and keyed
+ * by the vendor machine profile name.
+ *
+ * These values are NOT yet the result of a full A/B envelope sweep on the
+ * production image. They come from two orchestrator spot checks on the VPS:
+ * a 238 x 228 mm plate passed on the P1S while 250 x 250 mm was rejected because
+ * of the 18 x 28 mm `bed_exclude_area` corner, and the H2D-sized values reuse
+ * the Orca-measured planar margin. The orchestrator will replace this table
+ * after the sweep; treat it as a conservative placeholder, never as measured
+ * proof.
+ */
+const BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM = Object.freeze({
+    'Bambu Lab P1S 0.4 nozzle': Object.freeze({ x: 236, y: 226, z: 249.9 }),
+    'Bambu Lab H2D 0.4 nozzle': Object.freeze({ x: 347.9, y: 317.9, z: 324.9 })
+});
+
+/**
  * Validation-only fallback derates for non-catalogued FDM profiles. Known
  * server-owned profiles always use one of the explicit tables above.
  */
 const FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE = Object.freeze({
     prusa: Object.freeze({ x: 0, y: 0, z: 0.1 }),
-    orca: Object.freeze({ x: 2.1, y: 2.1, z: 0.1 })
+    orca: Object.freeze({ x: 2.1, y: 2.1, z: 0.1 }),
+    bambu: Object.freeze({ x: 2.1, y: 2.1, z: 0.1 })
 });
 
 /**
@@ -186,6 +212,8 @@ module.exports = {
     LAYER_HEIGHTS,
     ORCA_FILAMENT_PROFILE_BY_MATERIAL,
     ORCA_PROCESS_PROFILE_BY_LAYER,
+    BAMBU_DEFAULT_PROFILES_ROOT,
+    BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     DEFAULT_PRICING,
     MAX_BUILD_VOLUMES,
     P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
