@@ -210,7 +210,7 @@ this file maps them to modules.
   units and compound STL), `auto`/`preserve` orientation, bounded sidecar,
   `fallback_unmodified` with one `orientation.fallback` event.
 - model-stats.js: measured/unavailable dimension results, strict FDM stats,
-  SLA estimates (`sla_sl1_metadata_estimate`, `sla_synthetic_estimate`).
+  the SLA layer-count model (`sla_layer_time_model`, app/services/slice/sla-time-model.js).
 - native-bounds.js: explicit placement/print-volume diagnostics (including
   Bambu rc 192/190) -> full schema-2 K2 422 payload.
 - options.js: strict `layerHeight`, `material`, `infill` (integer 0..100,
@@ -231,7 +231,7 @@ this file maps them to modules.
   timeouts, quarantine drain, `SLICE_QUEUE_SHUTDOWN`.
 - response.js: success payload (engine version, digest, schema-2 transform,
   inclusive limits, Bambu `placement_mm` and `bed_type`), integer quarter-hour
-  price rounding, SLA/manual `null` pricing.
+  price rounding, manual `null` pricing (FDM without mass marker); SLA is priced from the layer-count model.
 - transform.js: sizing (fit-within-box), request rotation, placement, bounds,
   complete `model_transform` for success and K2.
 - zip.js, zip-policy.js, zip-open.js, zip-stream.js, three-mf.js: exactly one
@@ -275,8 +275,9 @@ this file maps them to modules.
   `profiles.effective_profile_sha256`, `supports`, schema-2 `model_transform`,
   inclusive `build_volume_limits_mm`, and `stats.object_height_mm` equal to
   final Z; Bambu adds `placement_mm`.
-- /prusa/slice allows FDM and SLA by layerHeight; SLA is quote-only (null mass,
-  rate, price).
+- /prusa/slice allows FDM and SLA by layerHeight; SLA slices with the Saturn 4 Ultra
+  quoting INI (zero elevation, pad around object) and prices from the layer-count
+  time model with resin-density mass.
 - /orca/slice is FDM-only, profile-compatibility aware, resolves output from a
   per-request isolated directory, and prices all four FDM materials.
 - /bambu/slice is FDM-only, registry-bound (`P1S`/`H2D`, registry layer keys,

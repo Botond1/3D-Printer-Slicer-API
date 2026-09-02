@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## v3.3.0 (2026-09-03)
+
+### Added
+- **[contract]** SLA quoting for the Elegoo Saturn 4 Ultra on `POST /prusa/slice` (`layerHeight` 0.025 / 0.05): PrusaSlicer generates supports and a pad at zero elevation, `stats.print_time_seconds` comes from the layer-count time model `sla-layer-time-v1` (`configs/sla/printers.json`, owner-tunable per-layer seconds), `stats.material_used_g = material_used_ml x resin density`, plus `stats.layer_count`, `stats.model_volume_ml`, `stats.support_volume_ml`, `profiles.sla_printer`, `profiles.resin_density_g_cm3`, `profiles.sla_time_model`; SLA is priced again.
+- `GET /profiles` publishes six `SATURN4U` SLA rows (two layer heights x three resins) with the declared `218.88 x 122.88 x 220 mm` envelope.
+- `app/scale_model.py` reports the watertight mesh volume, which the API uses for the model-only resin volume.
+
+### Fixed
+- SLA slicing of any model taller than 25 mm at 0.05 mm failed with `413 SLICE_RESOURCE_LIMIT_EXCEEDED` because the `.sl1` reader applied the 500-entry upload ZIP limit to one PNG per layer; the reader now counts layers with its own bound and reads only `config.ini`.
+- Large flat SLA parts no longer exhaust memory in PrusaSlicer's support tree (zero support elevation with a pad around the object).
+
+### Changed
+- **[contract]** SLA `hourly_rate` / `estimated_price_huf` / `material_used_g` are numeric again; `print_time_source` is `sla_layer_time_model` (the former `sla_synthetic_estimate` / `sla_sl1_metadata_estimate` values are gone).
+- The Prusa SLA invocation centres the model on the Saturn bed (`--center 109.44,61.44`), so every SLA `effective_profile_sha256` changes.
+- The `.sl1` artifact is a quote-only raster (768 x 432); a printable `.goo` still needs UVtools conversion (not bundled).
+
 ## v3.2.0 (2026-09-02)
 
 Bambu Studio engine overhaul. Consumer-visible contract changes are marked

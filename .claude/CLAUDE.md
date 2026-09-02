@@ -132,8 +132,10 @@ under `docs/codex/evidence/`.
 - Price: `ceil(max(print_time_seconds, 900) * hourly_rate / 3600)` rounded up
   to 10 HUF in integer arithmetic (1980 s at 800 HUF/h is 440, formerly 450).
   `hourly_rate` and `estimated_price_huf` are `null` for FDM without a
-  positive mass, profile-less Orca, and always SLA (`material_used_g` also
-  `null`; SLA is quote-only).
+  positive mass and profile-less Orca. SLA (Elegoo Saturn 4 Ultra quoting
+  profile, `configs/sla/printers.json`) is priced from the layer-count time
+  model `sla-layer-time-v1` and `material_used_g = usedMaterial_ml x resin
+  density`; its `.sl1` raster is quote-only (convert with UVtools for `.goo`).
 - Error statuses: 408 `UPLOAD_TOTAL_TIMEOUT`; 422 `UNSLICEABLE_SOURCE_GEOMETRY`
   (native faulty-mesh/model-load diagnostics, stdout and stderr, path-free
   `detail`), `FILE_PROCESSING_TIMEOUT` only on real timeouts (message names no
@@ -153,7 +155,7 @@ under `docs/codex/evidence/`.
   admission authority `largest_passing_dimensions_inclusive_mm`;
   `machine_resolutions` and `fleet_resolutions` are engine-scoped (fleets:
   bambu -> H2D, orca and prusa -> H2D-QUOTE) and never merged. The generic
-  `120 x 120 x 150 mm` SLA fallback is never advertised as a machine; the
+  SLA rows are the Elegoo Saturn 4 Ultra quoting rows (`SATURN4U`, prusa engine); the
   Elegoo Saturn 4 Ultra envelope is not guessed.
 - The pricing file is authoritative: defaults seed only a missing or empty
   `configs/pricing-state/pricing.json`; a deleted material never resurrects;
@@ -363,7 +365,11 @@ Return and preserve queue/rate errors:
 
 ## Engine Boundaries
 Prusa:
-- SLA layer heights: 0.025, 0.05 (quote-only: null mass, rate, and price)
+- SLA layer heights: 0.025, 0.05 (Saturn 4 Ultra `218.88 x 122.88 x 220 mm`,
+  zero support elevation + pad around object; time = layer count x tunable
+  per-layer seconds, mass = ml x density; the API-side INI bounds are the
+  admission authority because PrusaSlicer's SLA export does not refuse
+  out-of-bed objects)
 - FDM layer heights: 0.1, 0.2, 0.3
 
 Orca:
