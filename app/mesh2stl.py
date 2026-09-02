@@ -8,6 +8,7 @@ parsing free-form text. No automatic repair is ever applied.
 """
 
 import math
+import os
 import sys
 
 import trimesh
@@ -167,7 +168,7 @@ def convert_mesh_to_stl(input_path, output_path):
             missing input) are server-side faults, so they exit 1 WITHOUT
             the marker and are never reported as the customer's bad geometry.
     """
-    print(f"[PYTHON] Loading mesh: {input_path}")
+    print(f"[PYTHON] Loading mesh: {os.path.basename(str(input_path))}")
     try:
         mesh = _load_as_mesh(input_path)
     except FileNotFoundError:
@@ -183,7 +184,7 @@ def convert_mesh_to_stl(input_path, output_path):
 
     try:
         mesh.export(output_path)
-        print(f"[PYTHON] Success! Exported to {output_path}")
+        print(f"[PYTHON] Success! Exported to {os.path.basename(str(output_path))}")
     except Exception as error:  # noqa: BLE001
         print(f"[PYTHON] ERROR: Could not export this mesh file. {type(error).__name__}")
         sys.exit(1)

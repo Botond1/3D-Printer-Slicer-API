@@ -86,7 +86,7 @@ test('render service composes the slice pipeline instead of copying it and bound
     const source = read('app/services/render.service.js');
     assert.match(source, /require\('\.\/slice\/pipeline'\)/);
     assert.match(source, /require\('\.\/slice\/transform'\)/);
-    assert.match(source, /createSliceHandlers\(\{ \.\.\.options, processSliceImpl: processRender \}\)/);
+    assert.match(source, /createSliceHandlers\(\{\s*\.\.\.options,\s*processSliceImpl: processRender,\s*validateSliceRequestImpl\s*\}\)/);
     assert.match(source, /createCommandRunner\(\{ timeoutMs: RENDER_COMMAND_TIMEOUT_MS \}\)/);
     assert.match(source, /const RENDER_COMMAND_TIMEOUT_MS = 60_000;/);
     assert.doesNotMatch(source, /shell:\s*true|child_process|exec\(/);

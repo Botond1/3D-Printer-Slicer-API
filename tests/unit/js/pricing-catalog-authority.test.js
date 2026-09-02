@@ -98,8 +98,10 @@ test('catalog setPricing never re-merges defaults and getRate fails closed on un
     assert.equal(catalog.getRate('FDM', undefined), null);
     assert.equal(catalog.getRate('XYZ', 'PLA'), null);
 
+    catalog.setPricing({ FDM: { PLA: 850, ABS: 700 }, SLA: {} });
     catalog.removeMaterial('FDM', 'PLA');
     assert.equal(catalog.getRate('FDM', 'PLA'), null);
+    assert.throws(() => catalog.removeMaterial('FDM', 'ABS'), /last material/i, 'the last material is protected');
     catalog.setPricing({ FDM: { PLA: 0 }, SLA: {} });
     assert.equal(catalog.getRate('FDM', 'PLA'), null, 'a non-positive rate is never published');
 });

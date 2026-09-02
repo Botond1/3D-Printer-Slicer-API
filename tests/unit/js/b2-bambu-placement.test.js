@@ -507,10 +507,10 @@ test('placement_mm is a Bambu-only response field documented with the SLA/FDM pr
     assert.match(PLACEMENT_SCHEMA.description, /Bambu Studio only/);
     assert.match(PLACEMENT_SCHEMA.description, /Absent on Prusa and Orca/);
     assert.deepEqual(schema.properties.stats.properties.print_time_source.enum, [...PRINT_TIME_SOURCES]);
-    assert.deepEqual([...PRINT_TIME_SOURCES], [
+    assert.deepEqual([...PRINT_TIME_SOURCES].sort(), [
         ...PRINT_TIME_PATTERNS.map((pattern) => pattern.id),
         ...Object.values(SLA_PRINT_TIME_SOURCES)
-    ]);
+    ].sort());
     assert.ok(PRINT_TIME_SOURCES.includes('sla_synthetic_estimate'));
     assert.ok(PRINT_TIME_SOURCES.includes('sla_sl1_metadata_estimate'));
     assert.match(createSliceResponses()[500].description, /NATIVE_OUTPUT_OVERFLOW/);

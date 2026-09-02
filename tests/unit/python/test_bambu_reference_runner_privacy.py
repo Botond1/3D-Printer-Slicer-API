@@ -7,6 +7,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import sys
 import json
 import tempfile
 import unittest
@@ -23,6 +24,7 @@ def load_runner():
     if spec is None or spec.loader is None:
         raise RuntimeError("unable to load the Bambu reference runner")
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclasses resolve the owning module through sys.modules
     spec.loader.exec_module(module)
     return module
 

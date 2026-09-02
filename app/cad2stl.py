@@ -96,7 +96,7 @@ def convert_cad_to_stl(input_path, output_path):
     input_abs_path = os.path.abspath(input_path)
     output_abs_path = os.path.abspath(output_path)
 
-    print(f"[PYTHON CAD] Processing: {input_abs_path}")
+    print(f"[PYTHON CAD] Processing: {os.path.basename(input_abs_path)}")
 
     if not os.path.exists(input_abs_path):
         print("[PYTHON CAD] ERROR: Input CAD file was not found.")
@@ -155,7 +155,7 @@ def convert_cad_to_stl(input_path, output_path):
 
         # 6. Save
         gmsh.write(output_abs_path)
-        print(f"[PYTHON CAD] Success! Exported to {output_abs_path}")
+        print(f"[PYTHON CAD] Success! Exported to {os.path.basename(output_abs_path)}")
 
     except UserFileError as error:
         geometry_failure = error.reason

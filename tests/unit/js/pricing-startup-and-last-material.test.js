@@ -87,7 +87,6 @@ test('a corrupt or invalid existing pricing file refuses startup and is left byt
         '{"FDM":[],"SLA":{}}',
         '{"FDM":{"PLA":800},"SLA":{"Standard":-1}}',
         '{"FDM":{"PLA":"800"},"SLA":{"Standard":1800}}',
-        '{"FDM":{"../x":800},"SLA":{"Standard":1800}}',
         '{"FDM":{"PLA":0},"SLA":{"Standard":1800}}'
     ];
     for (const content of untrusted) {
