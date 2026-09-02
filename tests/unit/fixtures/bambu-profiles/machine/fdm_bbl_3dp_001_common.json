@@ -1,0 +1,32 @@
+{
+    "type": "machine",
+    "name": "fdm_bbl_3dp_001_common",
+    "inherits": "fdm_machine_common",
+    "from": "system",
+    "instantiation": "false",
+    "printer_structure": "corexy",
+    "printable_area": [
+        "0x0",
+        "256x0",
+        "256x256",
+        "0x256"
+    ],
+    "printable_height": "250",
+    "bed_exclude_area": [
+        "0x0",
+        "18x0",
+        "18x28",
+        "0x28"
+    ],
+    "nozzle_diameter": [
+        "0.4"
+    ],
+    "min_layer_height": [
+        "0.08"
+    ],
+    "max_layer_height": [
+        "0.28"
+    ],
+    "machine_start_gcode": ";===== bbl 3dp 001 start =====\nM17",
+    "machine_end_gcode": ";===== bbl 3dp 001 end =====\nM104 S0"
+}

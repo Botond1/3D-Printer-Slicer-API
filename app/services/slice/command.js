@@ -2,16 +2,60 @@
 
 const { execFile } = require('node:child_process');
 const { DEFAULTS } = require('../../config/constants');
+const { parseBoundedPositiveInt } = require('./number-utils');
 const { createChildEnvironment } = require('./child-environment');
 const { createProcessTreeTerminator } = require('./process-tree');
 const { quarantineNativeRuntime } = require('./native-runtime-status');
 const { nativeFinished, nativeStarted, recordNativeQuarantine } = require('../observability/metrics');
 const { emitEvent } = require('../observability/events');
 
-const COMMAND_TIMEOUT_MS = Number.parseInt(
-    process.env.SLICE_COMMAND_TIMEOUT_MS || `${DEFAULTS.SLICE_COMMAND_TIMEOUT_MS}`,
-    10
-) || DEFAULTS.SLICE_COMMAND_TIMEOUT_MS;
+/** Inclusive accepted range for the native slice command budget (1 s .. 60 min). */
+const SLICE_COMMAND_TIMEOUT_RANGE_MS = Object.freeze({ min: 1_000, max: 3_600_000 });
+
+/** Lower bound of the Python helper budget; below this real CAD imports fail. */
+const PYTHON_HELPER_TIMEOUT_MIN_MS = 10_000;
+
+/** Maximum bytes accepted from a child's stdout/stderr before Node kills it. */
+const DEFAULT_MAX_BUFFER_BYTES = 1024 * 10000;
+
+/**
+ * Resolve the native command timeout from the environment.
+ * Negative, zero, fractional, non-canonical, or out-of-range values fall back
+ * to the safe default instead of arming an immediately-firing timer.
+ * @param {NodeJS.ProcessEnv | Record<string, unknown>} [env=process.env] Environment source.
+ * @returns {number} Timeout in milliseconds.
+ */
+function resolveCommandTimeoutMs(env = process.env) {
+    return parseBoundedPositiveInt(
+        env.SLICE_COMMAND_TIMEOUT_MS,
+        DEFAULTS.SLICE_COMMAND_TIMEOUT_MS,
+        SLICE_COMMAND_TIMEOUT_RANGE_MS
+    );
+}
+
+/**
+ * Resolve the bounded budget for the Python preprocessing helpers (mesh2stl,
+ * cad2stl, orient, scale_model) from `PYTHON_HELPER_TIMEOUT_MS`. These run
+ * before any native slicer and never need the full native slice budget, so
+ * the accepted range is `10 s .. SLICE_COMMAND_TIMEOUT_MS`. The default is
+ * `DEFAULTS.PYTHON_HELPER_TIMEOUT_MS` capped at the native budget; invalid,
+ * non-canonical, or out-of-range values fall back to that default.
+ * @param {NodeJS.ProcessEnv | Record<string, unknown>} [env=process.env] Environment source.
+ * @returns {number} Helper timeout in milliseconds.
+ */
+function resolvePythonHelperTimeoutMs(env = process.env) {
+    const commandTimeoutMs = resolveCommandTimeoutMs(env);
+    const fallback = Math.min(DEFAULTS.PYTHON_HELPER_TIMEOUT_MS, commandTimeoutMs);
+    return parseBoundedPositiveInt(
+        env.PYTHON_HELPER_TIMEOUT_MS,
+        fallback,
+        { min: PYTHON_HELPER_TIMEOUT_MIN_MS, max: commandTimeoutMs }
+    );
+}
+
+const COMMAND_TIMEOUT_MS = resolveCommandTimeoutMs(process.env);
+/** Process-wide Python helper budget resolved once at load, like the native budget. */
+const PYTHON_HELPER_TIMEOUT_MS = resolvePythonHelperTimeoutMs(process.env);
 
 function abortReason(signal) {
     if (signal?.reason instanceof Error) return signal.reason;
@@ -34,30 +78,48 @@ function isAbortError(error, signal) {
     );
 }
 
+function timeoutMessage(timeoutMs) {
+    return `The slicing process timed out after ${Math.round(timeoutMs / 60000)} minutes.`;
+}
+
 function createTimeoutError(timeoutMs) {
-    const error = new Error(`The slicing process timed out after ${Math.round(timeoutMs / 60000)} minutes.`);
+    const error = new Error(timeoutMessage(timeoutMs));
     error.name = 'TimeoutError';
     error.code = 'ETIMEDOUT';
     error.killed = true;
     return error;
 }
 
+/**
+ * Resolve the effective timeout for one execution. A per-call override may
+ * only shorten the runner budget, never extend it.
+ * @param {number} runnerTimeoutMs Runner-level timeout.
+ * @param {unknown} requested Optional per-call override.
+ * @returns {number} Effective timeout in milliseconds.
+ */
+function effectiveTimeoutMs(runnerTimeoutMs, requested) {
+    if (!Number.isSafeInteger(requested) || requested <= 0) return runnerTimeoutMs;
+    return Math.min(requested, runnerTimeoutMs);
+}
+
 function elapsedMilliseconds(started) {
     return Number(process.hrtime.bigint() - started) / 1e6;
 }
 
-function nativeErrorCode(outcome) {
+function nativeErrorCode(outcome, error) {
     if (outcome === 'timeout') return 'NATIVE_TIMEOUT';
     if (outcome === 'aborted') return 'NATIVE_ABORTED';
+    if (error?.code === 'NATIVE_OUTPUT_OVERFLOW') return 'NATIVE_OUTPUT_OVERFLOW';
     return 'NATIVE_PROCESSING_FAILED';
 }
 
 class CommandExecution {
-    constructor(dependencies, executable, args, signal) {
+    constructor(dependencies, executable, args, signal, timeoutMs) {
         this.dependencies = dependencies;
         this.executable = executable;
         this.args = args;
         this.signal = signal;
+        this.timeoutMs = timeoutMs;
         this.onAbort = this.onAbort.bind(this);
     }
 
@@ -92,7 +154,8 @@ class CommandExecution {
     }
 
     armTimeout() {
-        const { setTimer, timeoutMs } = this.dependencies;
+        const { setTimer } = this.dependencies;
+        const timeoutMs = this.timeoutMs;
         this.timeoutTimer = setTimer(() => this.beginTermination(createTimeoutError(timeoutMs)), timeoutMs);
         this.timeoutTimer?.unref?.();
     }
@@ -158,8 +221,14 @@ class CommandExecution {
     }
 
     rejectCommandError(error, stdout, stderr) {
-        if (error.killed) {
-            error.message = `The slicing process timed out after ${Math.round(this.dependencies.timeoutMs / 60000)} minutes.`;
+        if (error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+            // Node killed the child because it exceeded the bounded output
+            // buffer. That is neither a timeout nor an abort, so it keeps its
+            // own stable code instead of the misleading timeout wording.
+            error.code = 'NATIVE_OUTPUT_OVERFLOW';
+            error.message = 'The slicing process produced more output than the bounded buffer allows.';
+        } else if (error.killed && this.terminationReason?.code === 'ETIMEDOUT') {
+            error.message = timeoutMessage(this.timeoutMs);
         }
         // Preserve both bounded execFile streams independently. Existing
         // classifiers retain the historical stderr fallback, while consumers
@@ -196,7 +265,7 @@ function createCommandRunner(overrides = {}) {
         clearTimer: overrides.clearTimeout || clearTimeout,
         platform: overrides.platform || process.platform,
         timeoutMs: overrides.timeoutMs || COMMAND_TIMEOUT_MS,
-        maxBuffer: overrides.maxBuffer || 1024 * 10000,
+        maxBuffer: overrides.maxBuffer || DEFAULT_MAX_BUFFER_BYTES,
         environmentFactory: overrides.createChildEnvironment || createChildEnvironment,
         terminatorFactory: overrides.createProcessTreeTerminator
             || ((child) => createProcessTreeTerminator(child, overrides.terminationDependencies))
@@ -208,7 +277,8 @@ function createCommandRunner(overrides = {}) {
             nativeStarted();
             emitEvent('native.started', { audience: 'slice', outcome: 'started' });
         }
-        return new CommandExecution(dependencies, executable, args, options.signal).run().then(
+        const timeoutMs = effectiveTimeoutMs(dependencies.timeoutMs, options.timeoutMs);
+        return new CommandExecution(dependencies, executable, args, options.signal, timeoutMs).run().then(
             (value) => {
                 if (telemetry === 'none') return value;
                 const duration = elapsedMilliseconds(started);
@@ -228,7 +298,7 @@ function createCommandRunner(overrides = {}) {
                 emitEvent('native.completed', {
                     audience: 'slice',
                     outcome,
-                    error_code: nativeErrorCode(outcome),
+                    error_code: nativeErrorCode(outcome, error),
                     duration_ms: duration
                 });
                 throw error;
@@ -242,12 +312,27 @@ function createStartupProbeRunner(overrides = {}) {
     return createCommandRunner({ ...overrides, telemetry: 'none' });
 }
 
+/**
+ * Build a runner whose budget is the shorter Python helper timeout.
+ * @param {object} [overrides] Test dependencies; `timeoutMs` is fixed to the resolved helper budget.
+ * @returns {ReturnType<typeof createCommandRunner>} Helper command runner.
+ */
+function createPythonHelperRunner(overrides = {}) {
+    return createCommandRunner({ ...overrides, timeoutMs: PYTHON_HELPER_TIMEOUT_MS });
+}
+
 const runCommand = createCommandRunner();
 
 module.exports = {
+    PYTHON_HELPER_TIMEOUT_MIN_MS,
+    PYTHON_HELPER_TIMEOUT_MS,
+    SLICE_COMMAND_TIMEOUT_RANGE_MS,
     runCommand,
     createCommandRunner,
+    createPythonHelperRunner,
     createStartupProbeRunner,
+    resolveCommandTimeoutMs,
+    resolvePythonHelperTimeoutMs,
     abortReason,
     throwIfAborted,
     isAbortError

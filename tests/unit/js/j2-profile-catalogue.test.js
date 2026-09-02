@@ -9,6 +9,10 @@ const path = require('node:path');
 const { once } = require('node:events');
 const express = require('express');
 
+// Bambu rows flatten the official vendor chain by name; the unit fixture
+// mirrors the registry-referenced names so the catalogue builds offline.
+process.env.BAMBU_PROFILES_ROOT = path.resolve(__dirname, '../fixtures/bambu-profiles');
+
 const { createJobWorkspace } = require('../../../app/services/slice/workspace');
 const {
     createRuntimeSlicerProfile,
@@ -34,7 +38,11 @@ const {
     matchesIfNoneMatch
 } = require('../../../app/routes/profile-catalogue.routes');
 
-const ENGINE_VERSIONS = Object.freeze({ prusa: '2.8.1-test', orca: '2.3.1-test' });
+const ENGINE_VERSIONS = Object.freeze({
+    prusa: '2.8.1-test', orca: '2.3.1-test', bambu: '02.08.02.61-test'
+});
+const BAMBU_P1S = Object.freeze({ id: 'P1S', name: 'Bambu Lab P1S' });
+const BAMBU_H2D = Object.freeze({ id: 'H2D', name: 'Bambu Lab H2D' });
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'j2-profile-catalogue-'));
 const minimum = Object.freeze({ x: 1, y: 1, z: 1 });
 let snapshot;
@@ -98,32 +106,47 @@ test.after(async () => {
     await fsPromises.rm(root, { recursive: true, force: true });
 });
 
-test('server-owned manifest uses only P1S and explicitly named P1S-physics quote chains', () => {
+test('server-owned manifest covers P1S, the P1S-physics quote chains, and the Bambu vendor chains', () => {
     const definitions = createPresetDefinitions();
-    assert.equal(definitions.length, 18);
+    assert.equal(definitions.length, 82);
     assert.equal(definitions.filter((item) => item.engine === 'prusa').length, 6);
-    assert.equal(definitions.filter((item) => item.engine === 'orca').length, 12);
+    assert.equal(definitions.filter((item) => item.engine === 'orca').length, 24);
+    assert.equal(definitions.filter((item) => item.engine === 'bambu').length, 52);
     assert.deepEqual(
         [...new Set(definitions.map((item) => item.printer.id))].sort(),
-        ['H2D-QUOTE', 'P1S']
+        ['H2D', 'H2D-QUOTE', 'P1S']
     );
     assert.equal(definitions.some((item) => (
         item.profileOverrides.orcaMachineProfile === 'Bambu_H2D_0.4_nozzle.json'
     )), false);
     assert.ok(definitions.every((item) => item.technology === 'FDM'));
+    for (const engine of ['orca', 'bambu']) {
+        assert.deepEqual(
+            [...new Set(definitions.filter((item) => item.engine === engine)
+                .map((item) => item.material))].sort(),
+            ['ABS', 'PETG', 'PLA', 'TPU'],
+            engine
+        );
+    }
+    const bambu = definitions.filter((item) => item.engine === 'bambu');
     assert.deepEqual(
-        [...new Set(definitions.filter((item) => item.engine === 'orca')
-            .map((item) => item.material))].sort(),
-        ['PETG', 'PLA']
+        [...new Set(bambu.filter((item) => item.printer.id === 'P1S').map((item) => item.layerKey))],
+        ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.28']
     );
+    assert.deepEqual(
+        [...new Set(bambu.filter((item) => item.printer.id === 'H2D').map((item) => item.layerKey))],
+        ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24']
+    );
+    assert.ok(bambu.every((item) => item.bedType === 'Textured PEI Plate'));
+    assert.ok(bambu.every((item) => Number.parseFloat(item.layerKey) === item.layerHeight));
 });
 
 test('v2 publishes explicit declared metadata and authoritative inclusive ceilings', () => {
     assert.equal(snapshot.body.schema, 'r3d-profile-catalogue-v2');
     assert.match(snapshot.body.catalogue_sha256, /^[a-f0-9]{64}$/);
     assert.match(snapshot.etag, /^"[a-f0-9]{64}"$/);
-    assert.equal(snapshot.body.profiles.length, 18);
-    assert.equal(new Set(snapshot.body.profiles.map((entry) => entry.id)).size, 18);
+    assert.equal(snapshot.body.profiles.length, 82);
+    assert.equal(new Set(snapshot.body.profiles.map((entry) => entry.id)).size, 82);
     assert.ok(snapshot.body.profiles.every((entry) => entry.technology === 'FDM'));
     assertNoPublicMaxProperty(snapshot.body);
 
@@ -236,7 +259,22 @@ test('selector parameters remain uniquely derived from the ordered component cha
                 name: component.selector_parameter,
                 value: component.basename
             }));
-        assert.deepEqual(entry.slice_selector.parameters, expectedParameters, entry.id);
+        const componentNames = new Set(expectedParameters.map((parameter) => parameter.name));
+        // Prusa/Orca selectors are exactly the component-derived list; Bambu
+        // prepends the registry printer id, layer key, and material before the
+        // same component-derived tail.
+        const derived = entry.slice_selector.parameters
+            .filter((parameter) => componentNames.has(parameter.name));
+        assert.deepEqual(derived, expectedParameters, entry.id);
+        if (entry.engine !== 'bambu') {
+            assert.deepEqual(entry.slice_selector.parameters, expectedParameters, entry.id);
+        } else {
+            assert.deepEqual(
+                entry.slice_selector.parameters.map((parameter) => parameter.name),
+                ['printerProfile', 'layerHeight', 'material', 'processProfile'],
+                entry.id
+            );
+        }
         assert.equal(
             new Set(entry.slice_selector.parameters.map((parameter) => parameter.name)).size,
             entry.slice_selector.parameters.length,
@@ -245,8 +283,89 @@ test('selector parameters remain uniquely derived from the ordered component cha
     }
 });
 
+test('bambu rows name the official vendor chain, registry selectors, and measured ceilings', () => {
+    const p1s = findProfile('bambu', 'P1S', 0.1, 'PLA');
+    assert.equal(p1s.id, 'bambu:FDM:P1S:0.1:PLA:Bambu-Lab-P1S-0.4-nozzle');
+    assert.equal(p1s.engine_version, ENGINE_VERSIONS.bambu);
+    assert.equal(p1s.material_scope, 'exact');
+    assert.deepEqual(p1s.printer, BAMBU_P1S);
+    assert.deepEqual(p1s.slice_selector, {
+        endpoint: '/bambu/slice',
+        parameters: [
+            { name: 'printerProfile', value: 'P1S' },
+            { name: 'layerHeight', value: '0.1' },
+            { name: 'material', value: 'PLA' },
+            { name: 'processProfile', value: '0.12mm Fine @BBL X1C' }
+        ]
+    });
+    assert.deepEqual(p1s.profile_components, [
+        { role: 'machine', basename: 'Bambu Lab P1S 0.4 nozzle', selector_parameter: null },
+        { role: 'process', basename: '0.12mm Fine @BBL X1C', selector_parameter: 'processProfile' },
+        { role: 'filament', basename: 'Generic PLA', selector_parameter: null }
+    ]);
+    assert.deepEqual(p1s.build_volume_limits_mm, {
+        declared_build_volume_dimensions_mm: { x: 256, y: 256, z: 250 },
+        declared_source_kind: 'profile-explicit',
+        largest_passing_dimensions_inclusive_mm: { x: 256, y: 228, z: 250 },
+        minimum_dimensions_inclusive_mm: minimum,
+        source_profile: 'Bambu Lab P1S 0.4 nozzle'
+    });
+    assert.equal(p1s.filament_diameter_mm, 1.75);
+    assert.equal(p1s.filament_density_g_cm3, 1.24);
+
+    const h2d = findProfile('bambu', 'H2D', 0.2, 'ABS');
+    assert.deepEqual(h2d.printer, BAMBU_H2D);
+    assert.equal(h2d.slice_selector.parameters.at(-1).value, '0.20mm Standard @BBL H2D');
+    assert.equal(h2d.profile_components[2].basename, 'Generic ABS @BBL H2D');
+    assert.deepEqual(
+        h2d.build_volume_limits_mm.declared_build_volume_dimensions_mm,
+        { x: 350, y: 320, z: 325 }
+    );
+    assert.deepEqual(
+        h2d.build_volume_limits_mm.largest_passing_dimensions_inclusive_mm,
+        { x: 325, y: 320, z: 325 }
+    );
+    assert.equal(h2d.filament_density_g_cm3, 1.04);
+    assert.equal(findProfile('bambu', 'H2D', 0.28, 'PLA'), undefined);
+
+    // Same printer, different vendor process (0.1 uses the 0.12 process with an
+    // overridden layer height) must never share a digest with the 0.12 row.
+    const p1sFine = findProfile('bambu', 'P1S', 0.12, 'PLA');
+    assert.equal(p1sFine.slice_selector.parameters.at(-1).value, '0.12mm Fine @BBL X1C');
+    assert.equal(p1s.effective_profile_sha256, p1sFine.effective_profile_sha256);
+    assert.notEqual(p1s.effective_profile_sha256, findProfile('bambu', 'P1S', 0.2, 'PLA').effective_profile_sha256);
+    assert.notEqual(p1s.effective_profile_sha256, findProfile('bambu', 'P1S', 0.1, 'PETG').effective_profile_sha256);
+    assert.notEqual(p1s.effective_profile_sha256, findProfile('bambu', 'H2D', 0.1, 'PLA').effective_profile_sha256);
+    assert.match(snapshot.body.semantics.scope, /Bambu Studio rows/);
+    // Measured on the production CLI with API-owned placement; the P1S L-shape is disclosed.
+    assert.doesNotMatch(snapshot.body.semantics.build_volume_dimensions, /provisional/i);
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /measured on the production CLI/i);
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /--arrange 0/);
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /256 x 228 mm/);
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /238 x 256 mm/);
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /first extruder area/);
+});
+
 test('machine and fleet resolutions preserve per-engine admission authority', () => {
     assert.deepEqual(snapshot.body.machine_resolutions, [
+        {
+            technology: 'FDM',
+            printer: BAMBU_H2D,
+            engine: 'bambu',
+            status: 'resolved',
+            reason: null,
+            minimum_dimensions_inclusive_mm: minimum,
+            largest_passing_dimensions_inclusive_mm: { x: 325, y: 320, z: 325 }
+        },
+        {
+            technology: 'FDM',
+            printer: BAMBU_P1S,
+            engine: 'bambu',
+            status: 'resolved',
+            reason: null,
+            minimum_dimensions_inclusive_mm: minimum,
+            largest_passing_dimensions_inclusive_mm: { x: 256, y: 228, z: 250 }
+        },
         {
             technology: 'FDM',
             printer: { id: 'H2D-QUOTE', name: 'H2D-sized quote (P1S physics)' },
@@ -285,6 +404,16 @@ test('machine and fleet resolutions preserve per-engine admission authority', ()
         }
     ]);
     assert.deepEqual(snapshot.body.fleet_resolutions, [
+        {
+            technology: 'FDM',
+            engine: 'bambu',
+            status: 'resolved',
+            reason: null,
+            printers: [BAMBU_H2D],
+            minimum_dimensions_inclusive_mm: minimum,
+            largest_passing_dimensions_inclusive_mm: { x: 325, y: 320, z: 325 },
+            excluded_printers: []
+        },
         {
             technology: 'FDM',
             engine: 'orca',
@@ -557,7 +686,9 @@ test('every managed preset digest matches the production slice preparation chain
                 material: definition.material,
                 runtimeConfigFile,
                 orcaMachineConfigFile: snapshots.orcaMachineConfigFile,
-                orcaFilamentConfigFile: snapshots.orcaFilamentConfigFile
+                orcaFilamentConfigFile: snapshots.orcaFilamentConfigFile,
+                bambuPrinterId: definition.engine === 'bambu' ? definition.printer.id : null,
+                bambuBedType: definition.engine === 'bambu' ? definition.bedType : null
             });
             const entry = snapshot.body.profiles.find((candidate) => (
                 candidate.engine === definition.engine

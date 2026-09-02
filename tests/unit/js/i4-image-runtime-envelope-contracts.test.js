@@ -132,7 +132,8 @@ function helperContract(source) {
         "TMPDIR: '/tmp'", "HOME: '/tmp/slicer-home'",
         "XDG_CACHE_HOME: '/tmp/xdg-cache'", "XDG_CONFIG_HOME: '/tmp/xdg-config'",
         "XDG_RUNTIME_DIR: '/tmp/xdg-runtime'",
-        "'/app/configs/prusa'", "'/app/configs/orca'",
+        "'/app/configs/prusa'", "'/app/configs/orca'", "'/app/configs/bambu'",
+        "const denied = ['/app', '/app/configs', '/app/configs/prusa', '/app/configs/orca', '/app/configs/bambu'];",
         '(stat.mode & 0o022) !== 0', '(stat.mode & 0o777) !== 0o700',
         'fs.realpathSync(directory) !== directory',
         "['EACCES', 'EROFS', 'EPERM']", "process.env.SLICE_SERVICE_API_KEY",
@@ -168,6 +169,19 @@ function helperContract(source) {
         'proveNoPostAbortDescendants(record);',
         'if (total > 65536)', "text.includes('/app/')", "'container', 'stop', '--timeout', '30'",
         "spawnSync('/usr/bin/ps'", 'processState.status !== 1',
+        'const rootImmutable = (stat) => stat.uid === 0 && (stat.mode & 0o022) === 0 && !stat.isSymbolicLink();',
+        "for (const target of ['/opt/bambustudio', '/opt/bambustudio/AppRun'])",
+        "if (!rootImmutable(fs.lstatSync(target))) fail('immutable_mode');",
+        "if (!stat.isFile() || !rootImmutable(stat) || (stat.mode & 0o111) === 0) fail('native_executable_mode');",
+        "['/usr/local/bin/prusa-slicer', '/opt/prusaslicer/AppRun', /Usage:\\s+prusa-slicer/]",
+        "['/usr/local/bin/orca-slicer', '/opt/orcaslicer/AppRun', /Usage:\\s+orca-slicer/]",
+        "['/usr/local/bin/bambu-studio', '/usr/local/bin/bambu-studio', /Usage:\\s+bambu-studio/]",
+        'fs.accessSync(executable, fs.constants.X_OK)',
+        'if (target !== expectedTarget) fail(\'native_executable_target\');',
+        '(stat.mode & 0o111) === 0',
+        "spawnSync(executable, ['--help'], {",
+        "stdio: ['ignore', 'pipe', 'pipe']",
+        'if (help.error || help.signal || !helpSentinel.test(helpOutput)) fail(\'native_executable_help\');',
         'classification=success'
     ]) assert.ok(source.includes(anchor), `missing helper anchor: ${anchor}`);
     assert.equal((source.match(/\/\^artifact-\[a-f0-9\]\{32\}\$\/\.test/g) || []).length, 2,
@@ -250,10 +264,10 @@ test('identity, probe output, helper source, and workflow orchestration remain f
         assert.throws(() => envelope.parsePositiveId(value, 'uid'));
     }
     assert.deepEqual(envelope.parseProbeOutput({
-        stdout: '{"classification":"success","immutableCount":8,"writableCount":9,"authenticatedSliceCount":2,"authenticatedClientAbortCount":1,"postAbortArtifactDelta":0,"cachedReadinessActiveJobs":0,"freshReadinessActiveJobs":1,"abortTransport":"terminal_response"}\n',
+        stdout: '{"classification":"success","immutableCount":9,"writableCount":9,"authenticatedSliceCount":2,"authenticatedClientAbortCount":1,"postAbortArtifactDelta":0,"cachedReadinessActiveJobs":0,"freshReadinessActiveJobs":1,"abortTransport":"terminal_response"}\n',
         stderr: ''
     }), {
-        classification: 'success', immutableCount: 8, writableCount: 9,
+        classification: 'success', immutableCount: 9, writableCount: 9,
         authenticatedSliceCount: 2, authenticatedClientAbortCount: 1,
         postAbortArtifactDelta: 0, cachedReadinessActiveJobs: 0,
         freshReadinessActiveJobs: 1, abortTransport: 'terminal_response'
@@ -261,7 +275,7 @@ test('identity, probe output, helper source, and workflow orchestration remain f
     for (const [cachedReadinessActiveJobs, freshReadinessActiveJobs] of [[1, 1], [0, 0]]) {
         assert.throws(() => envelope.parseProbeOutput({
             stdout: JSON.stringify({
-                classification: 'success', immutableCount: 8, writableCount: 9,
+                classification: 'success', immutableCount: 9, writableCount: 9,
                 authenticatedSliceCount: 2, authenticatedClientAbortCount: 1,
                 postAbortArtifactDelta: 0, cachedReadinessActiveJobs,
                 freshReadinessActiveJobs, abortTransport: 'terminal_response'
@@ -271,6 +285,15 @@ test('identity, probe output, helper source, and workflow orchestration remain f
     }
     assert.ok(CONTAINER_PROBE_FAILURES.includes('abort_initial_queue_not_idle'));
     assert.ok(CONTAINER_PROBE_FAILURES.includes('abort_readiness_cache_replaced'));
+    // Native executable probes fail with their own bounded reasons, never a free-text message.
+    assert.deepEqual(CONTAINER_PROBE_FAILURES.slice(-4), [
+        'native_executable_missing',
+        'native_executable_target',
+        'native_executable_mode',
+        'native_executable_help'
+    ]);
+    for (const reason of CONTAINER_PROBE_FAILURES) assert.match(reason, /^[a-z0-9_]+$/);
+    assert.equal(new Set(CONTAINER_PROBE_FAILURES).size, CONTAINER_PROBE_FAILURES.length);
     assert.deepEqual(envelope.parseTopOutput('PID PPID COMMAND\n4321 1 node\n'), [
         { pid: 4321, ppid: 1, command: 'node' }
     ]);
@@ -326,6 +349,23 @@ test('runtime-envelope and final-aggregation weakening mutations are rejected', 
         ['identity probe omits matching memory expectation', SOURCE,
             "'EXPECTED_MEMORY_BYTES=1073741824'", "'EXPECTED_MEMORY_BYTES=1'", helperContract],
         ['immutable mode ignored', SOURCE, '(stat.mode & 0o022) !== 0', 'false', helperContract],
+        ['Bambu Studio tree immutability check removed', SOURCE,
+            "for (const target of ['/opt/bambustudio', '/opt/bambustudio/AppRun'])",
+            'for (const target of [])', helperContract],
+        ['Bambu Studio executable check removed', SOURCE,
+            "  ['/usr/local/bin/bambu-studio', '/usr/local/bin/bambu-studio', /Usage:\\s+bambu-studio/]\n",
+            '', helperContract],
+        ['Bambu Studio executable reduced to a bare AppRun symlink', SOURCE,
+            "['/usr/local/bin/bambu-studio', '/usr/local/bin/bambu-studio', /Usage:\\s+bambu-studio/]",
+            "['/usr/local/bin/bambu-studio', '/opt/bambustudio/AppRun', /Usage:\\s+bambu-studio/]",
+            helperContract],
+        ['native help sentinel ignored', SOURCE,
+            'if (help.error || help.signal || !helpSentinel.test(helpOutput)) fail(\'native_executable_help\');',
+            'if (help.error) fail(\'native_executable_help\');', helperContract],
+        ['native executable bit ignored', SOURCE, '(stat.mode & 0o111) === 0', 'false', helperContract],
+        ['Bambu Studio root ownership ignored', SOURCE,
+            'const rootImmutable = (stat) => stat.uid === 0 && (stat.mode & 0o022) === 0 && !stat.isSymbolicLink();',
+            'const rootImmutable = (stat) => (stat.mode & 0o022) === 0 && !stat.isSymbolicLink();', helperContract],
         ['authenticated Prusa smoke removed', SOURCE, "  await slice('prusa');\n", '', helperContract],
         ['authenticated Orca smoke removed', SOURCE, "  await slice('orca');\n", '', helperContract],
         ['artifact identifier contract widened', SOURCE,

@@ -14,7 +14,9 @@ const {
 test('supported materials resolve to exact repository profiles and unsupported material stays null', () => {
     assert.equal(path.basename(resolveOrcaFilamentConfigPath('PLA')), 'PLA_generic.json');
     assert.equal(path.basename(resolveOrcaFilamentConfigPath('petg')), 'PETG_generic.json');
-    assert.equal(resolveOrcaFilamentConfigPath('ABS'), null);
+    assert.equal(path.basename(resolveOrcaFilamentConfigPath('ABS')), 'ABS_generic.json');
+    assert.equal(path.basename(resolveOrcaFilamentConfigPath('tpu')), 'TPU_generic.json');
+    assert.equal(resolveOrcaFilamentConfigPath('NYLON'), null);
     assert.equal(resolveOrcaFilamentConfigPath(''), null);
     assert.equal(resolveOrcaFilamentConfigPath('PLA', { orcaFilamentProfile: '../outside.json' }), null);
 });
@@ -28,7 +30,15 @@ test('used diameter and density come from the exact selected profile', () => {
         diameterMm: 1.75,
         densityGcm3: 1.27
     });
-    assert.equal(readOrcaFilamentProfileMetadata(null, 'ABS'), null);
+    assert.deepEqual(readOrcaFilamentProfileMetadata(resolveOrcaFilamentConfigPath('ABS'), 'ABS'), {
+        diameterMm: 1.75,
+        densityGcm3: 1.04
+    });
+    assert.deepEqual(readOrcaFilamentProfileMetadata(resolveOrcaFilamentConfigPath('TPU'), 'TPU'), {
+        diameterMm: 1.75,
+        densityGcm3: 1.24
+    });
+    assert.equal(readOrcaFilamentProfileMetadata(null, 'NYLON'), null);
 });
 
 test('metadata extraction refuses ambiguous, mismatched, and nonpositive values', async (t) => {

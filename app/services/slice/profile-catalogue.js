@@ -22,15 +22,28 @@ const {
     DIGEST_SCHEMA
 } = require('./profile-digest');
 const {
+    readBambuFilamentProfileMetadata,
     readOrcaFilamentProfileMetadata,
     resolveMaterialFilamentMetadata
 } = require('./filament-profile');
 const { readIniKeyValues } = require('./profile-readers');
 const { parseNumberLike } = require('./value-parsers');
+const {
+    getBambuAllowedLayerKeys,
+    getBambuMaterials,
+    getBambuPrinter,
+    getBambuPrinterRegistry,
+    resolveBambuProcessName
+} = require('./bambu-printer-registry');
 
 const PROFILE_CATALOGUE_SCHEMA = 'r3d-profile-catalogue-v2';
+/**
+ * Public string contracts. `basename` covers repository file basenames AND
+ * Bambu vendor profile names such as `0.20mm Standard @BBL X1C`, so it admits
+ * spaces, `@`, and `+` while still refusing path separators and a leading dot.
+ */
 const CATALOGUE_STRING_CONTRACTS = Object.freeze({
-    basename: Object.freeze({ min: 1, max: 128, pattern: /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/ }),
+    basename: Object.freeze({ min: 1, max: 128, pattern: /^[A-Za-z0-9][A-Za-z0-9 @._+-]{0,127}$/ }),
     engine: Object.freeze({ min: 1, max: 32, pattern: /^[a-z][a-z0-9-]{0,31}$/ }),
     engineVersion: Object.freeze({ min: 1, max: 128, pattern: /^[\x20-\x7e]{1,128}$/ }),
     entryId: Object.freeze({ min: 1, max: 256, pattern: /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/ }),
@@ -60,13 +73,24 @@ const CATALOGUE_SEMANTICS = Object.freeze({
     enforcement: 'Slice endpoints remain authoritative and enforce build-volume limits.',
     availability: 'Slicing does not depend on this catalogue endpoint.',
     freshness: 'ETag and catalogue_sha256 identify the process startup generation.',
-    build_volume_dimensions: 'declared_build_volume_dimensions_mm is physical/profile-declared metadata, not an admission limit. largest_passing_dimensions_inclusive_mm is the authoritative validation ceiling and accepts an exact boundary value.',
+    build_volume_dimensions: 'declared_build_volume_dimensions_mm is physical/profile-declared metadata, not an admission limit. largest_passing_dimensions_inclusive_mm is the authoritative validation ceiling and accepts an exact boundary value. Bambu Studio ceilings are measured on the production CLI with API-owned placement (--arrange 0); the P1S publishes its 256 x 228 mm footprint while placement also admits its alternative 238 x 256 mm footprint beside the excluded bed corner, and the H2D single-filament ceiling is the first extruder area.',
     fleet_derivation: 'Machine and fleet resolutions are engine-scoped because native slicers can have different inclusive admission ceilings for the same declared profile dimensions. Every per-profile ceiling remains visible. Presets within one technology, printer, and engine must agree exactly. Each technology and engine fleet names every machine whose largest-passing envelope contains every other resolved machine envelope in that engine. Ceilings are never synthesized component by component.',
-    scope: 'Catalogue v2 lists machine-bound server-owned FDM presets, including explicitly named H2D-sized quoting profiles that retain P1S physics and are not production H2D G-code profiles. Fallback-only SLA presets are never machine entries. Custom profile overrides and materials without a server-owned filament profile (including ABS and TPU) remain outside the catalogue.'
+    scope: 'Catalogue v2 lists machine-bound server-owned FDM presets on every engine, including explicitly named H2D-sized quoting profiles that retain P1S physics and are not production H2D G-code profiles, and Bambu Studio rows that use the official vendor machine/process/filament chain by name for the P1S and H2D. Server-owned filament profiles now cover PLA, PETG, ABS and TPU. Fallback-only SLA presets are never machine entries. Custom profile overrides and materials without a server-owned filament profile remain outside the catalogue.'
 });
 
+/** Bambu vendor names are not file paths; only file-backed selections take a basename. */
 function profileName(filePath) {
     return filePath ? path.basename(filePath) : null;
+}
+
+/**
+ * Public identifier token derived from a vendor name: spaces and other
+ * characters outside the entry-id contract collapse to `-`.
+ * @param {string} name Vendor profile name.
+ * @returns {string} Entry-id safe token.
+ */
+function vendorNameToken(name) {
+    return String(name).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
 function requireCatalogueString(value, contract, label) {
@@ -79,7 +103,17 @@ function requireCatalogueString(value, contract, label) {
     return value;
 }
 
-function buildSliceSelector(definition, profileComponents) {
+/**
+ * Build the endpoint selector. Parameters are derived from the ordered
+ * component chain; engines whose request contract selects by registry id and
+ * layer/material (Bambu) prepend those leading parameters, and every name is
+ * unique and bounded.
+ * @param {{engine: string}} definition Preset definition.
+ * @param {Array<{basename: string, selector_parameter: string|null}>} profileComponents Ordered components.
+ * @param {Array<{name: string, value: string}>} [leadingParameters=[]] Request parameters not backed by a component.
+ * @returns {{endpoint: string, parameters: Array<{name: string, value: string}>}} Selector.
+ */
+function buildSliceSelector(definition, profileComponents, leadingParameters = []) {
     requireCatalogueString(definition?.engine, CATALOGUE_STRING_CONTRACTS.engine, 'engine');
     if (!Array.isArray(profileComponents)
         || profileComponents.length < 1
@@ -88,26 +122,19 @@ function buildSliceSelector(definition, profileComponents) {
     }
     const parameters = [];
     const parameterNames = new Set();
-    for (const component of profileComponents) {
-        if (component.selector_parameter === null) continue;
-        requireCatalogueString(
-            component.selector_parameter,
-            CATALOGUE_STRING_CONTRACTS.selectorParameter,
-            'selector parameter name'
-        );
-        requireCatalogueString(
-            component.basename,
-            CATALOGUE_STRING_CONTRACTS.basename,
-            'selector parameter value'
-        );
-        if (parameterNames.has(component.selector_parameter)) {
+    const pushParameter = (name, value) => {
+        requireCatalogueString(name, CATALOGUE_STRING_CONTRACTS.selectorParameter, 'selector parameter name');
+        requireCatalogueString(value, CATALOGUE_STRING_CONTRACTS.basename, 'selector parameter value');
+        if (parameterNames.has(name)) {
             throw new Error('Catalogue profile components contain a duplicate selector parameter.');
         }
-        parameterNames.add(component.selector_parameter);
-        parameters.push({
-            name: component.selector_parameter,
-            value: component.basename
-        });
+        parameterNames.add(name);
+        parameters.push({ name, value });
+    };
+    for (const parameter of leadingParameters) pushParameter(parameter.name, parameter.value);
+    for (const component of profileComponents) {
+        if (component.selector_parameter === null) continue;
+        pushParameter(component.selector_parameter, component.basename);
     }
     if (parameters.length === 0) {
         throw new Error('Catalogue profile requires at least one selector parameter.');
@@ -164,6 +191,16 @@ function validateCatalogueEntryIdentity(entry) {
 }
 
 function buildProfileComponents(definition, selection) {
+    if (definition.engine === 'bambu') {
+        // Vendor NAMES, verbatim. The machine is selected through the registry
+        // printer id (a leading selector parameter), the process may be named
+        // explicitly, and the filament follows the material.
+        return [
+            { role: 'machine', basename: selection.orcaMachineConfigFile, selector_parameter: null },
+            { role: 'process', basename: selection.baseConfigFile, selector_parameter: 'processProfile' },
+            { role: 'filament', basename: selection.orcaFilamentConfigFile, selector_parameter: null }
+        ];
+    }
     if (definition.engine === 'orca') {
         return [
             {
@@ -190,7 +227,38 @@ function buildProfileComponents(definition, selection) {
     }];
 }
 
-function createPresetDefinitions() {
+function buildLeadingSelectorParameters(definition) {
+    if (definition.engine !== 'bambu') return [];
+    return [
+        { name: 'printerProfile', value: definition.printer.id },
+        { name: 'layerHeight', value: definition.layerKey },
+        { name: 'material', value: definition.material }
+    ];
+}
+
+function createBambuPresetDefinitions(registry) {
+    const definitions = [];
+    for (const printerId of Object.keys(registry.printers).sort()) {
+        const printer = getBambuPrinter(printerId, registry);
+        for (const layerKey of getBambuAllowedLayerKeys(printerId, registry)) {
+            for (const material of getBambuMaterials(printerId, registry)) {
+                definitions.push(Object.freeze({
+                    engine: 'bambu', technology: 'FDM',
+                    layerHeight: Number.parseFloat(layerKey), layerKey, material,
+                    bedType: printer.bedType,
+                    printer: Object.freeze({ id: printer.id, name: printer.name }),
+                    profileOverrides: Object.freeze({
+                        bambuPrinter: printer.id,
+                        bambuProcessProfile: resolveBambuProcessName(printerId, layerKey, null, registry)
+                    })
+                }));
+            }
+        }
+    }
+    return definitions;
+}
+
+function createPresetDefinitions(options = {}) {
     const definitions = [];
     for (const machine of SERVER_OWNED_PRUSA_MACHINES) {
         for (const layerHeight of LAYER_HEIGHTS.BY_TECHNOLOGY.FDM) {
@@ -217,6 +285,7 @@ function createPresetDefinitions() {
             }
         }
     }
+    definitions.push(...createBambuPresetDefinitions(options.bambuRegistry || getBambuPrinterRegistry()));
     return Object.freeze(definitions);
 }
 
@@ -243,10 +312,38 @@ function buildEntryId(definition, selection) {
         `${definition.layerHeight}`
     ];
     if (definition.material) parts.push(definition.material);
-    parts.push(profileName(
-        definition.engine === 'orca' ? selection.orcaMachineConfigFile : selection.baseConfigFile
-    ));
+    if (definition.engine === 'bambu') {
+        parts.push(vendorNameToken(selection.orcaMachineConfigFile));
+    } else {
+        parts.push(profileName(
+            definition.engine === 'orca' ? selection.orcaMachineConfigFile : selection.baseConfigFile
+        ));
+    }
     return parts.join(':');
+}
+
+function readCatalogueFilamentMetadata(definition, snapshots, dependencies) {
+    if (definition.engine === 'bambu') {
+        return dependencies.readBambuFilamentProfileMetadata(
+            snapshots.orcaFilamentConfigFile, definition.material
+        );
+    }
+    if (definition.engine === 'orca') {
+        return dependencies.readOrcaFilamentProfileMetadata(
+            snapshots.orcaFilamentConfigFile, definition.material
+        );
+    }
+    return readPrusaFilamentMetadata(
+        snapshots.baseConfigFile, definition.technology, definition.material
+    );
+}
+
+function resolveCatalogueBambuContext(definition) {
+    if (definition.engine !== 'bambu') return { printerId: null, bedType: null };
+    if (typeof definition.bedType !== 'string' || !definition.bedType) {
+        throw new Error('Bambu catalogue definition requires the registry bed type.');
+    }
+    return { printerId: definition.printer.id, bedType: definition.bedType };
 }
 
 async function buildCatalogueEntry(definition, engineVersions, workspace, dependencies) {
@@ -263,13 +360,7 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
     const snapshots = await dependencies.snapshotProfileSelection(
         definition.engine, selection, workspace
     );
-    const metadata = definition.engine === 'orca'
-        ? dependencies.readOrcaFilamentProfileMetadata(
-            snapshots.orcaFilamentConfigFile, definition.material
-        )
-        : readPrusaFilamentMetadata(
-            snapshots.baseConfigFile, definition.technology, definition.material
-        );
+    const metadata = readCatalogueFilamentMetadata(definition, snapshots, dependencies);
     // The density must be injected here exactly as the slice path injects it,
     // or the catalogue would digest a runtime profile that no real request ever
     // produces and every effective_profile_sha256 comparison would diverge.
@@ -287,21 +378,24 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
         definition.technology,
         snapshots.baseConfigFile,
         snapshots.orcaMachineConfigFile,
-        definition.engine === 'orca'
-            ? selection.orcaMachineConfigFile
-            : selection.baseConfigFile
+        definition.engine === 'prusa'
+            ? selection.baseConfigFile
+            : selection.orcaMachineConfigFile
     );
     if (!limits?.explicitMaxAxes
         || !['x', 'y', 'z'].every((axis) => limits.explicitMaxAxes[axis] === true)) {
         throw new Error('Catalogue profile requires explicit machine-profile build-volume metadata.');
     }
+    const bambu = resolveCatalogueBambuContext(definition);
     const digest = dependencies.calculateEffectiveProfileSha256({
         engine: definition.engine,
         technology: definition.technology,
         material: definition.material,
         runtimeConfigFile,
         orcaMachineConfigFile: snapshots.orcaMachineConfigFile,
-        orcaFilamentConfigFile: snapshots.orcaFilamentConfigFile
+        orcaFilamentConfigFile: snapshots.orcaFilamentConfigFile,
+        bambuPrinterId: bambu.printerId,
+        bambuBedType: bambu.bedType
     });
     const profileComponents = buildProfileComponents(definition, selection);
     return validateCatalogueEntryIdentity({
@@ -310,9 +404,11 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
         technology: definition.technology,
         layer_height_mm: definition.layerHeight,
         material: definition.material,
-        material_scope: definition.engine === 'orca' ? 'exact' : 'request-independent',
+        material_scope: definition.engine === 'prusa' ? 'request-independent' : 'exact',
         printer: { ...definition.printer },
-        slice_selector: buildSliceSelector(definition, profileComponents),
+        slice_selector: buildSliceSelector(
+            definition, profileComponents, buildLeadingSelectorParameters(definition)
+        ),
         profile_components: profileComponents,
         effective_profile_sha256: digest,
         effective_profile_identity_schema: DIGEST_SCHEMA,
@@ -584,7 +680,7 @@ async function buildProfileCatalogue(options = {}) {
     const validVersion = (value) => typeof value === 'string'
         && value.length >= 1 && value.length <= 128 && /^[\x20-\x7e]+$/.test(value);
     if (!engineVersions || !validVersion(engineVersions.prusa)
-        || !validVersion(engineVersions.orca)) {
+        || !validVersion(engineVersions.orca) || !validVersion(engineVersions.bambu)) {
         throw new Error('Startup-verified slicer engine versions are required.');
     }
     const dependencies = {
@@ -593,6 +689,7 @@ async function buildProfileCatalogue(options = {}) {
         createRuntimeSlicerProfile,
         resolveBuildVolumeLimits,
         calculateEffectiveProfileSha256,
+        readBambuFilamentProfileMetadata,
         readOrcaFilamentProfileMetadata,
         ...(options.dependencies || {})
     };
@@ -601,7 +698,7 @@ async function buildProfileCatalogue(options = {}) {
     let failure = null;
     try {
         const results = await Promise.allSettled(
-            createPresetDefinitions().map((definition) => (
+            createPresetDefinitions({ bambuRegistry: options.bambuRegistry }).map((definition) => (
                 buildCatalogueEntry(definition, engineVersions, workspace, dependencies)
             ))
         );
@@ -676,6 +773,7 @@ module.exports = {
     SERVER_OWNED_ORCA_MACHINES,
     buildSliceSelector,
     buildProfileCatalogue,
+    createBambuPresetDefinitions,
     createPresetDefinitions,
     createProfileCatalogueService,
     deepFreeze,

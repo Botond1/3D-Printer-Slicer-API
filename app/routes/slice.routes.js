@@ -10,7 +10,7 @@ const { DEFAULTS, EXTENSIONS } = require('../config/constants');
 const { resolveResourcePolicy } = require('../config/resource-policy');
 const { sliceRateLimiter } = require('../middleware/rateLimit');
 const requireSliceService = require('../middleware/requireSliceService');
-const { handleSlicePrusa, handleSliceOrca } = require('../services/slice.service');
+const { handleSlicePrusa, handleSliceOrca, handleSliceBambu } = require('../services/slice.service');
 const {
     createJobWorkspace,
     attachWorkspaceToRequest,
@@ -260,7 +260,8 @@ function createSliceRouter(options = {}) {
     });
     const handlers = {
         prusa: options.handlePrusa || handleSlicePrusa,
-        orca: options.handleOrca || handleSliceOrca
+        orca: options.handleOrca || handleSliceOrca,
+        bambu: options.handleBambu || handleSliceBambu
     };
     const policy = options.resourcePolicy || resolveResourcePolicy(options.env || process.env);
     const multipartLimits = options.multipartLimits || resolveMultipartLimits(options.env || process.env);
@@ -316,6 +317,7 @@ function createSliceRouter(options = {}) {
     // Rate limiting and authentication must reject before request-owned allocation.
     router.post('/prusa/slice', rateLimiter, authenticate, lifecycle('prusa'));
     router.post('/orca/slice', rateLimiter, authenticate, lifecycle('orca'));
+    router.post('/bambu/slice', rateLimiter, authenticate, lifecycle('bambu'));
     return router;
 }
 

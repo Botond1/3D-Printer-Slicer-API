@@ -1,0 +1,4 @@
+{
+    "name": "Nested Include Template",
+    "inherits": "fdm_machine_common"
+}

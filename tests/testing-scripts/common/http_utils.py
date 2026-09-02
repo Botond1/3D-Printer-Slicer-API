@@ -213,6 +213,90 @@ def curl_json_response(
         return status, body, response_headers
 
 
+def _multipart_field_arguments(
+    fields: Mapping[str, str | int | float | bool] | None,
+) -> list[str]:
+    """Render multipart form fields as curl ``-F`` arguments with stable booleans."""
+    arguments: list[str] = []
+    for key, value in (fields or {}).items():
+        if isinstance(value, bool):
+            normalized = "true" if value else "false"
+        else:
+            normalized = str(value)
+        arguments.extend(["-F", f"{key}={normalized}"])
+    return arguments
+
+
+def curl_multipart_download(
+    *,
+    base_url: str,
+    endpoint: str,
+    file_path: Path,
+    fields: Mapping[str, str | int | float | bool] | None = None,
+    slice_service_api_key: str | None = None,
+    max_body_bytes: int = 16 * 1024 * 1024,
+) -> tuple[int, dict[str, str], bytes, float]:
+    """Upload one file and retain the raw response body plus terminal headers.
+
+    Used for binary endpoints such as ``POST /render``. The body is captured
+    into a private temporary file that is deleted before returning; a body
+    larger than ``max_body_bytes`` is discarded and reported as empty. The
+    credential travels through the child stdin pipe exactly like the JSON and
+    slice helpers, never through argv.
+    """
+    credential_args: list[str] = []
+    credential_stdin: str | None = None
+    if slice_service_api_key:
+        credential_args, credential_stdin = _credential_header_stdin(
+            "x-slicer-api-key", slice_service_api_key,
+        )
+    with tempfile.TemporaryDirectory(prefix="slicer-http-download-") as temp_dir:
+        body_path = Path(temp_dir) / "response-body.bin"
+        header_path = Path(temp_dir) / "response-headers.txt"
+        cmd = [
+            "curl",
+            "-sS",
+            "-X",
+            "POST",
+            f"{base_url}{endpoint}",
+            *credential_args,
+            "-F",
+            f"choosenFile=@{file_path}",
+            *_multipart_field_arguments(fields),
+            "--dump-header",
+            str(header_path),
+            "-o",
+            str(body_path),
+            "-w",
+            "%{http_code}",
+        ]
+        cmd = _bounded_curl_command(cmd, CURL_SLICE_TOTAL_TIMEOUT_SECONDS)
+        started = time.perf_counter()
+        completed = _run_bounded_curl(
+            cmd,
+            subprocess_timeout_seconds=CURL_SLICE_SUBPROCESS_TIMEOUT_SECONDS,
+            stdin_text=credential_stdin,
+        )
+        duration = time.perf_counter() - started
+        if completed is None or completed.returncode != 0:
+            return 0, {}, b"", duration
+        try:
+            status = int((completed.stdout or "").strip() or "0")
+        except ValueError:
+            status = 0
+        try:
+            headers = _parse_response_headers(header_path.read_text(encoding="iso-8859-1"))
+        except OSError:
+            headers = {}
+        body = b""
+        try:
+            if body_path.exists() and 0 < body_path.stat().st_size <= max_body_bytes:
+                body = body_path.read_bytes()
+        except OSError:
+            body = b""
+        return status, headers, body, duration
+
+
 def curl_multipart_slice(
     *,
     base_url: str,

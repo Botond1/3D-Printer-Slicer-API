@@ -4,10 +4,14 @@ const assert = require('node:assert/strict');
 const { describe, it } = require('node:test');
 
 const {
+    BAMBU_PRINT_TIME_PATTERNS,
     GCODE_METRIC_ERROR_CODES,
     GcodeMetricsError,
+    PRINT_TIME_PATTERNS,
+    PRINT_TIME_PATTERNS_BY_ENGINE,
     parseDurationText,
     parseGcodeMetricsStrict,
+    resolvePrintTimePatterns,
     sumNumericList
 } = require('../../../app/services/slice/gcode-metrics');
 
@@ -48,21 +52,84 @@ const PRUSA_ZERO_GRAMS_GCODE = [
     ''
 ].join('\n');
 
+const BAMBU_2862_GCODE = [
+    '; BambuStudio 02.08.02.61',
+    '; model printing time: 5m 38s; total estimated time: 11m 54s',
+    'M73 P0 R6',
+    'G90',
+    'G1 X10.5 Y10.5 Z0.2 F3000',
+    '; total filament length [mm] : 241.20',
+    '; total filament volume [cm^3] : 0.58',
+    '; total filament weight [g] : 0.72',
+    ''
+].join('\n');
+
 describe('SZ-B2 strict G-code metrics', () => {
-    it('reads Orca 2.3.1 time, mass, length, and winning pattern identity', () => {
-        const metrics = parseGcodeMetricsStrict(ORCA_231_GCODE);
-        assert.equal(metrics.filament_used_g, 38.4);
-        assert.equal(metrics.print_time_seconds, 144 * 60);
+    it('reads Orca 2.3.1 M73 time, mass, length, and winning pattern identity exactly as before', () => {
+        // Orca keeps the historical ranking: M73 P0 R144 wins (8640 s), so the
+        // published Orca numbers stay byte-identical to the pre-overhaul output.
+        for (const options of [undefined, { engine: 'orca' }]) {
+            const metrics = parseGcodeMetricsStrict(ORCA_231_GCODE, options);
+            assert.equal(metrics.filament_used_g, 38.4);
+            assert.equal(metrics.print_time_seconds, 8640);
+            assert.equal(metrics.print_time_source, 'm73_p0_r_minutes');
+            assert.equal(metrics.filament_used_g_source, 'filament_used_g');
+            assert.equal(metrics.filament_used_mm, 12764.31);
+            assert.equal(metrics.filament_used_mm_source, 'filament_used_mm');
+        }
+    });
+
+    it('ranks the Bambu Studio total estimated time first only for the bambu engine', () => {
+        const bambu = parseGcodeMetricsStrict(BAMBU_2862_GCODE, { engine: 'bambu' });
+        assert.equal(bambu.print_time_seconds, 11 * 60 + 54);
+        assert.equal(bambu.print_time_source, 'total_estimated_time');
+        assert.equal(bambu.filament_used_g, 0.72);
+        assert.equal(bambu.filament_used_g_source, 'total_filament_weight_g');
+        assert.equal(bambu.filament_used_mm, 241.2);
+        assert.equal(bambu.filament_used_mm_source, 'total_filament_length_mm');
+        // The same Bambu footer read with the historical ranking reports M73.
+        const historical = parseGcodeMetricsStrict(BAMBU_2862_GCODE);
+        assert.equal(historical.print_time_source, 'm73_p0_r_minutes');
+        assert.equal(historical.print_time_seconds, 6 * 60);
+        // An Orca output read as bambu would take its total; the engine decides.
+        const orcaAsBambu = parseGcodeMetricsStrict(ORCA_231_GCODE, { engine: 'bambu' });
+        assert.equal(orcaAsBambu.print_time_source, 'total_estimated_time');
+        assert.equal(orcaAsBambu.print_time_seconds, 2 * 3600 + 29 * 60 + 41);
+        // Unknown engines fall back to the historical ranking.
+        assert.equal(parseGcodeMetricsStrict(BAMBU_2862_GCODE, { engine: 'other' }).print_time_source, 'm73_p0_r_minutes');
+    });
+
+    it('exposes the per-engine rankings and keeps the historical order for prusa and orca', () => {
+        const ids = (patterns) => patterns.map((pattern) => pattern.id);
+        assert.deepEqual(ids(PRINT_TIME_PATTERNS), [
+            'm73_p0_r_minutes', 'estimated_printing_time', 'total_estimated_time', 'time_seconds'
+        ]);
+        assert.deepEqual(ids(BAMBU_PRINT_TIME_PATTERNS), [
+            'total_estimated_time', 'm73_p0_r_minutes', 'estimated_printing_time', 'time_seconds'
+        ]);
+        assert.equal(resolvePrintTimePatterns('bambu'), BAMBU_PRINT_TIME_PATTERNS);
+        assert.equal(resolvePrintTimePatterns('orca'), PRINT_TIME_PATTERNS);
+        assert.equal(resolvePrintTimePatterns('prusa'), PRINT_TIME_PATTERNS);
+        assert.equal(resolvePrintTimePatterns(undefined), PRINT_TIME_PATTERNS);
+        assert.equal(resolvePrintTimePatterns('__proto__'), PRINT_TIME_PATTERNS);
+        assert.deepEqual(Object.keys(PRINT_TIME_PATTERNS_BY_ENGINE).sort(), ['bambu', 'orca', 'prusa']);
+    });
+
+    it('falls back to M73 model time on bambu only when no total estimated time is present', () => {
+        const content = BAMBU_2862_GCODE
+            .replace('; model printing time: 5m 38s; total estimated time: 11m 54s', '');
+        const metrics = parseGcodeMetricsStrict(content, { engine: 'bambu' });
         assert.equal(metrics.print_time_source, 'm73_p0_r_minutes');
-        assert.equal(metrics.filament_used_g_source, 'filament_used_g');
-        assert.equal(metrics.filament_used_mm, 12764.31);
-        assert.equal(metrics.filament_used_mm_source, 'filament_used_mm');
+        assert.equal(metrics.print_time_seconds, 6 * 60);
     });
 
     it('reads the Prusa FDM output shape', () => {
-        const metrics = parseGcodeMetricsStrict(PRUSA_281_GCODE);
-        assert.equal(metrics.filament_used_g, 24.22);
-        assert.equal(metrics.print_time_seconds, 97 * 60);
+        for (const options of [undefined, { engine: 'prusa' }]) {
+            const metrics = parseGcodeMetricsStrict(PRUSA_281_GCODE, options);
+            assert.equal(metrics.filament_used_g, 24.22);
+            assert.equal(metrics.print_time_seconds, 97 * 60);
+            assert.equal(metrics.print_time_source, 'm73_p0_r_minutes');
+        }
     });
 
     it('keeps a missing optional native mass explicit instead of inventing zero', () => {
@@ -96,14 +163,22 @@ describe('SZ-B2 strict G-code metrics', () => {
         assert.equal(parseGcodeMetricsStrict(content).filament_used_g, 43);
     });
 
-    it('uses the bounded fallback time marker only when M73 is absent', () => {
-        const content = ORCA_231_GCODE
+    it('uses the estimated-printing-time footer on orca when M73 is absent, and the total only after that', () => {
+        const withoutM73 = ORCA_231_GCODE
             .split('\n')
             .filter((line) => !line.startsWith('M73 P0 R'))
             .join('\n');
-        const metrics = parseGcodeMetricsStrict(content);
-        assert.equal(metrics.print_time_source, 'estimated_printing_time');
-        assert.equal(metrics.print_time_seconds, 2 * 3600 + 24 * 60 + 12);
+        const footer = parseGcodeMetricsStrict(withoutM73, { engine: 'orca' });
+        assert.equal(footer.print_time_source, 'estimated_printing_time');
+        assert.equal(footer.print_time_seconds, 2 * 3600 + 24 * 60 + 12);
+
+        const totalOnly = withoutM73
+            .split('\n')
+            .filter((line) => !line.startsWith('; estimated printing time'))
+            .join('\n');
+        const total = parseGcodeMetricsStrict(totalOnly, { engine: 'orca' });
+        assert.equal(total.print_time_source, 'total_estimated_time');
+        assert.equal(total.print_time_seconds, 2 * 3600 + 29 * 60 + 41);
     });
 
     it('parses supported duration units', () => {

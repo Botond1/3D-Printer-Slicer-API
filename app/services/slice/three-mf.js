@@ -8,10 +8,23 @@ const { isUnsafeZipPath, assertDeclaredEntryPolicy } = require('./zip-policy');
 const { archiveIdentity, openZipWithRetry } = require('./zip-open');
 
 const REQUIRED_PARTS = new Set(['[Content_Types].xml', '_rels/.rels', '3D/3dmodel.model']);
-const ALLOWED_ROOTS = new Set(['_rels', '3D', 'Metadata', 'Auxiliaries', 'Textures']);
+const REQUIRED_PARTS_LOWER = new Set([...REQUIRED_PARTS].map((part) => part.toLowerCase()));
+/** Allowed top-level package directories, compared case-insensitively like duplicate detection. */
+const ALLOWED_ROOTS = new Set(['_rels', '3d', 'metadata', 'auxiliaries', 'textures']);
+/** Part types accepted under any allowed root (OPC core plus texture/thumbnail parts). */
 const ALLOWED_EXTENSIONS = new Set([
     '.xml', '.rels', '.model', '.config', '.json', '.png', '.jpg', '.jpeg', '.pmap'
 ]);
+/**
+ * Additional part types that Bambu Studio / OrcaSlicer project exports place
+ * under `Metadata/` and `Auxiliaries/` (plate G-code, checksums, thumbnails,
+ * settings, notes). They are inspected for envelope safety and then ignored
+ * by the converter; only `3D/3dmodel.model` geometry is used.
+ */
+const PROJECT_METADATA_EXTENSIONS = new Set([
+    '.gcode', '.md5', '.png', '.json', '.config', '.xml', '.txt'
+]);
+const PROJECT_METADATA_ROOTS = new Set(['metadata', 'auxiliaries']);
 
 function canonicalThreeMfPartName(name) {
     const raw = String(name || '');
@@ -29,10 +42,22 @@ function canonicalThreeMfPartName(name) {
     return normalized.toLowerCase();
 }
 
+/**
+ * Decide whether a canonical-shaped part name is an accepted 3MF package part.
+ * Roots are matched case-insensitively, consistent with duplicate detection,
+ * so `3D/` and `3d/` are the same package directory.
+ * @param {string} name Raw part name (already canonical-checked by the caller).
+ * @returns {boolean} True when the part type is allowed.
+ */
 function isAllowedThreeMfPart(name) {
-    if (REQUIRED_PARTS.has(name)) return true;
-    const segments = name.split('/');
-    return ALLOWED_ROOTS.has(segments[0]) && ALLOWED_EXTENSIONS.has(path.posix.extname(name).toLowerCase());
+    const lowered = String(name).replaceAll('\\', '/').toLowerCase();
+    if (REQUIRED_PARTS_LOWER.has(lowered)) return true;
+    const segments = lowered.split('/');
+    const root = segments[0];
+    const extension = path.posix.extname(lowered);
+    if (!ALLOWED_ROOTS.has(root)) return false;
+    if (ALLOWED_EXTENSIONS.has(extension)) return true;
+    return PROJECT_METADATA_ROOTS.has(root) && PROJECT_METADATA_EXTENSIONS.has(extension);
 }
 
 async function consumeEntry(zipFile, entry, policy) {
@@ -129,8 +154,8 @@ async function inspectThreeMfArchive(filePath, options = {}) {
     if (!after || archiveIdentity(after) !== expectedIdentity) {
         throw invalidArchive('3MF archive changed during inspection.');
     }
-    for (const required of REQUIRED_PARTS) {
-        if (!seen.has(required.toLowerCase())) {
+    for (const required of REQUIRED_PARTS_LOWER) {
+        if (!seen.has(required)) {
             throw invalidArchive('3MF archive is missing a required package part.');
         }
     }

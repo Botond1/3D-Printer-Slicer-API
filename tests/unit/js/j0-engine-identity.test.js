@@ -14,7 +14,7 @@ const {
 const { buildSlicerCommandArgs, resolveSlicerInvocationPolicy } = require('../../../app/services/slice/engine');
 const { requireEngineVersion } = require('../../../app/services/slice/response');
 
-test('actual native version output is parsed for both pinned engine families', () => {
+test('actual native version output is parsed for all three pinned engine families', () => {
     const prusaVersion = parseEngineVersionOutput('prusa', {
         stdout: 'PrusaSlicer-2.8.1+linux-x64-GTK3\nUsage: prusa-slicer [ OPTIONS ]\n --help Show help\n'
     });
@@ -22,9 +22,19 @@ test('actual native version output is parsed for both pinned engine families', (
         stderr: '[warning] Current OrcaSlicer Version 02.03.01.00\n' +
             'Usage: orca-slicer [ OPTIONS ]\nOPTIONS:\n --help Show help\n'
     });
+    const bambuVersion = parseEngineVersionOutput('bambu', {
+        stdout: 'BambuStudio-02.08.02.61:\nUsage: bambu-studio [ OPTIONS ] [ file.stl ... ]\n' +
+            'OPTIONS:\n --help Show this help.\n'
+    });
     assert.equal(prusaVersion, '2.8.1+linux-x64-GTK3');
     assert.equal(orcaVersion, '02.03.01.00');
+    assert.equal(bambuVersion, '02.08.02.61');
+    assert.equal(requireEngineVersion(bambuVersion), '02.08.02.61');
     assert.notEqual(prusaVersion, orcaVersion);
+    // Orca output must never satisfy the Bambu sentinel and vice versa.
+    assert.throws(() => parseEngineVersionOutput('bambu', {
+        stdout: 'OrcaSlicer-2.3.1\nUsage: orca-slicer [ OPTIONS ]\nOPTIONS:\n --help\n'
+    }), /could not be verified/);
 });
 
 test('version resolution executes the selected binary once and caches exact output', async () => {
@@ -39,6 +49,7 @@ test('version resolution executes the selected binary once and caches exact outp
     assert.deepEqual(calls, [['orca-slicer', ['--help']]]);
     assert.deepEqual(VERSION_QUERY_ARGS.prusa, ['--help']);
     assert.deepEqual(VERSION_QUERY_ARGS.orca, ['--help']);
+    assert.deepEqual(VERSION_QUERY_ARGS.bambu, ['--help']);
 });
 
 test('failed version resolution is evicted and malformed output fails closed', async () => {
@@ -65,32 +76,38 @@ test('startup initialization is atomic and request lookup launches no child proc
     const cache = new Map();
     const initialized = new Map([['sentinel', 'unchanged']]);
     const calls = [];
+    const outputs = {
+        'prusa-slicer': { stdout: 'PrusaSlicer-2.8.1\nUsage: prusa-slicer\n --help\n' },
+        'orca-slicer': { stdout: 'OrcaSlicer-2.3.1:\nUsage: orca-slicer\nOPTIONS:\n --help\n' },
+        'bambu-studio': { stdout: 'BambuStudio-02.08.02.61:\nUsage: bambu-studio [ OPTIONS ]\nOPTIONS:\n --help\n' }
+    };
     const runner = async (executable, args) => {
         calls.push([executable, args]);
-        return executable === 'prusa-slicer'
-            ? { stdout: 'PrusaSlicer-2.8.1\nUsage: prusa-slicer\n --help\n' }
-            : { stdout: 'OrcaSlicer-2.3.1:\nUsage: orca-slicer\nOPTIONS:\n --help\n' };
+        return outputs[executable];
     };
     assert.deepEqual(await initializeSlicerEngineVersions({ runner, cache, initialized }), {
-        prusa: '2.8.1', orca: '2.3.1'
+        prusa: '2.8.1', orca: '2.3.1', bambu: '02.08.02.61'
     });
     assert.equal(getSlicerEngineVersion('prusa', { initialized }), '2.8.1');
     assert.equal(getSlicerEngineVersion('orca', { initialized }), '2.3.1');
-    assert.equal(calls.length, 2);
+    assert.equal(getSlicerEngineVersion('bambu', { initialized }), '02.08.02.61');
+    assert.deepEqual(calls.map(([executable]) => executable), ['prusa-slicer', 'orca-slicer', 'bambu-studio']);
 
-    const failedInitialized = new Map([['sentinel', 'unchanged']]);
-    await assert.rejects(initializeSlicerEngineVersions({
-        cache: new Map(),
-        initialized: failedInitialized,
-        runner: async (executable) => {
-            if (executable === 'orca-slicer') throw new Error('native failure');
-            return { stdout: 'PrusaSlicer-2.8.1\nUsage: prusa-slicer\n --help\n' };
-        }
-    }), (error) => error.code === 'STARTUP_SLICER_VERSION_FAILED' &&
-        error.cause?.message === 'native failure');
-    assert.deepEqual([...failedInitialized], [['sentinel', 'unchanged']]);
-    assert.throws(() => getSlicerEngineVersion('orca', { initialized: failedInitialized }),
-        /not verified during startup/);
+    for (const failing of ['orca-slicer', 'bambu-studio']) {
+        const failedInitialized = new Map([['sentinel', 'unchanged']]);
+        await assert.rejects(initializeSlicerEngineVersions({
+            cache: new Map(),
+            initialized: failedInitialized,
+            runner: async (executable) => {
+                if (executable === failing) throw new Error('native failure');
+                return outputs[executable];
+            }
+        }), (error) => error.code === 'STARTUP_SLICER_VERSION_FAILED' &&
+            error.cause?.message === 'native failure', failing);
+        assert.deepEqual([...failedInitialized], [['sentinel', 'unchanged']], failing);
+        assert.throws(() => getSlicerEngineVersion('orca', { initialized: failedInitialized }),
+            /not verified during startup/);
+    }
 });
 
 test('Orca native policy places but never reorients the transformed and bounds-checked model', () => {

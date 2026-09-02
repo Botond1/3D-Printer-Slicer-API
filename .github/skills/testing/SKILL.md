@@ -1,6 +1,6 @@
 ---
 name: testing
-description: Execute Python-based validation and regression test suites for the 3D Printer Slicer API (Prusa/Orca). Use this when asked to run tests, verify endpoint behavior, check queue concurrency, or validate pricing lifecycles.
+description: Execute Python-based validation and regression test suites for the 3D Printer Slicer API (Prusa/Orca/Bambu Studio, render preview). Use this when asked to run tests, verify endpoint behavior, check queue concurrency, confirm the measured Bambu envelopes, or validate pricing lifecycles.
 ---
 
 Use this skill whenever API endpoints, slicing logic, pricing, or queue concurrency needs to be tested.
@@ -21,12 +21,25 @@ Read that file for complete context when writing new tests or extending existing
    - Orca FDM: `python tests/testing-scripts/slicing/full_api_orca_fdm_test_runner.py`
    - Prusa FDM: `python tests/testing-scripts/slicing/full_api_prusa_fdm_test_runner.py`
    - Prusa SLA: `python tests/testing-scripts/slicing/full_api_prusa_sl1_test_runner.py`
+   - Bambu FDM: `python tests/testing-scripts/slicing/full_api_bambu_fdm_test_runner.py`
+   - Bambu envelopes: `python tests/testing-scripts/slicing/bambu_envelope_confirmation_runner.py`
 
 3. Isolated feature tests
    - Unsupported upload rejection: `python tests/testing-scripts/slicing/unsupported_upload_test_runner.py`
+   - Orientation matrix: `python tests/testing-scripts/slicing/orientation_visibility_test_runner.py`
+   - Native envelope sweep: `python tests/testing-scripts/slicing/native_envelope_sweep_runner.py`
+   - Render preview: `python tests/testing-scripts/render/render_preview_test_runner.py`
+   - Bambu reference comparison (owner-run, private inputs): `python tests/testing-scripts/calibration/bambu_reference_comparison_runner.py --models-dir PRIVATE_DIR --reference PRIVATE_DIR/meres.json --printer P1S --supports false`
    - Pricing lifecycle: `python tests/testing-scripts/pricing/pricing_cycle_test_runner.py`
    - Admin output listing: `python tests/testing-scripts/admin/admin_output_files_test_runner.py`
    - Rate-limit regression: `python tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py`
+   - Operations readiness/metrics: `python tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py`
+   - Profile catalogue (82 rows): `python tests/testing-scripts/profiles/profile_catalogue_test_runner.py`
+
+   Unit gates before any of these: `npm run test:js`, `npm run test:python`,
+   `npm run check:syntax`, `npm run check:repository-safety`. Runners pace
+   slice-service requests at 20 s and retry HTTP 429 with the advertised
+   `Retry-After`.
 
 4. Queue and concurrency test
    - Command: `python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --expected-max-concurrent N --retry-on-429 1 --cleanup-manifest NEW_MANIFEST_PATH --report NEW_REPORT_PATH`

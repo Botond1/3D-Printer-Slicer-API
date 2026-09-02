@@ -10,6 +10,7 @@ const {
     OUTPUT_DIR,
     PRUSA_CONFIGS_DIR,
     ORCA_CONFIGS_DIR,
+    BAMBU_CONFIGS_DIR,
     PRICING_STATE_DIR
 } = require('../config/paths');
 const { getPricing } = require('./pricing.service');
@@ -103,9 +104,20 @@ function createReadinessService(options = {}) {
         });
     }
 
+    /**
+     * Record the outcome of one artifact retention sweep.
+     * A sweep that could not satisfy the quota flips `RETENTION_UNSAFE`; the
+     * next sweep that satisfies it clears the reason again. The readiness
+     * cache is invalidated either way so `/ready` reflects the latest sweep.
+     * @param {{quotaSatisfied?: boolean} | boolean | null | undefined} summary Sweep summary or a bare boolean.
+     * @returns {boolean} The retention health now in effect.
+     */
     function recordRetentionResult(summary) {
-        retentionHealthy = Boolean(summary?.quotaSatisfied);
+        retentionHealthy = typeof summary === 'boolean'
+            ? summary
+            : summary?.quotaSatisfied === true;
         cache = undefined;
+        return retentionHealthy;
     }
 
     function runProbes() {
@@ -137,9 +149,11 @@ function createReadinessService(options = {}) {
                 directoryHealthy(CONFIGS_DIR)
                 && directoryHealthy(PRUSA_CONFIGS_DIR)
                 && directoryHealthy(ORCA_CONFIGS_DIR)
+                && directoryHealthy(BAMBU_CONFIGS_DIR)
                 && directoryImmutable(APP_ROOT, enforceImmutable)
                 && directoryImmutable(PRUSA_CONFIGS_DIR, enforceImmutable)
                 && directoryImmutable(ORCA_CONFIGS_DIR, enforceImmutable)
+                && directoryImmutable(BAMBU_CONFIGS_DIR, enforceImmutable)
             )
         });
         const ready = admissionOpen && !shuttingDown() && Object.values(probes).every(Boolean);
@@ -199,6 +213,7 @@ function createReadinessService(options = {}) {
         getFreshStatus,
         getStatus,
         isAdmissionOpen: () => admissionOpen && !shuttingDown(),
+        isRetentionHealthy: () => retentionHealthy,
         recordRetentionResult
     });
 }

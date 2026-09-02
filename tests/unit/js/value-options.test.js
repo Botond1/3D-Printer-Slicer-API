@@ -111,6 +111,7 @@ test('slice option defaults retain the Prusa FDM contract', () => {
         layerHeight: 0.2,
         material: 'PLA',
         infillPercentage: '20%',
+        supports: true,
         technology: 'FDM',
         orientationMode: 'auto',
         transformOptions: {
@@ -171,7 +172,8 @@ test('slice options normalize transforms, infill, and a valid Prusa profile', ()
     const result = parseSliceOptions({
         layerHeight: '0.2',
         material: 'PLA',
-        infill: '140',
+        infill: '100',
+        supports: 'no',
         sizeUnit: 'inch',
         targetSizeX: '2',
         keepProportions: 'false',
@@ -183,6 +185,7 @@ test('slice options normalize transforms, infill, and a valid Prusa profile', ()
 
     assert.equal(result.isValid, true);
     assert.equal(result.options.infillPercentage, '100%');
+    assert.equal(result.options.supports, false);
     assert.equal(result.options.orientationMode, 'preserve');
     assert.deepEqual(result.options.transformOptions, {
         unit: 'inch',
@@ -283,4 +286,44 @@ test('slice options return stable validation codes for material and transform er
     }
 
     assert.deepEqual(validateMaterialForTechnology('FDM', 'PLA'), { isValid: true });
+});
+
+test('infill is a strict integer 0..100 on every engine and is never clamped', () => {
+    for (const [raw, expected] of [
+        [undefined, '20%'], ['', '20%'], ['0', '0%'], [' 15 ', '15%'], ['35%', '35%'], [100, '100%'], ['007', '7%'],
+        // Integral decimal spellings are the same integer, with or without `%`.
+        ['20.0', '20%'], ['20.00', '20%'], ['20.0%', '20%'], [' 100.000 % ', '100%'], ['0.0', '0%'], [20.0, '20%']
+    ]) {
+        const result = parseSliceOptions({ infill: raw }, null, 'prusa');
+        assert.equal(result.isValid, true, String(raw));
+        assert.equal(result.options.infillPercentage, expected, String(raw));
+    }
+    for (const raw of [
+        '140', '-1', '101', '20.5', '20 percent', 'abc', 12.5, '1e2', true, {}, [],
+        '20.', '.0', '20.01', '100.5', '101.0', '-20.0', '+20.0', '20.0.0', '1e2.0'
+    ]) {
+        for (const [technology, engine] of [[null, 'prusa'], ['FDM', 'orca']]) {
+            const result = parseSliceOptions({ layerHeight: '0.2', material: 'PLA', infill: raw }, technology, engine);
+            assert.equal(result.isValid, false, `${engine} ${String(raw)}`);
+            assert.equal(result.response.errorCode, 'INVALID_INFILL', `${engine} ${String(raw)}`);
+        }
+    }
+});
+
+test('supports defaults on, accepts boolean aliases, and rejects ambiguous values on every engine', () => {
+    for (const [engine, technology] of [['prusa', null], ['orca', 'FDM']]) {
+        assert.equal(parseSliceOptions({ layerHeight: '0.2', material: 'PLA' }, technology, engine).options.supports, true, engine);
+        assert.equal(parseSliceOptions({ layerHeight: '0.2', material: 'PLA', supports: '' }, technology, engine).options.supports, true, engine);
+        for (const raw of ['false', '0', 'off', 'No', false, 0]) {
+            assert.equal(parseSliceOptions({ layerHeight: '0.2', material: 'PLA', supports: raw }, technology, engine).options.supports, false, `${engine} ${raw}`);
+        }
+        for (const raw of ['true', '1', 'yes', 'ON', true, 1]) {
+            assert.equal(parseSliceOptions({ layerHeight: '0.2', material: 'PLA', supports: raw }, technology, engine).options.supports, true, `${engine} ${raw}`);
+        }
+        for (const raw of ['maybe', '2', 'nope', {}, [], 1.5]) {
+            const result = parseSliceOptions({ layerHeight: '0.2', material: 'PLA', supports: raw }, technology, engine);
+            assert.equal(result.isValid, false, `${engine} ${String(raw)}`);
+            assert.equal(result.response.errorCode, 'INVALID_SUPPORTS', `${engine} ${String(raw)}`);
+        }
+    }
 });

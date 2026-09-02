@@ -1,0 +1,23 @@
+{
+    "type": "filament",
+    "name": "Generic TPU @BBL H2D",
+    "inherits": "Generic TPU @base",
+    "from": "system",
+    "instantiation": "true",
+    "setting_id": "GFS_TPU_H2D",
+    "filament_type": [
+        "TPU",
+        "TPU"
+    ],
+    "filament_density": [
+        "1.24",
+        "1.24"
+    ],
+    "filament_diameter": [
+        "1.75",
+        "1.75"
+    ],
+    "compatible_printers": [
+        "Bambu Lab H2D 0.4 nozzle"
+    ]
+}

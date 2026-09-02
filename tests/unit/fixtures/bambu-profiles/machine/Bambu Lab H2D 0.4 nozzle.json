@@ -1,0 +1,23 @@
+{
+    "type": "machine",
+    "name": "Bambu Lab H2D 0.4 nozzle",
+    "inherits": "fdm_bbl_3dp_002_common",
+    "from": "system",
+    "instantiation": "true",
+    "setting_id": "GM_BBL_H2D_004",
+    "printer_model": "Bambu Lab H2D",
+    "printer_variant": "0.4",
+    "include": [
+        "fdm_bbl_h2d_start_gcode_template",
+        "fdm_bbl_h2d_end_gcode_template"
+    ],
+    "nozzle_diameter": [
+        "0.4",
+        "0.4"
+    ],
+    "default_filament_profile": [
+        "Generic PLA @BBL H2D",
+        "Generic PLA @BBL H2D"
+    ],
+    "default_print_profile": "0.20mm Standard @BBL H2D"
+}

@@ -27,7 +27,7 @@ function validate(sources) {
     }
     assert.match(environment, /PYTHONNOUSERSITE: '1'/);
     assert.match(helpers, /path\.resolve\(__dirname, '\.\.', '\.\.'\)/);
-    for (const helper of ['mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py']) {
+    for (const helper of ['mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py', 'render_preview.py']) {
         assert.match(helpers, new RegExp(helper.replace('.', '\\.')));
     }
     assert.match(input, /catch \(error_\) \{\s*if \(isAbortError\(error_, signal\)\)/);
@@ -50,7 +50,9 @@ test('S1c source mutations are rejected for lifecycle, environment, helper, fall
     const mutations = [
         ['pre-abort spawn reopened', 'command', 'if (options.signal?.aborted) return Promise.reject', 'if (false) return Promise.reject'],
         ['settlement no longer waits for tree', 'command', 'if (this.terminationComplete) this.settle', 'if (true) this.settle'],
-        ['forced POSIX escalation removed', 'tree', "sendPosixSignal(pid, 'SIGKILL'", "sendPosixSignal(pid, 'SIGTERM'"],
+        // Both forced passes (first SIGKILL and the single retry) must be removed to
+        // prove the guard; a global pattern keeps the seam honest after the retry landed.
+        ['forced POSIX escalation removed', 'tree', /sendPosixSignal\(pid, 'SIGKILL'/g, "sendPosixSignal(pid, 'SIGTERM'"],
         ['Windows force flag removed', 'tree', "if (force) args.push('/F')", "if (force) args.push('/T')"],
         ['parent environment spread restored', 'environment', 'return { ...environment, ...SAFE_PYTHON_ENV }', 'return { ...source, ...SAFE_PYTHON_ENV }'],
         ['module helper anchor replaced by cwd', 'helpers', "path.resolve(__dirname, '..', '..')", 'path.resolve(process.cwd())'],

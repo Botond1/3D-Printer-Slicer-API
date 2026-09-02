@@ -111,7 +111,7 @@ function createSuccessfulHandler(engine, outputRoot, effects) {
 function assertRouteOrder(router, engine, rateLimiter, authenticate) {
     assert.deepEqual(
         router.stack.filter((layer) => layer.route).map((layer) => layer.route.path).sort(),
-        ['/orca/slice', '/prusa/slice']
+        ['/bambu/slice', '/orca/slice', '/prusa/slice']
     );
     const route = router.stack.find((layer) => layer.route.path === `/${engine}/slice`).route;
     assert.equal(route.stack.length, 3);
@@ -150,7 +150,8 @@ async function createRouteHarness(engine, root) {
         },
         onLifecycleSettled: settleLifecycle,
         handlePrusa: handler,
-        handleOrca: handler
+        handleOrca: handler,
+        handleBambu: handler
     });
     assertRouteOrder(router, engine, rateLimiter, authenticate);
     return { effects, events, jobsRoot, lifecycleSettled, outputRoot, router, warnings };
@@ -210,7 +211,7 @@ async function assertAuthorizedCall(url, engine, harness) {
     assert.deepEqual(await listOrEmpty(harness.jobsRoot), []);
 }
 
-for (const engine of ['prusa', 'orca']) {
+for (const engine of ['prusa', 'orca', 'bambu']) {
     test(`${engine} route is limiter -> auth -> lifecycle; unauthorized calls allocate nothing`, async (t) => {
         const root = await fs.mkdtemp(path.join(os.tmpdir(), `i3-auth-${engine}-`));
         const harness = await createRouteHarness(engine, root);

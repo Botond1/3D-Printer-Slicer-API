@@ -21,6 +21,7 @@ const createSwaggerDocument = require('./docs/swagger-docs');
 const { createPricingRouter } = require('./routes/pricing.routes');
 const { createProfileCatalogueRouter } = require('./routes/profile-catalogue.routes');
 const { createSliceRouter } = require('./routes/slice.routes');
+const { createRenderRouter } = require('./routes/render.routes');
 const { createSystemRouter } = require('./routes/system.routes');
 const errorHandler = require('./middleware/errorHandler');
 const { createCorsOptionsResolver, parseAllowedOrigins } = require('./middleware/corsPolicy');
@@ -38,6 +39,9 @@ const { auditStaleWorkspaces, auditWorkspacesThenListen } = require('./services/
 const { cleanupManagedArtifacts } = require('./services/artifact-store');
 const { beginSliceQueueShutdown } = require('./services/slice/queue');
 const { initializeSlicerEngineVersions } = require('./services/slice/engine-version');
+const { getBambuPrinterRegistry } = require('./services/slice/bambu-printer-registry');
+const { verifyBambuRegistryChains } = require('./services/slice/bambu-profile-chain');
+const { configureRetentionObserver } = require('./services/slice/output-lifecycle');
 const { createProfileCatalogueService } = require('./services/slice/profile-catalogue');
 const { createRuntimeLifecycle } = require('./services/runtime-lifecycle');
 const { createReadinessService } = require('./services/readiness.service');
@@ -58,7 +62,14 @@ try {
     process.exit(1);
 }
 ensureRequiredDirectories();
-loadPricingFromDisk();
+try {
+    loadPricingFromDisk();
+} catch (error) {
+    // Fail closed: an existing pricing file that cannot be trusted is never
+    // replaced with defaults. The operator repairs or removes it and restarts.
+    console.error(`[SECURITY] Pricing configuration is invalid (${error?.code || 'PRICING_FILE_INVALID'}). Refusing to start server.`);
+    process.exit(1);
+}
 
 /** @type {import('express').Express} */
 const app = express();
@@ -86,6 +97,10 @@ const authLogger = Object.freeze({
     }
 });
 const sliceRoutes = createSliceRouter({
+    authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger }),
+    resourcePolicy
+});
+const renderRoutes = createRenderRouter({
     authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger }),
     resourcePolicy
 });
@@ -202,6 +217,7 @@ app.get('/', (req, res) => res.redirect('/docs'));
 app.use(pricingRoutes);
 app.use(profileCatalogueRoutes);
 app.use(sliceRoutes);
+app.use(renderRoutes);
 app.use(systemRoutes);
 
 // Catch-all for unknown routes
@@ -224,6 +240,12 @@ const httpServer = createBoundedHttpServer(app);
  */
 async function startServer() {
     const engineVersions = await initializeSlicerEngineVersions();
+    // The Bambu registry and every vendor chain it references must flatten
+    // before listen; a typed failure here refuses startup rather than letting
+    // /bambu/slice answer 500 on its first request. The catalogue below stays
+    // non-critical and merely re-exercises the same chains.
+    verifyBambuRegistryChains({ registry: getBambuPrinterRegistry() });
+    configureRetentionObserver(readinessService);
     await profileCatalogueService.initialize({ engineVersions });
     const scratchCleanup = await auditStaleWorkspaces({
         jobsRoot: JOB_SCRATCH_DIR,
@@ -279,10 +301,16 @@ async function startServer() {
     });
 }
 
+const TYPED_STARTUP_FAILURE_CODES = new Set([
+    'STARTUP_SLICER_VERSION_FAILED',
+    'STARTUP_BAMBU_REGISTRY_INVALID',
+    'STARTUP_BAMBU_PROFILE_CHAIN_FAILED'
+]);
+
 runtimeLifecycle.run(startServer).catch((error) => {
     emitEvent('startup.completed', {
         outcome: 'failure',
-        error_code: error?.code === 'STARTUP_SLICER_VERSION_FAILED'
+        error_code: TYPED_STARTUP_FAILURE_CODES.has(error?.code)
             ? error.code
             : 'STARTUP_AUDIT_FAILED'
     });

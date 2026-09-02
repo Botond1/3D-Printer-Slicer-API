@@ -4,12 +4,19 @@ applyTo: ".github/**"
 
 # GitHub Folder Instructions
 
-Last synchronized: 2026-09-01
+Last synchronized: 2026-09-02
 
 ## Scope
 - Keep Copilot instructions centralized in .github/copilot-instructions.md.
 - Keep workflow files deterministic and minimal.
 - Keep .github/skills aligned with .claude/skills.
+- Image validation builds the three-engine image (PrusaSlicer 2.8.1,
+  OrcaSlicer 2.3.1, Bambu Studio 02.08.02.61). The Dockerfile pin check covers
+  the Bambu AppImage URL/SHA-256, the root-owned `bambu-studio` wrapper, the
+  Xvfb/GL/GStreamer runtime packages, and `init: true` in both Compose
+  manifests; candidate provenance evidence uses schema
+  `i7-s3a-candidate-provenance-v2`. The exact-image runtime probe verifies all
+  three executables.
 - Any validation container that starts the API must receive distinct inert
   active slice, pricing, artifact, and operations keys; previous slots are
   included only when the rotation contract is under test. Every value must meet
@@ -95,6 +102,12 @@ Last synchronized: 2026-09-01
   change is documentation-only. Public router rollback/final-dark, monitoring,
   backup/recovery acceptance, customer traffic, and full production acceptance
   remain unverified and separately authorized.
+
+- The historical I10/I11/I12 and route-activation facts below this line are
+  preserved verbatim in `docs/codex/history-waves.md`; the 3.2.0 Bambu engine
+  overhaul is integrated on `feat/bambu-engine-overhaul` and is not yet
+  published, deployed, or routed. Publication remains the manual I11
+  `workflow_dispatch` from exact protected `main`.
 
 ## Required Sync Targets
 When changing rules here, synchronize:

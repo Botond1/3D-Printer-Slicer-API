@@ -3,6 +3,7 @@
 const { createPricingPaths } = require('./pricing-openapi');
 const { createProfileCataloguePaths } = require('./profile-catalogue-openapi');
 const { createSlicePaths } = require('./slice-openapi');
+const { createRenderPaths } = require('./render-openapi');
 const { createAdminPaths } = require('./admin-openapi');
 const { createSystemPaths } = require('./system-openapi');
 
@@ -17,13 +18,14 @@ function createSwaggerDocument(pricing) {
         openapi: '3.0.0',
         info: {
             title: '3D Printer Slicer API for FDM and SLA',
-            version: '3.1.4',
+            version: '3.2.0',
             description: 'Automated 3D slicing and pricing engine for FDM and SLA technologies.'
         },
         tags: [
             { name: 'Pricing', description: 'Runtime pricing configuration endpoints' },
             { name: 'Profiles', description: 'Public startup profile catalogue' },
             { name: 'Slicing', description: 'Explicit FDM/SLA slicing and print estimation endpoints' },
+            { name: 'Preview', description: 'Deterministic PNG preview of the final slice pose' },
             { name: 'Admin', description: 'Protected operational endpoints requiring x-api-key' },
             { name: 'Operations', description: 'Protected readiness and metrics endpoints' },
             { name: 'System', description: 'Public liveness and readiness endpoints' }
@@ -32,6 +34,7 @@ function createSwaggerDocument(pricing) {
             ...createPricingPaths(),
             ...createProfileCataloguePaths(),
             ...createSlicePaths(),
+            ...createRenderPaths(),
             ...createAdminPaths(),
             ...createSystemPaths()
         },

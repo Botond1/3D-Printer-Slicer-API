@@ -5,10 +5,35 @@
 const http = require('node:http');
 const { DEFAULTS } = require('../config/constants');
 
+/**
+ * Traefik's default `idleConnTimeout` toward backends is 90 s. Node must keep
+ * an idle keep-alive socket open longer than the proxy does, otherwise Node
+ * closes first and the proxy's next reuse of that socket surfaces as an
+ * intermittent 502 at the edge. The default therefore sits above 90 s and
+ * the cap allows a further margin for a longer proxy setting. The default
+ * itself has one source: `DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS`.
+ */
+const TRAEFIK_DEFAULT_IDLE_CONN_TIMEOUT_MS = 90_000;
+const KEEP_ALIVE_TIMEOUT_DEFAULT_MS = DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS;
+const KEEP_ALIVE_TIMEOUT_MAXIMUM_MS = 120_000;
+if (!(KEEP_ALIVE_TIMEOUT_DEFAULT_MS > TRAEFIK_DEFAULT_IDLE_CONN_TIMEOUT_MS)
+    || !(KEEP_ALIVE_TIMEOUT_DEFAULT_MS <= KEEP_ALIVE_TIMEOUT_MAXIMUM_MS)) {
+    throw new Error('HTTP keep-alive default must outlive the proxy idle timeout within its cap.');
+}
+
+const HTTP_SERVER_DEFAULTS = Object.freeze({
+    HTTP_HEADERS_TIMEOUT_MS: DEFAULTS.HTTP_HEADERS_TIMEOUT_MS,
+    HTTP_REQUEST_TIMEOUT_MS: DEFAULTS.HTTP_REQUEST_TIMEOUT_MS,
+    HTTP_KEEP_ALIVE_TIMEOUT_MS: KEEP_ALIVE_TIMEOUT_DEFAULT_MS,
+    HTTP_MAX_HEADERS_COUNT: DEFAULTS.HTTP_MAX_HEADERS_COUNT,
+    HTTP_MAX_CONNECTIONS: DEFAULTS.HTTP_MAX_CONNECTIONS,
+    HTTP_MAX_REQUESTS_PER_SOCKET: DEFAULTS.HTTP_MAX_REQUESTS_PER_SOCKET
+});
+
 const HTTP_SERVER_BOUNDS = Object.freeze({
     HTTP_HEADERS_TIMEOUT_MS: Object.freeze({ minimum: 1_000, maximum: 60_000 }),
     HTTP_REQUEST_TIMEOUT_MS: Object.freeze({ minimum: 60_000, maximum: 600_000 }),
-    HTTP_KEEP_ALIVE_TIMEOUT_MS: Object.freeze({ minimum: 1_000, maximum: 60_000 }),
+    HTTP_KEEP_ALIVE_TIMEOUT_MS: Object.freeze({ minimum: 1_000, maximum: KEEP_ALIVE_TIMEOUT_MAXIMUM_MS }),
     HTTP_MAX_HEADERS_COUNT: Object.freeze({ minimum: 16, maximum: 2_000 }),
     HTTP_MAX_CONNECTIONS: Object.freeze({ minimum: 1, maximum: 1_024 }),
     HTTP_MAX_REQUESTS_PER_SOCKET: Object.freeze({ minimum: 1, maximum: 1_000 })
@@ -56,7 +81,7 @@ function resolveHttpServerOptions(env = process.env) {
         requestTimeout,
         keepAliveTimeout: resolveBoundedPositiveInteger(
             env.HTTP_KEEP_ALIVE_TIMEOUT_MS,
-            DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS,
+            HTTP_SERVER_DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS,
             HTTP_SERVER_BOUNDS.HTTP_KEEP_ALIVE_TIMEOUT_MS
         ),
         maxHeadersCount: resolveBoundedPositiveInteger(
@@ -109,6 +134,8 @@ function createBoundedHttpServer(app, options = {}) {
 
 module.exports = {
     HTTP_SERVER_BOUNDS,
+    HTTP_SERVER_DEFAULTS,
+    TRAEFIK_DEFAULT_IDLE_CONN_TIMEOUT_MS,
     configureHttpServer,
     createBoundedHttpServer,
     resolveBoundedPositiveInteger,

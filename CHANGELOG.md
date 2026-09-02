@@ -2,6 +2,68 @@
 
 All notable changes to this project are documented in this file.
 
+## v3.2.0 (2026-09-02)
+
+Bambu Studio engine overhaul. Consumer-visible contract changes are marked
+**[contract]**; the consumer view is `docs/integration-guide.md`.
+
+### Added
+
+- **[contract]** `POST /bambu/slice`: third engine backed by the Bambu Studio `02.08.02.61` headless CLI and the official Bambu Lab (BBL) vendor machine/process/filament chain flattened from `/opt/bambustudio/resources/profiles/BBL` (or `BAMBU_PROFILES_ROOT`). The server-owned registry `configs/bambu/printers.json` (`r3d-bambu-printer-registry-v1`) maps `printerProfile=P1S` (default, `printer` alias) and `H2D` to exact vendor names; layer keys P1S `0.08/0.1/0.12/0.16/0.2/0.24/0.28`, H2D `0.08/0.1/0.12/0.16/0.2/0.24`; materials PLA/PETG/ABS/TPU map to the vendor `Generic` filaments. Success responses add `profiles.printer`, `bed_type`, and `placement_mm {x_min, y_min}`; the retained artifact is the printer-ready `.gcode.3mf` project, listed and downloadable through the artifact routes.
+- **[contract]** `POST /render`: slice-authenticated, rate-limited, queue-serialized deterministic `1024 x 768` `image/png` preview of the exact final pose (isometric camera, plate grid, dimension caption; byte-identical output for identical input and options), rendered by `app/render_preview.py` (numpy + Pillow 12.3.0) under a 60 s budget; failures reuse the slice error envelope.
+- **[contract]** `supports` request field (`true`/`false`, default `true`) on all engines; any other present value returns `400 INVALID_SUPPORTS`. The default is digest-neutral; `supports=false` is a different effective profile.
+- **[contract]** Orca ABS and TPU filament profiles (`configs/orca/filament/ABS_generic.json` 1.04 g/cm3, `TPU_generic.json` 1.24 g/cm3), so all four FDM materials price automatically on every engine.
+- **[contract]** Error codes `INVALID_SUPPORTS`, `INVALID_INFILL`, `INVALID_PRINTER_PROFILE`, `INVALID_PROCESS_PROFILE`, `MATERIAL_PROFILE_UNAVAILABLE` (400), `UNSLICEABLE_SOURCE_GEOMETRY` (422, native faulty-mesh/model-load refusal with a path-free `detail`), and `NATIVE_OUTPUT_OVERFLOW` (500); the 429 (`RATE_LIMIT_EXCEEDED`, `SLICE_QUEUE_CLIENT_LIMIT`) and 503 (`SLICE_QUEUE_FULL`, `SLICE_QUEUE_TIMEOUT`, `SLICE_QUEUE_SHUTDOWN`) families are documented in OpenAPI.
+- API-owned Bambu placement (`app/services/slice/bambu-bed-geometry.js`, `bambu-placement.js`, `scale_model.py --place-min-x/--place-min-y`) derived from the flattened vendor bed (printable area, first-extruder area on the H2D, `bed_exclude_area` corner on the P1S).
+- Image: pinned and SHA-256-verified Bambu Studio AppImage extracted to `/opt/bambustudio` (root-owned, read-only); root-owned `0555` wrapper `/usr/local/bin/bambu-studio` that starts a private Xvfb only for `--export-3mf`; runtime packages `xvfb`, `libgl1`, `libgl1-mesa-dri`, `libglx-mesa0`, `libgstreamer1.0-0`, `libgstreamer-plugins-base1.0-0`; `init: true` in both Compose manifests; the dev overlay mounts `app/render_preview.py`; candidate provenance schema `i7-s3a-candidate-provenance-v2`; the exact-image runtime probe verifies all three executables.
+- Integration runners `slicing/full_api_bambu_fdm_test_runner.py`, `slicing/bambu_envelope_confirmation_runner.py`, `render/render_preview_test_runner.py`, and the owner-run `calibration/bambu_reference_comparison_runner.py`; deterministic privacy-safe synthetic fixtures (`common/synthetic_fixtures.py`) and the shared 429-aware slice helper (`common/runner_support.py`).
+- Structured event `orientation.fallback` (fixed vocabulary), emitted once per automatic-orientation fallback.
+- Documentation: `docs/integration-guide.md` (consumer contract), `docs/codex/handoff-2026-09-02.md`, `docs/codex/history-waves.md` (the pre-3.2.0 wave narrative moved verbatim out of `README.md` and the top-level instruction files), and a 2026-09-02 addendum to `docs/kalibracio-2026-08.md`.
+
+### Changed
+
+- **[contract]** `infill` is a strict integer `0..100` with an optional trailing `%`; it is never clamped and anything else returns `400 INVALID_INFILL`.
+- **[contract]** Price rounding uses integer arithmetic: `ceil(max(print_time_seconds, 900) * hourly_rate / 3600)` rounded up to the next 10 HUF. 1980 s at 800 HUF/h is now exactly 440 HUF (previously 450 because of floating-point noise).
+- **[contract]** `stats.print_time_source` ranks `total estimated time` first, so Orca and Bambu report the wall-clock total including the start sequence. Orca's shipped generic profile emits `estimated printing time (normal mode)`, so its numbers did not change.
+- **[contract]** SLA responses are quote-only: `material_used_g`, `hourly_rate`, and `estimated_price_huf` are always `null`, and `print_time_source` marks the estimate (`sla_sl1_metadata_estimate` / `sla_synthetic_estimate`).
+- **[contract]** `keepProportions=true` with several target axes fits the model within the box (smallest ratio wins); NaN/zero/negative ratios are rejected.
+- **[contract]** `SLICE_QUEUE_CLIENT_LIMIT` responses carry `Retry-After` and `retryAfterSeconds`; the slice limiter and the queue fairness cap key on the authenticated principal (`req.slicePrincipal`) with client-IP fallback.
+- **[contract]** Option and profile validation runs before queue admission, so a `400` never consumes a queue slot.
+- **[contract]** `GET /profiles` publishes 82 rows (6 Prusa, 24 Orca including ABS/TPU, 28 Bambu P1S, 24 Bambu H2D) with three engine-scoped fleets (bambu -> H2D, orca and prusa -> H2D-QUOTE) and the measured Bambu envelopes.
+- **[contract]** Archive handling tolerates `__MACOSX/`, `.DS_Store`, `Thumbs.db`, `desktop.ini`, and directory entries; 3MF roots match case-insensitively; Bambu/Orca project parts under `Metadata/` and `Auxiliaries/` are admitted; `mesh2stl.py` honours the 3MF `unit` attribute and uses `Scene.to_mesh()`.
+- **[contract]** `FILE_PROCESSING_TIMEOUT` is returned only for real timeouts and its message no longer hard-codes 10 minutes; Python helpers run under a 120 s budget clamped to the native budget.
+- Bambu invocation is `--arrange 0 --orient 0` (never `--allow-rotations`): Bambu Studio's `--arrange 1` yawed models that did not fit, breaking the rotation-only transform contract. Measured inclusive ceilings replace the provisional pins: P1S `256 x 228 x 250` with the alternative `238 x 256` footprint (L-shaped admission around the `18 x 28 mm` excluded corner), H2D `325 x 320 x 325`; native rc 192/190 refusals map to the K2 `MODEL_OUT_OF_PRINTER_BOUNDS` payload.
+- `HTTP_KEEP_ALIVE_TIMEOUT_MS` default is `95000` (bounded `1000..120000`) so idle sockets outlive the reverse proxy's 90 s idle timeout.
+- `SLICE_COMMAND_TIMEOUT_MS` is a bounded positive integer (`1000..3600000`, default `600000`); native output beyond the bounded buffer stops the process with `NATIVE_OUTPUT_OVERFLOW` instead of timeout wording.
+- Process tree: the post-SIGKILL settle polls up to 10 s and re-kills the group once; an exited child with a live group is terminated instead of refused. A native-runtime quarantine closes admission, drains at most 10 s, and exits with status 70 through an injectable seam so `restart: unless-stopped` recovers.
+- Prusa INIs use the `temperature` / `first_layer_temperature` / `bed_temperature` keys.
+- `requirements.txt` pins the signed-image versions (gmsh 4.15.2, lxml 6.1.2, networkx 3.6.1, numpy 2.5.2, Pillow 12.3.0, scipy 1.18.1, trimesh 5.1.0) and drops the unused `numpy-stl`.
+- Per-slice retention sweep failures are non-fatal to the slice and surface as readiness reason `RETENTION_UNSAFE`; readiness also probes `configs/bambu`.
+- `README.md` rewritten as a lean current document; `CLAUDE.md`, `.claude/CLAUDE.md`, `.github/copilot-instructions.md`, `AGENTS.md`, the folder-local guides, the Copilot instruction overlays, and the mirrored agent/skill definitions describe the three-engine state, with the wave narrative replaced by a compact "Current contract" section.
+- Package version `3.2.0`.
+
+### Fixed
+
+- Every `/bambu/slice` request answered 500 after a successful native slice because managed artifact names did not admit `.gcode.3mf`.
+- An existing `configs/pricing-state/pricing.json` is authoritative: defaults seed only a missing or empty file, so a material removed with `DELETE /pricing/...` no longer resurrects on restart; `getRate` fails closed with `null`; pricing 400/404/409/500 bodies carry stable `errorCode` values (`INVALID_TECHNOLOGY`, `INVALID_MATERIAL`, `INVALID_PRICE`, `MATERIAL_NOT_FOUND`, `MATERIAL_ALREADY_EXISTS`, `PRICING_PERSISTENCE_FAILED`).
+- Converter `INVALID_SOURCE_GEOMETRY|<reason>` markers (printed to stdout and stderr with exit 2 by `cad2stl.py` and `mesh2stl.py`) map to HTTP 400 on every path.
+- SLA was never meant to be priced automatically; it no longer is.
+- The keep-alive default has one source (`DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS`).
+- `render_preview.py` joined the Python helper allowlist and the i4 probe contract lists the native executable failure reasons.
+
+### Removed
+
+- The provisional Bambu admission pins and the Bambu `--arrange 1` invocation.
+- The multi-screen J0/J1/J2/J3/J3B/I10..I12 narrative blocks from `README.md` and the top-level instruction files (moved verbatim to `docs/codex/history-waves.md`).
+- `numpy-stl` from `requirements.txt`.
+
+### Validation
+
+- Bambu Studio CLI versus the owner's Bambu Studio GUI readings on the ten reference models (supports off): time within -1.1..+0.1 %, mass within 0..0.2 %. OrcaSlicer 2.3.1 with its bundled BBL profiles deviates by up to +24 % and has no H2D profile. Supports on adds +47..+140 % time on overhang-heavy models.
+- Production-envelope smoke of the image (40 mm PLA cube, 0.2 mm, 20 %, supports on): Bambu P1S 2453 s / 24.0 g / 550 HUF; Bambu H2D 2452 s / 23.94 g / 550 HUF; Prusa 1980 s / 24.7 g / 440 HUF; Orca 2760 s / 24.2 g / 620 HUF; `POST /render` returned a valid PNG.
+- `npm run test:js`, `npm run test:python`, `npm run check:syntax`, and `npm run check:repository-safety` pass on the integration branch; the Bambu matrix, envelope confirmation, render, catalogue (82 rows), admin (`.gcode.3mf`), and orientation runners were updated for the new contract.
+- Not done in this release: publication, deployment, route/DNS/allowlist mutation, and consumer-repository changes. Production still runs the signed main candidate `bf5e712`.
+
 ## v3.1.4 (2026-05-14)
 
 ### Added

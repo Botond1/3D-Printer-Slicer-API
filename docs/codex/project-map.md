@@ -1,5 +1,21 @@
 # Verified project map
 
+## 3.2.0 successor note (2026-09-02)
+
+The sections below describe the J3B checkpoint and remain accurate for the
+image that production runs (signed main candidate `bf5e712`). The
+`feat/bambu-engine-overhaul` integration branch (version 3.2.0) supersedes
+several statements: the service has three engines (PrusaSlicer 2.8.1,
+OrcaSlicer 2.3.1, Bambu Studio 02.08.02.61) and four slice-service routes
+(`/prusa/slice`, `/orca/slice`, `/bambu/slice`, `/render`); `GET /profiles`
+publishes 82 rows with three engine-scoped fleets; Bambu placement is
+API-owned with measured inclusive ceilings P1S `256 x 228 x 250` (alternative
+footprint `238 x 256`) and H2D `325 x 320 x 325`; the retained Bambu artifact
+is `.gcode.3mf`; price rounding is integer arithmetic; the keep-alive default
+is 95000 ms. The complete current contract is in `CLAUDE.md` ("Current
+contract"), the consumer view in `docs/integration-guide.md`, and the
+operator view in `docs/codex/handoff-2026-09-02.md`. Nothing below was edited.
+
 ## Current J3B native-envelope and original-dimension corrective candidate
 
 Current classification:

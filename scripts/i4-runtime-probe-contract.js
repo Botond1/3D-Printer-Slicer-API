@@ -28,7 +28,11 @@ const CONTAINER_PROBE_FAILURES = Object.freeze([
     'abort_transport_unexpected',
     'client_abort_not_settled',
     'post_abort_artifact_detected',
-    'slice_execution'
+    'slice_execution',
+    'native_executable_missing',
+    'native_executable_target',
+    'native_executable_mode',
+    'native_executable_help'
 ]);
 
 function expectedTmpfs(uid, gid) {
@@ -55,7 +59,7 @@ function evaluateProbeOutput(result) {
     }
     const fixed = {
         classification: 'success',
-        immutableCount: 8,
+        immutableCount: 9,
         writableCount: 9,
         authenticatedSliceCount: 2,
         authenticatedClientAbortCount: 1,

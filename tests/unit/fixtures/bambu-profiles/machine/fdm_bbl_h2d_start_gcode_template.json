@@ -1,0 +1,6 @@
+{
+    "type": "machine",
+    "name": "fdm_bbl_h2d_start_gcode_template",
+    "machine_start_gcode": ";===== h2d start template =====\nM17\nG28",
+    "template_marker": "from-include-template"
+}

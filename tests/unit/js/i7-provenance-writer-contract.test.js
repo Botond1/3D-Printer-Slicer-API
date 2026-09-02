@@ -189,3 +189,28 @@ test('writer binds pin metadata to exact active assignments, not comments or lat
         (error) => error.code === 'provenance_pinned_input_mismatch'
     );
 });
+
+test('writer pins the Bambu Studio AppImage URL and digest exactly like the Prusa/Orca inputs', () => {
+    const dockerfile = fs.readFileSync(path.join(ROOT, 'Dockerfile'), 'utf8').replace(/\r\n?/g, '\n');
+    const installer = fs.readFileSync(path.join(ROOT, 'scripts/install-swiper-vendor.py'), 'utf8');
+    const expectedUrl = 'ARG BAMBU_APPIMAGE_URL="https://github.com/bambulab/BambuStudio/releases/download/'
+        + 'v02.08.02.61/BambuStudio_ubuntu24.04-v02.08.02.61-20260820225108.AppImage"';
+    const expectedSha = 'ARG BAMBU_APPIMAGE_SHA256="d501b103fac5424513ec0e8d6bc145fb30719de2c7d94d7320d723740c81a7fd"';
+    assert.equal(dockerfile.split('\n').filter((line) => line === expectedUrl).length, 1);
+    assert.equal(dockerfile.split('\n').filter((line) => line === expectedSha).length, 1);
+    for (const [name, mutated] of [
+        ['URL drift', dockerfile.replace(expectedUrl, expectedUrl.replace('v02.08.02.61/', 'v02.08.02.62/'))],
+        ['digest drift', dockerfile.replace(expectedSha, 'ARG BAMBU_APPIMAGE_SHA256="malformed"')],
+        ['URL removed', dockerfile.replace(`${expectedUrl}\n`, '')],
+        ['digest removed', dockerfile.replace(`${expectedSha}\n`, '')],
+        ['digest duplicated', `${dockerfile}\n${expectedSha}\n`],
+        ['comment decoy', dockerfile.replace(expectedSha, `# ${expectedSha}`)]
+    ]) {
+        assert.notEqual(mutated, dockerfile, name);
+        assert.throws(
+            () => verifyPinnedInputs(mutated, installer),
+            (error) => error.code === 'provenance_pinned_input_mismatch',
+            name
+        );
+    }
+});

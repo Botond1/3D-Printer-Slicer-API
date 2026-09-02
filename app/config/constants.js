@@ -12,13 +12,18 @@ const DEFAULTS = {
     MAX_UPLOAD_BYTES: 500 * 1024 * 1024,
     HTTP_HEADERS_TIMEOUT_MS: 60_000,
     HTTP_REQUEST_TIMEOUT_MS: 600_000,
-    HTTP_KEEP_ALIVE_TIMEOUT_MS: 5_000,
+    // Traefik's default idle connection timeout toward backends is 90 s; Node
+    // must keep an idle keep-alive socket open longer than the proxy does.
+    HTTP_KEEP_ALIVE_TIMEOUT_MS: 95_000,
     HTTP_MAX_HEADERS_COUNT: 2_000,
     HTTP_MAX_CONNECTIONS: 128,
     HTTP_MAX_REQUESTS_PER_SOCKET: 100,
     WORKSPACE_STALE_AGE_MS: 24 * 60 * 60 * 1000,
     MAX_LOG_OUTPUT: 4000,
     SLICE_COMMAND_TIMEOUT_MS: 600000,
+    // Python preprocessing helpers (mesh2stl, cad2stl, orient, scale_model)
+    // run before any native slicer and never need the full native budget.
+    PYTHON_HELPER_TIMEOUT_MS: 120_000,
     SLICE_TIMEOUT_MINUTES: 10,
     SLICE_RATE_LIMIT_WINDOW_MS: 60_000,
     SLICE_RATE_LIMIT_MAX_REQUESTS: 3,
@@ -71,8 +76,16 @@ const ORCA_PROCESS_PROFILE_BY_LAYER = {
 /** Orca filament profiles selected by normalized FDM material key. */
 const ORCA_FILAMENT_PROFILE_BY_MATERIAL = Object.freeze({
     PLA: 'PLA_generic.json',
-    PETG: 'PETG_generic.json'
+    PETG: 'PETG_generic.json',
+    ABS: 'ABS_generic.json',
+    TPU: 'TPU_generic.json'
 });
+
+/**
+ * Bambu Studio vendor-profile resources bundled inside the AppImage.
+ * Overridable through `BAMBU_PROFILES_ROOT` for tests and alternative layouts.
+ */
+const BAMBU_DEFAULT_PROFILES_ROOT = '/opt/bambustudio/resources/profiles/BBL';
 
 /**
  * Default fallback pricing matrix in HUF/hour.
@@ -136,12 +149,42 @@ Object.freeze({
 });
 
 /**
+ * Measured Bambu Studio 02.08.02.61 admission ceilings, inclusive on every
+ * axis and keyed by the vendor machine profile name. Measured on the
+ * production CLI with `--arrange 0` and API-owned placement, confirmed at
+ * 0.1 mm granularity:
+ *
+ * - P1S: `256 x 228` at `(0, 28)` passes and `256 x 228.1` fails (rc 192,
+ *   object conflict with the `18 x 28 mm` excluded corner); `256.1` wide fails
+ *   (rc -50/206, no object fully inside the print volume); Z `250.0` passes and
+ *   `250.1` fails at both 0.2 and 0.28 mm layers.
+ * - H2D (single filament, first extruder area `325 x 320`): `325 x 320 x 10`
+ *   at the origin passes, `349` or `350` wide fails (rc 190, filament cannot be
+ *   mapped to the extruder); Z `325.0` passes and `325.1` fails.
+ */
+const BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM = Object.freeze({
+    'Bambu Lab P1S 0.4 nozzle': Object.freeze({ x: 256, y: 228, z: 250 }),
+    'Bambu Lab H2D 0.4 nozzle': Object.freeze({ x: 325, y: 320, z: 325 })
+});
+
+/**
+ * The P1S admissible footprint is L-shaped because of the excluded corner:
+ * `{X <= 256, Y <= 228}` placed with `y_min >= 28`, OR `{X <= 238, Y <= 256}`
+ * placed with `x_min >= 18` (`238 x 256` at `(18, 0)` passes, `238.1 x 256`
+ * fails). The catalogue publishes one inclusive triple (the wide footprint);
+ * this constant keeps the alternative footprint representable in code, and
+ * `bambu-placement.js` admits either through real placement.
+ */
+const BAMBU_P1S_ALTERNATIVE_FOOTPRINT_INCLUSIVE_MM = Object.freeze({ x: 238, y: 256 });
+
+/**
  * Validation-only fallback derates for non-catalogued FDM profiles. Known
  * server-owned profiles always use one of the explicit tables above.
  */
 const FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE = Object.freeze({
     prusa: Object.freeze({ x: 0, y: 0, z: 0.1 }),
-    orca: Object.freeze({ x: 2.1, y: 2.1, z: 0.1 })
+    orca: Object.freeze({ x: 2.1, y: 2.1, z: 0.1 }),
+    bambu: Object.freeze({ x: 2.1, y: 2.1, z: 0.1 })
 });
 
 /**
@@ -186,6 +229,9 @@ module.exports = {
     LAYER_HEIGHTS,
     ORCA_FILAMENT_PROFILE_BY_MATERIAL,
     ORCA_PROCESS_PROFILE_BY_LAYER,
+    BAMBU_DEFAULT_PROFILES_ROOT,
+    BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    BAMBU_P1S_ALTERNATIVE_FOOTPRINT_INCLUSIVE_MM,
     DEFAULT_PRICING,
     MAX_BUILD_VOLUMES,
     P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,

@@ -27,6 +27,7 @@ services:
     cap_drop:
       - ALL
     read_only: true
+    init: true
     pids_limit: ${SLICER_PIDS_LIMIT:-512}
     mem_limit: ${SLICER_MEMORY_BYTES:-4294967296}
     memswap_limit: ${SLICER_MEMORY_BYTES:-4294967296}

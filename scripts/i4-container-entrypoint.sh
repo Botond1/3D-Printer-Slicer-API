@@ -87,7 +87,7 @@ assert_immutable_profile_directory() {
 for runtime_directory in /app/input /app/output /app/configs/pricing-state /tmp; do
     assert_owned_writable_directory "$runtime_directory"
 done
-for profile_directory in /app/configs/prusa /app/configs/orca; do
+for profile_directory in /app/configs/prusa /app/configs/orca /app/configs/bambu; do
     assert_immutable_profile_directory "$profile_directory"
 done
 

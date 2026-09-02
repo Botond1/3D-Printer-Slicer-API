@@ -5,6 +5,13 @@ const path = require('node:path');
 const { createChildEnvironment } = require('./child-environment');
 
 const DEFAULT_GRACE_MS = 1000;
+/**
+ * Settle budget after SIGKILL. A killed group still needs the kernel to reap
+ * every member, and a large native slicer with many threads can take well
+ * over one second to disappear from the process table. This must stay below
+ * the container stop grace (30 s) so a quarantine can still exit in time.
+ */
+const DEFAULT_KILL_SETTLE_MS = 10_000;
 const DEFAULT_POLL_MS = 20;
 
 function isSafeChildPid(pid, ownPid = process.pid) {
@@ -90,8 +97,14 @@ async function terminatePosix(pid, dependencies) {
     const termDeadline = dependencies.now() + dependencies.graceMs;
     if (await waitForPosixGroupExit(pid, termDeadline, dependencies)) return;
     sendPosixSignal(pid, 'SIGKILL', dependencies);
-    const killDeadline = dependencies.now() + dependencies.graceMs;
-    if (!await waitForPosixGroupExit(pid, killDeadline, dependencies)) {
+    const killDeadline = dependencies.now() + dependencies.killSettleMs;
+    if (await waitForPosixGroupExit(pid, killDeadline, dependencies)) return;
+    // One repeated forced pass before giving up: a member forked between the
+    // first SIGKILL and the poll, or a slow reap, must not quarantine the
+    // whole runtime when a second signal settles the group.
+    sendPosixSignal(pid, 'SIGKILL', dependencies);
+    const retryDeadline = dependencies.now() + dependencies.killSettleMs;
+    if (!await waitForPosixGroupExit(pid, retryDeadline, dependencies)) {
         throw new Error('Process group did not settle after forced termination.');
     }
 }
@@ -144,6 +157,10 @@ function createProcessTreeTerminator(child, overrides = {}) {
         setTimeout: overrides.setTimeout || setTimeout,
         pollMs: overrides.pollMs ?? DEFAULT_POLL_MS,
         graceMs: overrides.graceMs ?? DEFAULT_GRACE_MS,
+        killSettleMs: overrides.killSettleMs ?? Math.max(
+            DEFAULT_KILL_SETTLE_MS,
+            overrides.graceMs ?? DEFAULT_GRACE_MS
+        ),
         childEnvironment,
         taskkillPath: overrides.taskkillPath
             || (platform === 'win32' ? resolveTaskkillPath(childEnvironment) : null)
@@ -158,10 +175,16 @@ function createProcessTreeTerminator(child, overrides = {}) {
             return terminationPromise;
         }
         if (hasChildExited(child)) {
-            if (dependencies.platform === 'win32' || isPosixGroupAlive(pid, dependencies.kill)) {
+            if (dependencies.platform === 'win32') {
                 terminationPromise = Promise.reject(
                     new Error('Process-tree identity was lost before termination could be verified.')
                 );
+            } else if (isPosixGroupAlive(pid, dependencies.kill)) {
+                // The direct child is gone but its process group still has
+                // members (orphaned grandchildren). The group id stays valid
+                // while any member lives, so terminate the group instead of
+                // refusing and leaving a live orphan behind.
+                terminationPromise = terminatePosix(pid, dependencies);
             } else {
                 terminationPromise = Promise.resolve();
             }
@@ -177,6 +200,8 @@ function createProcessTreeTerminator(child, overrides = {}) {
 }
 
 module.exports = {
+    DEFAULT_GRACE_MS,
+    DEFAULT_KILL_SETTLE_MS,
     createProcessTreeTerminator,
     isSafeChildPid,
     hasChildExited

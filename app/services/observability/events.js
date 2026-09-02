@@ -20,6 +20,7 @@ const EVENT_NAMES = Object.freeze([
     'native.quarantined',
     'native.started',
     'native.termination_settled',
+    'orientation.fallback',
     'pricing.mutated',
     'profile_catalogue.changed',
     'queue.admitted',

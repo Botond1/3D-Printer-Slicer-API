@@ -15,10 +15,17 @@ You are the documentation syncer for the 3D Printer Slicer API.
 You own ALL documentation and instruction files:
 
 ### Global instruction files
-- `CLAUDE.md` — Root Claude operating guide
+- `CLAUDE.md` — Root Claude operating guide; its "Current contract" section states every retained hard rule once with exact numbers
 - `.claude/CLAUDE.md` — Claude-specific instructions
 - `.github/copilot-instructions.md` — Copilot global instructions
-- `README.md` — Public-facing repository documentation
+- `AGENTS.md` — Codex routing layer (current state plus rules; links, never a third mirror)
+- `README.md` — Public-facing repository documentation (lean, <= 450 lines)
+
+### Contract and handoff documents
+- `docs/integration-guide.md` — Consumer contract (WooCommerce plugin, LeadPilot); update whenever a request field, response field, error code, budget, or engine changes
+- `docs/codex/handoff-<date>.md` — Dated operator handoff; add a new one instead of rewriting the previous
+- `docs/codex/history-waves.md` — Verbatim pre-3.2.0 wave narrative; never edit, never move content back into README or CLAUDE.md
+- `CHANGELOG.md` — Release entries mark consumer-visible changes as **[contract]**
 
 ### Folder-local instruction files
 - `app/CLAUDE.md` — App folder local guide

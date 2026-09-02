@@ -1,0 +1,42 @@
+{
+    "type": "filament",
+    "setting_id": "ORCA_FIL_ABS_LOCAL",
+    "name": "Generic ABS @R3D",
+    "from": "user",
+    "instantiation": "true",
+    "inherits": "fdm_filament_abs",
+    "filament_type": [
+        "ABS"
+    ],
+    "filament_vendor": [
+        "Generic"
+    ],
+    "filament_density": [
+        "1.04"
+    ],
+    "filament_diameter": [
+        "1.75"
+    ],
+    "filament_cost": [
+        "20"
+    ],
+    "nozzle_temperature": [
+        "250"
+    ],
+    "nozzle_temperature_initial_layer": [
+        "250"
+    ],
+    "hot_plate_temp": [
+        "100"
+    ],
+    "hot_plate_temp_initial_layer": [
+        "100"
+    ],
+    "compatible_printers": [
+        "MyMarlin 0.4 nozzle",
+        "MyH2D 0.4 nozzle"
+    ],
+    "filament_max_volumetric_speed": [
+        "12"
+    ]
+}

@@ -1,0 +1,5 @@
+{
+    "type": "machine",
+    "name": "Missing Parent",
+    "inherits": "Does Not Exist"
+}

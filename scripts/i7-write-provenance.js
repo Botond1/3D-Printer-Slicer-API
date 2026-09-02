@@ -158,8 +158,10 @@ function verifyPinnedInputs(dockerfileSource, swiperSource) {
     for (const [name, value] of [
         ['PRUSA_APPIMAGE_URL', EXACT_SLICERS.prusa.url],
         ['ORCA_APPIMAGE_URL', EXACT_SLICERS.orca.url],
+        ['BAMBU_APPIMAGE_URL', EXACT_SLICERS.bambu.url],
         ['PRUSA_APPIMAGE_SHA256', EXACT_SLICERS.prusa.sha256],
         ['ORCA_APPIMAGE_SHA256', EXACT_SLICERS.orca.sha256],
+        ['BAMBU_APPIMAGE_SHA256', EXACT_SLICERS.bambu.sha256],
         ['SWIPER_VENDOR_URL', EXACT_SWIPER.url]
     ]) {
         requireSingleExactLine(dockerfileLines, `ARG ${name}=`, `ARG ${name}="${value}"`);

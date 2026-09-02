@@ -6,18 +6,26 @@ const path = require('node:path');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { getRate } = require('../pricing.service');
 const { roundDimensions, roundToThree } = require('./common');
+const { getBambuPrinter } = require('./bambu-printer-registry');
 const RESOURCE_POLICY = resolveResourcePolicy(process.env);
+
+const MINIMUM_BILLABLE_SECONDS = 900;
 
 /**
  * Price calculator strategy: minimum quarter-hour billing with upward rounding to nearest 10 HUF.
+ *
+ * The arithmetic stays in integers: `seconds * rate / 3600` is computed before
+ * any division so an exact multiple of 10 (1980 s at 800 HUF/h is exactly 440)
+ * is not pushed to the next step by floating-point noise. The former
+ * hours-first formula produced 440.00000000000006 and billed 450.
  * @param {number} hourlyRate Hourly material rate.
  * @param {{print_time_seconds: number}} stats Parsed print stats.
  * @returns {number} Calculated total price in HUF.
  */
 function calculateQuarterHourMinimumPrice(hourlyRate, stats) {
-    const printHours = stats.print_time_seconds / 3600;
-    const calcHours = Math.max(printHours, 0.25);
-    return Math.ceil((calcHours * hourlyRate) / 10) * 10;
+    const billableSeconds = Math.max(Number(stats.print_time_seconds), MINIMUM_BILLABLE_SECONDS);
+    const exactPrice = Math.ceil((billableSeconds * hourlyRate) / 3600);
+    return Math.ceil(exactPrice / 10) * 10;
 }
 
 const PRICING_STRATEGIES = Object.freeze({
@@ -97,8 +105,55 @@ function mapOrcaProfileResponse(context) {
     };
 }
 
+function requirePositiveFilamentMetadata(metadata, label) {
+    if (
+        !metadata
+        || !Number.isFinite(metadata.diameterMm)
+        || metadata.diameterMm <= 0
+        || !Number.isFinite(metadata.densityGcm3)
+        || metadata.densityGcm3 <= 0
+    ) {
+        throw new Error(`Selected ${label} filament profile metadata is unavailable.`);
+    }
+    return metadata;
+}
+
+/**
+ * Bambu selections are vendor profile NAMES rather than repository file paths,
+ * so the public payload echoes them verbatim together with the registry printer
+ * id and bed type that selected them.
+ */
+function mapBambuProfileResponse(context) {
+    const printer = context.profileOverrides?.bambuPrinter;
+    if (typeof printer !== 'string' || !printer) {
+        throw new Error('Bambu printer selection is unavailable.');
+    }
+    const bedType = getBambuPrinter(printer).bedType;
+    for (const [field, label] of [
+        ['orcaMachineConfigFile', 'machine'],
+        ['baseConfigFile', 'process'],
+        ['orcaFilamentConfigFile', 'filament']
+    ]) {
+        if (typeof context[field] !== 'string' || !context[field]) {
+            throw new Error(`Bambu ${label} profile selection is unavailable.`);
+        }
+    }
+    const metadata = requirePositiveFilamentMetadata(context.filamentProfileMetadata, 'Bambu');
+    return {
+        printer,
+        machine_profile: context.orcaMachineConfigFile,
+        process_profile: context.baseConfigFile,
+        filament_profile: context.orcaFilamentConfigFile,
+        filament_diameter_mm: metadata.diameterMm,
+        filament_density_g_cm3: metadata.densityGcm3,
+        bed_type: bedType,
+        effective_profile_sha256: requireEffectiveProfileSha256(context.effectiveProfileSha256)
+    };
+}
+
 const PROFILE_RESPONSE_MAPPERS = Object.freeze({
     orca: mapOrcaProfileResponse,
+    bambu: mapBambuProfileResponse,
     prusa: (context) => ({
         prusa_profile: path.basename(context.baseConfigFile),
         effective_profile_sha256: requireEffectiveProfileSha256(context.effectiveProfileSha256)
@@ -138,7 +193,7 @@ function isExactMeasuredDimensions(value) {
 
 /**
  * Resolve profile payload mapper based on selected slicing engine.
- * @param {'prusa'|'orca'} engine Engine key.
+ * @param {'prusa'|'orca'|'bambu'} engine Engine key.
  * @returns {(context: {baseConfigFile: string, orcaMachineConfigFile: string | null}) => Record<string, string>} Mapper function.
  */
 function resolveProfileMapper(engine) {
@@ -146,12 +201,42 @@ function resolveProfileMapper(engine) {
 }
 
 /**
+ * Whether the request-controlled support flag is on. Omission keeps the
+ * historical always-on behaviour; only an explicit boolean false disables it.
+ * @param {unknown} value Parsed request value.
+ * @returns {boolean} Effective support flag.
+ */
+function resolveSupportsFlag(value) {
+    return value !== false;
+}
+
+/**
+ * Bambu Studio responses publish the API-owned bed placement because
+ * `--arrange 0` keeps the STL coordinates exactly; other engines place
+ * natively and expose nothing. A Bambu response without a placement is a
+ * pipeline defect and fails closed instead of implying native arrangement.
+ * @param {'prusa'|'orca'|'bambu'} engine Engine key.
+ * @param {{x_min?: unknown, y_min?: unknown}|null|undefined} placement Chosen placement.
+ * @returns {{placement_mm: {x_min: number, y_min: number}}|{}} Optional response fragment.
+ */
+function resolvePlacementResponse(engine, placement) {
+    if (engine !== 'bambu') return {};
+    const xMin = Number(placement?.x_min);
+    const yMin = Number(placement?.y_min);
+    if (!placement || !Number.isFinite(xMin) || !Number.isFinite(yMin)) {
+        throw new Error('Bambu placement is unavailable.');
+    }
+    return { placement_mm: { x_min: roundToThree(xMin), y_min: roundToThree(yMin) } };
+}
+
+/**
  * Build successful slice response payload.
  * @param {{
- * engine: 'prusa'|'orca',
+ * engine: 'prusa'|'orca'|'bambu',
  * technology: 'FDM'|'SLA',
  * material: string,
  * infillPercentage: string,
+ * supports?: boolean,
  * orcaMachineConfigFile: string | null,
  * orcaFilamentConfigFile: string | null,
  * filamentProfileMetadata: {diameterMm: number, densityGcm3: number} | null,
@@ -198,7 +283,11 @@ function buildSliceSuccessResponse(context) {
     }
 
     const profiles = resolveProfileMapper(engine)(context);
-    const requiresManualPricing = (technology === 'FDM' &&
+    // SLA is never priced automatically: its print time is an uncalibrated
+    // estimate and no resin mass is measured, so hourly rate and price stay
+    // null and the response never publishes a resin mass either.
+    const requiresManualPricing = technology === 'SLA' ||
+        (technology === 'FDM' &&
         (!Number.isFinite(stats.material_used_g) || stats.material_used_g <= 0)) ||
         (engine === 'orca' && profiles.filament_profile === null);
     const { hourlyRate, totalPrice } = requiresManualPricing
@@ -214,6 +303,7 @@ function buildSliceSuccessResponse(context) {
         technology,
         material,
         infill: infillPercentage,
+        supports: resolveSupportsFlag(context.supports),
         profiles,
         model_transform: modelTransform,
         build_volume_limits_mm: {
@@ -221,9 +311,11 @@ function buildSliceSuccessResponse(context) {
             max: roundDimensions(buildVolumeLimits.max),
             source_profile: buildVolumeLimits.sourceProfile
         },
+        ...resolvePlacementResponse(engine, context.placement),
         hourly_rate: hourlyRate,
         stats: {
             ...stats,
+            ...(technology === 'SLA' ? { material_used_g: null } : {}),
             object_height_mm: finalHeight,
             estimated_price_huf: totalPrice
         }
@@ -231,10 +323,15 @@ function buildSliceSuccessResponse(context) {
 }
 
 module.exports = {
+    MINIMUM_BILLABLE_SECONDS,
     buildSliceSuccessResponse,
+    calculateQuarterHourMinimumPrice,
     calculateSlicePricing,
+    mapBambuProfileResponse,
     mapOrcaProfileResponse,
     requireEngineVersion,
+    resolvePlacementResponse,
     resolveProfileMapper,
-    resolvePricingStrategy
+    resolvePricingStrategy,
+    resolveSupportsFlag
 };

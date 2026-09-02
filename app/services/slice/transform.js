@@ -5,7 +5,7 @@
 const { randomBytes } = require('node:crypto');
 const fs = require('node:fs/promises');
 const { PYTHON_EXECUTABLE } = require('../../config/python');
-const { runCommand, throwIfAborted } = require('./command');
+const { runCommand, throwIfAborted, PYTHON_HELPER_TIMEOUT_MS } = require('./command');
 const { resolvePythonHelper } = require('./helper-paths');
 const {
     MODEL_INFO_MEASUREMENT_STATUSES,
@@ -16,7 +16,7 @@ const {
     isPositiveModelMeasurement
 } = require('./model-stats');
 const { validateModelDimensionsAgainstLimits } = require('./profiles');
-const { roundDimensions } = require('./common');
+const { roundDimensions, roundToThree } = require('./common');
 const {
     buildModelTransformContract,
     createOrientationState,
@@ -84,6 +84,14 @@ function hasTargetSizing(targetSizeMm) {
 
 /**
  * Build uniform scale factors from proportional target sizing.
+ *
+ * Fit-within-box semantics: every requested axis contributes one ratio
+ * `target / base`, and the single uniform factor is the minimum of those
+ * ratios. The scaled model therefore never exceeds any requested axis; when
+ * several axes are given, at most one of them is met exactly and the others
+ * come out smaller. A requested axis whose ratio is non-finite or not
+ * strictly positive (NaN, zero, negative, or a zero base dimension) is
+ * rejected instead of being silently skipped.
  * @param {{x: number, y: number, z: number}} baseDimensions Current model dimensions.
  * @param {{x: number | null, y: number | null, z: number | null}} targetSizeMm Requested target size in millimeters.
  * @returns {{isValid: true, scale: {x: number, y: number, z: number}} | {isValid: false, error: string}} Scale result.
@@ -95,14 +103,14 @@ function buildProportionalScale(baseDimensions, targetSizeMm) {
     if (targetSizeMm.y !== null) ratios.push(targetSizeMm.y / baseDimensions.y);
     if (targetSizeMm.z !== null) ratios.push(targetSizeMm.z / baseDimensions.z);
 
-    const factor = ratios.find((value) => Number.isFinite(value) && value > 0);
-    if (!factor) {
+    if (ratios.length === 0 || !ratios.every((value) => Number.isFinite(value) && value > 0)) {
         return {
             isValid: false,
             error: 'Invalid proportional scaling ratio derived from target size values.'
         };
     }
 
+    const factor = Math.min(...ratios);
     return {
         isValid: true,
         scale: { x: factor, y: factor, z: factor }
@@ -210,6 +218,47 @@ function buildModelTransformPlan(modelInfo, transformOptions) {
     };
 }
 
+/** Identity scale/rotation used by the placement-only helper pass. */
+const IDENTITY_TRANSFORM_PLAN = Object.freeze({
+    scale: Object.freeze({ x: 1, y: 1, z: 1 }),
+    rotationDeg: Object.freeze({ x: 0, y: 0, z: 0 })
+});
+
+/**
+ * Run `scale_model.py` once. The optional placement appends the explicit
+ * `--place-min-x`/`--place-min-y` pair, which translates the already scaled,
+ * rotated, and grounded mesh so its bounding-box minimum corner lands on the
+ * given coordinates (Z stays grounded).
+ * @param {string} inputPath Contained input STL path.
+ * @param {string} outputPath Contained output STL path.
+ * @param {{scale: {x: number, y: number, z: number}, rotationDeg: {x: number, y: number, z: number}}} transformPlan Transform plan.
+ * @param {{xMin: number, yMin: number}|null} placement Optional placement.
+ * @param {AbortSignal} [signal] Request cancellation signal.
+ * @returns {Promise<string>} Output STL path.
+ */
+async function runScaleModelHelper(inputPath, outputPath, transformPlan, placement, signal) {
+    const args = [transformPlan.scale.x, transformPlan.scale.y, transformPlan.scale.z,
+        transformPlan.rotationDeg.x, transformPlan.rotationDeg.y, transformPlan.rotationDeg.z]
+        .map((value) => Number.parseFloat(value).toString());
+    if (placement) {
+        for (const [flag, value] of [['--place-min-x', placement.xMin], ['--place-min-y', placement.yMin]]) {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) throw new Error('Model placement coordinates must be finite.');
+            args.push(flag, numeric.toString());
+        }
+    }
+
+    await runCommand(PYTHON_EXECUTABLE, [
+        resolvePythonHelper('scale_model.py'), inputPath, outputPath, ...args
+    ], { signal, timeoutMs: PYTHON_HELPER_TIMEOUT_MS });
+    throwIfAborted(signal);
+    const outputStat = await fs.lstat(outputPath);
+    if (!outputStat.isFile() || outputStat.isSymbolicLink()) {
+        throw new Error('Model transform did not produce a safe STL file.');
+    }
+    return outputPath;
+}
+
 /**
  * Execute Python-based scale/rotation transform for STL model.
  * @param {string} inputPath Input STL path.
@@ -221,20 +270,24 @@ function buildModelTransformPlan(modelInfo, transformOptions) {
 async function applyModelTransform(inputPath, transformPlan, workspace, suffixFactory, signal) {
     throwIfAborted(signal);
     const transformedPath = resolveTransformedPath(inputPath, workspace, suffixFactory);
+    return runScaleModelHelper(inputPath, transformedPath, transformPlan, null, signal);
+}
 
-    const args = [transformPlan.scale.x, transformPlan.scale.y, transformPlan.scale.z,
-        transformPlan.rotationDeg.x, transformPlan.rotationDeg.y, transformPlan.rotationDeg.z]
-        .map((value) => Number.parseFloat(value).toString());
-
-    await runCommand(PYTHON_EXECUTABLE, [
-        resolvePythonHelper('scale_model.py'), inputPath, transformedPath, ...args
-    ], { signal });
+/**
+ * Translate the final model onto its API-owned bed placement (Bambu only).
+ * Runs after the bounds check, on the already sized/rotated STL, so the
+ * dimensions the placement was decided on are exactly the ones translated.
+ * @param {string} inputPath Final contained STL path.
+ * @param {{xMin: number, yMin: number}} placement Chosen placement.
+ * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {() => string} [suffixFactory] Server-generated suffix factory.
+ * @param {AbortSignal} [signal] Request cancellation signal.
+ * @returns {Promise<string>} Placed STL path.
+ */
+async function applyModelPlacement(inputPath, placement, workspace, suffixFactory, signal) {
     throwIfAborted(signal);
-    const transformedStat = await fs.lstat(transformedPath);
-    if (!transformedStat.isFile() || transformedStat.isSymbolicLink()) {
-        throw new Error('Model transform did not produce a safe STL file.');
-    }
-    return transformedPath;
+    const placedPath = resolveTransformedPath(inputPath, workspace, suffixFactory, 'placed');
+    return runScaleModelHelper(inputPath, placedPath, IDENTITY_TRANSFORM_PLAN, placement, signal);
 }
 
 /**
@@ -242,15 +295,19 @@ async function applyModelTransform(inputPath, transformPlan, workspace, suffixFa
  * @param {string} inputPath Contained STL input path.
  * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
  * @param {() => string} [suffixFactory] Server-generated suffix factory.
+ * @param {'scaled'|'placed'} [label='scaled'] Stable server-owned stage label.
  * @returns {string} Contained transform output path.
  */
-function resolveTransformedPath(inputPath, workspace, suffixFactory = () => randomBytes(8).toString('hex')) {
+function resolveTransformedPath(inputPath, workspace, suffixFactory = () => randomBytes(8).toString('hex'), label = 'scaled') {
     workspace.assertContainedPath(inputPath);
     const suffix = String(suffixFactory());
     if (!/^[a-f0-9]{16}$/i.test(suffix)) {
         throw new Error('Invalid server-generated transform suffix.');
     }
-    return workspace.assertContainedPath(inputPath.replace(/\.stl$/i, `_scaled_${suffix}.stl`));
+    if (label !== 'scaled' && label !== 'placed') {
+        throw new Error('Invalid server-generated transform label.');
+    }
+    return workspace.assertContainedPath(inputPath.replace(/\.stl$/i, `_${label}_${suffix}.stl`));
 }
 
 /**
@@ -258,12 +315,12 @@ function resolveTransformedPath(inputPath, workspace, suffixFactory = () => rand
  * @param {string} processableFile STL candidate path.
  * @param {{status: 'measured'|'unavailable', modelInfo: {x: number, y: number, z: number, height_mm: number}|null}|{x: number|string, y: number|string, z: number|string, height_mm?: number}} orientedModelMeasurement Post-orientation measurement. A raw object is accepted only for direct/unit compatibility.
  * @param {{unit: 'mm'|'inch', keepProportions: boolean, requestedTargetSize: {x: number | null, y: number | null, z: number | null}, targetSizeMm: {x: number | null, y: number | null, z: number | null}, scalePercent: number | null, rotationDeg: {x: number, y: number, z: number}}} transformOptions Parsed transform options.
- * @param {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string}} buildVolumeLimits Printer limits.
+ * @param {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string, bedGeometry?: object}} buildVolumeLimits Printer limits. Limits carrying `bedGeometry` (Bambu) are validated by placement and the accepted model is translated onto that placement.
  * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
  * @param {AbortSignal} [signal] Request cancellation signal.
  * @param {{orientation?: Readonly<Record<string, unknown>>, originalModelMeasurement?: Record<string, unknown>, originalModelInfo?: Record<string, number>}} [transformContext] Orientation and original-measurement provenance used by the versioned response contract. `originalModelInfo` is a direct/unit compatibility seam.
  * @returns {Promise<
- *   {isValid: true, processableFile: string, transformPlan: Record<string, unknown>, modelTransform: Record<string, unknown>, effectiveModelInfo: {x: number, y: number, z: number, height_mm: number}, modelBoundsValidation: {isValid: true, dimensions: {x: number, y: number, z: number}}}
+ *   {isValid: true, processableFile: string, transformPlan: Record<string, unknown>, modelTransform: Record<string, unknown>, effectiveModelInfo: {x: number, y: number, z: number, height_mm: number}, modelBoundsValidation: {isValid: true, dimensions: {x: number, y: number, z: number}}, placement: {x_min: number, y_min: number}|null}
  *   | {isValid: false, status: number, response: {success: false, error: string, errorCode: string, model_dimensions_mm?: {x: number, y: number, z: number}, model_transform?: Record<string, unknown>, build_volume_limits_mm?: {min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, source_profile: string}}}
  * >} Validation result.
  */
@@ -353,18 +410,42 @@ async function applyTransformAndValidateModel(
         };
     }
 
+    let placement = null;
+    if (modelBoundsValidation.placement) {
+        // Bambu only: the bounds check chose a placement on the real bed shape;
+        // translate the final STL onto it because `--arrange 0` keeps the
+        // coordinates exactly. Translation does not change any dimension, so
+        // the measured final dimensions and the transform contract stay valid.
+        transformedFilePath = await applyModelPlacement(
+            transformedFilePath,
+            modelBoundsValidation.placement,
+            workspace,
+            undefined,
+            signal
+        );
+        throwIfAborted(signal);
+        placement = {
+            x_min: roundToThree(modelBoundsValidation.placement.xMin),
+            y_min: roundToThree(modelBoundsValidation.placement.yMin)
+        };
+    }
+
     return {
         isValid: true,
         processableFile: transformedFilePath,
         transformPlan,
         modelTransform,
         effectiveModelInfo,
-        modelBoundsValidation
+        modelBoundsValidation,
+        placement
     };
 }
 
 module.exports = {
+    applyModelPlacement,
     applyTransformAndValidateModel,
+    buildModelTransformPlan,
+    buildProportionalScale,
     normalizeDirectModelMeasurement,
     resolveTransformedPath
 };

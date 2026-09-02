@@ -14,13 +14,13 @@ You are the JavaScript developer for the 3D Printer Slicer API.
 
 ## Your Scope
 You own all Node.js + Express code inside `app/`:
-- `app/server.js` — Express bootstrap, middleware, Swagger, route registration
-- `app/routes/` — route definitions (slice.routes.js, pricing.routes.js, system.routes.js)
-- `app/middleware/` — rateLimit.js, requireAdmin.js
-- `app/services/` — admin-output.service.js, pricing.service.js, slice.service.js, and slice/* pipeline modules
-- `app/config/` — constants.js, paths.js
-- `app/docs/` — swagger-docs.js (OpenAPI generation)
-- `app/utils/` — logger.js
+- `app/server.js` — Express bootstrap, middleware, Swagger, startup guards (three engine versions, Bambu registry/vendor chain), route registration
+- `app/routes/` — slice.routes.js (`/prusa/slice`, `/orca/slice`, `/bambu/slice`), render.routes.js (`/render`), upload-lifecycle.js, pricing.routes.js, profile-catalogue.routes.js, system.routes.js, admin-download.handlers.js
+- `app/middleware/` — rateLimit.js (principal-keyed token bucket), requireSliceService.js, requireAudience.js, requireAdmin.js, corsPolicy.js, requestId.js, requestObservability.js, errorHandler.js
+- `app/services/` — slice.service.js, render.service.js, admin-output.service.js, pricing.service.js (+ pricing/), readiness.service.js, runtime-lifecycle.js, http-server.js, artifact-*.js, observability/, and slice/* pipeline modules (including bambu-printer-registry.js, bambu-profile-chain.js, bambu-bed-geometry.js, bambu-placement.js)
+- `app/config/` — constants.js, resource-policy.js, service-auth.js, route-policy.js, trust-proxy.js, paths.js, python.js
+- `app/docs/` — swagger-docs.js plus the per-surface OpenAPI modules (slice, render, pricing, profile-catalogue, admin, system)
+- `app/utils/` — logger.js, client-ip.js, bounded-file.js
 
 ## Hard Constraints (Non-negotiable)
 1. **Root-scoped runtime dirs only.** Use `input/`, `output/`, `configs/` at repo root. NEVER introduce `app/input`, `app/output`, or `app/configs`.
@@ -42,39 +42,48 @@ You own all Node.js + Express code inside `app/`:
 6. **Upload field name must remain `choosenFile`.**
 7. **Keep response vocabulary stable.** Clients depend on exact error-code
    strings. Every successful slice requires actual-selected-executable
-   `engine_version` and lowercase `profiles.effective_profile_sha256`; the
-   bounds error requires both dimension payloads, and the live
+   `engine_version`, lowercase `profiles.effective_profile_sha256`,
+   `supports`, the schema-2 `model_transform`, inclusive
+   `build_volume_limits_mm`, and (Bambu) `placement_mm`; the bounds error
+   requires both dimension payloads plus the same transform, and the live
    `MODEL_DIMENSIONS_UNAVAILABLE` code stays in the general 422 branch. Keep the
-   complete live slice-500 enum: `INTERNAL_PROCESSING_ERROR`,
-   `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
+   400 codes `INVALID_SUPPORTS`, `INVALID_INFILL`, `INVALID_PRINTER_PROFILE`,
+   `INVALID_PROCESS_PROFILE`, `MATERIAL_PROFILE_UNAVAILABLE`, the 422 code
+   `UNSLICEABLE_SOURCE_GEOMETRY`, and the complete live slice-500 enum:
+   `SLICE_OUTPUT_UNPARSED`, `NATIVE_OUTPUT_OVERFLOW`,
+   `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
+   and `INTERNAL_SERVER_ERROR`. Every 429 carries `Retry-After`.
 8. **Preserve selected-profile byte continuity.** Snapshot canonical regular
-   Prusa bytes and the allowlisted flattened versioned repository copy of the
-   Orca v2.3.1 parent chain into job scratch before bounds/runtime use; keep
-   original child basenames in public metadata. Preserve the Docker build
-   equality gate and stable relative-extrusion settings aligned with the pinned
-   machine parent's per-layer `G92 E0` reset.
-9. **Preserve native identity and orientation ownership.** Resolve/cache
-   both engine versions atomically from bounded selected-executable `--help`
-   output before listen; publish neither unless both pass, and keep startup
-   probes telemetry-disabled so they cannot alter slice-native lifecycle
-   metrics/events. Derive Prusa export flags and Orca machine-then-process
-   settings precedence from the same digest-covered policy. Keep Orca at
-   `--arrange 1` / `--orient 0` after preprocessing/bounds checks. Arrangement
-   places already-rotated geometry onto the build plate, while auto-orient stays
-   disabled and cannot replace the requested rotation. Focused command/digest
-   contracts and final exact-image HTTP transform/final-dimensions E2E pass for
-   both principals; the exact local code/image identity is recorded in J0 evidence.
-10. **Do not start blocked W8 work.** Filament-profile identity plus
-   `material_used_g` is `BLOCKED_OWNER_INPUT / NOT_STARTED` until the owner
-   supplies required Bambu reference profile fields.
+   Prusa bytes, the allowlisted flattened versioned repository copy of the
+   Orca v2.3.1 parent chain, and the fail-closed flattened Bambu vendor chain
+   into job scratch before bounds/runtime use; keep original child basenames
+   or vendor names in public metadata. Preserve the Docker build equality gate
+   and stable relative-extrusion settings aligned with the pinned machine
+   parent's per-layer `G92 E0` reset.
+9. **Preserve native identity and orientation ownership.** Resolve/cache all
+   three engine versions atomically from bounded selected-executable `--help`
+   output before listen; publish none unless all pass, and keep startup
+   probes telemetry-disabled. Keep Orca at `--arrange 1 --orient 0` plus one
+   single-token `--allow-rotations=0`, and Bambu at `--arrange 0 --orient 0`
+   with API-owned placement (`bambu-placement.js`, `scale_model.py
+   --place-min-x/--place-min-y`) and never `--allow-rotations`. No native
+   engine may add an unreported rotation.
+10. **Keep the numbers that clients see.** Integer quarter-hour price rounding
+   (`ceil(max(s, 900) * rate / 3600)` rounded up to 10 HUF; 1980 s at 800 HUF/h
+   is 440), `total_estimated_time` ranked first, direct-marker-only
+   `material_used_g`, SLA always `null` mass/rate/price, an authoritative
+   pricing file, keep-alive default 95000 ms (max 120000), and the measured
+   inclusive ceilings in `app/config/constants.js`.
 
 ## Engine Rules
-- Prusa: layer heights 0.025, 0.05 (SLA), 0.1, 0.2, 0.3 (FDM)
-- Orca: FDM only, layer heights 0.1, 0.2, 0.3, requires machine+process profile compatibility
+- Prusa: layer heights 0.025, 0.05 (SLA, quote-only), 0.1, 0.2, 0.3 (FDM)
+- Orca: FDM only, layer heights 0.1, 0.2, 0.3, requires machine+process profile compatibility; PLA/PETG/ABS/TPU filament profiles
+- Bambu: FDM only, printers `P1S` (default) and `H2D` from `configs/bambu/printers.json`, layer keys P1S 0.08/0.1/0.12/0.16/0.2/0.24/0.28 and H2D 0.08/0.1/0.12/0.16/0.2/0.24, vendor `Generic` filaments, `.gcode.3mf` artifact, measured ceilings P1S `256 x 228 x 250` (alternative `238 x 256`) and H2D `325 x 320 x 325`
+- Render: `POST /render` shares the slice limiter/auth/queue and returns a deterministic 1024 x 768 PNG under a 60 s budget
 
 ## Existing Endpoints (keep stable unless explicitly changing)
-Public: GET /health, GET /ready, GET /pricing, GET /openapi.json, GET /docs, GET /
-Slice: POST /prusa/slice, POST /orca/slice
+Public: GET /health, GET /ready, GET /pricing, GET /profiles, GET /openapi.json, GET /docs, GET /
+Slice: POST /prusa/slice, POST /orca/slice, POST /bambu/slice, POST /render
 Pricing: POST /pricing/FDM, POST /pricing/SLA, PATCH /pricing/:technology/:material, DELETE /pricing/:technology/:material
 Artifact: GET /admin/output-files, GET /admin/download/:fileName
 Operations: GET /health/detailed, GET /operations/readiness, GET /operations/metrics

@@ -6,12 +6,10 @@ const express = require('express');
 const requireAdmin = require('../middleware/requireAdmin');
 const { adminRateLimiter } = require('../middleware/rateLimit');
 const { emitEvent } = require('../services/observability/events');
+const defaultPricingService = require('../services/pricing.service');
+const { LAST_MATERIAL_PROTECTED, assertNotLastMaterial } = require('../services/pricing/catalog');
 const {
-    getPricing,
-    commitPricingMutation,
-    findMaterialKey
-} = require('../services/pricing.service');
-const {
+    PRICING_ERROR_CODES,
     parseMaterialOrResponse,
     parsePriceOrResponse,
     parseTechnologyOrResponse,
@@ -41,9 +39,10 @@ function recordPricingMutation(req, technology, action, outcome, errorCode) {
  * @param {import('express').Request} req Express request object.
  * @param {import('express').Response} res Express response object.
  * @param {'FDM'|'SLA'} technology Technology key.
+ * @param {(mutator: Function) => Promise<unknown>} commitPricingMutation Serialized pricing mutation coordinator.
  * @returns {import('express').Response}
  */
-async function createMaterialForTechnology(req, res, technology) {
+async function createMaterialForTechnology(req, res, technology, commitPricingMutation) {
     const materialResult = parseMaterialOrResponse(res, req.body?.material);
     if (materialResult.response) {
         recordPricingMutation(req, technology, 'create', 'failure', 'PRICING_VALIDATION_FAILED');
@@ -74,7 +73,11 @@ async function createMaterialForTechnology(req, res, technology) {
     } catch (error) {
         if (error.code === 'PRICING_CONFLICT') {
             recordPricingMutation(req, technology, 'create', 'failure', 'PRICING_CONFLICT');
-            return res.status(409).json({ success: false, error: error.message });
+            return res.status(409).json({
+                success: false,
+                error: error.message,
+                errorCode: PRICING_ERROR_CODES.MATERIAL_ALREADY_EXISTS
+            });
         }
         recordPricingMutation(req, technology, 'create', 'failure', 'PRICING_PERSISTENCE_FAILED');
         return persistenceFailure(res);
@@ -99,6 +102,9 @@ async function createMaterialForTechnology(req, res, technology) {
 function createPricingRouter(options = {}) {
     const router = express.Router();
     const authenticatePricing = options.authenticate || requireAdmin;
+    // Injectable service seam: tests bind an isolated catalog/repository pair;
+    // production uses the module singleton backed by the root-scoped state.
+    const { getPricing, commitPricingMutation, findMaterialKey } = options.pricingService || defaultPricingService;
 
     router.get('/pricing', (req, res) => {
         res.status(200).json(getPricing());
@@ -110,7 +116,7 @@ function createPricingRouter(options = {}) {
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-    router.post('/pricing/FDM', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'FDM'));
+    router.post('/pricing/FDM', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'FDM', commitPricingMutation));
 
 /**
  * Create a new SLA material.
@@ -118,7 +124,7 @@ function createPricingRouter(options = {}) {
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-    router.post('/pricing/SLA', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'SLA'));
+    router.post('/pricing/SLA', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'SLA', commitPricingMutation));
 
 /**
  * Update an existing material hourly pricing entry.
@@ -154,7 +160,8 @@ function createPricingRouter(options = {}) {
         recordPricingMutation(req, technology, 'update', 'failure', 'PRICING_NOT_FOUND');
         return res.status(400).json({
             success: false,
-            error: 'Material does not exist for this technology. Only existing materials can be updated.'
+            error: 'Material does not exist for this technology. Only existing materials can be updated.',
+            errorCode: PRICING_ERROR_CODES.MATERIAL_NOT_FOUND
         });
     }
 
@@ -175,7 +182,11 @@ function createPricingRouter(options = {}) {
     } catch (error) {
         if (error.code === 'PRICING_NOT_FOUND') {
             recordPricingMutation(req, technology, 'update', 'failure', 'PRICING_NOT_FOUND');
-            return res.status(404).json({ success: false, error: error.message });
+            return res.status(404).json({
+                success: false,
+                error: error.message,
+                errorCode: PRICING_ERROR_CODES.MATERIAL_NOT_FOUND
+            });
         }
         recordPricingMutation(req, technology, 'update', 'failure', 'PRICING_PERSISTENCE_FAILED');
         return persistenceFailure(res);
@@ -214,7 +225,11 @@ function createPricingRouter(options = {}) {
     const materialKey = findMaterialKey(technology, materialParam);
     if (!materialKey) {
         recordPricingMutation(req, technology, 'delete', 'failure', 'PRICING_NOT_FOUND');
-        return res.status(404).json({ success: false, error: 'Material not found.' });
+        return res.status(404).json({
+            success: false,
+            error: 'Material not found.',
+            errorCode: PRICING_ERROR_CODES.MATERIAL_NOT_FOUND
+        });
     }
 
     try {
@@ -227,13 +242,30 @@ function createPricingRouter(options = {}) {
                 missing.code = 'PRICING_NOT_FOUND';
                 throw missing;
             }
+            // Readiness requires non-empty FDM and SLA maps; the last material
+            // of a technology is protected so a pricing edit cannot take the
+            // service out of READY. Checked inside the serialized mutation so a
+            // concurrent delete cannot race past it.
+            assertNotLastMaterial(candidate[technology], current);
             delete candidate[technology][current];
             return current;
         });
     } catch (error) {
         if (error.code === 'PRICING_NOT_FOUND') {
             recordPricingMutation(req, technology, 'delete', 'failure', 'PRICING_NOT_FOUND');
-            return res.status(404).json({ success: false, error: error.message });
+            return res.status(404).json({
+                success: false,
+                error: error.message,
+                errorCode: PRICING_ERROR_CODES.MATERIAL_NOT_FOUND
+            });
+        }
+        if (error.code === LAST_MATERIAL_PROTECTED) {
+            recordPricingMutation(req, technology, 'delete', 'failure', LAST_MATERIAL_PROTECTED);
+            return res.status(409).json({
+                success: false,
+                error: error.message,
+                errorCode: PRICING_ERROR_CODES.LAST_MATERIAL_PROTECTED
+            });
         }
         recordPricingMutation(req, technology, 'delete', 'failure', 'PRICING_PERSISTENCE_FAILED');
         return persistenceFailure(res);

@@ -1,0 +1,8 @@
+{
+    "type": "process",
+    "name": "fdm_process_single_common",
+    "inherits": "fdm_process_common",
+    "from": "system",
+    "instantiation": "false",
+    "single_extruder_multi_material": "1"
+}

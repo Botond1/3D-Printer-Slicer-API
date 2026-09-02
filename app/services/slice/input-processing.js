@@ -6,9 +6,15 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { EXTENSIONS } = require('../../config/constants');
 const { PYTHON_EXECUTABLE } = require('../../config/python');
-const { runCommand, throwIfAborted, isAbortError } = require('./command');
+const {
+    runCommand,
+    throwIfAborted,
+    isAbortError,
+    PYTHON_HELPER_TIMEOUT_MS
+} = require('./command');
 const { resolvePythonHelper } = require('./helper-paths');
 const { inspectThreeMfArchive } = require('./three-mf');
+const { emitEvent } = require('../observability/events');
 const {
     createOrientationState,
     identityRotationMatrix,
@@ -16,6 +22,27 @@ const {
 } = require('./orientation-contract');
 
 const MAX_ORIENTATION_METADATA_BYTES = 4096;
+
+/** Per-call budget for Python helpers; the runner clamps it to the native budget. */
+const HELPER_COMMAND_OPTIONS = Object.freeze({ timeoutMs: PYTHON_HELPER_TIMEOUT_MS });
+
+/**
+ * Classify why the orientation helper could not produce a trusted result.
+ * Only a bounded class is returned; messages, paths, and output are never
+ * forwarded to telemetry.
+ * @param {unknown} error Failure raised while running or reading the helper.
+ * @returns {string} Bounded failure class.
+ */
+function classifyOrientationFailure(error) {
+    if (error === null || error === undefined) return 'ORIENTATION_OUTPUT_MISSING';
+    if (error?.code === 'ETIMEDOUT' || error?.name === 'TimeoutError') return 'ORIENTATION_HELPER_TIMEOUT';
+    if (error?.code === 'NATIVE_OUTPUT_OVERFLOW') return 'ORIENTATION_HELPER_OUTPUT_OVERFLOW';
+    if (error?.code === 'ENOENT') return 'ORIENTATION_OUTPUT_MISSING';
+    if (error?.code === 'ORIENTATION_METADATA_INVALID' || /orientation metadata/i.test(String(error?.message || ''))) {
+        return 'ORIENTATION_METADATA_INVALID';
+    }
+    return 'ORIENTATION_HELPER_FAILED';
+}
 
 /**
  * Convert supported non-STL inputs to STL for downstream slicing.
@@ -37,7 +64,7 @@ async function convertInputToStl(processableFile, workspace, signal) {
         await runCommand(
             PYTHON_EXECUTABLE,
             [resolvePythonHelper('mesh2stl.py'), processableFile, finalStlPath],
-            { signal }
+            { signal, ...HELPER_COMMAND_OPTIONS }
         );
         throwIfAborted(signal);
         if (!await isRegularNonSymlink(finalStlPath)) throw new Error('Converter did not produce a safe STL file.');
@@ -49,7 +76,7 @@ async function convertInputToStl(processableFile, workspace, signal) {
         await runCommand(
             PYTHON_EXECUTABLE,
             [resolvePythonHelper('cad2stl.py'), processableFile, finalStlPath],
-            { signal }
+            { signal, ...HELPER_COMMAND_OPTIONS }
         );
         throwIfAborted(signal);
         if (!await isRegularNonSymlink(finalStlPath)) throw new Error('Converter did not produce a safe STL file.');
@@ -138,17 +165,25 @@ async function readOrientationMetadata(metadataPath, expectedMode, workspace) {
 
 /**
  * Attempt orientation optimization and fall back to original file on failure.
+ *
+ * The fallback keeps the submitted geometry untouched and reports an honest
+ * outcome (`preserved` for preserve mode, `fallback_unmodified` for auto).
+ * Every fallback also emits one bounded `orientation.fallback` event carrying
+ * only the failure class, never helper output or paths.
  * @param {string} processableFile STL input path.
  * @param {'FDM'|'SLA'} technology Active technology mode.
  * @param {'auto'|'preserve'} orientationMode Requested orientation policy.
  * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
  * @param {AbortSignal} [signal] Request cancellation signal.
+ * @param {{emitEvent?: Function}} [dependencies] Injectable telemetry seam.
  * @returns {Promise<{processableFile: string, orientation: Readonly<Record<string, unknown>>}>} Oriented candidate and trusted metadata.
  */
-async function tryOptimizeOrientation(processableFile, technology, orientationMode, workspace, signal) {
+async function tryOptimizeOrientation(processableFile, technology, orientationMode, workspace, signal, dependencies = {}) {
     throwIfAborted(signal);
     const orientedStlPath = resolveOrientedPath(processableFile, workspace);
     const metadataPath = resolveOrientationMetadataPath(orientedStlPath, workspace);
+    const emit = dependencies.emitEvent || emitEvent;
+    let failure = null;
 
     try {
         await runCommand(
@@ -161,7 +196,7 @@ async function tryOptimizeOrientation(processableFile, technology, orientationMo
                 orientationMode,
                 metadataPath
             ],
-            { signal }
+            { signal, ...HELPER_COMMAND_OPTIONS }
         );
         throwIfAborted(signal);
         if (await isRegularNonSymlink(orientedStlPath)) {
@@ -178,11 +213,22 @@ async function tryOptimizeOrientation(processableFile, technology, orientationMo
             throwIfAborted(signal);
             throw error_;
         }
+        failure = error_;
     }
 
     const fallbackOutcome = orientationMode === 'preserve'
         ? 'preserved'
         : 'fallback_unmodified';
+    try {
+        emit('orientation.fallback', {
+            audience: 'slice',
+            outcome: fallbackOutcome,
+            error_code: classifyOrientationFailure(failure),
+            extra: { reason: orientationMode, technology }
+        });
+    } catch {
+        // Telemetry can never alter the fallback contract.
+    }
     return {
         processableFile,
         orientation: createOrientationState(
@@ -194,6 +240,7 @@ async function tryOptimizeOrientation(processableFile, technology, orientationMo
 }
 
 module.exports = {
+    classifyOrientationFailure,
     convertInputToStl,
     tryOptimizeOrientation,
     resolveConvertedPath,

@@ -89,8 +89,14 @@ function dockerfileContract(source) {
         'COPY --chown=0:0 configs/ ./configs/',
         'COPY --chown=0:0 package.json package-lock.json ./'
     ]) assert.ok(runtime.includes(copy), `missing immutable copy contract: ${copy}`);
-    assert.match(runtime, /chown -R root:root \/app \/opt\/venv \/opt\/prusaslicer \/opt\/orcaslicer/);
-    assert.match(runtime, /chmod -R a-w \/app \/opt\/venv \/opt\/prusaslicer \/opt\/orcaslicer/);
+    assert.match(runtime,
+        /chown -R root:root \/app \/opt\/venv \/opt\/prusaslicer \/opt\/orcaslicer \/opt\/bambustudio \\$/m);
+    assert.match(runtime,
+        /chmod -R a-w \/app \/opt\/venv \/opt\/prusaslicer \/opt\/orcaslicer \/opt\/bambustudio \\$/m);
+    assert.match(runtime, /^COPY --from=slicer-base \/tmp\/bambu-squashfs-root \/opt\/bambustudio$/m);
+    assert.match(runtime,
+        /^COPY --chown=0:0 --chmod=0555 scripts\/bambu-studio-wrapper\.sh \/usr\/local\/bin\/bambu-studio$/m);
+    assert.doesNotMatch(runtime, /ln -sf? \/opt\/bambustudio/);
     assert.match(runtime, /mkdir -p input output configs\/pricing-state/);
     assert.match(runtime, /chown slicer:slicer input output configs\/pricing-state/);
     assert.match(runtime, /chmod 0700 input output configs\/pricing-state/);
@@ -126,7 +132,7 @@ function entrypointContract(source) {
     assert.match(source,
         /for runtime_directory in \/app\/input \/app\/output \/app\/configs\/pricing-state \/tmp; do/);
     assert.match(source,
-        /for profile_directory in \/app\/configs\/prusa \/app\/configs\/orca; do/);
+        /for profile_directory in \/app\/configs\/prusa \/app\/configs\/orca \/app\/configs\/bambu; do/);
     assert.match(source, /realpath -e -- "\$profile_directory"/);
     assert.match(source, /stat -c '%A' -- "\$profile_directory"/);
     assert.match(source, /\?\?\?\?\?w\?\?\?\?\|\?\?\?\?\?\?\?\?w\?\) exit 78/);
@@ -173,7 +179,21 @@ test('container-envelope weakening mutations fail the focused contract', async (
         ['runtime HOME routed to immutable passwd home', DOCKERFILE,
             'HOME=/tmp/slicer-home', 'HOME=/home/slicer', dockerfileContract],
         ['immutable chmod removed', DOCKERFILE,
-            '    && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer \\\n', '', dockerfileContract],
+            '    && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer /opt/bambustudio \\\n', '',
+            dockerfileContract],
+        ['Bambu Studio tree left writable', DOCKERFILE,
+            '    && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer /opt/bambustudio \\\n',
+            '    && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer \\\n', dockerfileContract],
+        ['Bambu Studio tree not root-owned', DOCKERFILE,
+            'RUN chown -R root:root /app /opt/venv /opt/prusaslicer /opt/orcaslicer /opt/bambustudio \\\n',
+            'RUN chown -R root:root /app /opt/venv /opt/prusaslicer /opt/orcaslicer \\\n', dockerfileContract],
+        ['Bambu Studio wrapper becomes writable', DOCKERFILE,
+            'COPY --chown=0:0 --chmod=0555 scripts/bambu-studio-wrapper.sh /usr/local/bin/bambu-studio',
+            'COPY --chown=0:0 --chmod=0755 scripts/bambu-studio-wrapper.sh /usr/local/bin/bambu-studio',
+            dockerfileContract],
+        ['Bambu Studio exposed through a bare symlink', DOCKERFILE,
+            'COPY --chown=0:0 --chmod=0555 scripts/bambu-studio-wrapper.sh /usr/local/bin/bambu-studio',
+            'RUN ln -sf /opt/bambustudio/AppRun /usr/local/bin/bambu-studio', dockerfileContract],
         ['world-writable runtime added', DOCKERFILE, 'chmod 0700', 'chmod 0777', dockerfileContract]
     ];
 
@@ -218,6 +238,9 @@ test('service-identity startup guard weakening mutations fail closed', async (t)
         ['profile roots become writable',
             'if [ "$profile_real_path" != "$profile_directory" ] || [ -w "$profile_directory" ]; then',
             'if [ "$profile_real_path" != "$profile_directory" ]; then'],
+        ['bambu profile root dropped from the immutable loop',
+            'for profile_directory in /app/configs/prusa /app/configs/orca /app/configs/bambu; do',
+            'for profile_directory in /app/configs/prusa /app/configs/orca; do'],
         ['job scratch creation removed', '    /tmp/slice-jobs \\\n', ''],
         ['exec semantics removed', 'exec "$@"', '"$@"']
     ];

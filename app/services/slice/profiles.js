@@ -12,6 +12,7 @@ const {
     MAX_BUILD_VOLUMES,
     P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE,
     MIN_BUILD_VOLUMES
 } = require('../../config/constants');
@@ -21,6 +22,17 @@ const { readProfileText, readProfileJson, readIniKeyValues } = require('./profil
 const { parseNumberLike } = require('./value-parsers');
 const { roundToThree } = require('./common');
 const { resolveOrcaFilamentConfigPath } = require('./filament-profile');
+const { parseBambuBedGeometry } = require('./bambu-bed-geometry');
+const { validateBambuPlacementLimits } = require('./bambu-placement');
+const {
+    getBambuPrinter,
+    resolveBambuFilamentName,
+    resolveBambuLayerKey,
+    resolveBambuProcessName
+} = require('./bambu-printer-registry');
+
+const SUPPORT_OFF = '0';
+const SUPPORT_ON = '1';
 
 /**
  * Resolve Orca process profile filename from explicit override, env, or defaults.
@@ -251,11 +263,39 @@ function parseDimensionLimitsFromPrusaProfile(configPath, technology) {
 }
 
 /**
+ * Parse build-volume limits from a flattened Bambu machine snapshot.
+ * The snapshot carries the vendor machine NAME, which is the public
+ * `source_profile` and the key of the measured admission table; the
+ * caller-supplied public source path is ignored on purpose because the
+ * pipeline passes the process selection for non-Orca engines. The declared
+ * dimensions stay the plate `printable_area`/`printable_height` metadata,
+ * while `bedGeometry` carries the real placement shape (first-extruder area
+ * and excluded rectangles) that Bambu admission is decided on.
+ * @param {string} machineSnapshotPath Flattened machine JSON snapshot.
+ * @param {'FDM'|'SLA'} technology Active technology.
+ * @returns {{min: object, max: object, sourceProfile: string, explicitMaxAxes: object, bedGeometry: object}} Parsed limits.
+ */
+function parseDimensionLimitsFromBambuMachineSnapshot(machineSnapshotPath, technology) {
+    if (!machineSnapshotPath || !fs.existsSync(machineSnapshotPath)) {
+        throw new Error('Bambu machine snapshot is required for build-volume limits.');
+    }
+    const limits = parseDimensionLimitsFromOrcaMachineProfile(machineSnapshotPath, technology);
+    const profileData = readProfileJson(machineSnapshotPath);
+    const machineName = profileData.name;
+    if (typeof machineName !== 'string' || !machineName) {
+        throw new Error('Bambu machine snapshot has no vendor name.');
+    }
+    limits.sourceProfile = machineName;
+    limits.bedGeometry = parseBambuBedGeometry(profileData);
+    return limits;
+}
+
+/**
  * Resolve effective build-volume limits for selected engine/profile pair.
- * @param {'prusa'|'orca'} engine Slicer engine key.
+ * @param {'prusa'|'orca'|'bambu'} engine Slicer engine key.
  * @param {'FDM'|'SLA'} technology Active technology.
  * @param {string} configFile Process/profile config file.
- * @param {string | null} orcaMachineConfigFile Orca machine config path.
+ * @param {string | null} orcaMachineConfigFile Orca/Bambu machine config path.
  * @param {string | null} [publicSourceProfileFile=null] Original selected path used only for stable public metadata.
  * @returns {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string, explicitMaxAxes: {x: boolean, y: boolean, z: boolean}}} Resolved limits.
  */
@@ -266,10 +306,15 @@ function resolveBuildVolumeLimits(
     orcaMachineConfigFile,
     publicSourceProfileFile = null
 ) {
-    const limits = engine === 'orca'
-        ? parseDimensionLimitsFromOrcaMachineProfile(orcaMachineConfigFile, technology)
-        : parseDimensionLimitsFromPrusaProfile(configFile, technology);
-    if (publicSourceProfileFile) {
+    let limits;
+    if (engine === 'bambu') {
+        limits = parseDimensionLimitsFromBambuMachineSnapshot(orcaMachineConfigFile, technology);
+    } else if (engine === 'orca') {
+        limits = parseDimensionLimitsFromOrcaMachineProfile(orcaMachineConfigFile, technology);
+    } else {
+        limits = parseDimensionLimitsFromPrusaProfile(configFile, technology);
+    }
+    if (publicSourceProfileFile && engine !== 'bambu') {
         limits.sourceProfile = path.basename(publicSourceProfileFile);
     }
     const declaredMax = { ...limits.max };
@@ -278,8 +323,12 @@ function resolveBuildVolumeLimits(
     const h2dQuoteProfileLimits =
         H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[engine]
         || Object.freeze({});
+    const bambuProfileLimits = engine === 'bambu'
+        ? BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM
+        : Object.freeze({});
     const configuredLargestPassing = knownProfileLimits[limits.sourceProfile]
         || h2dQuoteProfileLimits[limits.sourceProfile]
+        || bambuProfileLimits[limits.sourceProfile]
         || null;
     let largestPassing = configuredLargestPassing
         ? { ...configuredLargestPassing }
@@ -309,9 +358,15 @@ function resolveBuildVolumeLimits(
 
 /**
  * Validate model dimensions against configured printer limits.
+ *
+ * Limits that carry a `bedGeometry` (Bambu) decide X/Y admission by placement
+ * feasibility on the real bed shape and return the chosen placement, so an
+ * L-shaped footprint such as the P1S `238 x 256` is admitted although the
+ * published triple is `256 x 228`. Limits without bed geometry (Prusa, Orca,
+ * preview) keep the per-axis comparison unchanged.
  * @param {{x: number|string, y: number|string, z: number|string}} modelInfo Model dimension payload.
- * @param {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string}} buildVolumeLimits Printer limits.
- * @returns {{isValid: true, dimensions: {x: number, y: number, z: number}} | {isValid: false, dimensions: {x: number, y: number, z: number}, tooSmall: string[], tooLarge: string[]}} Validation result.
+ * @param {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string, bedGeometry?: object}} buildVolumeLimits Printer limits.
+ * @returns {{isValid: true, dimensions: {x: number, y: number, z: number}, placement?: {xMin: number, yMin: number, strategy: string}} | {isValid: false, dimensions: {x: number, y: number, z: number}, tooSmall: string[], tooLarge: string[]}} Validation result.
  */
 function validateModelDimensionsAgainstLimits(modelInfo, buildVolumeLimits) {
     const dimensions = {
@@ -327,6 +382,9 @@ function validateModelDimensionsAgainstLimits(modelInfo, buildVolumeLimits) {
             tooSmall: ['Model dimensions must be finite and positive.'],
             tooLarge: []
         };
+    }
+    if (buildVolumeLimits.bedGeometry) {
+        return validateBambuPlacementLimits(dimensions, buildVolumeLimits);
     }
 
     const axes = ['x', 'y', 'z'];
@@ -359,12 +417,22 @@ function validateModelDimensionsAgainstLimits(modelInfo, buildVolumeLimits) {
 }
 
 /**
+ * Whether the request asked for support generation. Only an explicit boolean
+ * false turns it off; omission keeps the historical always-on behaviour.
+ * @param {{supports?: unknown}} options Runtime options.
+ * @returns {boolean} Effective support flag.
+ */
+function resolveSupports(options) {
+    return options?.supports !== false;
+}
+
+/**
  * Create temporary Orca process profile with runtime overrides.
  * @param {string} baseProcessProfilePath Source process profile path.
  * @param {number} layerHeight Requested layer height.
  * @param {string} infillPercentage Infill override.
  * @param {{resolvePath(...segments: string[]): string, assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
- * @param {{pathFactory?: (defaultPath: string) => string}} [options] Test-only path seam.
+ * @param {{pathFactory?: (defaultPath: string) => string, supports?: boolean}} [options] Test-only path seam and request options.
  * @returns {Promise<string>} Runtime profile path.
  */
 async function createOrcaRuntimeProcessProfile(baseProcessProfilePath, layerHeight, infillPercentage, workspace, options = {}) {
@@ -373,8 +441,44 @@ async function createOrcaRuntimeProcessProfile(baseProcessProfilePath, layerHeig
     profileData.sparse_infill_density = infillPercentage;
     profileData.layer_gcode = '';
     profileData.use_relative_e_distances = '1';
+    // The repository process profiles enable support; the runtime writes the
+    // explicit zero only when the request turns it off so the default runtime
+    // profile (and therefore its digest) stays exactly what it was.
+    if (!resolveSupports(options)) profileData.enable_support = SUPPORT_OFF;
 
     const runtimeProfilePath = resolveRuntimeProfilePath(workspace, 'orca-runtime', '.json', options.pathFactory);
+    await fsPromises.writeFile(runtimeProfilePath, JSON.stringify(profileData, null, 4), {
+        flag: 'wx',
+        mode: 0o600
+    });
+
+    return runtimeProfilePath;
+}
+
+/**
+ * Create the Bambu Studio runtime process profile from the flattened vendor
+ * snapshot: layer height, sparse infill density, and support generation are
+ * the only request-controlled keys, exactly as a GUI user would change them.
+ * @param {string} baseProcessProfilePath Flattened vendor process snapshot.
+ * @param {number} layerHeight Requested layer height.
+ * @param {string} infillPercentage Infill override.
+ * @param {object} workspace Owning workspace.
+ * @param {{pathFactory?: (defaultPath: string) => string, supports?: boolean}} [options] Request options.
+ * @returns {Promise<string>} Runtime profile path.
+ */
+async function createBambuRuntimeProcessProfile(baseProcessProfilePath, layerHeight, infillPercentage, workspace, options = {}) {
+    const profileData = readProfileJson(baseProcessProfilePath);
+    if (!profileData || typeof profileData !== 'object' || Array.isArray(profileData) || profileData.type !== 'process') {
+        throw new Error('Bambu runtime profile requires a flattened process snapshot.');
+    }
+    if (Object.hasOwn(profileData, 'inherits') || Object.hasOwn(profileData, 'include')) {
+        throw new Error('Bambu runtime profile requires a flattened process snapshot.');
+    }
+    profileData.layer_height = `${layerHeight}`;
+    profileData.sparse_infill_density = infillPercentage;
+    profileData.enable_support = resolveSupports(options) ? SUPPORT_ON : SUPPORT_OFF;
+
+    const runtimeProfilePath = resolveRuntimeProfilePath(workspace, 'bambu-runtime', '.json', options.pathFactory);
     await fsPromises.writeFile(runtimeProfilePath, JSON.stringify(profileData, null, 4), {
         flag: 'wx',
         mode: 0o600
@@ -452,6 +556,15 @@ async function createPrusaRuntimeProfile(baseConfigPath, technology, layerHeight
         iniContent = upsertIniKey(iniContent, 'filament_density', `${options.filamentDensityGcm3}`);
     }
 
+    // With supports on, the CLI `--support-material` flags force generation and
+    // the INI is left untouched (so the default digest is unchanged). With
+    // supports off those flags are omitted and the INI must carry explicit
+    // zeros, because the shipped profile enables automatic supports itself.
+    if (technology === 'FDM' && !resolveSupports(options)) {
+        iniContent = upsertIniKey(iniContent, 'support_material', SUPPORT_OFF);
+        iniContent = upsertIniKey(iniContent, 'support_material_auto', SUPPORT_OFF);
+    }
+
     const runtimeProfilePath = resolveRuntimeProfilePath(workspace, 'prusa-runtime', '.ini', options.pathFactory);
     await fsPromises.writeFile(runtimeProfilePath, iniContent, {
         flag: 'wx',
@@ -480,16 +593,19 @@ function resolveRuntimeProfilePath(workspace, prefix, extension, pathFactory) {
 
 /**
  * Create runtime slicer profile for selected engine.
- * @param {'prusa'|'orca'} engine Slicer engine key.
+ * @param {'prusa'|'orca'|'bambu'} engine Slicer engine key.
  * @param {string} baseConfigFile Source config path.
  * @param {'FDM'|'SLA'} technology Active technology.
  * @param {number} layerHeight Requested layer height.
  * @param {string} infillPercentage Infill override.
  * @param {{resolvePath(...segments: string[]): string, assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
- * @param {{pathFactory?: (defaultPath: string) => string}} [options] Test-only path seam.
+ * @param {{pathFactory?: (defaultPath: string) => string, supports?: boolean, filamentDensityGcm3?: number}} [options] Request options and test-only path seam.
  * @returns {Promise<string>} Runtime profile path.
  */
 async function createRuntimeSlicerProfile(engine, baseConfigFile, technology, layerHeight, infillPercentage, workspace, options = {}) {
+    if (engine === 'bambu') {
+        return createBambuRuntimeProcessProfile(baseConfigFile, layerHeight, infillPercentage, workspace, options);
+    }
     if (engine === 'orca') {
         return createOrcaRuntimeProcessProfile(baseConfigFile, layerHeight, infillPercentage, workspace, options);
     }
@@ -498,15 +614,68 @@ async function createRuntimeSlicerProfile(engine, baseConfigFile, technology, la
 }
 
 /**
- * Validate and resolve profile file selection for request.
- * @param {'prusa'|'orca'} engine Slicer engine key.
+ * Resolve the Bambu Studio vendor NAMES for one request from the registry.
+ * The selection fields reuse the generic pipeline shape, but for Bambu they
+ * carry vendor profile names rather than repository file paths; the snapshot
+ * step flattens those names into job-owned JSON before any native use.
  * @param {'FDM'|'SLA'} technology Active technology.
  * @param {number} layerHeight Requested layer height.
- * @param {{prusaProfile?: string | null, orcaMachineProfile?: string | null, orcaProcessProfile?: string | null, orcaFilamentProfile?: string | null}} profileOverrides Profile overrides.
+ * @param {{bambuPrinter?: string|null, bambuProcessProfile?: string|null}} profileOverrides Parsed request selection.
+ * @param {string|null} material Requested material key.
+ * @returns {{isValid: true, baseConfigFile: string, orcaMachineConfigFile: string, orcaFilamentConfigFile: string} | {isValid: false, status: number, response: object}} Selection result.
+ */
+function resolveBambuProfileSelection(technology, layerHeight, profileOverrides, material) {
+    const failure = (error, errorCode) => ({
+        isValid: false,
+        status: 400,
+        response: { success: false, error, errorCode }
+    });
+    if (technology !== 'FDM') {
+        return failure('Bambu Studio supports FDM only.', 'INVALID_LAYER_HEIGHT_FOR_TECHNOLOGY');
+    }
+    const printerId = profileOverrides?.bambuPrinter;
+    let printer;
+    try {
+        printer = getBambuPrinter(printerId);
+    } catch {
+        return failure('Invalid printerProfile for Bambu Studio. Allowed values: P1S, H2D.', 'INVALID_PRINTER_PROFILE');
+    }
+    const layerKey = resolveBambuLayerKey(Number(layerHeight), printerId);
+    if (!layerKey) {
+        return failure(`Invalid layerHeight for Bambu Studio printer ${printerId}.`, 'INVALID_LAYER_HEIGHT');
+    }
+    const processName = resolveBambuProcessName(printerId, layerKey, profileOverrides?.bambuProcessProfile || null);
+    if (!processName) {
+        return failure(`Invalid processProfile for Bambu Studio printer ${printerId}.`, 'INVALID_PROCESS_PROFILE');
+    }
+    const filamentName = resolveBambuFilamentName(printerId, material);
+    if (!filamentName) {
+        return failure(
+            `Material ${material} has no Bambu Studio filament profile for printer ${printerId}.`,
+            'MATERIAL_PROFILE_UNAVAILABLE'
+        );
+    }
+    return {
+        isValid: true,
+        baseConfigFile: processName,
+        orcaMachineConfigFile: printer.machine,
+        orcaFilamentConfigFile: filamentName
+    };
+}
+
+/**
+ * Validate and resolve profile file selection for request.
+ * @param {'prusa'|'orca'|'bambu'} engine Slicer engine key.
+ * @param {'FDM'|'SLA'} technology Active technology.
+ * @param {number} layerHeight Requested layer height.
+ * @param {{prusaProfile?: string | null, orcaMachineProfile?: string | null, orcaProcessProfile?: string | null, orcaFilamentProfile?: string | null, bambuPrinter?: string|null, bambuProcessProfile?: string|null}} profileOverrides Profile overrides.
  * @param {string|null} [material=null] Requested material key.
  * @returns {{isValid: true, baseConfigFile: string, orcaMachineConfigFile: string | null, orcaFilamentConfigFile: string | null} | {isValid: false, status: number, response: {success: false, error: string, errorCode: string}}} Selection result.
  */
 function resolveProfileSelection(engine, technology, layerHeight, profileOverrides, material = null) {
+    if (engine === 'bambu') {
+        return resolveBambuProfileSelection(technology, layerHeight, profileOverrides || {}, material);
+    }
     const baseConfigFile = resolveConfigPath(engine, technology, layerHeight, profileOverrides);
     const orcaMachineConfigFile = engine === 'orca'
         ? resolveOrcaMachineConfigPath(profileOverrides)
@@ -564,6 +733,7 @@ module.exports = {
     resolveConfigPath,
     resolveOrcaFilamentConfigPath,
     resolveOrcaMachineConfigPath,
+    resolveBambuProfileSelection,
     resolveBuildVolumeLimits,
     validateModelDimensionsAgainstLimits,
     createRuntimeSlicerProfile,

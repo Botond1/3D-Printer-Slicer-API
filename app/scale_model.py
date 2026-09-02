@@ -1,11 +1,19 @@
-"""Scale and rotate STL models for slicing preprocessing.
+"""Scale, rotate, and optionally place STL models for slicing preprocessing.
 
 Usage:
     python3 scale_model.py input.stl output.stl sx sy sz rx ry rz
+    python3 scale_model.py input.stl output.stl sx sy sz rx ry rz \
+        --place-min-x X --place-min-y Y
 
 Where:
 - sx/sy/sz are scaling factors (positive floats)
 - rx/ry/rz are rotation angles in degrees
+- ``--place-min-x``/``--place-min-y`` (optional, always both, in this exact
+  order) translate the model AFTER scale, rotation, and grounding so its
+  bounding-box minimum X/Y corner equals the given millimetre values. Z stays
+  grounded at 0. Bambu Studio is invoked with ``--arrange 0`` and keeps the STL
+  coordinates exactly, so the API owns placement through these flags. Without
+  the flags the model is centred on the origin as before.
 """
 
 import math
@@ -14,6 +22,12 @@ import sys
 
 import numpy as np
 import trimesh
+
+
+PLACE_MIN_X_FLAG = "--place-min-x"
+PLACE_MIN_Y_FLAG = "--place-min-y"
+BASE_ARGUMENT_COUNT = 9
+PLACED_ARGUMENT_COUNT = BASE_ARGUMENT_COUNT + 4
 
 
 def _load_as_mesh(input_path: str) -> trimesh.Trimesh:
@@ -67,6 +81,17 @@ def _place_on_build_plate(mesh: trimesh.Trimesh) -> None:
     mesh.apply_translation([0, 0, -min_z])
 
 
+def _place_at_minimum_corner(mesh: trimesh.Trimesh, min_x: float, min_y: float) -> None:
+    """Translate so the bounding-box minimum X/Y corner equals the given values.
+
+    Z is untouched: the mesh is already grounded, and only X/Y placement is
+    the API's responsibility.
+    """
+    current_min_x = float(mesh.bounds[0][0])
+    current_min_y = float(mesh.bounds[0][1])
+    mesh.apply_translation([min_x - current_min_x, min_y - current_min_y, 0.0])
+
+
 def transform_model(
     input_path: str,
     output_path: str,
@@ -76,8 +101,9 @@ def transform_model(
     rot_x_deg: float,
     rot_y_deg: float,
     rot_z_deg: float,
+    placement: tuple[float, float] | None = None,
 ) -> None:
-    """Scale and rotate model, then export as STL."""
+    """Scale, rotate, ground, optionally place the model, then export as STL."""
     if scale_x <= 0 or scale_y <= 0 or scale_z <= 0:
         raise ValueError("Scale factors must be positive values.")
 
@@ -87,25 +113,55 @@ def transform_model(
     mesh.apply_transform(_to_transform_matrix(scale_x, scale_y, scale_z))
     _apply_rotations(mesh, rot_x_deg, rot_y_deg, rot_z_deg)
     _place_on_build_plate(mesh)
+    if placement is not None:
+        _place_at_minimum_corner(mesh, placement[0], placement[1])
 
     mesh.export(output_path)
 
 
-def _parse_args(argv: list[str]) -> tuple[str, str, float, float, float, float, float, float]:
+def _parse_placement(argv: list[str]) -> tuple[float, float] | None:
+    """Parse the optional, strictly ordered placement flag pair.
+
+    Raises:
+        ValueError: If the flags are partial, misordered, or non-finite.
+    """
+    if len(argv) == BASE_ARGUMENT_COUNT:
+        return None
+    if len(argv) != PLACED_ARGUMENT_COUNT:
+        raise ValueError(
+            "Usage: python3 scale_model.py input.stl output.stl sx sy sz rx ry rz "
+            f"[{PLACE_MIN_X_FLAG} X {PLACE_MIN_Y_FLAG} Y]"
+        )
+    if argv[9] != PLACE_MIN_X_FLAG or argv[11] != PLACE_MIN_Y_FLAG:
+        raise ValueError(
+            f"Placement requires exactly {PLACE_MIN_X_FLAG} X {PLACE_MIN_Y_FLAG} Y in that order."
+        )
+    min_x = float(argv[10])
+    min_y = float(argv[12])
+    if not (math.isfinite(min_x) and math.isfinite(min_y)):
+        raise ValueError("Placement coordinates must be finite.")
+    return min_x, min_y
+
+
+def _parse_args(
+    argv: list[str],
+) -> tuple[str, str, float, float, float, float, float, float, tuple[float, float] | None]:
     """Parse CLI arguments for transformation operation.
 
     Args:
         argv: Raw command line argument list.
 
     Returns:
-        Tuple of input path, output path, scale factors and rotation angles.
+        Tuple of input path, output path, scale factors, rotation angles, and
+        the optional placement pair.
 
     Raises:
-        ValueError: If argument count is invalid.
+        ValueError: If argument count or flag shape is invalid.
     """
-    if len(argv) != 9:
+    if len(argv) not in (BASE_ARGUMENT_COUNT, PLACED_ARGUMENT_COUNT):
         raise ValueError(
-            "Usage: python3 scale_model.py input.stl output.stl sx sy sz rx ry rz"
+            "Usage: python3 scale_model.py input.stl output.stl sx sy sz rx ry rz "
+            f"[{PLACE_MIN_X_FLAG} X {PLACE_MIN_Y_FLAG} Y]"
         )
 
     input_path = argv[1]
@@ -117,8 +173,9 @@ def _parse_args(argv: list[str]) -> tuple[str, str, float, float, float, float, 
     rx = float(argv[6])
     ry = float(argv[7])
     rz = float(argv[8])
+    placement = _parse_placement(argv)
 
-    return input_path, output_path, sx, sy, sz, rx, ry, rz
+    return input_path, output_path, sx, sy, sz, rx, ry, rz, placement
 
 
 if __name__ == "__main__":

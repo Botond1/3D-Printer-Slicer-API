@@ -97,8 +97,10 @@ test('queue enforces the queued-plus-active per-client cap', async () => {
         body: {
             success: false,
             error: result.rejected.message,
-            errorCode: 'SLICE_QUEUE_CLIENT_LIMIT'
-        }
+            errorCode: 'SLICE_QUEUE_CLIENT_LIMIT',
+            retryAfterSeconds: 5
+        },
+        headers: { 'Retry-After': '5' }
     });
     assert.deepEqual(result.results, ['first', 'second', 'other']);
     assertDrained(result.finalStatus);

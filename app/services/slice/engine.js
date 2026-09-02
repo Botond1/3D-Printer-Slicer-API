@@ -4,11 +4,44 @@
 
 const path = require('node:path');
 
+const SUPPORTED_ENGINES = Object.freeze(['prusa', 'orca', 'bambu']);
+const SLICER_EXECUTABLES = Object.freeze({
+    prusa: 'prusa-slicer',
+    orca: 'orca-slicer',
+    bambu: 'bambu-studio'
+});
+
 const ORCA_INVOCATION_POLICY = Object.freeze({
     arrange: '1',
     orient: '0',
     allowRotations: '0',
     slice: '0',
+    settingsPrecedence: Object.freeze(['machine', 'process']),
+    filamentOption: '--load-filaments'
+});
+/**
+ * Bambu Studio 2.8 headless policy. `--export-3mf` receives a path RELATIVE to
+ * `--outputdir`, the plate G-code appears beside it as `plate_1.gcode`, and
+ * Bambu's `--allow-rotations` takes no value (it defaults off) so it is never
+ * passed. The bed type is a per-printer registry value; the policy carries the
+ * default so the digest binds a stable server-owned invocation shape.
+ *
+ * Arrangement is OFF by design. Measured on the production CLI: `--arrange 1`
+ * yawed a `262 x 100 mm` plate into a `256 x 256` diagonal bounding box even
+ * with rotations disabled, silently breaking the rotation-only transform
+ * contract. With `--arrange 0` the CLI keeps the STL coordinates exactly and
+ * grounds Z itself, so the API places the model (see `bambu-placement.js`).
+ */
+const BAMBU_INVOCATION_POLICY = Object.freeze({
+    arrange: '0',
+    orient: '0',
+    slice: '0',
+    // Warning-level native logging: Bambu Studio only reports slicing diagnostics
+    // such as empty layers / faulty meshes on stderr at this level, and the API
+    // classifies those into typed 4xx responses instead of a generic 500.
+    debug: '2',
+    bedType: 'Textured PEI Plate',
+    export3mf: true,
     settingsPrecedence: Object.freeze(['machine', 'process']),
     filamentOption: '--load-filaments'
 });
@@ -25,23 +58,33 @@ const PRUSA_SLA_INVOCATION_POLICY = Object.freeze({
 });
 
 /**
+ * Whether a value names one of the supported native engines.
+ * @param {unknown} engine Candidate engine key.
+ * @returns {boolean} True for `prusa`, `orca`, or `bambu`.
+ */
+function isSupportedEngine(engine) {
+    return SUPPORTED_ENGINES.includes(engine);
+}
+
+/**
  * Return the request-independent native invocation policy used for profile identity.
- * @param {'prusa'|'orca'} engine Slicer engine key.
+ * @param {'prusa'|'orca'|'bambu'} engine Slicer engine key.
  * @param {'FDM'|'SLA'} technology Active print technology.
  * @returns {Readonly<Record<string, string|boolean|readonly string[]>>} Stable server-owned CLI policy.
  */
 function resolveSlicerInvocationPolicy(engine, technology) {
     if (engine === 'orca') return ORCA_INVOCATION_POLICY;
+    if (engine === 'bambu') return BAMBU_INVOCATION_POLICY;
     return technology === 'SLA' ? PRUSA_SLA_INVOCATION_POLICY : PRUSA_FDM_INVOCATION_POLICY;
 }
 
 /**
  * Resolve slicer executable name from engine identifier.
- * @param {'prusa'|'orca'} engine Slicer engine key.
- * @returns {'prusa-slicer'|'orca-slicer'} CLI executable name.
+ * @param {'prusa'|'orca'|'bambu'} engine Slicer engine key.
+ * @returns {'prusa-slicer'|'orca-slicer'|'bambu-studio'} CLI executable name.
  */
 function resolveSlicerExecutable(engine) {
-    return engine === 'orca' ? 'orca-slicer' : 'prusa-slicer';
+    return SLICER_EXECUTABLES[engine] || SLICER_EXECUTABLES.prusa;
 }
 
 function resolvePrusaExportFlag(exportMode) {
@@ -62,15 +105,79 @@ function composeOrcaSettingsFiles(policy, orcaMachineConfigPath, configFile) {
         .join(';');
 }
 
+function buildOrcaArgs(policy, configFile, outputPath, orcaMachineConfigPath, orcaFilamentConfigPath) {
+    const outputDir = path.dirname(outputPath);
+    const settingsFiles = composeOrcaSettingsFiles(policy, orcaMachineConfigPath, configFile);
+    const args = ['--load-settings', settingsFiles];
+    if (orcaFilamentConfigPath) {
+        args.push(policy.filamentOption, orcaFilamentConfigPath);
+    }
+    args.push(
+        '--arrange', policy.arrange,
+        '--orient', policy.orient,
+        `--allow-rotations=${policy.allowRotations}`,
+        '--slice', policy.slice,
+        '--outputdir', outputDir
+    );
+    return args;
+}
+
+function buildBambuArgs(policy, configFile, outputPath, machineConfigPath, filamentConfigPath, engineOptions) {
+    if (typeof machineConfigPath !== 'string' || !machineConfigPath) {
+        throw new Error('Bambu machine profile is required.');
+    }
+    if (typeof filamentConfigPath !== 'string' || !filamentConfigPath) {
+        throw new Error('Bambu filament profile is required.');
+    }
+    const exportName = path.basename(outputPath);
+    if (!exportName.toLowerCase().endsWith('.gcode.3mf')) {
+        throw new Error('Bambu export target must be a .gcode.3mf path.');
+    }
+    const bedType = typeof engineOptions.bedType === 'string' && engineOptions.bedType
+        ? engineOptions.bedType
+        : policy.bedType;
+    return [
+        '--load-settings', composeOrcaSettingsFiles(policy, machineConfigPath, configFile),
+        policy.filamentOption, filamentConfigPath,
+        '--curr-bed-type', bedType,
+        '--arrange', policy.arrange,
+        '--orient', policy.orient,
+        '--slice', policy.slice,
+        '--debug', policy.debug,
+        '--export-3mf', exportName,
+        '--outputdir', path.dirname(outputPath)
+    ];
+}
+
+function buildPrusaArgs(policy, technology, configFile, outputPath, infillPercentage, engineOptions) {
+    const args = ['--load', configFile, '--center', policy.center];
+    if (technology === 'SLA') {
+        args.push(resolvePrusaExportFlag(policy.export), '--output', outputPath);
+        return args;
+    }
+    // Support flags stay exactly as today for the default; `supports=false`
+    // omits them and the runtime INI carries the explicit zero values instead.
+    const supports = engineOptions.supports !== false;
+    if (policy.supportMaterial && supports) args.push('--support-material');
+    if (policy.supportMaterialAuto && supports) args.push('--support-material-auto');
+    args.push(
+        '--gcode-flavor', policy.gcodeFlavor,
+        resolvePrusaExportFlag(policy.export), '--output', outputPath,
+        '--fill-density', infillPercentage
+    );
+    return args;
+}
+
 /**
  * Build command-line arguments array for selected slicer engine and technology.
  * @param {'FDM'|'SLA'} technology Active print technology.
  * @param {string} configFile Runtime profile/config path.
  * @param {string} outputPath Desired output artifact path.
  * @param {string} infillPercentage Infill override (e.g. `20%`).
- * @param {'prusa'|'orca'} [engine='prusa'] Selected slicer engine.
- * @param {string | null} [orcaMachineConfigPath=null] Orca machine profile path.
- * @param {string | null} [orcaFilamentConfigPath=null] Orca filament profile path.
+ * @param {'prusa'|'orca'|'bambu'} [engine='prusa'] Selected slicer engine.
+ * @param {string | null} [machineConfigPath=null] Orca/Bambu machine profile path.
+ * @param {string | null} [filamentConfigPath=null] Orca/Bambu filament profile path.
+ * @param {{supports?: boolean, bedType?: string}} [engineOptions={}] Request-controlled engine options.
  * @returns {string[]} CLI argument array.
  */
 function buildSlicerCommandArgs(
@@ -79,50 +186,25 @@ function buildSlicerCommandArgs(
     outputPath,
     infillPercentage,
     engine = 'prusa',
-    orcaMachineConfigPath = null,
-    orcaFilamentConfigPath = null
+    machineConfigPath = null,
+    filamentConfigPath = null,
+    engineOptions = {}
 ) {
     const policy = resolveSlicerInvocationPolicy(engine, technology);
+    const options = engineOptions && typeof engineOptions === 'object' ? engineOptions : {};
     if (engine === 'orca') {
-        const outputDir = path.dirname(outputPath);
-        const settingsFiles = composeOrcaSettingsFiles(
-            policy,
-            orcaMachineConfigPath,
-            configFile
-        );
-        const args = ['--load-settings', settingsFiles];
-        if (orcaFilamentConfigPath) {
-            args.push(policy.filamentOption, orcaFilamentConfigPath);
-        }
-        args.push(
-            '--arrange', policy.arrange,
-            '--orient', policy.orient,
-            `--allow-rotations=${policy.allowRotations}`,
-            '--slice', policy.slice,
-            '--outputdir', outputDir
-        );
-        return args;
+        return buildOrcaArgs(policy, configFile, outputPath, machineConfigPath, filamentConfigPath);
     }
-
-    const args = ['--load', configFile, '--center', policy.center];
-
-    if (technology === 'SLA') {
-        args.push(resolvePrusaExportFlag(policy.export), '--output', outputPath);
-    } else {
-        if (policy.supportMaterial) args.push('--support-material');
-        if (policy.supportMaterialAuto) args.push('--support-material-auto');
-        args.push(
-            '--gcode-flavor', policy.gcodeFlavor,
-            resolvePrusaExportFlag(policy.export), '--output', outputPath,
-            '--fill-density', infillPercentage
-        );
+    if (engine === 'bambu') {
+        return buildBambuArgs(policy, configFile, outputPath, machineConfigPath, filamentConfigPath, options);
     }
-
-    return args;
+    return buildPrusaArgs(policy, technology, configFile, outputPath, infillPercentage, options);
 }
 
 module.exports = {
+    SUPPORTED_ENGINES,
     composeOrcaSettingsFiles,
+    isSupportedEngine,
     resolveSlicerExecutable,
     resolveSlicerInvocationPolicy,
     buildSlicerCommandArgs

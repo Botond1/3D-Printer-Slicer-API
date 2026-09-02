@@ -1,0 +1,11 @@
+{
+    "type": "process",
+    "name": "0.12mm Fine @BBL H2D",
+    "inherits": "fdm_process_single_0.12",
+    "from": "system",
+    "instantiation": "true",
+    "setting_id": "GP_BBL_H2D_012",
+    "compatible_printers": [
+        "Bambu Lab H2D 0.4 nozzle"
+    ]
+}

@@ -1,6 +1,6 @@
 {
   "name": "3d-printer-slicer-api",
-  "version": "3.1.4",
+  "version": "3.2.0",
   "packageManager": "npm@10.9.8",
   "main": "app/server.js",
   "scripts": {
@@ -25,5 +25,8 @@
     "multer": "^2.2.0",
     "swagger-ui-express": "^5.0.0",
     "yauzl": "^3.2.0"
+  },
+  "overrides": {
+    "qs": "6.16.0"
   }
 }

@@ -7,6 +7,25 @@
  */
 const { isSafeMaterialName } = require('./validation');
 
+/** Error code raised when a delete would empty a technology's pricing map. */
+const LAST_MATERIAL_PROTECTED = 'LAST_MATERIAL_PROTECTED';
+
+/**
+ * Refuse to remove the only material of a technology map.
+ * @param {Record<string, number>} entries Technology pricing map.
+ * @param {string} materialKey Material key about to be removed.
+ * @returns {void}
+ * @throws {Error & {code: 'LAST_MATERIAL_PROTECTED'}} When `materialKey` is the sole entry.
+ */
+function assertNotLastMaterial(entries, materialKey) {
+    const keys = Object.keys(entries || {});
+    if (keys.length === 1 && keys[0] === materialKey) {
+        const error = new Error('The last material of a technology cannot be deleted.');
+        error.code = LAST_MATERIAL_PROTECTED;
+        throw error;
+    }
+}
+
 class PricingCatalog {
     /**
      * @param {PricingMap} defaultPricing Default pricing configuration.
@@ -17,17 +36,25 @@ class PricingCatalog {
     }
 
     /**
-     * Replace in-memory pricing with defaults merged by payload.
+     * Replace in-memory pricing with the supplied payload.
+     *
+     * The payload is authoritative: defaults are never merged back in, so a
+     * material that an operator deleted stays deleted across restarts. A
+     * technology map that is absent from the payload becomes an empty map.
      * @param {Partial<PricingMap> | Record<string, unknown>} pricingPayload Incoming pricing payload.
      * @returns {void}
      */
     setPricing(pricingPayload) {
-        const fdmSource = pricingPayload?.FDM && typeof pricingPayload.FDM === 'object' ? pricingPayload.FDM : undefined;
-        const slaSource = pricingPayload?.SLA && typeof pricingPayload.SLA === 'object' ? pricingPayload.SLA : undefined;
+        const fdmSource = pricingPayload?.FDM && typeof pricingPayload.FDM === 'object' && !Array.isArray(pricingPayload.FDM)
+            ? pricingPayload.FDM
+            : {};
+        const slaSource = pricingPayload?.SLA && typeof pricingPayload.SLA === 'object' && !Array.isArray(pricingPayload.SLA)
+            ? pricingPayload.SLA
+            : {};
 
         this.pricing = {
-            FDM: { ...this.defaultPricing.FDM, ...fdmSource },
-            SLA: { ...this.defaultPricing.SLA, ...slaSource }
+            FDM: { ...fdmSource },
+            SLA: { ...slaSource }
         };
     }
 
@@ -135,36 +162,44 @@ class PricingCatalog {
 
     /**
      * Remove a material from pricing map.
+     * Refuses to remove the LAST material of a technology: readiness requires
+     * non-empty FDM and SLA maps, so emptying one would take the service out
+     * of `READY` through an ordinary pricing edit.
      * @param {'FDM' | 'SLA'} technology Technology namespace.
      * @param {string} materialKey Material key to remove.
      * @returns {void}
+     * @throws {Error & {code: 'LAST_MATERIAL_PROTECTED'}} When the material is the technology's only entry.
      */
     removeMaterial(technology, materialKey) {
-        delete this.pricing[technology][materialKey];
+        const entries = this.pricing[technology];
+        if (!entries || typeof entries !== 'object' || !Object.hasOwn(entries, materialKey)) return;
+        assertNotLastMaterial(entries, materialKey);
+        delete entries[materialKey];
     }
 
     /**
-     * Get effective hourly rate for technology/material pair.
-     * Falls back to technology default if material is missing.
+     * Get the configured hourly rate for a technology/material pair.
+     *
+     * Fails closed: when the material has no configured positive rate under
+     * the selected technology the result is `null`. The rate of another
+     * material or a compiled-in default is never substituted, so a caller can
+     * never price a quote against a rate the operator did not configure.
      * @param {'FDM' | 'SLA'} technology Technology namespace.
      * @param {unknown} material Material key.
-     * @returns {number} Hourly rate in HUF.
+     * @returns {number | null} Hourly rate in HUF, or null when unconfigured.
      */
     getRate(technology, material) {
-        const techPricing = this.pricing[technology] || {};
+        const techPricing = this.pricing[technology];
+        if (!techPricing || typeof techPricing !== 'object') return null;
         const materialKey = this.findMaterialKey(technology, material);
-        if (materialKey && Object.hasOwn(techPricing, materialKey)) {
-            return techPricing[materialKey];
-        }
-
-        const firstRate = Object.values(techPricing).find((value) => Number.isFinite(value) && value > 0);
-        if (firstRate) return firstRate;
-
-        const fallbackPricing = this.defaultPricing[technology] || {};
-        return Object.values(fallbackPricing).find((value) => Number.isFinite(value) && value > 0) || 0;
+        if (!materialKey || !Object.hasOwn(techPricing, materialKey)) return null;
+        const rate = techPricing[materialKey];
+        return Number.isFinite(rate) && rate > 0 ? rate : null;
     }
 }
 
 module.exports = {
-    PricingCatalog
+    LAST_MATERIAL_PROTECTED,
+    PricingCatalog,
+    assertNotLastMaterial
 };

@@ -72,7 +72,7 @@ function createAdminPaths() {
                 tags: ['Admin'],
                 summary: 'Download a generated output file from output directory.',
                 description:
-                    'Protected endpoint. Requires x-api-key header. Only .gcode and .sl1 files are allowed for direct file download. Use `ALL` as fileName to download every generated output file in a ZIP archive within MAX_ZIP_ENTRIES and MAX_ZIP_UNCOMPRESSED_BYTES limits.',
+                    'Protected endpoint. Requires x-api-key header. Only managed .gcode, .sl1, and Bambu Studio .gcode.3mf files are allowed for direct file download. Use `ALL` as fileName to download every generated output file in a ZIP archive within MAX_ZIP_ENTRIES and MAX_ZIP_UNCOMPRESSED_BYTES limits.',
                 parameters: [
                     {
                         name: 'fileName',

@@ -1,0 +1,7 @@
+{
+    "type": "machine",
+    "name": "Include Inherits",
+    "include": [
+        "Nested Include Template"
+    ]
+}

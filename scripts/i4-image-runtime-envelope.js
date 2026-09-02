@@ -132,6 +132,7 @@ function assertRuntimeInspect(record, expected) {
 
 const CONTAINER_PROBE = String.raw`
 const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
 const evaluateAbortTransport = ${evaluateAbortTransport.toString()};
 const [uidText, gidText, stl] = process.argv.slice(1);
 const uid = Number(uidText);
@@ -150,13 +151,37 @@ for (const [key, value] of Object.entries(expectedEnvironment)) {
 }
 const immutable = [
   '/app/server.js', '/app/node_modules', '/app/configs', '/app/configs/prusa',
-  '/app/configs/orca', '/opt/venv', '/opt/prusaslicer', '/opt/orcaslicer'
+  '/app/configs/orca', '/app/configs/bambu', '/opt/venv', '/opt/prusaslicer', '/opt/orcaslicer'
 ];
 for (const target of immutable) {
   const stat = fs.lstatSync(target);
   if (stat.uid !== 0 || (stat.mode & 0o022) !== 0 || stat.isSymbolicLink()) fail('immutable_mode');
 }
-const denied = ['/app', '/app/configs', '/app/configs/prusa', '/app/configs/orca'];
+const rootImmutable = (stat) => stat.uid === 0 && (stat.mode & 0o022) === 0 && !stat.isSymbolicLink();
+for (const target of ['/opt/bambustudio', '/opt/bambustudio/AppRun']) {
+  if (!rootImmutable(fs.lstatSync(target))) fail('immutable_mode');
+}
+const nativeExecutables = [
+  ['/usr/local/bin/prusa-slicer', '/opt/prusaslicer/AppRun', /Usage:\s+prusa-slicer/],
+  ['/usr/local/bin/orca-slicer', '/opt/orcaslicer/AppRun', /Usage:\s+orca-slicer/],
+  ['/usr/local/bin/bambu-studio', '/usr/local/bin/bambu-studio', /Usage:\s+bambu-studio/]
+];
+for (const [executable, expectedTarget, helpSentinel] of nativeExecutables) {
+  let target;
+  try {
+    fs.accessSync(executable, fs.constants.X_OK);
+    target = fs.realpathSync(executable);
+  } catch { fail('native_executable_missing'); }
+  if (target !== expectedTarget) fail('native_executable_target');
+  const stat = fs.statSync(target);
+  if (!stat.isFile() || !rootImmutable(stat) || (stat.mode & 0o111) === 0) fail('native_executable_mode');
+  const help = spawnSync(executable, ['--help'], {
+    encoding: 'utf8', shell: false, timeout: 120000, maxBuffer: 65536, stdio: ['ignore', 'pipe', 'pipe']
+  });
+  const helpOutput = (help.stdout || '') + '\n' + (help.stderr || '');
+  if (help.error || help.signal || !helpSentinel.test(helpOutput)) fail('native_executable_help');
+}
+const denied = ['/app', '/app/configs', '/app/configs/prusa', '/app/configs/orca', '/app/configs/bambu'];
 for (const directory of denied) {
   const probe = directory + '/.i4-denied-probe';
   try { fs.writeFileSync(probe, 'x', { flag: 'wx', mode: 0o600 }); fail('immutable_write'); }

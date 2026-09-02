@@ -1,0 +1,37 @@
+{
+    "type": "machine",
+    "name": "fdm_bbl_3dp_002_common",
+    "inherits": "fdm_machine_common",
+    "from": "system",
+    "instantiation": "false",
+    "printer_structure": "corexy",
+    "printable_area": [
+        "0x0",
+        "350x0",
+        "350x320",
+        "0x320"
+    ],
+    "printable_height": "325",
+    "extruder_printable_area": [
+        "0x0,325x0,325x320,0x320",
+        "25x0,350x0,350x320,25x320"
+    ],
+    "extruder_printable_height": [
+        "320",
+        "325"
+    ],
+    "master_extruder_id": "2",
+    "nozzle_diameter": [
+        "0.4",
+        "0.4"
+    ],
+    "min_layer_height": [
+        "0.08",
+        "0.08"
+    ],
+    "max_layer_height": [
+        "0.28",
+        "0.28"
+    ],
+    "template_marker": "from-parent"
+}

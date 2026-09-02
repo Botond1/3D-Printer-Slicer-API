@@ -8,6 +8,7 @@ const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { readFileSyncBounded } = require('../../utils/bounded-file');
 const { resolveRuntimeProfilePath } = require('./profiles');
 const { resolveOrcaProfileInheritance } = require('./orca-profile-inheritance');
+const { flattenBambuProfile } = require('./bambu-profile-chain');
 
 /**
  * Copy one selected immutable profile into job-owned scratch storage.
@@ -37,26 +38,67 @@ async function snapshotProfileFile(sourcePath, prefix, extension, workspace) {
     return snapshotPath;
 }
 
-async function snapshotResolvedOrcaProfile(sourcePath, profileType, prefix, workspace) {
-    const resolved = resolveOrcaProfileInheritance(sourcePath, profileType);
+async function writeResolvedJsonSnapshot(resolved, prefix, workspace, label) {
     const content = Buffer.from(`${JSON.stringify(resolved, null, 4)}\n`, 'utf8');
     if (content.length > resolveResourcePolicy().MAX_PROFILE_BYTES) {
-        throw new Error('Resolved Orca profile exceeds the configured byte limit.');
+        throw new Error(`Resolved ${label} profile exceeds the configured byte limit.`);
     }
     const snapshotPath = resolveRuntimeProfilePath(workspace, prefix, '.json');
     await fs.writeFile(snapshotPath, content, { flag: 'wx', mode: 0o600 });
     return snapshotPath;
 }
 
+async function snapshotResolvedOrcaProfile(sourcePath, profileType, prefix, workspace) {
+    const resolved = resolveOrcaProfileInheritance(sourcePath, profileType);
+    return writeResolvedJsonSnapshot(resolved, prefix, workspace, 'Orca');
+}
+
+/**
+ * Flatten one vendor Bambu profile by NAME and write it into job scratch.
+ * @param {string} name Vendor profile name.
+ * @param {'machine'|'process'|'filament'} role Profile role.
+ * @param {string} prefix Snapshot prefix.
+ * @param {object} workspace Owning workspace.
+ * @returns {Promise<string>} Flattened JSON snapshot path.
+ */
+async function snapshotFlattenedBambuProfile(name, role, prefix, workspace) {
+    const resolved = flattenBambuProfile(role, name);
+    return writeResolvedJsonSnapshot(resolved, prefix, workspace, 'Bambu');
+}
+
+async function snapshotBambuSelection(selection, workspace) {
+    for (const [field, role] of [
+        ['baseConfigFile', 'process'],
+        ['orcaMachineConfigFile', 'machine'],
+        ['orcaFilamentConfigFile', 'filament']
+    ]) {
+        if (typeof selection[field] !== 'string' || !selection[field]) {
+            throw new Error(`Bambu ${role} profile selection is required for snapshot.`);
+        }
+    }
+    const baseConfigFile = await snapshotFlattenedBambuProfile(
+        selection.baseConfigFile, 'process', 'bambu-base-profile', workspace
+    );
+    const orcaMachineConfigFile = await snapshotFlattenedBambuProfile(
+        selection.orcaMachineConfigFile, 'machine', 'bambu-machine-profile', workspace
+    );
+    const orcaFilamentConfigFile = await snapshotFlattenedBambuProfile(
+        selection.orcaFilamentConfigFile, 'filament', 'bambu-filament-profile', workspace
+    );
+    return { baseConfigFile, orcaMachineConfigFile, orcaFilamentConfigFile };
+}
+
 /**
  * Snapshot every selected profile before bounds parsing or runtime derivation.
- * Public response metadata continues to use the original selection paths.
- * @param {'prusa'|'orca'} engine Slicer engine key.
+ * Public response metadata continues to use the original selection paths (or,
+ * for Bambu, the original vendor names).
+ * @param {'prusa'|'orca'|'bambu'} engine Slicer engine key.
  * @param {{baseConfigFile: string, orcaMachineConfigFile: string|null, orcaFilamentConfigFile?: string|null}} selection Original selection.
  * @param {{resolveScratchPath(...segments: string[]): string, assertScratchContainedPath(candidatePath: string): string}} workspace Owning workspace.
  * @returns {Promise<{baseConfigFile: string, orcaMachineConfigFile: string|null, orcaFilamentConfigFile: string|null}>} Exact job-owned inputs.
  */
 async function snapshotProfileSelection(engine, selection, workspace) {
+    if (engine === 'bambu') return snapshotBambuSelection(selection, workspace);
     if (engine !== 'prusa' && engine !== 'orca') {
         throw new Error('Unsupported slicer engine for profile snapshot.');
     }
@@ -92,4 +134,9 @@ async function snapshotProfileSelection(engine, selection, workspace) {
     return { baseConfigFile, orcaMachineConfigFile, orcaFilamentConfigFile };
 }
 
-module.exports = { snapshotProfileFile, snapshotProfileSelection, snapshotResolvedOrcaProfile };
+module.exports = {
+    snapshotFlattenedBambuProfile,
+    snapshotProfileFile,
+    snapshotProfileSelection,
+    snapshotResolvedOrcaProfile
+};

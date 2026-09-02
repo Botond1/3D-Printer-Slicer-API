@@ -96,14 +96,15 @@ function deleteMaterialOperation(technology) {
     return {
         tags: ['Pricing'],
         summary: `Delete an ${technology} material price.`,
-        description: 'Protected endpoint. Requires x-api-key header. Deleting default is forbidden.',
+        description: 'Protected endpoint. Requires x-api-key header. The last material of a technology cannot be deleted (`LAST_MATERIAL_PROTECTED`), because readiness requires a non-empty FDM and SLA pricing map.',
         parameters: [materialPathParameter(), adminKeyParameter()],
         security: [{ PricingApiKey: [] }],
         responses: {
             200: { description: 'Material deleted successfully' },
-            400: { description: 'Validation error (including default deletion attempt)' },
+            400: { description: 'Validation error' },
             401: { description: 'Unauthorized' },
             404: { description: 'Material not found' },
+            409: { description: 'The material is the last one of its technology (`LAST_MATERIAL_PROTECTED`).' },
             500: { description: 'Persistence error' }
         }
     };

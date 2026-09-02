@@ -189,15 +189,36 @@ class TokenBucketRateLimiter {
 }
 
 /**
+ * Resolve the client key used by the slice rate limiter.
+ *
+ * The slice limiter is mounted BEFORE `x-slicer-api-key` authentication on
+ * every slice and render route (`rateLimiter, authenticate, ...`), so no
+ * the authenticated principal exists when it runs and the limiter can only key on
+ * the resolved client IP. Principal-aware fairness lives in the slice queue
+ * (`resolveQueueKey` in `slice.service.js`), which runs after authentication.
+ * Keep the limiter in front of authentication: rejecting excess traffic
+ * before any digest comparison or workspace allocation is the point.
+ * @param {import('express').Request} req Express request object.
+ * @returns {string} Bounded per-client-IP limiter key.
+ */
+function resolveSliceClientKey(req) {
+    return `ip:${getClientIp(req)}`;
+}
+
+/**
  * Build an Express middleware wrapper around a limiter strategy.
- * @param {{limiter: {allow(key: string, now: number): {allowed: true} | {allowed: false, retryAfterSeconds: number}}, errorCode?: string, errorMessage?: string}} config Wrapper configuration.
+ * @param {{limiter: {allow(key: string, now: number): {allowed: true} | {allowed: false, retryAfterSeconds: number}}, errorCode?: string, errorMessage?: string, resolveKey?: (req: import('express').Request) => string}} config Wrapper configuration.
  * @returns {import('express').RequestHandler} Rate-limit middleware instance.
  */
-function createLimiterMiddleware({ limiter, errorCode = 'RATE_LIMIT_EXCEEDED', errorMessage = 'Too many requests. Please retry later.' }) {
+function createLimiterMiddleware({
+    limiter,
+    errorCode = 'RATE_LIMIT_EXCEEDED',
+    errorMessage = 'Too many requests. Please retry later.',
+    resolveKey = getClientIp
+}) {
     return function limiterMiddleware(req, res, next) {
         const now = Date.now();
-        const ip = getClientIp(req);
-        const decision = limiter.allow(ip, now);
+        const decision = limiter.allow(String(resolveKey(req)), now);
 
         if (decision.allowed) {
             return next();
@@ -241,7 +262,8 @@ const sliceRateLimiter = createLimiterMiddleware({
         windowMs: SLICE_RATE_LIMIT_WINDOW_MS,
         maxRequests: SLICE_RATE_LIMIT_MAX_REQUESTS,
         burstCapacity: SLICE_RATE_LIMIT_BURST_CAPACITY
-    })
+    }),
+    resolveKey: resolveSliceClientKey
 });
 
 /**
@@ -258,5 +280,8 @@ const adminRateLimiter = createLimiterMiddleware({
 
 module.exports = {
     sliceRateLimiter,
-    adminRateLimiter
+    adminRateLimiter,
+    createLimiterMiddleware,
+    resolveSliceClientKey,
+    sendRateLimitResponse
 };
