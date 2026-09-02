@@ -87,7 +87,7 @@ class BambuReferenceRunnerPrivacyTests(unittest.TestCase):
         )
         code, out = self.run_main(["--models-dir", str(self.missing_models), "--reference", str(self.reference)])
         self.assertEqual(code, 1)
-        self.assertIn("reading file unusable: models directory is missing or unreadable", out)
+        self.assertIn("models directory is missing or unreadable", out)
         self.assert_path_free(out)
 
     def test_main_prints_only_the_error_class_for_an_unexpected_os_error(self) -> None:

@@ -154,7 +154,11 @@ def load_reference(reference_path: Path, models_dir: Path) -> list[ReferenceEntr
         minutes = _positive_float(entry.get("ido_perc"))
         grams = _positive_float(entry.get("anyag_g"))
         if minutes is None or grams is None:
-            raise ReferenceFileError(f"entry {index} needs positive ido_perc and anyag_g")
+            # The owner's reading legitimately records unsliceable models (for
+            # example a part taller than the printer) with null values; those
+            # rows carry no reference and are skipped, never fabricated.
+            print(f"[BAMBU REFERENCE] entry {index}: no numeric reference (skipped)", flush=True)
+            continue
         try:
             model_path = resolve_model_path(models_dir, entry.get("fajl"))
         except ReferenceFileError as error:

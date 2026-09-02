@@ -193,7 +193,7 @@ class TokenBucketRateLimiter {
  *
  * The slice limiter is mounted BEFORE `x-slicer-api-key` authentication on
  * every slice and render route (`rateLimiter, authenticate, ...`), so no
- * `req.slicePrincipal` exists when it runs and the limiter can only key on
+ * the authenticated principal exists when it runs and the limiter can only key on
  * the resolved client IP. Principal-aware fairness lives in the slice queue
  * (`resolveQueueKey` in `slice.service.js`), which runs after authentication.
  * Keep the limiter in front of authentication: rejecting excess traffic
