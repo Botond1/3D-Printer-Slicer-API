@@ -5,3 +5,4 @@ scipy
 lxml
 networkx
 gmsh
+Pillow==12.3.0

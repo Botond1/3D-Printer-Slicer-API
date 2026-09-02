@@ -21,6 +21,7 @@ const createSwaggerDocument = require('./docs/swagger-docs');
 const { createPricingRouter } = require('./routes/pricing.routes');
 const { createProfileCatalogueRouter } = require('./routes/profile-catalogue.routes');
 const { createSliceRouter } = require('./routes/slice.routes');
+const { createRenderRouter } = require('./routes/render.routes');
 const { createSystemRouter } = require('./routes/system.routes');
 const errorHandler = require('./middleware/errorHandler');
 const { createCorsOptionsResolver, parseAllowedOrigins } = require('./middleware/corsPolicy');
@@ -86,6 +87,10 @@ const authLogger = Object.freeze({
     }
 });
 const sliceRoutes = createSliceRouter({
+    authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger }),
+    resourcePolicy
+});
+const renderRoutes = createRenderRouter({
     authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger }),
     resourcePolicy
 });
@@ -202,6 +207,7 @@ app.get('/', (req, res) => res.redirect('/docs'));
 app.use(pricingRoutes);
 app.use(profileCatalogueRoutes);
 app.use(sliceRoutes);
+app.use(renderRoutes);
 app.use(systemRoutes);
 
 // Catch-all for unknown routes
