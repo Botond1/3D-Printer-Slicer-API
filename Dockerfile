@@ -52,8 +52,10 @@ WORKDIR /tmp
 
 ARG PRUSA_APPIMAGE_URL="https://github.com/prusa3d/PrusaSlicer/releases/download/version_2.8.1/PrusaSlicer-2.8.1+linux-x64-newer-distros-GTK3-202409181416.AppImage"
 ARG ORCA_APPIMAGE_URL="https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v2.3.1/OrcaSlicer_Linux_AppImage_Ubuntu2404_V2.3.1.AppImage"
+ARG BAMBU_APPIMAGE_URL="https://github.com/bambulab/BambuStudio/releases/download/v02.08.02.61/BambuStudio_ubuntu24.04-v02.08.02.61-20260820225108.AppImage"
 ARG PRUSA_APPIMAGE_SHA256="565f2f4bd4dbb05904a459d54db1916b6932124709c1d17b5aacfe9f5f2f1b03"
 ARG ORCA_APPIMAGE_SHA256="f199e5408914efdbbbfa4fd6752cd6ad4727209b488bc47bff9a0da5f053a701"
+ARG BAMBU_APPIMAGE_SHA256="d501b103fac5424513ec0e8d6bc145fb30719de2c7d94d7320d723740c81a7fd"
 # Swiper 12.1.2 (MIT), upstream tag commit 2fd88b718b6854e8d6be7f183e68b73b68dae816.
 ARG SWIPER_VENDOR_URL="https://registry.npmjs.org/swiper/-/swiper-12.1.2.tgz"
 
@@ -73,12 +75,17 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && chmod +x OrcaSlicer.AppImage \
     && ./OrcaSlicer.AppImage --appimage-extract \
     && mv squashfs-root orca-squashfs-root \
+    && wget -q "$BAMBU_APPIMAGE_URL" -O BambuStudio.AppImage \
+    && echo "$BAMBU_APPIMAGE_SHA256  BambuStudio.AppImage" | sha256sum -c - \
+    && chmod +x BambuStudio.AppImage \
+    && ./BambuStudio.AppImage --appimage-extract \
+    && mv squashfs-root bambu-squashfs-root \
     && wget -q --max-redirect=0 "$SWIPER_VENDOR_URL" -O swiper-12.1.2.tgz \
     && python3 /tmp/install-swiper-vendor.py \
         --archive /tmp/swiper-12.1.2.tgz \
         --orca-root /tmp/orca-squashfs-root \
         --source-url "$SWIPER_VENDOR_URL" \
-    && rm -- /tmp/PrusaSlicer.AppImage /tmp/OrcaSlicer.AppImage \
+    && rm -- /tmp/PrusaSlicer.AppImage /tmp/OrcaSlicer.AppImage /tmp/BambuStudio.AppImage \
         /tmp/swiper-12.1.2.tgz /tmp/install-swiper-vendor.py
 
 # ==============================================================================
@@ -151,6 +158,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         ca-certificates curl gnupg python3 \
         libglu1-mesa libgtk-3-0 libegl1 libwebkit2gtk-4.1-0 \
         libgomp1 libosmesa6 libxft2 libxinerama1 \
+        xvfb libgl1 libgl1-mesa-dri libglx-mesa0 \
+        libgstreamer1.0-0 libgstreamer-plugins-base1.0-0 \
     && mkdir -p /etc/apt/keyrings \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
         | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
@@ -166,8 +175,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 # 3. Copy extracted slicers (Owned by root - slicer user only needs execute permissions)
 COPY --from=slicer-base /tmp/prusa-squashfs-root /opt/prusaslicer
 COPY --from=slicer-base /tmp/orca-squashfs-root /opt/orcaslicer
+COPY --from=slicer-base /tmp/bambu-squashfs-root /opt/bambustudio
 RUN ln -sf /opt/prusaslicer/AppRun /usr/local/bin/prusa-slicer \
     && ln -sf /opt/orcaslicer/AppRun /usr/local/bin/orca-slicer
+# Bambu Studio is reached through a root-owned wrapper, not a bare symlink: it
+# starts a private Xvfb only for --export-3mf (thumbnail rendering) and tears it
+# down again, so the AppRun itself is never the public entry point.
+COPY --chown=0:0 --chmod=0555 scripts/bambu-studio-wrapper.sh /usr/local/bin/bambu-studio
 
 # 4. Copy dependencies (Owned by root - highly secure, read-only for app)
 COPY --from=builder /opt/venv /opt/venv
@@ -187,8 +201,8 @@ COPY --chown=0:0 --chmod=0555 scripts/i4-container-entrypoint.sh /usr/local/bin/
 # 6. Create only the root-scoped mutable runtime surfaces for the service user.
 # Production overlays configs/pricing-state with a dedicated writable bind mount;
 # configs/prusa and configs/orca remain immutable profile content.
-RUN chown -R root:root /app /opt/venv /opt/prusaslicer /opt/orcaslicer \
-    && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer \
+RUN chown -R root:root /app /opt/venv /opt/prusaslicer /opt/orcaslicer /opt/bambustudio \
+    && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer /opt/bambustudio \
     && mkdir -p input output configs/pricing-state \
     && chown slicer:slicer input output configs/pricing-state \
     && chmod 0700 input output configs/pricing-state
