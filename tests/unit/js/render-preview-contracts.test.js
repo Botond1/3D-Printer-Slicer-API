@@ -78,8 +78,8 @@ test('renderer helper ships beside the other Python helpers and Pillow is pinned
     assert.match(helper, /O_EXCL/);
     const requirements = read('requirements.txt').split(/\r?\n/).filter(Boolean);
     assert.ok(requirements.includes('Pillow==12.3.0'), requirements.join(','));
-    assert.ok(requirements.includes('trimesh'));
-    assert.ok(requirements.includes('numpy'));
+    assert.ok(requirements.includes('trimesh==5.1.0'));
+    assert.ok(requirements.includes('numpy==2.5.2'));
 });
 
 test('render service composes the slice pipeline instead of copying it and bounds its own renderer timeout', () => {

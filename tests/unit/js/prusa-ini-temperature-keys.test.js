@@ -55,6 +55,7 @@ test('requirements.txt pins exactly the signed production image versions without
         'lxml==6.1.2',
         'networkx==3.6.1',
         'numpy==2.5.2',
+        'Pillow==12.3.0',
         'scipy==1.18.1',
         'trimesh==5.1.0'
     ]);
