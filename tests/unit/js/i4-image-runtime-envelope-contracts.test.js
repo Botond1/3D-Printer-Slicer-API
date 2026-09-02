@@ -264,10 +264,10 @@ test('identity, probe output, helper source, and workflow orchestration remain f
         assert.throws(() => envelope.parsePositiveId(value, 'uid'));
     }
     assert.deepEqual(envelope.parseProbeOutput({
-        stdout: '{"classification":"success","immutableCount":8,"writableCount":9,"authenticatedSliceCount":2,"authenticatedClientAbortCount":1,"postAbortArtifactDelta":0,"cachedReadinessActiveJobs":0,"freshReadinessActiveJobs":1,"abortTransport":"terminal_response"}\n',
+        stdout: '{"classification":"success","immutableCount":9,"writableCount":9,"authenticatedSliceCount":2,"authenticatedClientAbortCount":1,"postAbortArtifactDelta":0,"cachedReadinessActiveJobs":0,"freshReadinessActiveJobs":1,"abortTransport":"terminal_response"}\n',
         stderr: ''
     }), {
-        classification: 'success', immutableCount: 8, writableCount: 9,
+        classification: 'success', immutableCount: 9, writableCount: 9,
         authenticatedSliceCount: 2, authenticatedClientAbortCount: 1,
         postAbortArtifactDelta: 0, cachedReadinessActiveJobs: 0,
         freshReadinessActiveJobs: 1, abortTransport: 'terminal_response'
@@ -275,7 +275,7 @@ test('identity, probe output, helper source, and workflow orchestration remain f
     for (const [cachedReadinessActiveJobs, freshReadinessActiveJobs] of [[1, 1], [0, 0]]) {
         assert.throws(() => envelope.parseProbeOutput({
             stdout: JSON.stringify({
-                classification: 'success', immutableCount: 8, writableCount: 9,
+                classification: 'success', immutableCount: 9, writableCount: 9,
                 authenticatedSliceCount: 2, authenticatedClientAbortCount: 1,
                 postAbortArtifactDelta: 0, cachedReadinessActiveJobs,
                 freshReadinessActiveJobs, abortTransport: 'terminal_response'

@@ -59,7 +59,7 @@ function evaluateProbeOutput(result) {
     }
     const fixed = {
         classification: 'success',
-        immutableCount: 8,
+        immutableCount: 9,
         writableCount: 9,
         authenticatedSliceCount: 2,
         authenticatedClientAbortCount: 1,

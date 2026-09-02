@@ -160,6 +160,42 @@ function recordRetentionMiss(jobId, cleanup) {
     }
 }
 
+const BAMBU_RESULT_FILE_NAME = 'result.json';
+const MAX_BAMBU_RESULT_BYTES = 65_536;
+const MAX_BAMBU_RESULT_MESSAGE_CHARS = 512;
+
+/**
+ * Surface Bambu Studio's structured failure summary alongside the native
+ * streams. The CLI writes `<outputdir>/result.json` with `return_code` and
+ * `error_string` even when it prints nothing useful on stderr, so the existing
+ * text classifiers (placement rejection, unsliceable geometry) can see it.
+ * Never throws: a missing or malformed file leaves the error untouched.
+ * @param {Error & {stderr?: string}} err Native command error.
+ * @param {string|null} engineOutputDir Isolated engine output directory.
+ * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @returns {Promise<void>} Resolves after the diagnostic is attached or skipped.
+ */
+async function attachBambuResultDiagnostics(err, engineOutputDir, workspace) {
+    try {
+        if (!err || typeof engineOutputDir !== 'string' || !engineOutputDir) return;
+        const resultPath = workspace.assertContainedPath(path.join(engineOutputDir, BAMBU_RESULT_FILE_NAME));
+        const stats = await fs.lstat(resultPath);
+        if (!stats.isFile() || stats.isSymbolicLink() || stats.size <= 0 || stats.size > MAX_BAMBU_RESULT_BYTES) return;
+        const parsed = JSON.parse(await fs.readFile(resultPath, 'utf8'));
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+        const returnCode = Number.isInteger(parsed.return_code) ? parsed.return_code : null;
+        const message = typeof parsed.error_string === 'string'
+            ? parsed.error_string.replaceAll(/[^ -~]/g, ' ').slice(0, MAX_BAMBU_RESULT_MESSAGE_CHARS)
+            : '';
+        if (returnCode === null && !message) return;
+        err.bambuResult = Object.freeze({ returnCode, errorString: message });
+        err.stderr = `${err.stderr || ''}
+[bambu result.json] return_code=${returnCode} error_string=${message}`;
+    } catch {
+        // Diagnostics are best effort; the original native failure stands.
+    }
+}
+
 async function runSlicerAndParseStats(context) {
     const {
         engine, technology, layerHeight, infillPercentage, baseConfigFile,
@@ -209,6 +245,7 @@ async function runSlicerAndParseStats(context) {
         );
     } catch (err) {
         throwIfAborted(signal);
+        if (engine === 'bambu') await attachBambuResultDiagnostics(err, engineOutputDir, workspace);
         throw wrapNativePlacementRejection(err, { modelTransform, buildVolumeLimits });
     }
     throwIfAborted(signal);

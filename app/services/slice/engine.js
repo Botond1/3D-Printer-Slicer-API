@@ -36,6 +36,10 @@ const BAMBU_INVOCATION_POLICY = Object.freeze({
     arrange: '0',
     orient: '0',
     slice: '0',
+    // Warning-level native logging: Bambu Studio only reports slicing diagnostics
+    // such as empty layers / faulty meshes on stderr at this level, and the API
+    // classifies those into typed 4xx responses instead of a generic 500.
+    debug: '2',
     bedType: 'Textured PEI Plate',
     export3mf: true,
     settingsPrecedence: Object.freeze(['machine', 'process']),
@@ -139,6 +143,7 @@ function buildBambuArgs(policy, configFile, outputPath, machineConfigPath, filam
         '--arrange', policy.arrange,
         '--orient', policy.orient,
         '--slice', policy.slice,
+        '--debug', policy.debug,
         '--export-3mf', exportName,
         '--outputdir', path.dirname(outputPath)
     ];

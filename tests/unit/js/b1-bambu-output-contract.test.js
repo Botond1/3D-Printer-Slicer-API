@@ -564,7 +564,7 @@ test('bambu slice run parses plate_1.gcode, retains the .gcode.3mf, and treats a
     assert.deepEqual(args.slice(2, 4), ['--load-filaments', snapshots.orcaFilamentConfigFile]);
     assert.deepEqual(args.slice(4, 6), ['--curr-bed-type', 'Textured PEI Plate']);
     // `--arrange 0`: the STL arrives already placed by the API (see bambu-placement.js).
-    assert.deepEqual(args.slice(6, 16), ['--arrange', '0', '--orient', '0', '--slice', '0', '--export-3mf', 'result.gcode.3mf', '--outputdir', engineOutputDir]);
+    assert.deepEqual(args.slice(6, 18), ['--arrange', '0', '--orient', '0', '--slice', '0', '--debug', '2', '--export-3mf', 'result.gcode.3mf', '--outputdir', engineOutputDir]);
     assert.equal(args.some((value) => value.startsWith('--allow-rotations')), false);
     assert.equal(parseCalls.length, 1);
     assert.equal(parseCalls[0][0], path.join(engineOutputDir, 'plate_1.gcode'));

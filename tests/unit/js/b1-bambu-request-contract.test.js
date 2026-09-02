@@ -128,7 +128,8 @@ test('bambu argv disables native arrangement (API-owned placement) and never pas
     assert.equal(isSupportedEngine('cura'), false);
     assert.equal(resolveSlicerExecutable('bambu'), 'bambu-studio');
     assert.deepEqual(resolveSlicerInvocationPolicy('bambu', 'FDM'), {
-        arrange: '0', orient: '0', slice: '0', bedType: 'Textured PEI Plate', export3mf: true,
+        arrange: '0', orient: '0', slice: '0',
+        debug: '2', bedType: 'Textured PEI Plate', export3mf: true,
         settingsPrecedence: ['machine', 'process'], filamentOption: '--load-filaments'
     });
     const outputPath = path.join('stage', 'job', 'result.gcode.3mf');
@@ -141,6 +142,7 @@ test('bambu argv disables native arrangement (API-owned placement) and never pas
         '--load-filaments', 'filament.json',
         '--curr-bed-type', 'Textured PEI Plate',
         '--arrange', '0', '--orient', '0', '--slice', '0',
+        '--debug', '2',
         '--export-3mf', 'result.gcode.3mf',
         '--outputdir', path.join('stage', 'job')
     ]);
