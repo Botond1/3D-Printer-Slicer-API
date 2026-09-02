@@ -1,4 +1,10 @@
-"""Run Orca FDM full API matrix for all files under tests/testing-files."""
+"""Run Orca FDM full API matrix for all files under tests/testing-files.
+
+Materials cycle across PLA, PETG, ABS and TPU so every server-owned Orca
+filament profile is exercised; each FDM success must now publish a positive
+direct mass and a catalogue-priced quote (ABS/TPU are no longer manual).
+Without a private corpus the synthetic fixture set is used instead.
+"""
 
 from __future__ import annotations
 
@@ -24,6 +30,7 @@ ORCA_FDM_SCENARIO = SliceScenario(
         "full_api_orca_fdm_test_report.json",
         "full_api_orca_fdm_test_report.md",
     ),
+    materials=("PLA", "PETG", "ABS", "TPU"),
 )
 
 

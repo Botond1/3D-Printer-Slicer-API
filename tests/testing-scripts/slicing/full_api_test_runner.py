@@ -44,6 +44,7 @@ FULL_API_SCENARIOS = (
             "full_api_orca_fdm_test_report.json",
             "full_api_orca_fdm_test_report.md",
         ),
+        materials=("PLA", "PETG", "ABS", "TPU"),
     ),
     SliceScenario(
         key="prusa_fdm",
