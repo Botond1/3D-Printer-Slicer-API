@@ -119,6 +119,25 @@ def axis_map_equals(observed: object, expected: Mapping[str, float], tolerance: 
         return False
 
 
+def validate_optional_placement(body: object) -> tuple[bool, str]:
+    """``placement_mm`` is optional; when present it must be numeric ``{x_min, y_min}``.
+
+    A parallel track adds the field to Bambu responses. Its absence is never a
+    failure, but a present value that is not a finite numeric pair is.
+    """
+    if not isinstance(body, dict) or "placement_mm" not in body:
+        return True, "placement_mm absent"
+    placement = body.get("placement_mm")
+    if not isinstance(placement, dict) or not all(
+        isinstance(placement.get(key), (int, float))
+        and not isinstance(placement.get(key), bool)
+        and math.isfinite(placement.get(key))
+        for key in ("x_min", "y_min")
+    ):
+        return False, "placement_mm is present but not a numeric x_min/y_min pair"
+    return True, "placement_mm numeric"
+
+
 def error_code_of(body: object) -> str | None:
     if isinstance(body, dict) and isinstance(body.get("errorCode"), str):
         return body["errorCode"]

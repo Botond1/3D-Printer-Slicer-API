@@ -87,7 +87,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--material", default="PLA")
     parser.add_argument("--infill", default="15")
     parser.add_argument("--tolerance-percent", type=float, default=DEFAULT_TOLERANCE_PERCENT)
-    parser.add_argument("--sleep-seconds", type=float, default=12.0)
+    parser.add_argument(
+        "--sleep-seconds", type=float, default=20.0,
+        help="Pause between models; the slice limiter admits 3 requests/min sustained.",
+    )
     parser.add_argument("--report", type=Path, default=DEFAULT_REPORT_PATH)
     return parser.parse_args(argv)
 

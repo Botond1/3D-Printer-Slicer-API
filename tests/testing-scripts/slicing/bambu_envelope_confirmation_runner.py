@@ -38,6 +38,7 @@ from common.runner_support import (
     format_number,
     post_slice_with_retry,
     report_target_class,
+    validate_optional_placement,
 )
 from common.synthetic_fixtures import dimensions_close, inspect_binary_stl, write_cuboid_stl
 
@@ -46,7 +47,8 @@ CATALOGUE_ENDPOINT = "/profiles"
 CATALOGUE_SCHEMA = "r3d-profile-catalogue-v2"
 LAYER_HEIGHT = "0.2"
 MATERIAL = "PLA"
-SLEEP_SECONDS = 12
+# Paced to the 3 requests/min sustained slice limiter; 429s are still retried.
+SLEEP_SECONDS = 20
 FINAL_DIMENSION_TOLERANCE_MM = 0.05
 BOUNDS_ERROR_CODE = "MODEL_OUT_OF_PRINTER_BOUNDS"
 MEASURED_ENVELOPES_MM = {
@@ -138,7 +140,10 @@ def validate_pass(body: object, case: EdgeCase) -> tuple[bool, str]:
     stats = body.get("stats")
     if not isinstance(stats, dict) or abs(float(stats.get("object_height_mm", -1)) - expected["z"]) > FINAL_DIMENSION_TOLERANCE_MM:
         return False, "stats.object_height_mm differs from the cuboid height"
-    return True, "accepted at the exact inclusive edge with preserved dimensions"
+    placement_ok, placement_note = validate_optional_placement(body)
+    if not placement_ok:
+        return False, placement_note
+    return True, f"accepted at the exact inclusive edge with preserved dimensions ({placement_note})"
 
 
 def validate_fail(status: int, body: object, case: EdgeCase) -> tuple[bool, str]:

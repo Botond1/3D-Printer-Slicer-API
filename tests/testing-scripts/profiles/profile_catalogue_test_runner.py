@@ -1,4 +1,13 @@
-"""Focused HTTP integration checks for the public profile catalogue v2."""
+"""Focused HTTP integration checks for the public profile catalogue v2.
+
+The catalogue is validated generically (exact v2 entry shape, canonical digest,
+strong ETag, conditional 304, independent engine-scoped derivation) and then
+against the exact managed-preset tables below. The observed engine/printer/
+layer/material set must equal one *named catalogue generation*; the retired
+18-row J3B set stays recognisable so a regression is reported by name, while
+the required generation check accepts only the current 82-row set with the
+``bambu``, ``orca`` and ``prusa`` engines and the measured Bambu envelopes.
+"""
 
 from __future__ import annotations
 
@@ -34,19 +43,32 @@ PROFILE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$")
 ENGINE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 SLICE_ENDPOINT_PATTERN = re.compile(r"^/[a-z][a-z0-9-]{0,31}/slice$")
 ROLE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
-PROFILE_BASENAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+# Mirrors the API contract: repository basenames AND Bambu Studio vendor names
+# such as `0.20mm Standard @BBL X1C` (spaces, `@`, `+`), never a path.
+PROFILE_BASENAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 @._+-]{0,127}$")
 SELECTOR_PARAMETER_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 PRINTER_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 MINIMUM_DIMENSIONS = {"x": 1, "y": 1, "z": 1}
 DECLARED_DIMENSIONS = {
     "P1S": {"x": 256, "y": 256, "z": 250},
     "H2D-QUOTE": {"x": 350, "y": 320, "z": 325},
+    "H2D": {"x": 350, "y": 320, "z": 325},
+}
+# Measured Bambu Studio admission envelopes (inclusive, exact). The P1S bed is
+# L-shaped because of its 18 x 28 mm exclude corner: the catalogue publishes the
+# primary 256 x 228 footprint; the alternative 238 x 256 footprint is provable
+# only through the slice endpoint (see bambu_envelope_confirmation_runner).
+MEASURED_BAMBU_ENVELOPES = {
+    "P1S": {"x": 256, "y": 228, "z": 250},
+    "H2D": {"x": 325, "y": 320, "z": 325},
 }
 LARGEST_PASSING_DIMENSIONS = {
     ("prusa", "P1S"): {"x": 256, "y": 256, "z": 249.9},
     ("orca", "P1S"): {"x": 253.9, "y": 253.9, "z": 249.9},
     ("prusa", "H2D-QUOTE"): {"x": 350, "y": 320, "z": 324.9},
     ("orca", "H2D-QUOTE"): {"x": 347.9, "y": 317.9, "z": 324.9},
+    ("bambu", "P1S"): MEASURED_BAMBU_ENVELOPES["P1S"],
+    ("bambu", "H2D"): MEASURED_BAMBU_ENVELOPES["H2D"],
 }
 TOP_LEVEL_FIELDS = {
     "schema", "catalogue_sha256", "semantics", "profiles",
@@ -79,19 +101,69 @@ FLEET_RESOLUTION_FIELDS = {
     "minimum_dimensions_inclusive_mm",
     "largest_passing_dimensions_inclusive_mm", "excluded_printers",
 }
-EXPECTED_CURRENT_PRESETS = frozenset(
-    [
-        ("prusa", printer_id, layer_height, None)
-        for printer_id in ("P1S", "H2D-QUOTE")
-        for layer_height in (0.1, 0.2, 0.3)
-    ]
-    + [
-        ("orca", printer_id, layer_height, material)
-        for printer_id in ("P1S", "H2D-QUOTE")
-        for layer_height in (0.1, 0.2, 0.3)
-        for material in ("PETG", "PLA")
-    ]
+QUOTE_PRINTER = {"id": "H2D-QUOTE", "name": "H2D-sized quote (P1S physics)"}
+BAMBU_PRINTERS = {
+    "P1S": {
+        "name": "Bambu Lab P1S",
+        "source_profile": "Bambu Lab P1S 0.4 nozzle",
+        "layer_keys": ("0.08", "0.1", "0.12", "0.16", "0.2", "0.24", "0.28"),
+    },
+    "H2D": {
+        "name": "Bambu Lab H2D",
+        "source_profile": "Bambu Lab H2D 0.4 nozzle",
+        "layer_keys": ("0.08", "0.1", "0.12", "0.16", "0.2", "0.24"),
+    },
+}
+BAMBU_MATERIALS = ("ABS", "PETG", "PLA", "TPU")
+ORCA_MATERIALS = ("ABS", "PETG", "PLA", "TPU")
+PRUSA_PRESETS = frozenset(
+    ("prusa", printer_id, layer_height, None)
+    for printer_id in ("P1S", "H2D-QUOTE")
+    for layer_height in (0.1, 0.2, 0.3)
 )
+LEGACY_J3B_PRESETS = PRUSA_PRESETS | frozenset(
+    ("orca", printer_id, layer_height, material)
+    for printer_id in ("P1S", "H2D-QUOTE")
+    for layer_height in (0.1, 0.2, 0.3)
+    for material in ("PETG", "PLA")
+)
+CURRENT_PRESETS = PRUSA_PRESETS | frozenset(
+    ("orca", printer_id, layer_height, material)
+    for printer_id in ("P1S", "H2D-QUOTE")
+    for layer_height in (0.1, 0.2, 0.3)
+    for material in ORCA_MATERIALS
+) | frozenset(
+    ("bambu", printer_id, float(layer_key), material)
+    for printer_id, printer in BAMBU_PRINTERS.items()
+    for layer_key in printer["layer_keys"]
+    for material in BAMBU_MATERIALS
+)
+CURRENT_GENERATION = "bambu-82"
+# Every generation the runner can name exactly. The retired J3B set stays
+# recognisable so a regression to it is reported by name; only the current
+# generation satisfies the required generation check.
+CATALOGUE_GENERATIONS = (
+    (
+        CURRENT_GENERATION, CURRENT_PRESETS,
+        "Exactly 82 managed FDM rows publish separate declared and inclusive ceilings: "
+        "6 Prusa, 24 Orca (PLA/PETG/ABS/TPU), 28 Bambu Studio P1S and 24 Bambu Studio H2D.",
+    ),
+    (
+        "j3b-18", LEGACY_J3B_PRESETS,
+        "Exactly 18 managed FDM rows publish separate declared and inclusive ceilings; "
+        "H2D-sized quote selectors exist on both engines.",
+    ),
+)
+EXPECTED_CURRENT_PRESETS = CURRENT_PRESETS
+# Per engine: the dominant fleet printer(s) and every printer the engine binds.
+EXPECTED_FLEETS = {
+    "bambu": {
+        "printers": [{"id": "H2D", "name": BAMBU_PRINTERS["H2D"]["name"]}],
+        "engine_printers": ("H2D", "P1S"),
+    },
+    "orca": {"printers": [QUOTE_PRINTER], "engine_printers": ("H2D-QUOTE", "P1S")},
+    "prusa": {"printers": [QUOTE_PRINTER], "engine_printers": ("H2D-QUOTE", "P1S")},
+}
 
 
 @dataclass(frozen=True)
@@ -302,6 +374,36 @@ def derive_catalogue_resolutions(profiles: object) -> tuple[list[dict], list[dic
     return machine_resolutions, fleet_resolutions
 
 
+def leading_parameters_name_row_identity(
+    profile: Mapping[str, object], leading_parameters: list[dict[str, str]],
+) -> bool:
+    """Leading (component-free) selector parameters may only restate the row identity.
+
+    Registry-selected engines such as Bambu Studio choose the machine and
+    filament through ``printerProfile``/``layerHeight``/``material`` instead of
+    file basenames, so exactly those three parameters may precede the
+    component-backed chain. Nothing else is admitted ahead of the chain.
+    """
+    if [parameter["name"] for parameter in leading_parameters] != [
+        "printerProfile", "layerHeight", "material",
+    ]:
+        return False
+    printer_id, layer_value, material_value = (
+        parameter["value"] for parameter in leading_parameters
+    )
+    printer = profile.get("printer")
+    try:
+        layer_matches = float(layer_value) == float(profile.get("layer_height_mm"))
+    except (TypeError, ValueError):
+        return False
+    return (
+        isinstance(printer, dict)
+        and printer_id == printer.get("id")
+        and layer_matches
+        and material_value == profile.get("material")
+    )
+
+
 def validate_profile_entry_schema(profile: object) -> tuple[bool, str]:
     """Validate one technology-agnostic v2 entry."""
     if not isinstance(profile, dict) or set(profile) != PROFILE_ENTRY_FIELDS:
@@ -379,8 +481,14 @@ def validate_profile_entry_schema(profile: object) -> tuple[bool, str]:
             linked_parameters.append({
                 "name": selector_parameter, "value": component["basename"],
             })
-    if linked_parameters != parameters:
-        return False, "Selector parameters do not match the ordered component chain."
+    chain_start = len(parameters) - len(linked_parameters)
+    if chain_start < 0 or parameters[chain_start:] != linked_parameters:
+        return False, "Selector parameters do not end with the ordered component chain."
+    leading_parameters = parameters[:chain_start]
+    if leading_parameters and not leading_parameters_name_row_identity(
+        profile, leading_parameters,
+    ):
+        return False, "Leading selector parameters are not the row's own registry identity."
     digest = profile.get("effective_profile_sha256")
     if (
         not isinstance(digest, str) or SHA256_PATTERN.fullmatch(digest) is None
@@ -570,11 +678,90 @@ def _selector_map(profile: Mapping[str, object]) -> dict[str, str]:
     return {parameter["name"]: parameter["value"] for parameter in parameters}
 
 
+def _prusa_row_valid(
+    printer_id: str, layer: object, selectors: Mapping[str, str], limits: Mapping[str, object],
+) -> bool:
+    expected_profile = (
+        f"FDM_{layer}mm.ini" if printer_id == "P1S"
+        else f"FDM_P1S_H2D_SIZE_QUOTING_{layer}mm.ini"
+    )
+    return (
+        selectors == {"printerProfile": expected_profile}
+        and limits.get("source_profile") == expected_profile
+    )
+
+
+def _orca_row_valid(
+    printer_id: str, layer: object, selectors: Mapping[str, str], limits: Mapping[str, object],
+) -> bool:
+    expected_machine = (
+        "Bambu_P1S_0.4_nozzle.json" if printer_id == "P1S"
+        else "Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json"
+    )
+    return (
+        selectors == {
+            "printerProfile": expected_machine,
+            "processProfile": f"FDM_{layer}mm.json",
+        }
+        and limits.get("source_profile") == expected_machine
+    )
+
+
+def _bambu_row_valid(
+    profile: Mapping[str, object], printer_id: str, layer: object, material: object,
+    selectors: Mapping[str, str], limits: Mapping[str, object],
+) -> bool:
+    """Bambu rows select by registry id/layer/material and name the vendor chain."""
+    printer = BAMBU_PRINTERS.get(printer_id)
+    printer_identity = profile.get("printer")
+    if (
+        printer is None
+        or not isinstance(printer_identity, dict)
+        or printer_identity.get("name") != printer["name"]
+    ):
+        return False
+    layer_key = selectors.get("layerHeight")
+    process = selectors.get("processProfile")
+    components = profile.get("profile_components")
+    if not isinstance(components, list) or not all(isinstance(item, dict) for item in components):
+        return False
+    try:
+        layer_key_matches = layer_key in printer["layer_keys"] and float(layer_key) == float(layer)
+    except (TypeError, ValueError):
+        return False
+    return (
+        set(selectors) == {"printerProfile", "layerHeight", "material", "processProfile"}
+        and selectors.get("printerProfile") == printer_id
+        and layer_key_matches
+        and material in BAMBU_MATERIALS and selectors.get("material") == material
+        and isinstance(process, str) and "@BBL" in process
+        and [item.get("role") for item in components] == ["machine", "process", "filament"]
+        and components[0].get("basename") == printer["source_profile"]
+        and components[1].get("basename") == process
+        and limits.get("source_profile") == printer["source_profile"]
+    )
+
+
+def classify_catalogue_generation(observed: set) -> str | None:
+    """Name the generation whose preset set equals ``observed`` exactly, else None."""
+    for name, presets, _message in CATALOGUE_GENERATIONS:
+        if observed == presets:
+            return name
+    return None
+
+
 def validate_current_v2_fdm_boundary(body: object) -> tuple[bool, str]:
-    """Validate the exact 18 managed presets and their two dimension meanings."""
+    """Validate every managed row against its engine's exact selector/ceiling contract.
+
+    Each row must match the declared and inclusive tables for its engine and
+    printer and select its exact managed chain; the resulting engine/printer/
+    layer/material set must equal one named catalogue generation. The
+    observation names that generation; ``validate_current_generation``
+    separately requires it to be the current one.
+    """
     profiles = body.get("profiles") if isinstance(body, dict) else None
-    if not isinstance(profiles, list) or len(profiles) != 18:
-        return False, "Profiles are unavailable or not the closed set of 18."
+    if not isinstance(profiles, list) or not profiles:
+        return False, "Profiles are unavailable."
     observed: set[tuple[object, object, object, object]] = set()
     for profile in profiles:
         if not isinstance(profile, dict) or profile.get("technology") != "FDM":
@@ -598,35 +785,99 @@ def validate_current_v2_fdm_boundary(body: object) -> tuple[bool, str]:
             return False, "A current row has an incorrect declared or inclusive ceiling."
         selectors = _selector_map(profile)
         layer = profile.get("layer_height_mm")
+        material = profile.get("material")
         if engine == "prusa":
-            expected_profile = (
-                f"FDM_{layer}mm.ini" if printer_id == "P1S"
-                else f"FDM_P1S_H2D_SIZE_QUOTING_{layer}mm.ini"
-            )
-            if selectors != {"printerProfile": expected_profile}:
-                return False, "A Prusa selector does not select its exact managed profile."
+            row_valid = _prusa_row_valid(printer_id, layer, selectors, limits)
+        elif engine == "orca":
+            row_valid = _orca_row_valid(printer_id, layer, selectors, limits)
         else:
-            expected_machine = (
-                "Bambu_P1S_0.4_nozzle.json" if printer_id == "P1S"
-                else "Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json"
-            )
-            if selectors != {
-                "printerProfile": expected_machine,
-                "processProfile": f"FDM_{layer}mm.json",
-            }:
-                return False, "An Orca selector does not select its exact managed chain."
+            row_valid = _bambu_row_valid(profile, printer_id, layer, material, selectors, limits)
+        if not row_valid:
+            return False, f"A {engine} selector does not select its exact managed chain."
         if "Bambu_H2D_0.4_nozzle.json" in selectors.values():
             return False, "The incompatible placeholder H2D profile is publicly selected."
-        observed.add((engine, printer_id, layer, profile.get("material")))
-    if observed != EXPECTED_CURRENT_PRESETS:
+        observed.add((engine, printer_id, layer, material))
+    generation = classify_catalogue_generation(observed)
+    if generation is None:
         return False, "The current engine/printer/layer/material set is incomplete."
+    return True, next(
+        message for name, _presets, message in CATALOGUE_GENERATIONS if name == generation
+    )
+
+
+def validate_current_generation(body: object) -> tuple[bool, str]:
+    """Require the current 82-row generation over the bambu, orca and prusa engines."""
+    profiles = body.get("profiles") if isinstance(body, dict) else None
+    fleets = body.get("fleet_resolutions") if isinstance(body, dict) else None
+    if not isinstance(profiles, list) or not isinstance(fleets, list):
+        return False, "Profiles or fleet resolutions are unavailable."
+    observed: set[tuple[object, object, object, object]] = set()
+    for profile in profiles:
+        if not isinstance(profile, dict) or not isinstance(profile.get("printer"), dict):
+            return False, "A profile row is malformed."
+        observed.add((
+            profile.get("engine"), profile["printer"].get("id"),
+            profile.get("layer_height_mm"), profile.get("material"),
+        ))
+    generation = classify_catalogue_generation(observed)
+    engines = sorted(
+        str(fleet.get("engine")) if isinstance(fleet, dict) else "invalid" for fleet in fleets
+    )
+    if generation != CURRENT_GENERATION or engines != sorted(EXPECTED_FLEETS):
+        return False, (
+            f"Observed generation {generation or 'unknown'} with {len(profiles)} rows and "
+            f"fleet engines {engines}; expected {CURRENT_GENERATION} with "
+            f"{len(CURRENT_PRESETS)} rows and the bambu, orca and prusa fleets."
+        )
     return True, (
-        "Exactly 18 managed FDM rows publish separate declared and inclusive ceilings; "
-        "H2D-sized quote selectors exist on both engines."
+        f"{len(CURRENT_PRESETS)} rows over the bambu, orca and prusa engines form the "
+        "current generation."
+    )
+
+
+def validate_measured_bambu_envelopes(body: object) -> tuple[bool, str]:
+    """Every bambu row and machine resolution publishes the measured inclusive triple."""
+    if not isinstance(body, dict):
+        return False, "Response body is unavailable."
+    profiles = body.get("profiles") if isinstance(body.get("profiles"), list) else []
+    rows = [
+        profile for profile in profiles
+        if isinstance(profile, dict) and profile.get("engine") == "bambu"
+        and isinstance(profile.get("printer"), dict)
+    ]
+    if not rows:
+        return False, "No bambu rows are published."
+    for printer_id, expected in MEASURED_BAMBU_ENVELOPES.items():
+        printer_rows = [row for row in rows if row["printer"].get("id") == printer_id]
+        if not printer_rows:
+            return False, f"No bambu rows are published for {printer_id}."
+        if any(
+            not isinstance(row.get("build_volume_limits_mm"), dict)
+            or row["build_volume_limits_mm"].get("largest_passing_dimensions_inclusive_mm")
+            != expected
+            for row in printer_rows
+        ):
+            return False, f"A bambu {printer_id} row does not publish the measured envelope."
+    machines = body.get("machine_resolutions")
+    observed = {
+        machine["printer"].get("id"): machine.get("largest_passing_dimensions_inclusive_mm")
+        for machine in (machines if isinstance(machines, list) else [])
+        if isinstance(machine, dict) and machine.get("engine") == "bambu"
+        and isinstance(machine.get("printer"), dict)
+    }
+    if any(
+        observed.get(printer_id) != expected
+        for printer_id, expected in MEASURED_BAMBU_ENVELOPES.items()
+    ):
+        return False, "Bambu machine resolutions do not publish the measured envelopes."
+    return True, (
+        "Bambu P1S 256 x 228 x 250 mm and H2D 325 x 320 x 325 mm are published on every "
+        "row and machine resolution."
     )
 
 
 def validate_current_v2_resolutions(body: object) -> tuple[bool, str]:
+    """Every published engine derives its own machine and fleet ceilings from the tables."""
     if not isinstance(body, dict):
         return False, "Response body is unavailable."
     machines = body.get("machine_resolutions")
@@ -638,28 +889,37 @@ def validate_current_v2_resolutions(body: object) -> tuple[bool, str]:
         machine.get("largest_passing_dimensions_inclusive_mm")
         for machine in machines if isinstance(machine, dict)
     }
-    if observed_machines != LARGEST_PASSING_DIMENSIONS:
-        return False, "Current machine resolutions do not preserve all engine ceilings."
-    expected_fleets = {
-        "orca": LARGEST_PASSING_DIMENSIONS[("orca", "H2D-QUOTE")],
-        "prusa": LARGEST_PASSING_DIMENSIONS[("prusa", "H2D-QUOTE")],
+    published_engines = {engine for engine, _printer_id in observed_machines}
+    expected_machines = {
+        (engine, printer_id): LARGEST_PASSING_DIMENSIONS[(engine, printer_id)]
+        for engine in published_engines if engine in EXPECTED_FLEETS
+        for printer_id in EXPECTED_FLEETS[engine]["engine_printers"]
     }
-    if len(fleets) != 2:
-        return False, "Current FDM fleet is not split into exactly two engine scopes."
+    if not published_engines or observed_machines != expected_machines:
+        return False, "Machine resolutions do not preserve every engine's own ceilings."
+    fleet_engines = sorted(
+        str(fleet.get("engine")) if isinstance(fleet, dict) else "invalid" for fleet in fleets
+    )
+    if fleet_engines != sorted(published_engines):
+        return False, "Fleet resolutions do not cover exactly the published engines."
     for fleet in fleets:
-        engine = fleet.get("engine") if isinstance(fleet, dict) else None
+        engine = fleet.get("engine")
+        expected = EXPECTED_FLEETS[engine]
+        dominant_printer = expected["printers"][0]["id"]
         if (
-            engine not in expected_fleets or fleet.get("technology") != "FDM"
+            fleet.get("technology") != "FDM"
             or fleet.get("status") != "resolved" or fleet.get("reason") is not None
-            or fleet.get("printers") != [{
-                "id": "H2D-QUOTE", "name": "H2D-sized quote (P1S physics)",
-            }]
+            or fleet.get("printers") != expected["printers"]
             or fleet.get("minimum_dimensions_inclusive_mm") != MINIMUM_DIMENSIONS
-            or fleet.get("largest_passing_dimensions_inclusive_mm") != expected_fleets[engine]
+            or fleet.get("largest_passing_dimensions_inclusive_mm")
+            != LARGEST_PASSING_DIMENSIONS[(engine, dominant_printer)]
             or fleet.get("excluded_printers") != []
         ):
-            return False, "A current engine-scoped fleet ceiling is invalid."
-    return True, "Orca and Prusa publish distinct machine-derived H2D-quote fleet ceilings."
+            return False, f"The {engine} fleet ceiling is not its dominant machine's envelope."
+    return True, (
+        "Each published engine's fleet ceiling is its own dominant machine's inclusive "
+        "envelope; engines are never merged."
+    )
 
 
 def cube_stl() -> bytes:
@@ -777,8 +1037,18 @@ def run_checks(base_url: str, verify_slice: bool) -> tuple[list[Check], str]:
     ))
     current_ok, observation = validate_current_v2_fdm_boundary(body)
     checks.append(Check(
-        "current v2 managed set is exactly 18 machine-bound FDM presets",
+        "managed rows publish exact per-engine selectors, declared and inclusive ceilings",
         CATALOGUE_ENDPOINT, status, current_ok, observation,
+    ))
+    generation_ok, observation = validate_current_generation(body)
+    checks.append(Check(
+        "current generation is the 82-row set with the bambu, orca and prusa engines",
+        CATALOGUE_ENDPOINT, status, generation_ok, observation,
+    ))
+    bambu_ok, observation = validate_measured_bambu_envelopes(body)
+    checks.append(Check(
+        "bambu rows publish the measured P1S and H2D inclusive envelopes",
+        CATALOGUE_ENDPOINT, status, bambu_ok, observation,
     ))
     resolutions_ok, observation = validate_published_resolutions(body)
     checks.append(Check(
@@ -787,7 +1057,7 @@ def run_checks(base_url: str, verify_slice: bool) -> tuple[list[Check], str]:
     ))
     current_resolutions_ok, observation = validate_current_v2_resolutions(body)
     checks.append(Check(
-        "current Prusa and Orca H2D-quote fleet ceilings stay separate",
+        "each engine's fleet ceiling is its own dominant machine (bambu H2D, orca/prusa H2D-QUOTE)",
         CATALOGUE_ENDPOINT, status, current_resolutions_ok, observation,
     ))
     if verify_slice and isinstance(body, dict):
@@ -810,7 +1080,9 @@ def write_report(base_url: str, checks: list[Check], slice_state: str) -> None:
         f"Optional live slice digest parity: **{slice_state}**", "",
         "## Evidence boundary", "",
         "This runner validates the live v2 HTTP catalogue, its declared profile dimensions, "
-        "authoritative inclusive largest-passing ceilings, and engine-scoped derivation. "
+        "authoritative inclusive largest-passing ceilings, engine-scoped derivation, and the "
+        "current 82-row generation (prusa, orca PLA/PETG/ABS/TPU, and Bambu Studio P1S/H2D "
+        "with the measured envelopes). "
         "Exact-image/native measurement and deployment state require separate evidence. "
         "The optional slice parity check runs only when explicitly requested.", "",
         "No base URL, hostname, IP address, credential, response body, or temporary path "

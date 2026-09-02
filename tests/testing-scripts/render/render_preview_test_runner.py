@@ -42,7 +42,8 @@ RENDER_ENDPOINT = "/render"
 EXPECTED_WIDTH = 1024
 EXPECTED_HEIGHT = 768
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-SLEEP_SECONDS = 12
+# Paced to the shared 3 requests/min sustained slice limiter; 429s are retried.
+SLEEP_SECONDS = 20
 MAX_ATTEMPTS = 3
 PREVIEW_MODEL_MM = (40.0, 60.0, 25.0)
 # Deliberately not a credential: a fixed, well-formed but unconfigured value.

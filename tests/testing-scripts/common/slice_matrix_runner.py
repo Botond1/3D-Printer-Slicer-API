@@ -7,6 +7,13 @@ Fixture sources: when the gitignored private corpus under ``tests/testing-files`
 contains supported models it is used; otherwise the deterministic synthetic
 fixture set from ``common.synthetic_fixtures`` is generated into a temporary
 directory and the report states that only synthetic fixtures ran.
+
+Contract notes: FDM successes on every engine must publish a positive direct
+mass and a catalogue-priced quote (Orca ABS/TPU included); SLA successes must
+publish null mass, hourly rate, and price; a scenario may declare
+``negative_requests`` that are sent once against the first fixture and must be
+rejected with their exact status and error code (for example ``infill=140`` is
+``400 INVALID_INFILL``, never clamped).
 """
 
 from __future__ import annotations
@@ -64,6 +71,9 @@ class SliceScenario:
     ``materials`` optionally cycles additional materials across the discovered
     files (the first entry starts the cycle); when empty, ``material`` is used
     for every request. ``printer_profile`` selects the Bambu registry printer.
+    ``negative_requests`` are ``(label, extra_fields, expected_status,
+    error_codes)`` tuples sent once against the first fixture; each must be
+    rejected with that exact status and one of the accepted error codes.
     """
 
     key: str
@@ -77,6 +87,7 @@ class SliceScenario:
     expected_failures: tuple[ExpectedFailure, ...] = ()
     materials: tuple[str, ...] = ()
     printer_profile: str | None = None
+    negative_requests: tuple[tuple[str, dict[str, str], int, tuple[str, ...]], ...] = ()
 
 
 @dataclass
@@ -547,6 +558,102 @@ def resolve_fixture_files(tests_root: Path, synthetic_dir: Path) -> tuple[list[P
     return write_standard_fixture_set(synthetic_root), synthetic_dir, FIXTURE_SOURCE_SYNTHETIC
 
 
+def evaluate_negative_response(
+    status: int,
+    body: dict | str | None,
+    expected_status: int,
+    error_codes: tuple[str, ...],
+) -> tuple[bool, str | None, str | None]:
+    """Judge one declared rejection: exact status, typed envelope, accepted code."""
+    error_code = body.get("errorCode") if isinstance(body, dict) else None
+    error_message = body.get("error") if isinstance(body, dict) else None
+    if status != expected_status:
+        return False, error_code, (
+            f"Expected {expected_status}, got status={status}, errorCode={error_code}"
+        )
+    if not isinstance(body, dict) or body.get("success") is not False:
+        return False, error_code, "Rejection body is not the typed success:false envelope"
+    if error_codes and error_code not in error_codes:
+        return False, error_code, f"Expected errorCode in {error_codes}, got {error_code}"
+    return True, error_code, error_message
+
+
+def select_negative_fixture(files: Sequence[Path]) -> Path:
+    """Prefer a plain STL for negative requests so only the option under test can fail."""
+    for candidate in files:
+        if candidate.suffix.lower() == ".stl":
+            return candidate
+    return files[0]
+
+
+def run_negative_requests(
+    scenario: SliceScenario,
+    *,
+    base_url: str,
+    slice_service_api_key: str,
+    file_path: Path,
+    relative_file: str,
+    first_index: int,
+    retry_on_429: int,
+    retry_wait_seconds: int,
+    sleep_seconds: int,
+) -> list[TestCaseResult]:
+    """Send each declared negative request against one fixture and expect its rejection."""
+    rows: list[TestCaseResult] = []
+    layer_height = scenario.layer_heights[0]
+    material = scenario.material
+    for offset, (label, overrides, expected_status, error_codes) in enumerate(
+        scenario.negative_requests,
+    ):
+        index = first_index + offset
+        extra_fields = build_extra_fields(
+            scenario.endpoint, scenario.technology, layer_height, scenario.printer_profile,
+        )
+        extra_fields.update(overrides)
+        codes = "/".join(error_codes) if error_codes else "any_error"
+        print(f"[RUNNER:{scenario.key}] #{index} -> negative | {relative_file} | {label}")
+        status, body, duration = run_slice_request_with_retry(
+            base_url,
+            scenario.endpoint,
+            file_path,
+            layer_height,
+            material,
+            slice_service_api_key,
+            extra_fields,
+            retry_on_429=retry_on_429,
+            retry_wait_seconds=retry_wait_seconds,
+        )
+        success, error_code, error_message = evaluate_negative_response(
+            status, body, expected_status, error_codes,
+        )
+        rows.append(
+            TestCaseResult(
+                index=index,
+                endpoint=scenario.endpoint,
+                technology=scenario.technology,
+                file=f"{relative_file} [{label}]",
+                category="negative",
+                layer_height=layer_height,
+                material=material,
+                http_status=status,
+                success=success,
+                duration_sec=round(duration, 3),
+                expected_hint=f"expected_{expected_status}_{codes}",
+                error_code=error_code,
+                error_message=error_message,
+                raw_body=body,
+                expected_hourly_rate=None,
+                actual_hourly_rate=None,
+                hourly_rate_matches_pricing_json=None,
+            )
+        )
+        print(f"[RUNNER:{scenario.key}]    status={status} success={success} duration={duration:.2f}s")
+        if not success and error_message:
+            print(f"[RUNNER:{scenario.key}]    detail={error_message}")
+        time.sleep(sleep_seconds)
+    return rows
+
+
 def run_scenario(
     scripts_root: Path,
     scenario: SliceScenario,
@@ -676,6 +783,20 @@ def run_scenario(
 
             req_index += 1
             time.sleep(sleep_seconds)
+
+        if scenario.negative_requests:
+            negative_fixture = select_negative_fixture(files)
+            rows.extend(run_negative_requests(
+                scenario,
+                base_url=base_url,
+                slice_service_api_key=slice_service_api_key,
+                file_path=negative_fixture,
+                relative_file=str(negative_fixture.relative_to(files_root)).replace("\\", "/"),
+                first_index=req_index,
+                retry_on_429=retry_on_429,
+                retry_wait_seconds=retry_wait_seconds,
+                sleep_seconds=sleep_seconds,
+            ))
 
     generated_at = datetime.now(timezone.utc).isoformat()
     report_text = markdown_summary(

@@ -45,6 +45,9 @@ FULL_API_SCENARIOS = (
             "full_api_orca_fdm_test_report.md",
         ),
         materials=("PLA", "PETG", "ABS", "TPU"),
+        negative_requests=(
+            ("infill 140 is rejected, never clamped", {"infill": "140"}, 400, ("INVALID_INFILL",)),
+        ),
     ),
     SliceScenario(
         key="prusa_fdm",

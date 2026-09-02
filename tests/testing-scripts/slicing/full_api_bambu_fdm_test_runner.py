@@ -43,6 +43,7 @@ from common.runner_support import (
     is_positive_number,
     post_slice_with_retry,
     report_target_class,
+    validate_optional_placement,
 )
 from common.slice_matrix_runner import discover_test_files
 from common.synthetic_fixtures import (
@@ -64,13 +65,21 @@ MATERIALS = ("PLA", "PETG", "ABS", "TPU")
 H2D_CASES = ((0.2, "PLA"),)
 DEFAULT_INFILL = "15"
 EXPECTED_INFILL_ECHO = "15%"
-SLEEP_SECONDS = 12
+# The slice limiter admits 3 requests/min sustained (burst 5) per client, so
+# requests are paced at that rate; 429 responses are still retried with backoff.
+SLEEP_SECONDS = 20
 DIMENSION_TOLERANCE_MM = 1e-6
 MEASURED_BUILD_VOLUME_MAX_MM = {
     "P1S": {"x": 256, "y": 228, "z": 250},
     "H2D": {"x": 325, "y": 320, "z": 325},
 }
-MATERIAL_REJECTION_CODES = ("INVALID_MATERIAL_FOR_TECHNOLOGY", "MATERIAL_PROFILE_UNAVAILABLE")
+# `Standard` is the SLA resin material, so the forced-FDM Bambu endpoint reports
+# MATERIAL_TECHNOLOGY_MISMATCH; the other codes cover unknown/unprofiled materials.
+MATERIAL_REJECTION_CODES = (
+    "MATERIAL_TECHNOLOGY_MISMATCH",
+    "INVALID_MATERIAL_FOR_TECHNOLOGY",
+    "MATERIAL_PROFILE_UNAVAILABLE",
+)
 ARTIFACT_SUFFIX = ".gcode.3mf"
 
 
@@ -292,7 +301,10 @@ def validate_success_body(
     artifact_id = body.get("artifact_id")
     if not isinstance(artifact_id, str) or ARTIFACT_ID_PATTERN.fullmatch(artifact_id) is None:
         return False, "artifact_id is missing or not artifact-<32 hex>"
-    return True, "complete Bambu success contract"
+    placement_ok, placement_note = validate_optional_placement(body)
+    if not placement_ok:
+        return False, placement_note
+    return True, f"complete Bambu success contract ({placement_note})"
 
 
 def evaluate_case(case: BambuCase, status: int, body: object, pricing_map: dict | None) -> tuple[bool, str]:
