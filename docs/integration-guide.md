@@ -197,9 +197,11 @@ unavailable and the converted model continued as submitted).
 `original_dimensions_mm` is a real pre-orientation measurement and `false`
 exactly when it is `null`.
 
-The examples below use the same 40 mm PLA cube. The Prusa and Orca numbers are
-the measured baselines of the current image; the Bambu numbers are
-illustrative until the orchestrator records the measured value.
+The examples below use the same 40 mm PLA cube at 0.2 mm, 20 % infill,
+supports on, measured on the current image (2026-09-02). `print_time_readable`
+is a human-readable `<h>h <m>m` string and is not meant to be parsed. The
+`material_used_m` values in the examples are derived from the measured mass
+and the profile density; the service reports the slicer's own length marker.
 
 ### 4.1 Prusa example
 
@@ -246,7 +248,7 @@ illustrative until the orchestrator records the measured value.
   "hourly_rate": 800,
   "stats": {
     "print_time_seconds": 1980,
-    "print_time_readable": "33m",
+    "print_time_readable": "0h 33m",
     "print_time_source": "estimated_printing_time",
     "material_used_m": 8.27,
     "material_used_g": 24.7,
@@ -278,7 +280,7 @@ illustrative until the orchestrator records the measured value.
   "hourly_rate": 800,
   "stats": {
     "print_time_seconds": 2760,
-    "print_time_readable": "46m",
+    "print_time_readable": "0h 46m",
     "print_time_source": "total_estimated_time",
     "material_used_m": 8.11,
     "material_used_g": 24.2,
@@ -288,7 +290,7 @@ illustrative until the orchestrator records the measured value.
 }
 ```
 
-### 4.3 Bambu example (only the engine-specific parts shown)
+### 4.3 Bambu example (only the engine-specific parts shown; H2D measured 2452 s / 23.94 g / 550 HUF)
 
 ```json
 {
@@ -312,13 +314,13 @@ illustrative until the orchestrator records the measured value.
   "placement_mm": { "x_min": 108, "y_min": 108 },
   "hourly_rate": 800,
   "stats": {
-    "print_time_seconds": 1740,
-    "print_time_readable": "29m",
+    "print_time_seconds": 2453,
+    "print_time_readable": "0h 40m",
     "print_time_source": "total_estimated_time",
-    "material_used_m": 8.2,
-    "material_used_g": 24.5,
+    "material_used_m": 8.05,
+    "material_used_g": 24.0,
     "object_height_mm": 40,
-    "estimated_price_huf": 390
+    "estimated_price_huf": 550
   }
 }
 ```
@@ -415,7 +417,7 @@ Do not parse the `error` text; branch on `errorCode` only.
 All values are inclusive: a model exactly on the value is accepted.
 
 Measured on 2026-09-02 against the owner's Bambu Studio GUI readings of the
-ten reference models: the Bambu Studio 2.8.2.61 headless CLI reproduces the
+ten reference models: the Bambu Studio 02.08.02.61 headless CLI reproduces the
 GUI within −1.1..+0.1 % on time and 0..0.2 % on mass with supports off, so
 `POST /bambu/slice` is the quoting authority for Bambu Lab printers.
 OrcaSlicer 2.3.1 with its bundled BBL profiles deviates by up to +24 % and has
