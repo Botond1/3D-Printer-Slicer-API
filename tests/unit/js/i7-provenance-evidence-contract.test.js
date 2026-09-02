@@ -26,7 +26,7 @@ const EXPECTED_KEYS = Object.freeze({
     workflow: ['job', 'name', 'run_attempt', 'run_id'],
     build_inputs: ['dockerfile_sha256', 'package_json_sha256', 'package_lock_sha256', 'platform'],
     image: ['configured_user', 'id', 'identity_scope', 'kernel_gid', 'kernel_uid', 'service_gid', 'service_uid'],
-    slicers: ['orca', 'prusa'],
+    slicers: ['bambu', 'orca', 'prusa'],
     slicer: ['sha256', 'url', 'version'],
     swiper: ['sha256', 'sha512', 'url', 'version'],
     sbom: ['file_sha256', 'spdx_version'],
@@ -69,7 +69,10 @@ function validInput() {
                 sha256: '565f2f4bd4dbb05904a459d54db1916b6932124709c1d17b5aacfe9f5f2f1b03'},
             orca: {version: '2.3.1',
                 url: 'https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v2.3.1/OrcaSlicer_Linux_AppImage_Ubuntu2404_V2.3.1.AppImage',
-                sha256: 'f199e5408914efdbbbfa4fd6752cd6ad4727209b488bc47bff9a0da5f053a701'}
+                sha256: 'f199e5408914efdbbbfa4fd6752cd6ad4727209b488bc47bff9a0da5f053a701'},
+            bambu: {version: '02.08.02.61',
+                url: 'https://github.com/bambulab/BambuStudio/releases/download/v02.08.02.61/BambuStudio_ubuntu24.04-v02.08.02.61-20260820225108.AppImage',
+                sha256: 'd501b103fac5424513ec0e8d6bc145fb30719de2c7d94d7320d723740c81a7fd'}
         },
         swiper: {
             version: '12.1.2',
@@ -111,10 +114,11 @@ function assertRejected(value, expected = {}) {
 test('builder emits one frozen, bounded, exact-schema successful evidence object', () => {
     const evidence = buildCandidateEvidence(validInput());
     assert.equal(validateCandidateEvidence(evidence), null);
-    assert.equal(evidence.schema_version, 'i7-s3a-candidate-provenance-v1');
+    assert.equal(evidence.schema_version, 'i7-s3a-candidate-provenance-v2');
     assert.ok(Object.isFrozen(evidence));
     assert.ok(Object.isFrozen(evidence.workflow));
     assert.ok(Object.isFrozen(evidence.slicers.prusa));
+    assert.ok(Object.isFrozen(evidence.slicers.bambu));
     assert.ok(Buffer.byteLength(JSON.stringify(evidence), 'utf8') <= MAX_EVIDENCE_BYTES);
     assertExactKeys(evidence, EXPECTED_KEYS.top, 'top-level allowlist');
     assert.deepEqual([...EVIDENCE_KEYS.root].sort(), [...EXPECTED_KEYS.top].sort());
@@ -125,6 +129,15 @@ test('builder emits one frozen, bounded, exact-schema successful evidence object
     assertExactKeys(evidence.slicers, EXPECTED_KEYS.slicers, 'slicers');
     assertExactKeys(evidence.slicers.prusa, EXPECTED_KEYS.slicer, 'Prusa');
     assertExactKeys(evidence.slicers.orca, EXPECTED_KEYS.slicer, 'Orca');
+    assertExactKeys(evidence.slicers.bambu, EXPECTED_KEYS.slicer, 'Bambu');
+});
+
+test('validator rejects v1-shaped evidence that omits the pinned Bambu Studio slicer', () => {
+    const value = validInput();
+    delete value.slicers.bambu;
+    assert.equal(validateCandidateEvidence(value), 'slicers_schema_mismatch');
+    value.schema_version = 'i7-s3a-candidate-provenance-v1';
+    assert.equal(validateCandidateEvidence(value), 'evidence_version_mismatch');
 });
 test('builder rejects non-object input and does not retain caller-owned mutable state', () => {
     for (const value of [null, [], 'evidence', 1]) {
@@ -198,6 +211,10 @@ test('validator binds pinned tool metadata, successful proofs, and no-publicatio
         ['Prusa version', (x) => { x.slicers.prusa.version = '2.8.2'; }],
         ['Prusa hash', (x) => { x.slicers.prusa.sha256 = HASH_A; }],
         ['Orca URL', (x) => { x.slicers.orca.url += '?mirror=1'; }],
+        ['Bambu version', (x) => { x.slicers.bambu.version = '2.8.2.61'; }],
+        ['Bambu hash', (x) => { x.slicers.bambu.sha256 = HASH_A; }],
+        ['Bambu URL', (x) => { x.slicers.bambu.url += '?mirror=1'; }],
+        ['Bambu extra field', (x) => { x.slicers.bambu.wrapper = '/usr/local/bin/bambu-studio'; }],
         ['Swiper version', (x) => { x.swiper.version = '12.1.3'; }],
         ['Swiper URL', (x) => { x.swiper.url += '?mirror=1'; }],
         ['Swiper SHA256', (x) => { x.swiper.sha256 = HASH_A; }],

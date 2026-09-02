@@ -89,8 +89,14 @@ function dockerfileContract(source) {
         'COPY --chown=0:0 configs/ ./configs/',
         'COPY --chown=0:0 package.json package-lock.json ./'
     ]) assert.ok(runtime.includes(copy), `missing immutable copy contract: ${copy}`);
-    assert.match(runtime, /chown -R root:root \/app \/opt\/venv \/opt\/prusaslicer \/opt\/orcaslicer/);
-    assert.match(runtime, /chmod -R a-w \/app \/opt\/venv \/opt\/prusaslicer \/opt\/orcaslicer/);
+    assert.match(runtime,
+        /chown -R root:root \/app \/opt\/venv \/opt\/prusaslicer \/opt\/orcaslicer \/opt\/bambustudio \\$/m);
+    assert.match(runtime,
+        /chmod -R a-w \/app \/opt\/venv \/opt\/prusaslicer \/opt\/orcaslicer \/opt\/bambustudio \\$/m);
+    assert.match(runtime, /^COPY --from=slicer-base \/tmp\/bambu-squashfs-root \/opt\/bambustudio$/m);
+    assert.match(runtime,
+        /^COPY --chown=0:0 --chmod=0555 scripts\/bambu-studio-wrapper\.sh \/usr\/local\/bin\/bambu-studio$/m);
+    assert.doesNotMatch(runtime, /ln -sf? \/opt\/bambustudio/);
     assert.match(runtime, /mkdir -p input output configs\/pricing-state/);
     assert.match(runtime, /chown slicer:slicer input output configs\/pricing-state/);
     assert.match(runtime, /chmod 0700 input output configs\/pricing-state/);
@@ -173,7 +179,21 @@ test('container-envelope weakening mutations fail the focused contract', async (
         ['runtime HOME routed to immutable passwd home', DOCKERFILE,
             'HOME=/tmp/slicer-home', 'HOME=/home/slicer', dockerfileContract],
         ['immutable chmod removed', DOCKERFILE,
-            '    && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer \\\n', '', dockerfileContract],
+            '    && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer /opt/bambustudio \\\n', '',
+            dockerfileContract],
+        ['Bambu Studio tree left writable', DOCKERFILE,
+            '    && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer /opt/bambustudio \\\n',
+            '    && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer \\\n', dockerfileContract],
+        ['Bambu Studio tree not root-owned', DOCKERFILE,
+            'RUN chown -R root:root /app /opt/venv /opt/prusaslicer /opt/orcaslicer /opt/bambustudio \\\n',
+            'RUN chown -R root:root /app /opt/venv /opt/prusaslicer /opt/orcaslicer \\\n', dockerfileContract],
+        ['Bambu Studio wrapper becomes writable', DOCKERFILE,
+            'COPY --chown=0:0 --chmod=0555 scripts/bambu-studio-wrapper.sh /usr/local/bin/bambu-studio',
+            'COPY --chown=0:0 --chmod=0755 scripts/bambu-studio-wrapper.sh /usr/local/bin/bambu-studio',
+            dockerfileContract],
+        ['Bambu Studio exposed through a bare symlink', DOCKERFILE,
+            'COPY --chown=0:0 --chmod=0555 scripts/bambu-studio-wrapper.sh /usr/local/bin/bambu-studio',
+            'RUN ln -sf /opt/bambustudio/AppRun /usr/local/bin/bambu-studio', dockerfileContract],
         ['world-writable runtime added', DOCKERFILE, 'chmod 0700', 'chmod 0777', dockerfileContract]
     ];
 

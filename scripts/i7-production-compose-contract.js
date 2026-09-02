@@ -10,7 +10,7 @@ const IMAGE_INTERPOLATION =
     'image: "${SLICER_API_IMAGE:?Set SLICER_API_IMAGE to registry/repository@sha256:<64 lowercase hex>}"';
 const SERVICE_KEYS = Object.freeze([
     'image', 'container_name', 'env_file', 'environment', 'user', 'healthcheck',
-    'security_opt', 'cap_drop', 'read_only', 'pids_limit', 'mem_limit',
+    'security_opt', 'cap_drop', 'read_only', 'init', 'pids_limit', 'mem_limit',
     'memswap_limit', 'cpus', 'tmpfs', 'logging', 'volumes', 'networks',
     'restart', 'stop_grace_period'
 ]);
@@ -108,6 +108,7 @@ function validateProductionComposeSource(source) {
         `    ${IMAGE_INTERPOLATION}`,
         '    user: "${SLICER_UID:?Set SLICER_UID to the image slicer user\'s positive numeric UID}:${SLICER_GID:?Set SLICER_GID to the image slicer user\'s positive numeric GID}"',
         '    read_only: true',
+        '    init: true',
         '    pids_limit: ${SLICER_PIDS_LIMIT:-512}',
         '    mem_limit: ${SLICER_MEMORY_BYTES:-4294967296}',
         '    memswap_limit: ${SLICER_MEMORY_BYTES:-4294967296}',

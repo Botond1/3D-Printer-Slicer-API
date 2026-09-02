@@ -76,6 +76,24 @@ test('production Compose satisfies the immutable single-service contract', () =>
     );
 });
 
+test('production Compose runs the service under an init process so detached native trees are reaped', async (t) => {
+    assert.equal(COMPOSE.split('\n').filter((line) => line === '    init: true').length, 1);
+    assert.match(COMPOSE, /^    read_only: true\n    init: true\n    pids_limit:/m);
+    const cases = [
+        ['init removed', replaceRequired(COMPOSE, /^    init: true\n/m, '')],
+        ['init disabled', replaceRequired(COMPOSE, /^    init: true$/m, '    init: false')],
+        ['init moved out of order', replaceRequired(
+            replaceRequired(COMPOSE, /^    init: true\n/m, ''),
+            /^    restart: unless-stopped\n/m,
+            '    restart: unless-stopped\n    init: true\n'
+        )],
+        ['init duplicated', addServiceDirective(COMPOSE, '    init: true\n')]
+    ];
+    for (const [name, source] of cases) {
+        await t.test(name, () => assertRejected(source, name));
+    }
+});
+
 test('production Compose rejects mutable image and build inputs', async (t) => {
     const imageCases = [
         ['missing image', ''],

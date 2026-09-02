@@ -1,6 +1,8 @@
 'use strict';
 
-const SCHEMA_VERSION = 'i7-s3a-candidate-provenance-v1';
+// v2 adds the third pinned native slicer (Bambu Studio) to `slicers`; every
+// key stays exact, so v1 evidence is not accepted by this validator.
+const SCHEMA_VERSION = 'i7-s3a-candidate-provenance-v2';
 const MAX_EVIDENCE_BYTES = 64 * 1024;
 const EXACT_REPOSITORY = 'https://github.com/Botond1/3D-Printer-Slicer-API';
 const EXACT_WORKFLOW = 'Image Validation - Build Once (NO PUSH / NO DEPLOY)';
@@ -14,6 +16,11 @@ const EXACT_SLICERS = Object.freeze({
         version: '2.3.1',
         url: 'https://github.com/OrcaSlicer/OrcaSlicer/releases/download/v2.3.1/OrcaSlicer_Linux_AppImage_Ubuntu2404_V2.3.1.AppImage',
         sha256: 'f199e5408914efdbbbfa4fd6752cd6ad4727209b488bc47bff9a0da5f053a701'
+    }),
+    bambu: Object.freeze({
+        version: '02.08.02.61',
+        url: 'https://github.com/bambulab/BambuStudio/releases/download/v02.08.02.61/BambuStudio_ubuntu24.04-v02.08.02.61-20260820225108.AppImage',
+        sha256: 'd501b103fac5424513ec0e8d6bc145fb30719de2c7d94d7320d723740c81a7fd'
     })
 });
 const EXACT_SWIPER = Object.freeze({
@@ -37,7 +44,7 @@ const EVIDENCE_KEYS = Object.freeze({
         'id', 'identity_scope', 'configured_user', 'service_uid', 'service_gid',
         'kernel_uid', 'kernel_gid'
     ]),
-    slicers: Object.freeze(['prusa', 'orca']),
+    slicers: Object.freeze(['prusa', 'orca', 'bambu']),
     slicer: Object.freeze(['version', 'url', 'sha256']),
     swiper: Object.freeze(['version', 'url', 'sha512', 'sha256']),
     sbom: Object.freeze(['file_sha256', 'spdx_version']),
@@ -116,7 +123,8 @@ function validateSlicer(value, expected) {
 function validateSlicers(value) {
     if (!exactKeys(value, EVIDENCE_KEYS.slicers)) return 'slicers_schema_mismatch';
     return validateSlicer(value.prusa, EXACT_SLICERS.prusa)
-        || validateSlicer(value.orca, EXACT_SLICERS.orca);
+        || validateSlicer(value.orca, EXACT_SLICERS.orca)
+        || validateSlicer(value.bambu, EXACT_SLICERS.bambu);
 }
 
 function validateSwiper(value) {
