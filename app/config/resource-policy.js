@@ -20,6 +20,12 @@ const RESOURCE_DEFINITIONS = Object.freeze({
     MULTIPART_MAX_FIELD_NAME_CHARS: { default: 64, min: 20, max: 256 },
     MULTIPART_MAX_FIELD_BYTES: { default: 65_536, min: 1_024, max: MiB },
     MAX_ZIP_ENTRIES: { default: 500, min: 1, max: 500 },
+    // A PrusaSlicer .sl1 archive carries one PNG per layer plus config.ini, so
+    // its entry count is a layer budget rather than the generic upload ZIP
+    // entry policy above: a tall model at a fine layer height can exceed
+    // MAX_ZIP_ENTRIES long before it is unreasonable, but it must still be
+    // bounded so a hostile/corrupt archive cannot force unbounded iteration.
+    MAX_SL1_ENTRIES: { default: 20_000, min: 1, max: 20_000 },
     MAX_ZIP_UNCOMPRESSED_BYTES: { default: 500 * MiB, min: 1, max: 500 * MiB },
     MAX_ZIP_ENTRY_BYTES: { default: 500 * MiB, min: 1, max: 500 * MiB },
     MAX_ZIP_COMPRESSION_RATIO: { default: 100, min: 1, max: 1_000 },

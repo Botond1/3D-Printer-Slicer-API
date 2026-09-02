@@ -236,7 +236,7 @@ test('explicit-axis provenance distinguishes complete, partial, and fallback env
     const fallbackSla = resolveBuildVolumeLimits(
         'prusa', 'SLA', path.join(PRUSA_DIR, 'missing-sla-profile.ini'), null
     );
-    assert.deepEqual(fallbackSla.max, { x: 120, y: 120, z: 150 });
+    assert.deepEqual(fallbackSla.max, { x: 218.88, y: 122.88, z: 220 });
     assert.deepEqual(fallbackSla.explicitMaxAxes, { x: false, y: false, z: false });
 
     const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'j2-partial-volume-'));

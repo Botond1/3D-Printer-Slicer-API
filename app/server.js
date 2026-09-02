@@ -41,6 +41,7 @@ const { beginSliceQueueShutdown } = require('./services/slice/queue');
 const { initializeSlicerEngineVersions } = require('./services/slice/engine-version');
 const { getBambuPrinterRegistry } = require('./services/slice/bambu-printer-registry');
 const { verifyBambuRegistryChains } = require('./services/slice/bambu-profile-chain');
+const { getSlaPrinterRegistry } = require('./services/slice/sla-printer-registry');
 const { configureRetentionObserver } = require('./services/slice/output-lifecycle');
 const { createProfileCatalogueService } = require('./services/slice/profile-catalogue');
 const { createRuntimeLifecycle } = require('./services/runtime-lifecycle');
@@ -245,6 +246,10 @@ async function startServer() {
     // /bambu/slice answer 500 on its first request. The catalogue below stays
     // non-critical and merely re-exercises the same chains.
     verifyBambuRegistryChains({ registry: getBambuPrinterRegistry() });
+    // The SLA printer registry has no external chain to flatten (Prusa reads
+    // its own bundled SLA profiles directly), so loading it once and
+    // validating it strictly is the complete startup gate.
+    getSlaPrinterRegistry();
     configureRetentionObserver(readinessService);
     await profileCatalogueService.initialize({ engineVersions });
     const scratchCleanup = await auditStaleWorkspaces({
@@ -304,7 +309,8 @@ async function startServer() {
 const TYPED_STARTUP_FAILURE_CODES = new Set([
     'STARTUP_SLICER_VERSION_FAILED',
     'STARTUP_BAMBU_REGISTRY_INVALID',
-    'STARTUP_BAMBU_PROFILE_CHAIN_FAILED'
+    'STARTUP_BAMBU_PROFILE_CHAIN_FAILED',
+    'STARTUP_SLA_REGISTRY_INVALID'
 ]);
 
 runtimeLifecycle.run(startServer).catch((error) => {

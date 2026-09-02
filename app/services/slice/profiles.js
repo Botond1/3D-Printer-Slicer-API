@@ -12,6 +12,7 @@ const {
     MAX_BUILD_VOLUMES,
     P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    SLA_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE,
     MIN_BUILD_VOLUMES
@@ -323,11 +324,15 @@ function resolveBuildVolumeLimits(
     const h2dQuoteProfileLimits =
         H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[engine]
         || Object.freeze({});
+    const slaProfileLimits = technology === 'SLA'
+        ? (SLA_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[engine] || Object.freeze({}))
+        : Object.freeze({});
     const bambuProfileLimits = engine === 'bambu'
         ? BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM
         : Object.freeze({});
     const configuredLargestPassing = knownProfileLimits[limits.sourceProfile]
         || h2dQuoteProfileLimits[limits.sourceProfile]
+        || slaProfileLimits[limits.sourceProfile]
         || bambuProfileLimits[limits.sourceProfile]
         || null;
     let largestPassing = configuredLargestPassing

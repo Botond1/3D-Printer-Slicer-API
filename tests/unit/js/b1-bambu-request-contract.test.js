@@ -172,10 +172,10 @@ test('supports=false drops the Prusa support flags while the default argv stays 
         buildSlicerCommandArgs('FDM', 'process.json', path.join('stage', 'result.gcode'), '20%', 'orca', 'machine.json', 'filament.json', { supports: false }),
         orca
     );
-    // SLA never carries support flags.
+    // SLA never carries support flags, and centers on the Saturn 4 Ultra bed.
     assert.deepEqual(
         buildSlicerCommandArgs('SLA', 'profile.ini', 'out.sl1', '20%', 'prusa', null, null, { supports: false }),
-        ['--load', 'profile.ini', '--center', '100,100', '--export-sla', '--output', 'out.sl1']
+        ['--load', 'profile.ini', '--center', '109.44,61.44', '--export-sla', '--output', 'out.sl1']
     );
 });
 

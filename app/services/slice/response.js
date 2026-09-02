@@ -7,6 +7,8 @@ const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { getRate } = require('../pricing.service');
 const { roundDimensions, roundToThree } = require('./common');
 const { getBambuPrinter } = require('./bambu-printer-registry');
+const { getDefaultSlaPrinterId, resolveSlaResinDensity } = require('./sla-printer-registry');
+const { TIME_MODEL_SCHEMA } = require('./sla-time-model');
 const RESOURCE_POLICY = resolveResourcePolicy(process.env);
 
 const MINIMUM_BILLABLE_SECONDS = 900;
@@ -151,13 +153,35 @@ function mapBambuProfileResponse(context) {
     };
 }
 
+/**
+ * Prusa SLA quoting rows add the printer id, the resin density used to derive
+ * `stats.material_used_g`, and the layer-time model schema; the request's
+ * material has already passed `INVALID_MATERIAL_FOR_TECHNOLOGY` validation
+ * upstream, so a missing density here is an internal defect.
+ */
+function mapPrusaProfileResponse(context) {
+    const base = {
+        prusa_profile: path.basename(context.baseConfigFile),
+        effective_profile_sha256: requireEffectiveProfileSha256(context.effectiveProfileSha256)
+    };
+    if (context.technology !== 'SLA') return base;
+    const slaPrinter = getDefaultSlaPrinterId();
+    const resinDensityGcm3 = resolveSlaResinDensity(context.material, slaPrinter);
+    if (!Number.isFinite(resinDensityGcm3) || resinDensityGcm3 <= 0) {
+        throw new Error('SLA resin density is unavailable for a validated material.');
+    }
+    return {
+        ...base,
+        sla_printer: slaPrinter,
+        resin_density_g_cm3: resinDensityGcm3,
+        sla_time_model: TIME_MODEL_SCHEMA
+    };
+}
+
 const PROFILE_RESPONSE_MAPPERS = Object.freeze({
     orca: mapOrcaProfileResponse,
     bambu: mapBambuProfileResponse,
-    prusa: (context) => ({
-        prusa_profile: path.basename(context.baseConfigFile),
-        effective_profile_sha256: requireEffectiveProfileSha256(context.effectiveProfileSha256)
-    })
+    prusa: mapPrusaProfileResponse
 });
 
 /**
@@ -283,10 +307,11 @@ function buildSliceSuccessResponse(context) {
     }
 
     const profiles = resolveProfileMapper(engine)(context);
-    // SLA is never priced automatically: its print time is an uncalibrated
-    // estimate and no resin mass is measured, so hourly rate and price stay
-    // null and the response never publishes a resin mass either.
-    const requiresManualPricing = technology === 'SLA' ||
+    // FDM stays manual without a positive measured mass, and Orca stays
+    // manual without a selected filament profile. SLA always has a positive
+    // resin mass (derived from the parsed volume and registry resin density)
+    // and prices automatically like FDM.
+    const requiresManualPricing =
         (technology === 'FDM' &&
         (!Number.isFinite(stats.material_used_g) || stats.material_used_g <= 0)) ||
         (engine === 'orca' && profiles.filament_profile === null);
@@ -315,7 +340,6 @@ function buildSliceSuccessResponse(context) {
         hourly_rate: hourlyRate,
         stats: {
             ...stats,
-            ...(technology === 'SLA' ? { material_used_g: null } : {}),
             object_height_mm: finalHeight,
             estimated_price_huf: totalPrice
         }
@@ -329,6 +353,7 @@ module.exports = {
     calculateSlicePricing,
     mapBambuProfileResponse,
     mapOrcaProfileResponse,
+    mapPrusaProfileResponse,
     requireEngineVersion,
     resolvePlacementResponse,
     resolveProfileMapper,
