@@ -108,18 +108,26 @@ test.after(async () => {
 
 test('server-owned manifest covers P1S, the P1S-physics quote chains, and the Bambu vendor chains', () => {
     const definitions = createPresetDefinitions();
-    assert.equal(definitions.length, 82);
-    assert.equal(definitions.filter((item) => item.engine === 'prusa').length, 6);
+    assert.equal(definitions.length, 88);
+    assert.equal(definitions.filter((item) => item.engine === 'prusa').length, 12);
+    assert.equal(definitions.filter((item) => item.engine === 'prusa' && item.technology === 'FDM').length, 6);
+    assert.equal(definitions.filter((item) => item.engine === 'prusa' && item.technology === 'SLA').length, 6);
     assert.equal(definitions.filter((item) => item.engine === 'orca').length, 24);
     assert.equal(definitions.filter((item) => item.engine === 'bambu').length, 52);
     assert.deepEqual(
         [...new Set(definitions.map((item) => item.printer.id))].sort(),
-        ['H2D', 'H2D-QUOTE', 'P1S']
+        ['H2D', 'H2D-QUOTE', 'P1S', 'SATURN4U']
     );
     assert.equal(definitions.some((item) => (
         item.profileOverrides.orcaMachineProfile === 'Bambu_H2D_0.4_nozzle.json'
     )), false);
-    assert.ok(definitions.every((item) => item.technology === 'FDM'));
+    assert.ok(definitions.every((item) => item.technology === 'FDM' || item.technology === 'SLA'));
+    assert.deepEqual(
+        [...new Set(definitions
+            .filter((item) => item.engine === 'prusa' && item.technology === 'SLA')
+            .map((item) => item.material))].sort(),
+        ['ABS-Like', 'Flexible', 'Standard']
+    );
     for (const engine of ['orca', 'bambu']) {
         assert.deepEqual(
             [...new Set(definitions.filter((item) => item.engine === engine)
@@ -145,9 +153,9 @@ test('v2 publishes explicit declared metadata and authoritative inclusive ceilin
     assert.equal(snapshot.body.schema, 'r3d-profile-catalogue-v2');
     assert.match(snapshot.body.catalogue_sha256, /^[a-f0-9]{64}$/);
     assert.match(snapshot.etag, /^"[a-f0-9]{64}"$/);
-    assert.equal(snapshot.body.profiles.length, 82);
-    assert.equal(new Set(snapshot.body.profiles.map((entry) => entry.id)).size, 82);
-    assert.ok(snapshot.body.profiles.every((entry) => entry.technology === 'FDM'));
+    assert.equal(snapshot.body.profiles.length, 88);
+    assert.equal(new Set(snapshot.body.profiles.map((entry) => entry.id)).size, 88);
+    assert.ok(snapshot.body.profiles.every((entry) => entry.technology === 'FDM' || entry.technology === 'SLA'));
     assertNoPublicMaxProperty(snapshot.body);
 
     const expectedLimitKeys = [
@@ -167,8 +175,9 @@ test('v2 publishes explicit declared metadata and authoritative inclusive ceilin
     assert.match(snapshot.body.semantics.build_volume_dimensions, /not an admission limit/i);
     assert.match(snapshot.body.semantics.build_volume_dimensions, /exact boundary value/i);
     assert.match(snapshot.body.semantics.fleet_derivation, /engine-scoped/i);
-    assert.match(snapshot.body.semantics.scope, /Fallback-only SLA presets are never machine entries/);
+    assert.match(snapshot.body.semantics.scope, /Fallback-only presets backed by no explicit machine-profile metadata are never machine entries/);
     assert.match(snapshot.body.semantics.scope, /ABS and TPU/);
+    assert.match(snapshot.body.semantics.scope, /Elegoo Saturn 4 Ultra SLA quoting rows/);
     assert.equal(Object.isFrozen(snapshot.body), true);
     assert.equal(Object.isFrozen(snapshot.body.profiles[0].printer), true);
     assert.equal(Object.isFrozen(snapshot.body.machine_resolutions[0]), true);
@@ -266,14 +275,24 @@ test('selector parameters remain uniquely derived from the ordered component cha
         const derived = entry.slice_selector.parameters
             .filter((parameter) => componentNames.has(parameter.name));
         assert.deepEqual(derived, expectedParameters, entry.id);
-        if (entry.engine !== 'bambu') {
-            assert.deepEqual(entry.slice_selector.parameters, expectedParameters, entry.id);
-        } else {
+        if (entry.engine === 'bambu') {
             assert.deepEqual(
                 entry.slice_selector.parameters.map((parameter) => parameter.name),
                 ['printerProfile', 'layerHeight', 'material', 'processProfile'],
                 entry.id
             );
+        } else if (entry.engine === 'prusa' && entry.technology === 'SLA') {
+            // SLA has no printerProfile component: the default
+            // `${technology}_${layerHeight}mm.ini` naming resolves the exact
+            // file from layerHeight alone, so layerHeight and material are the
+            // complete, component-independent selector.
+            assert.deepEqual(
+                entry.slice_selector.parameters.map((parameter) => parameter.name),
+                ['layerHeight', 'material'],
+                entry.id
+            );
+        } else {
+            assert.deepEqual(entry.slice_selector.parameters, expectedParameters, entry.id);
         }
         assert.equal(
             new Set(entry.slice_selector.parameters.map((parameter) => parameter.name)).size,
@@ -401,6 +420,15 @@ test('machine and fleet resolutions preserve per-engine admission authority', ()
             reason: null,
             minimum_dimensions_inclusive_mm: minimum,
             largest_passing_dimensions_inclusive_mm: { x: 256, y: 256, z: 249.9 }
+        },
+        {
+            technology: 'SLA',
+            printer: { id: 'SATURN4U', name: 'Elegoo Saturn 4 Ultra' },
+            engine: 'prusa',
+            status: 'resolved',
+            reason: null,
+            minimum_dimensions_inclusive_mm: minimum,
+            largest_passing_dimensions_inclusive_mm: { x: 218.88, y: 122.88, z: 220 }
         }
     ]);
     assert.deepEqual(snapshot.body.fleet_resolutions, [
@@ -432,6 +460,16 @@ test('machine and fleet resolutions preserve per-engine admission authority', ()
             printers: [{ id: 'H2D-QUOTE', name: 'H2D-sized quote (P1S physics)' }],
             minimum_dimensions_inclusive_mm: minimum,
             largest_passing_dimensions_inclusive_mm: { x: 350, y: 320, z: 324.9 },
+            excluded_printers: []
+        },
+        {
+            technology: 'SLA',
+            engine: 'prusa',
+            status: 'resolved',
+            reason: null,
+            printers: [{ id: 'SATURN4U', name: 'Elegoo Saturn 4 Ultra' }],
+            minimum_dimensions_inclusive_mm: minimum,
+            largest_passing_dimensions_inclusive_mm: { x: 218.88, y: 122.88, z: 220 },
             excluded_printers: []
         }
     ]);

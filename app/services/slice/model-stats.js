@@ -9,6 +9,7 @@ const { resourceLimit, invalidStats } = require('./resource-errors');
 const { parseSl1Stats } = require('./sl1-stats');
 const { resolveSlaResinDensity } = require('./sla-printer-registry');
 const { computeSlaPrintTime } = require('./sla-time-model');
+const { roundToThree } = require('./common');
 const {
     FILAMENT_GRAM_PATTERNS,
     GcodeMetricsError,
@@ -348,9 +349,9 @@ async function parseSlaOutputStats(stats, filePath, policy, options) {
 
     const modelVolumeMm3 = options.modelVolumeMm3;
     if (Number.isFinite(modelVolumeMm3) && modelVolumeMm3 >= 0) {
-        const modelVolumeMl = modelVolumeMm3 / 1000;
+        const modelVolumeMl = roundToThree(modelVolumeMm3 / 1000);
         stats.model_volume_ml = modelVolumeMl;
-        stats.support_volume_ml = Math.max(0, stats.material_used_ml - modelVolumeMl);
+        stats.support_volume_ml = roundToThree(Math.max(0, stats.material_used_ml - modelVolumeMl));
     } else {
         stats.model_volume_ml = null;
         stats.support_volume_ml = null;

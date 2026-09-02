@@ -414,6 +414,10 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
     // The density must be injected here exactly as the slice path injects it,
     // or the catalogue would digest a runtime profile that no real request ever
     // produces and every effective_profile_sha256 comparison would diverge.
+    // SLA resin density is never injected into the runtime INI at slice time
+    // (resolveMaterialFilamentMetadata only maps the four FDM materials, and
+    // resin mass is derived independently from the parsed volume and the SLA
+    // registry), so the catalogue must not inject it here either.
     const runtimeConfigFile = await dependencies.createRuntimeSlicerProfile(
         definition.engine,
         snapshots.baseConfigFile,
@@ -421,7 +425,7 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
         definition.layerHeight,
         `${DEFAULTS.DEFAULT_INFIL_PERCENT}%`,
         workspace,
-        { filamentDensityGcm3: metadata?.densityGcm3 }
+        { filamentDensityGcm3: definition.technology === 'FDM' ? metadata?.densityGcm3 : undefined }
     );
     const limits = dependencies.resolveBuildVolumeLimits(
         definition.engine,

@@ -193,12 +193,18 @@ test('SL1 config.ini metadata is read from a generated archive', async (t) => {
     const root = await fixture(t);
     const sl1 = path.join(root, 'model.sl1');
     await makeArchive(sl1, [
-        { name: 'config.ini', data: 'printTime=120\nusedMaterial=4.25\n', store: true },
+        {
+            name: 'config.ini',
+            data: 'printTime=120\nusedMaterial=4.25\nlayerHeight=0.05\nnumFast=95\nnumSlow=5\nnumFade=8\n',
+            store: true
+        },
         { name: '0.png', data: Buffer.from([1, 2, 3]), store: true }
     ]);
     assert.deepEqual(await parseSl1Stats(sl1), {
-        print_time_seconds: 120,
-        material_used_ml: 4.25
+        material_used_ml: 4.25,
+        layer_count: 100,
+        fade_layers: 8,
+        sl1_print_time_seconds: 120
     });
 });
 

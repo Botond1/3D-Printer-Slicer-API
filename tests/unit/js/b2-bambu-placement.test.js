@@ -68,7 +68,7 @@ const {
 } = require('../../../app/docs/slice-openapi');
 const { PRINT_TIME_PATTERNS } = require('../../../app/services/slice/gcode-metrics');
 const {
-    SLA_PRINT_TIME_SOURCES,
+    SLA_PRINT_TIME_SOURCE,
     createMeasuredModelMeasurement
 } = require('../../../app/services/slice/model-stats');
 const {
@@ -509,10 +509,9 @@ test('placement_mm is a Bambu-only response field documented with the SLA/FDM pr
     assert.deepEqual(schema.properties.stats.properties.print_time_source.enum, [...PRINT_TIME_SOURCES]);
     assert.deepEqual([...PRINT_TIME_SOURCES].sort(), [
         ...PRINT_TIME_PATTERNS.map((pattern) => pattern.id),
-        ...Object.values(SLA_PRINT_TIME_SOURCES)
+        SLA_PRINT_TIME_SOURCE
     ].sort());
-    assert.ok(PRINT_TIME_SOURCES.includes('sla_synthetic_estimate'));
-    assert.ok(PRINT_TIME_SOURCES.includes('sla_sl1_metadata_estimate'));
+    assert.ok(PRINT_TIME_SOURCES.includes('sla_layer_time_model'));
     assert.match(createSliceResponses()[500].description, /NATIVE_OUTPUT_OVERFLOW/);
 
     const prusa = buildSliceSuccessResponse({

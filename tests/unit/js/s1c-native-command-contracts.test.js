@@ -267,9 +267,9 @@ test('Prusa and Orca execution append only the processable model to exact engine
     // back to manual pricing. The third row stays false because that request
     // asks for a material with no catalogue entry, so nothing was supplied.
     assert.deepEqual(parseCalls.map((args) => [args[4], args[5]]), [
-        ['prusa', { requireFilamentGrams: true }],
-        ['orca', { requireFilamentGrams: true }],
-        ['orca', { requireFilamentGrams: false }]
+        ['prusa', { requireFilamentGrams: true, material: 'PLA', modelVolumeMm3: null }],
+        ['orca', { requireFilamentGrams: true, material: 'PLA', modelVolumeMm3: null }],
+        ['orca', { requireFilamentGrams: false, material: 'ABS', modelVolumeMm3: null }]
     ]);
     assert.equal(prusaResult.filamentProfileMetadata.densityGcm3 > 0, true);
     assert.ok(calls.every((call) => call.signal === signal));
