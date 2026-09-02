@@ -13,13 +13,37 @@ const { isUnsafeZipPath, assertDeclaredEntryPolicy } = require('./zip-policy');
 const { archiveIdentity, openZipWithRetry } = require('./zip-open');
 const { extractZipEntry } = require('./zip-stream');
 
+/** Platform metadata basenames that desktop archivers add and that carry no model data. */
+const IGNORED_ZIP_BASENAMES = Object.freeze(new Set([
+    '.ds_store', 'thumbs.db', 'desktop.ini'
+]));
+/** Resource-fork sidecar directory added by macOS Finder archives. */
+const IGNORED_ZIP_ROOTS = Object.freeze(new Set(['__macosx']));
+/** Junk sidecars may sit one level below their sidecar directory. */
+const JUNK_ENTRY_MAX_DEPTH = 8;
+
 /**
- * Detect unsafe ZIP entry names (path traversal / absolute paths).
- * @param {string} entryPath ZIP internal entry name.
- * @returns {boolean} True when the entry path is unsafe.
+ * Decide whether an entry is archiver junk that is tolerated but never used.
+ * Directory entries, the macOS `__MACOSX/` sidecar tree, and well-known
+ * platform metadata files are skipped. Every other entry must be a supported
+ * model file; the archive still has to contain exactly one of those.
+ * @param {string} fileName Safe (already path-validated) ZIP entry name.
+ * @returns {boolean} True when the entry is ignorable junk.
  */
+function isIgnorableZipEntry(fileName) {
+    const slashed = String(fileName).replaceAll('\\', '/');
+    if (slashed.endsWith('/')) return true;
+    const segments = slashed.split('/');
+    if (IGNORED_ZIP_ROOTS.has(segments[0].toLowerCase())) return true;
+    const basename = segments[segments.length - 1].toLowerCase();
+    return IGNORED_ZIP_BASENAMES.has(basename) || basename.startsWith('._');
+}
+
 /**
  * Inspect ZIP entries before extraction to enforce anti-zip-bomb constraints.
+ * Junk entries (see `isIgnorableZipEntry`) still count toward the entry and
+ * byte envelopes so a junk-padded bomb cannot bypass the limits, but they
+ * never become extraction candidates and never fail the archive.
  * @param {string} zipPath Path to ZIP archive.
  * @param {Set<string>} supportedExts Allowed extension set.
  * @returns {Promise<string[]>} Candidate entry names matching supported extensions.
@@ -48,17 +72,23 @@ async function inspectZipFile(zipPath, supportedExts, options = {}) {
                 return fail(invalidArchive('Encrypted ZIP files are not supported.'));
             }
 
-            if (isUnsafeZipPath(entry.fileName)) {
+            const directoryEntry = entry.fileName.endsWith('/');
+            if (isUnsafeZipPath(directoryEntry ? entry.fileName.slice(0, -1) : entry.fileName)) {
                 return fail(invalidArchive('ZIP contains unsafe file paths.'));
             }
 
-            if (entry.fileName.endsWith('/')) {
-                return fail(invalidArchive('ZIP directories are not supported.'));
-            }
-            try {
-                assertDeclaredEntryPolicy(entry, policy);
-            } catch (error) {
-                return fail(error);
+            const ignorable = isIgnorableZipEntry(entry.fileName);
+            if (!directoryEntry) {
+                try {
+                    // Junk sidecars live under their own directory, so they are
+                    // exempt from the model-entry depth rule but still bound by
+                    // the declared size, ratio, and regular-file checks.
+                    assertDeclaredEntryPolicy(entry, ignorable
+                        ? { ...policy, MAX_ZIP_PATH_DEPTH: JUNK_ENTRY_MAX_DEPTH }
+                        : policy);
+                } catch (error) {
+                    return fail(error);
+                }
             }
             totalUncompressed += entry.uncompressedSize;
             if (!Number.isSafeInteger(totalUncompressed) || totalUncompressed > policy.MAX_ZIP_UNCOMPRESSED_BYTES) {
@@ -68,6 +98,11 @@ async function inspectZipFile(zipPath, supportedExts, options = {}) {
             fileEntryCount += 1;
             if (fileEntryCount > policy.MAX_ZIP_ENTRIES) {
                 return fail(resourceLimit('ZIP contains too many files.'));
+            }
+
+            if (ignorable) {
+                zipFile.readEntry();
+                return;
             }
 
             const ext = path.extname(entry.fileName).toLowerCase();
@@ -181,6 +216,7 @@ module.exports = {
     extractFirstSupportedFromZip,
     resolveExtractionDirectory,
     inspectZipFile,
+    isIgnorableZipEntry,
     extractZipEntry,
     isUnsafeZipPath,
     assertDeclaredEntryPolicy

@@ -5,7 +5,7 @@
 const { randomBytes } = require('node:crypto');
 const fs = require('node:fs/promises');
 const { PYTHON_EXECUTABLE } = require('../../config/python');
-const { runCommand, throwIfAborted } = require('./command');
+const { runCommand, throwIfAborted, PYTHON_HELPER_TIMEOUT_MS } = require('./command');
 const { resolvePythonHelper } = require('./helper-paths');
 const {
     MODEL_INFO_MEASUREMENT_STATUSES,
@@ -84,6 +84,14 @@ function hasTargetSizing(targetSizeMm) {
 
 /**
  * Build uniform scale factors from proportional target sizing.
+ *
+ * Fit-within-box semantics: every requested axis contributes one ratio
+ * `target / base`, and the single uniform factor is the minimum of those
+ * ratios. The scaled model therefore never exceeds any requested axis; when
+ * several axes are given, at most one of them is met exactly and the others
+ * come out smaller. A requested axis whose ratio is non-finite or not
+ * strictly positive (NaN, zero, negative, or a zero base dimension) is
+ * rejected instead of being silently skipped.
  * @param {{x: number, y: number, z: number}} baseDimensions Current model dimensions.
  * @param {{x: number | null, y: number | null, z: number | null}} targetSizeMm Requested target size in millimeters.
  * @returns {{isValid: true, scale: {x: number, y: number, z: number}} | {isValid: false, error: string}} Scale result.
@@ -95,14 +103,14 @@ function buildProportionalScale(baseDimensions, targetSizeMm) {
     if (targetSizeMm.y !== null) ratios.push(targetSizeMm.y / baseDimensions.y);
     if (targetSizeMm.z !== null) ratios.push(targetSizeMm.z / baseDimensions.z);
 
-    const factor = ratios.find((value) => Number.isFinite(value) && value > 0);
-    if (!factor) {
+    if (ratios.length === 0 || !ratios.every((value) => Number.isFinite(value) && value > 0)) {
         return {
             isValid: false,
             error: 'Invalid proportional scaling ratio derived from target size values.'
         };
     }
 
+    const factor = Math.min(...ratios);
     return {
         isValid: true,
         scale: { x: factor, y: factor, z: factor }
@@ -228,7 +236,7 @@ async function applyModelTransform(inputPath, transformPlan, workspace, suffixFa
 
     await runCommand(PYTHON_EXECUTABLE, [
         resolvePythonHelper('scale_model.py'), inputPath, transformedPath, ...args
-    ], { signal });
+    ], { signal, timeoutMs: PYTHON_HELPER_TIMEOUT_MS });
     throwIfAborted(signal);
     const transformedStat = await fs.lstat(transformedPath);
     if (!transformedStat.isFile() || transformedStat.isSymbolicLink()) {
@@ -365,6 +373,8 @@ async function applyTransformAndValidateModel(
 
 module.exports = {
     applyTransformAndValidateModel,
+    buildModelTransformPlan,
+    buildProportionalScale,
     normalizeDirectModelMeasurement,
     resolveTransformedPath
 };

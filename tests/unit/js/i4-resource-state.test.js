@@ -111,12 +111,19 @@ test('technology-specific stats reject NaN, Infinity, negative, zero-required an
     assert.throws(() => validateSliceStats({
         ...validFdm, material_used_g: policy.MAX_MATERIAL_USED_GRAMS + 1
     }, 'FDM', policy));
-    assert.doesNotThrow(() => validateSliceStats({
-        ...validFdm, material_used_m: 0, material_used_g: 0, material_used_ml: 1
-    }, 'SLA', policy));
-    assert.throws(() => validateSliceStats({
-        ...validFdm, material_used_m: 0, material_used_g: 0, material_used_ml: 0
-    }, 'SLA', policy));
+    // SLA never publishes a resin mass (null, not zero) and its print time is
+    // always an explicitly marked estimate.
+    const validSla = {
+        ...validFdm,
+        material_used_m: 0,
+        material_used_g: null,
+        material_used_ml: 1,
+        print_time_source: 'sla_synthetic_estimate'
+    };
+    assert.doesNotThrow(() => validateSliceStats({ ...validSla }, 'SLA', policy));
+    assert.throws(() => validateSliceStats({ ...validSla, material_used_g: 0 }, 'SLA', policy));
+    assert.throws(() => validateSliceStats({ ...validSla, material_used_ml: 0 }, 'SLA', policy));
+    assert.throws(() => validateSliceStats({ ...validSla, print_time_source: null }, 'SLA', policy));
 });
 
 test('SLA config requires positive finite usedMaterial and accepts bounded printTime', () => {

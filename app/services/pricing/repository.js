@@ -55,12 +55,21 @@ class PricingRepository {
         const pricingRaw = this.fs === fs
             ? readFileSyncBounded(target, this.policy.MAX_PRICING_BYTES)
             : this.readWithInjectedFs(target);
+        if (String(pricingRaw).trim() === '') {
+            const empty = new Error('Pricing file is empty.');
+            empty.code = 'PRICING_FILE_EMPTY';
+            throw empty;
+        }
         const parsed = JSON.parse(pricingRaw);
-        const fdmSource = parsed?.FDM && typeof parsed.FDM === 'object' ? parsed.FDM : undefined;
-        const slaSource = parsed?.SLA && typeof parsed.SLA === 'object' ? parsed.SLA : undefined;
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error('Invalid pricing payload.');
+        }
+        // An existing file is authoritative. Defaults seed only a missing or
+        // empty file (the caller resets to defaults when this throws), so a
+        // material deleted through the API never resurrects on restart.
         return validatePricingSnapshot({
-            FDM: { ...this.defaultPricing.FDM, ...fdmSource },
-            SLA: { ...this.defaultPricing.SLA, ...slaSource }
+            FDM: parsed.FDM,
+            SLA: parsed.SLA
         }, this.policy.MAX_HOURLY_PRICE_HUF);
     }
 

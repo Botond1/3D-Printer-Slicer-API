@@ -12,6 +12,7 @@ const {
     findMaterialKey
 } = require('../services/pricing.service');
 const {
+    PRICING_ERROR_CODES,
     parseMaterialOrResponse,
     parsePriceOrResponse,
     parseTechnologyOrResponse,
@@ -74,7 +75,11 @@ async function createMaterialForTechnology(req, res, technology) {
     } catch (error) {
         if (error.code === 'PRICING_CONFLICT') {
             recordPricingMutation(req, technology, 'create', 'failure', 'PRICING_CONFLICT');
-            return res.status(409).json({ success: false, error: error.message });
+            return res.status(409).json({
+                success: false,
+                error: error.message,
+                errorCode: PRICING_ERROR_CODES.MATERIAL_ALREADY_EXISTS
+            });
         }
         recordPricingMutation(req, technology, 'create', 'failure', 'PRICING_PERSISTENCE_FAILED');
         return persistenceFailure(res);
@@ -154,7 +159,8 @@ function createPricingRouter(options = {}) {
         recordPricingMutation(req, technology, 'update', 'failure', 'PRICING_NOT_FOUND');
         return res.status(400).json({
             success: false,
-            error: 'Material does not exist for this technology. Only existing materials can be updated.'
+            error: 'Material does not exist for this technology. Only existing materials can be updated.',
+            errorCode: PRICING_ERROR_CODES.MATERIAL_NOT_FOUND
         });
     }
 
@@ -175,7 +181,11 @@ function createPricingRouter(options = {}) {
     } catch (error) {
         if (error.code === 'PRICING_NOT_FOUND') {
             recordPricingMutation(req, technology, 'update', 'failure', 'PRICING_NOT_FOUND');
-            return res.status(404).json({ success: false, error: error.message });
+            return res.status(404).json({
+                success: false,
+                error: error.message,
+                errorCode: PRICING_ERROR_CODES.MATERIAL_NOT_FOUND
+            });
         }
         recordPricingMutation(req, technology, 'update', 'failure', 'PRICING_PERSISTENCE_FAILED');
         return persistenceFailure(res);
@@ -214,7 +224,11 @@ function createPricingRouter(options = {}) {
     const materialKey = findMaterialKey(technology, materialParam);
     if (!materialKey) {
         recordPricingMutation(req, technology, 'delete', 'failure', 'PRICING_NOT_FOUND');
-        return res.status(404).json({ success: false, error: 'Material not found.' });
+        return res.status(404).json({
+            success: false,
+            error: 'Material not found.',
+            errorCode: PRICING_ERROR_CODES.MATERIAL_NOT_FOUND
+        });
     }
 
     try {
@@ -233,7 +247,11 @@ function createPricingRouter(options = {}) {
     } catch (error) {
         if (error.code === 'PRICING_NOT_FOUND') {
             recordPricingMutation(req, technology, 'delete', 'failure', 'PRICING_NOT_FOUND');
-            return res.status(404).json({ success: false, error: error.message });
+            return res.status(404).json({
+                success: false,
+                error: error.message,
+                errorCode: PRICING_ERROR_CODES.MATERIAL_NOT_FOUND
+            });
         }
         recordPricingMutation(req, technology, 'delete', 'failure', 'PRICING_PERSISTENCE_FAILED');
         return persistenceFailure(res);
