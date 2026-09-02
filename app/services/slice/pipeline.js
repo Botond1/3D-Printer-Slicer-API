@@ -247,6 +247,7 @@ async function executePreparedSlice(req, res, job, workspace, signal) {
         ...request,
         ...profiles,
         modelTransform: model.modelTransform,
+        placement: model.placement,
         buildVolumeLimits,
         stats,
         engineVersion,

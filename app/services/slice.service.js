@@ -1,7 +1,7 @@
 /** Queue-aware public slicing handlers with contained pipeline delegation. */
 
 const { getClientIp } = require('../utils/client-ip');
-const { enqueueSliceJob, toQueueErrorResponse } = require('./slice/queue');
+const { enqueueSliceJob, sendQueueErrorResponse, toQueueErrorResponse } = require('./slice/queue');
 const {
     processSlice,
     appendOriginalExtensionToUpload,
@@ -24,7 +24,9 @@ const {
 function createQueueErrorResponse(err, res) {
     const queueErrorResponse = toQueueErrorResponse(err);
     if (queueErrorResponse) {
-        return res.status(queueErrorResponse.status).json(queueErrorResponse.body);
+        // Applies the mapping's headers too, so SLICE_QUEUE_CLIENT_LIMIT carries
+        // Retry-After alongside retryAfterSeconds exactly like the rate limiter.
+        return sendQueueErrorResponse(res, queueErrorResponse);
     }
     return res.status(500).json({
         success: false,

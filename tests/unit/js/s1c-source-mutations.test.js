@@ -27,7 +27,7 @@ function validate(sources) {
     }
     assert.match(environment, /PYTHONNOUSERSITE: '1'/);
     assert.match(helpers, /path\.resolve\(__dirname, '\.\.', '\.\.'\)/);
-    for (const helper of ['mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py']) {
+    for (const helper of ['mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py', 'render_preview.py']) {
         assert.match(helpers, new RegExp(helper.replace('.', '\\.')));
     }
     assert.match(input, /catch \(error_\) \{\s*if \(isAbortError\(error_, signal\)\)/);

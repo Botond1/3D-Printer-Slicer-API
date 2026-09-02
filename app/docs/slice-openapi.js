@@ -150,6 +150,36 @@ const BUILD_VOLUME_LIMITS_SCHEMA = Object.freeze({
     }
 });
 
+/**
+ * Bambu Studio only. The API sends `--arrange 0` because native arrangement
+ * yaws an object that does not fit the plate, so the API translates the final
+ * model itself and publishes where its bounding-box minimum corner landed.
+ */
+const PLACEMENT_SCHEMA = Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    required: ['x_min', 'y_min'],
+    description: 'Bambu Studio only. Bed coordinates (mm, three decimals) of the final model bounding-box minimum corner after API-owned placement: centred on the printable area (the first extruder area on the H2D), shifted +Y or +X off an excluded bed corner when needed. Z is always grounded. Absent on Prusa and Orca responses, which place natively.',
+    properties: {
+        x_min: { type: 'number', minimum: 0 },
+        y_min: { type: 'number', minimum: 0 }
+    }
+});
+
+/**
+ * Print-time provenance labels. The FDM entries mirror the strict G-code
+ * pattern ids in `gcode-metrics.js`; the SLA entries mirror
+ * `SLA_PRINT_TIME_SOURCES` in `model-stats.js`. A unit test pins both.
+ */
+const PRINT_TIME_SOURCES = Object.freeze([
+    'total_estimated_time',
+    'm73_p0_r_minutes',
+    'estimated_printing_time',
+    'time_seconds',
+    'sla_synthetic_estimate',
+    'sla_sl1_metadata_estimate'
+]);
+
 const MODEL_TRANSFORM_SCHEMA = Object.freeze({
     type: 'object',
     additionalProperties: false,
@@ -330,10 +360,11 @@ const SUCCESS_SCHEMA = Object.freeze({
         hourly_rate: {
             type: 'number',
             nullable: true,
-            description: 'Configured hourly rate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
+            description: 'Configured hourly rate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review. SLA is never priced automatically and always returns null.'
         },
         model_transform: MODEL_TRANSFORM_SCHEMA,
         build_volume_limits_mm: BUILD_VOLUME_LIMITS_SCHEMA,
+        placement_mm: PLACEMENT_SCHEMA,
         stats: {
             type: 'object',
             required: ['material_used_m', 'material_used_g', 'object_height_mm', 'estimated_price_huf'],
@@ -342,6 +373,12 @@ const SUCCESS_SCHEMA = Object.freeze({
                     type: 'integer',
                     minimum: 1,
                     description: 'Total estimated print time. Orca and Bambu report the wall-clock total including the start sequence (`total estimated time`); Prusa reports its estimated printing time.'
+                },
+                print_time_source: {
+                    type: 'string',
+                    nullable: true,
+                    enum: [...PRINT_TIME_SOURCES],
+                    description: 'Which marker produced print_time_seconds. FDM values name the strict G-code pattern that matched (`total_estimated_time`, `m73_p0_r_minutes`, `estimated_printing_time`, `time_seconds`). SLA values are estimates only: `sla_synthetic_estimate` is the server per-layer model used when the SL1 metadata carries no time, `sla_sl1_metadata_estimate` is the uncalibrated PrusaSlicer SL1 `printTime`. Null only when strict metric parsing is disabled.'
                 },
                 material_used_m: {
                     type: 'number',
@@ -352,7 +389,7 @@ const SUCCESS_SCHEMA = Object.freeze({
                     type: 'number',
                     nullable: true,
                     minimum: 0,
-                    description: 'Filament mass parsed directly from the slicer marker; null when the selected native profile emits no mass marker. It is never derived from length.'
+                    description: 'Filament mass parsed directly from the slicer marker; null when the selected native profile emits no mass marker. It is never derived from length. Always null for SLA, which measures no resin mass.'
                 },
                 object_height_mm: {
                     type: 'number',
@@ -362,7 +399,7 @@ const SUCCESS_SCHEMA = Object.freeze({
                 estimated_price_huf: {
                     type: 'number',
                     nullable: true,
-                    description: 'Calculated estimate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
+                    description: 'Calculated estimate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review. SLA is never priced automatically and always returns null.'
                 }
             }
         }
@@ -503,9 +540,10 @@ function createSliceResponses() {
             'Per-client rate limit or per-client queue fairness cap reached. Responses carry Retry-After and retryAfterSeconds.',
             ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT']
         ),
-        500: errorCodeResponse('Server Error', [
+        500: errorCodeResponse('Server Error. `NATIVE_OUTPUT_OVERFLOW` means a native process exceeded its bounded stdout/stderr budget and was stopped; no estimate is returned.', [
             'SLICE_OUTPUT_UNPARSED',
             'INTERNAL_PROCESSING_ERROR',
+            'NATIVE_OUTPUT_OVERFLOW',
             'QUEUE_INTERNAL_ERROR',
             'UPLOAD_STORAGE_ERROR',
             'INTERNAL_SERVER_ERROR'
@@ -639,13 +677,15 @@ function createSlicePaths() {
         }),
         '/bambu/slice': createSliceOperation({
             summary: 'Bambu Studio endpoint (FDM-only, official vendor profiles).',
-            description: 'Requires x-slicer-api-key service authentication. Uses the Bambu Studio headless CLI with the official vendor machine/process/filament chain flattened from the bundled BBL resources, so time and mass reproduce the Bambu Studio GUI readings. Always FDM. The retained artifact is the printer-ready `.gcode.3mf` project; statistics come from the sliced plate G-code. Supports optional size/scale/rotation preprocessing and provisional registry-based build-volume validation.',
+            description: 'Requires x-slicer-api-key service authentication. Uses the Bambu Studio headless CLI with the official vendor machine/process/filament chain flattened from the bundled BBL resources, so time and mass reproduce the Bambu Studio GUI readings. Always FDM. The retained artifact is the printer-ready `.gcode.3mf` project; statistics come from the sliced plate G-code. Supports optional size/scale/rotation preprocessing. Native arrangement is disabled (`--arrange 0`, never `--allow-rotations`): the API places the final model on the real bed shape (printable area, excluded corner, first extruder area on the H2D) and reports it in `placement_mm`. Build-volume admission uses the measured inclusive ceilings and placement feasibility, so a P1S part of `238 x 256 mm` is admitted beside the excluded corner although the published triple is `256 x 228 mm`.',
             properties: createBambuProperties()
         })
     };
 }
 
 module.exports = {
+    PLACEMENT_SCHEMA,
+    PRINT_TIME_SOURCES,
     REQUEST_VALIDATION_CODES,
     createSlicePaths,
     createSliceResponses

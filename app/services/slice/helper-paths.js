@@ -1,9 +1,11 @@
-/** Module-anchored absolute paths for the four Python processing helpers. */
+/** Module-anchored absolute paths for the five Python processing helpers. */
 
 const path = require('node:path');
 
 const APPLICATION_ROOT = path.resolve(__dirname, '..', '..');
-const HELPER_NAMES = new Set(['mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py']);
+const HELPER_NAMES = new Set([
+    'mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py', 'render_preview.py'
+]);
 
 /**
  * Resolve an approved helper in both local `app/` and flattened `/app` layouts.
@@ -17,5 +19,6 @@ function resolvePythonHelper(helperName) {
 
 module.exports = {
     APPLICATION_ROOT,
+    HELPER_NAMES,
     resolvePythonHelper
 };

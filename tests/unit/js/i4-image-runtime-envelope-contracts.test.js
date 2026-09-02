@@ -284,6 +284,15 @@ test('identity, probe output, helper source, and workflow orchestration remain f
     }
     assert.ok(CONTAINER_PROBE_FAILURES.includes('abort_initial_queue_not_idle'));
     assert.ok(CONTAINER_PROBE_FAILURES.includes('abort_readiness_cache_replaced'));
+    // Native executable probes fail with their own bounded reasons, never a free-text message.
+    assert.deepEqual(CONTAINER_PROBE_FAILURES.slice(-4), [
+        'native_executable_missing',
+        'native_executable_target',
+        'native_executable_mode',
+        'native_executable_help'
+    ]);
+    for (const reason of CONTAINER_PROBE_FAILURES) assert.match(reason, /^[a-z0-9_]+$/);
+    assert.equal(new Set(CONTAINER_PROBE_FAILURES).size, CONTAINER_PROBE_FAILURES.length);
     assert.deepEqual(envelope.parseTopOutput('PID PPID COMMAND\n4321 1 node\n'), [
         { pid: 4321, ppid: 1, command: 'node' }
     ]);

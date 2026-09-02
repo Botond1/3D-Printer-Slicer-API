@@ -10,6 +10,7 @@ const {
     OUTPUT_DIR,
     PRUSA_CONFIGS_DIR,
     ORCA_CONFIGS_DIR,
+    BAMBU_CONFIGS_DIR,
     PRICING_STATE_DIR
 } = require('../config/paths');
 const { getPricing } = require('./pricing.service');
@@ -148,9 +149,11 @@ function createReadinessService(options = {}) {
                 directoryHealthy(CONFIGS_DIR)
                 && directoryHealthy(PRUSA_CONFIGS_DIR)
                 && directoryHealthy(ORCA_CONFIGS_DIR)
+                && directoryHealthy(BAMBU_CONFIGS_DIR)
                 && directoryImmutable(APP_ROOT, enforceImmutable)
                 && directoryImmutable(PRUSA_CONFIGS_DIR, enforceImmutable)
                 && directoryImmutable(ORCA_CONFIGS_DIR, enforceImmutable)
+                && directoryImmutable(BAMBU_CONFIGS_DIR, enforceImmutable)
             )
         });
         const ready = admissionOpen && !shuttingDown() && Object.values(probes).every(Boolean);

@@ -9,6 +9,16 @@ const {
     configureHttpServer,
     resolveHttpServerOptions
 } = require('../../../app/services/http-server');
+const { DEFAULTS } = require('../../../app/config/constants');
+
+test('the keep-alive default has one source: constants.js DEFAULTS drives http-server.js', () => {
+    assert.equal(DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS, 95_000);
+    assert.equal(HTTP_SERVER_DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS, DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS);
+    assert.equal(HTTP_SERVER_DEFAULTS.HTTP_HEADERS_TIMEOUT_MS, DEFAULTS.HTTP_HEADERS_TIMEOUT_MS);
+    assert.equal(HTTP_SERVER_DEFAULTS.HTTP_REQUEST_TIMEOUT_MS, DEFAULTS.HTTP_REQUEST_TIMEOUT_MS);
+    assert.ok(DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS > TRAEFIK_DEFAULT_IDLE_CONN_TIMEOUT_MS);
+    assert.ok(DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS <= HTTP_SERVER_BOUNDS.HTTP_KEEP_ALIVE_TIMEOUT_MS.maximum);
+});
 
 test('Node keep-alive outlives the Traefik idle connection timeout by default and at its cap', () => {
     assert.equal(TRAEFIK_DEFAULT_IDLE_CONN_TIMEOUT_MS, 90_000);

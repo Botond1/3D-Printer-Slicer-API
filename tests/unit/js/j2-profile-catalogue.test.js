@@ -283,7 +283,7 @@ test('selector parameters remain uniquely derived from the ordered component cha
     }
 });
 
-test('bambu rows name the official vendor chain, registry selectors, and provisional ceilings', () => {
+test('bambu rows name the official vendor chain, registry selectors, and measured ceilings', () => {
     const p1s = findProfile('bambu', 'P1S', 0.1, 'PLA');
     assert.equal(p1s.id, 'bambu:FDM:P1S:0.1:PLA:Bambu-Lab-P1S-0.4-nozzle');
     assert.equal(p1s.engine_version, ENGINE_VERSIONS.bambu);
@@ -306,7 +306,7 @@ test('bambu rows name the official vendor chain, registry selectors, and provisi
     assert.deepEqual(p1s.build_volume_limits_mm, {
         declared_build_volume_dimensions_mm: { x: 256, y: 256, z: 250 },
         declared_source_kind: 'profile-explicit',
-        largest_passing_dimensions_inclusive_mm: { x: 236, y: 226, z: 249.9 },
+        largest_passing_dimensions_inclusive_mm: { x: 256, y: 228, z: 250 },
         minimum_dimensions_inclusive_mm: minimum,
         source_profile: 'Bambu Lab P1S 0.4 nozzle'
     });
@@ -323,7 +323,7 @@ test('bambu rows name the official vendor chain, registry selectors, and provisi
     );
     assert.deepEqual(
         h2d.build_volume_limits_mm.largest_passing_dimensions_inclusive_mm,
-        { x: 347.9, y: 317.9, z: 324.9 }
+        { x: 325, y: 320, z: 325 }
     );
     assert.equal(h2d.filament_density_g_cm3, 1.04);
     assert.equal(findProfile('bambu', 'H2D', 0.28, 'PLA'), undefined);
@@ -337,7 +337,13 @@ test('bambu rows name the official vendor chain, registry selectors, and provisi
     assert.notEqual(p1s.effective_profile_sha256, findProfile('bambu', 'P1S', 0.1, 'PETG').effective_profile_sha256);
     assert.notEqual(p1s.effective_profile_sha256, findProfile('bambu', 'H2D', 0.1, 'PLA').effective_profile_sha256);
     assert.match(snapshot.body.semantics.scope, /Bambu Studio rows/);
-    assert.match(snapshot.body.semantics.build_volume_dimensions, /provisional/i);
+    // Measured on the production CLI with API-owned placement; the P1S L-shape is disclosed.
+    assert.doesNotMatch(snapshot.body.semantics.build_volume_dimensions, /provisional/i);
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /measured on the production CLI/i);
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /--arrange 0/);
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /256 x 228 mm/);
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /238 x 256 mm/);
+    assert.match(snapshot.body.semantics.build_volume_dimensions, /first extruder area/);
 });
 
 test('machine and fleet resolutions preserve per-engine admission authority', () => {
@@ -349,7 +355,7 @@ test('machine and fleet resolutions preserve per-engine admission authority', ()
             status: 'resolved',
             reason: null,
             minimum_dimensions_inclusive_mm: minimum,
-            largest_passing_dimensions_inclusive_mm: { x: 347.9, y: 317.9, z: 324.9 }
+            largest_passing_dimensions_inclusive_mm: { x: 325, y: 320, z: 325 }
         },
         {
             technology: 'FDM',
@@ -358,7 +364,7 @@ test('machine and fleet resolutions preserve per-engine admission authority', ()
             status: 'resolved',
             reason: null,
             minimum_dimensions_inclusive_mm: minimum,
-            largest_passing_dimensions_inclusive_mm: { x: 236, y: 226, z: 249.9 }
+            largest_passing_dimensions_inclusive_mm: { x: 256, y: 228, z: 250 }
         },
         {
             technology: 'FDM',
@@ -405,7 +411,7 @@ test('machine and fleet resolutions preserve per-engine admission authority', ()
             reason: null,
             printers: [BAMBU_H2D],
             minimum_dimensions_inclusive_mm: minimum,
-            largest_passing_dimensions_inclusive_mm: { x: 347.9, y: 317.9, z: 324.9 },
+            largest_passing_dimensions_inclusive_mm: { x: 325, y: 320, z: 325 },
             excluded_printers: []
         },
         {

@@ -171,3 +171,49 @@ test('SLICE_QUEUE_CLIENT_LIMIT carries Retry-After and retryAfterSeconds like th
     assert.deepEqual(observed.headers, { 'Retry-After': '5' });
     assert.equal(observed.payload.retryAfterSeconds, 5);
 });
+
+test('slice handlers send queue rejections through sendQueueErrorResponse so Retry-After reaches the wire', async (t) => {
+    // The slice service loads the Python runtime resolver, which fails closed without an absolute executable.
+    const previousPythonExecutable = process.env.PYTHON_EXECUTABLE;
+    process.env.PYTHON_EXECUTABLE = process.execPath;
+    t.after(() => {
+        if (previousPythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;
+        else process.env.PYTHON_EXECUTABLE = previousPythonExecutable;
+    });
+    const { createSliceHandlers } = require('../../../app/services/slice.service');
+    const binding = () => ({ signal: new AbortController().signal, dispose() {} });
+    const queueKeys = [];
+    const build = (error) => createSliceHandlers({
+        enqueueSliceJobImpl: async (_task, options) => {
+            queueKeys.push(options.queueKey);
+            throw error;
+        },
+        getClientIpImpl: () => '203.0.113.10',
+        bindRequestAbortImpl: binding,
+        setResponseAbortSignalImpl: () => {},
+        processSliceImpl: async () => { throw new Error('must not run'); }
+    });
+
+    const limited = response();
+    const principalRequest = { slicePrincipal: { slot: 'leadpilot' } };
+    assert.equal(await build(new SliceQueueClientLimitError(7)).handleSliceBambu(principalRequest, limited.res), limited.res);
+    assert.equal(limited.observed.status, 429);
+    assert.deepEqual(limited.observed.headers, { 'Retry-After': '7' });
+    assert.equal(limited.observed.payload.errorCode, 'SLICE_QUEUE_CLIENT_LIMIT');
+    assert.equal(limited.observed.payload.retryAfterSeconds, 7);
+    // The principal queue key is kept: every address of one principal shares one fairness key.
+    assert.deepEqual(queueKeys, ['principal:leadpilot']);
+
+    const full = response();
+    await build(new SliceQueueFullError()).handleSlicePrusa({}, full.res);
+    assert.equal(full.observed.status, 503);
+    assert.deepEqual(full.observed.headers, {});
+    assert.equal(full.observed.payload.errorCode, 'SLICE_QUEUE_FULL');
+    assert.deepEqual(queueKeys, ['principal:leadpilot', '203.0.113.10']);
+
+    const internal = response();
+    await build(new Error('unexpected queue failure')).handleSliceOrca({}, internal.res);
+    assert.equal(internal.observed.status, 500);
+    assert.deepEqual(internal.observed.headers, {});
+    assert.equal(internal.observed.payload.errorCode, 'QUEUE_INTERNAL_ERROR');
+});

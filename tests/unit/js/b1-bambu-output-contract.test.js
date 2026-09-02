@@ -123,13 +123,27 @@ test('bambu snapshots are flattened vendor JSON written into job scratch', async
     const limits = resolveBuildVolumeLimits('bambu', 'FDM', snapshots.baseConfigFile, snapshots.orcaMachineConfigFile, 'ignored process name');
     assert.equal(limits.sourceProfile, 'Bambu Lab H2D 0.4 nozzle');
     assert.deepEqual(limits.declaredMax, { x: 350, y: 320, z: 325 });
-    assert.deepEqual(limits.max, { x: 347.9, y: 317.9, z: 324.9 });
+    // Measured single-filament ceiling: the FIRST extruder area of the flattened machine.
+    assert.deepEqual(limits.max, { x: 325, y: 320, z: 325 });
     assert.deepEqual(limits.explicitMaxAxes, { x: true, y: true, z: true });
+    assert.deepEqual(limits.bedGeometry, {
+        printable: { minX: 0, minY: 0, maxX: 325, maxY: 320 },
+        printableSource: 'extruder_printable_area',
+        excludes: [],
+        printableHeight: 325
+    });
     const p1s = await bambuSnapshots(root);
     const p1sLimits = resolveBuildVolumeLimits('bambu', 'FDM', p1s.baseConfigFile, p1s.orcaMachineConfigFile, null);
     assert.equal(p1sLimits.sourceProfile, 'Bambu Lab P1S 0.4 nozzle');
     assert.deepEqual(p1sLimits.declaredMax, { x: 256, y: 256, z: 250 });
-    assert.deepEqual(p1sLimits.max, { x: 236, y: 226, z: 249.9 });
+    // Measured wide footprint; the excluded 18 x 28 mm corner is carried as bed geometry.
+    assert.deepEqual(p1sLimits.max, { x: 256, y: 228, z: 250 });
+    assert.deepEqual(p1sLimits.bedGeometry, {
+        printable: { minX: 0, minY: 0, maxX: 256, maxY: 256 },
+        printableSource: 'printable_area',
+        excludes: [{ minX: 0, minY: 0, maxX: 18, maxY: 28 }],
+        printableHeight: 250
+    });
     assert.throws(() => resolveBuildVolumeLimits('bambu', 'FDM', p1s.baseConfigFile, null), /machine snapshot is required/);
 });
 
@@ -296,15 +310,20 @@ test('bambu response mapper echoes vendor names, registry printer, bed type, and
     assert.throws(() => mapBambuProfileResponse({ ...context, orcaFilamentConfigFile: null }), /filament profile selection/);
     assert.throws(() => mapBambuProfileResponse({ ...context, effectiveProfileSha256: 'nope' }), /SHA-256 is unavailable/);
 
-    const response = buildSliceSuccessResponse({
+    const bambuContext = {
         engine: 'bambu', technology: 'FDM', material: 'PLA', infillPercentage: '20%', supports: false,
         ...context, engineVersion: '02.08.02.61',
         modelTransform: modelTransform(),
-        buildVolumeLimits: { min: { x: 1, y: 1, z: 1 }, max: { x: 347.9, y: 317.9, z: 324.9 }, sourceProfile: 'Bambu Lab H2D 0.4 nozzle' },
+        buildVolumeLimits: { min: { x: 1, y: 1, z: 1 }, max: { x: 325, y: 320, z: 325 }, sourceProfile: 'Bambu Lab H2D 0.4 nozzle' },
         stats: { print_time_seconds: 1980, print_time_readable: '0h 33m', material_used_m: 0.24, material_used_g: 24.7, object_height_mm: 30 },
         jobId: 'job-id', artifactId: 'artifact-id'
-    });
+    };
+    const response = buildSliceSuccessResponse({ ...bambuContext, placement: { x_min: 157.5, y_min: 150 } });
     assert.equal(response.slicer_engine, 'bambu');
+    // Bambu publishes the API-owned placement; a missing placement is a pipeline defect.
+    assert.deepEqual(response.placement_mm, { x_min: 157.5, y_min: 150 });
+    assert.throws(() => buildSliceSuccessResponse(bambuContext), /placement is unavailable/);
+    assert.throws(() => buildSliceSuccessResponse({ ...bambuContext, placement: { x_min: 'x', y_min: 0 } }), /placement is unavailable/);
     assert.equal(response.supports, false);
     assert.equal(response.profiles.printer, 'H2D');
     assert.equal(response.build_volume_limits_mm.source_profile, 'Bambu Lab H2D 0.4 nozzle');
@@ -435,7 +454,7 @@ test('native geometry diagnostics map to UNSLICEABLE_SOURCE_GEOMETRY with a boun
         stderr: ''
     }), {
         modelTransform: modelTransform({ x: 260, y: 20, z: 30 }),
-        buildVolumeLimits: { min: { x: 1, y: 1, z: 1 }, max: { x: 236, y: 226, z: 249.9 }, sourceProfile: 'Bambu Lab P1S 0.4 nozzle' }
+        buildVolumeLimits: { min: { x: 1, y: 1, z: 1 }, max: { x: 256, y: 228, z: 250 }, sourceProfile: 'Bambu Lab P1S 0.4 nozzle' }
     });
     const boundsResult = invoke(bounds);
     assert.equal(boundsResult.payload.errorCode, 'MODEL_OUT_OF_PRINTER_BOUNDS');
@@ -525,7 +544,7 @@ test('bambu slice run parses plate_1.gcode, retains the .gcode.3mf, and treats a
         processableFile: 'model.stl',
         effectiveModelInfo: { height_mm: 30 },
         modelTransform: modelTransform(),
-        buildVolumeLimits: { min: { x: 1, y: 1, z: 1 }, max: { x: 236, y: 226, z: 249.9 }, sourceProfile: 'Bambu Lab P1S 0.4 nozzle' },
+        buildVolumeLimits: { min: { x: 1, y: 1, z: 1 }, max: { x: 256, y: 228, z: 250 }, sourceProfile: 'Bambu Lab P1S 0.4 nozzle' },
         workspace,
         signal: new AbortController().signal
     };
@@ -544,7 +563,8 @@ test('bambu slice run parses plate_1.gcode, retains the .gcode.3mf, and treats a
     assert.match(args[1].split(';')[1], /bambu-runtime-[a-f0-9]{16}\.json$/);
     assert.deepEqual(args.slice(2, 4), ['--load-filaments', snapshots.orcaFilamentConfigFile]);
     assert.deepEqual(args.slice(4, 6), ['--curr-bed-type', 'Textured PEI Plate']);
-    assert.deepEqual(args.slice(6, 16), ['--arrange', '1', '--orient', '0', '--slice', '0', '--export-3mf', 'result.gcode.3mf', '--outputdir', engineOutputDir]);
+    // `--arrange 0`: the STL arrives already placed by the API (see bambu-placement.js).
+    assert.deepEqual(args.slice(6, 16), ['--arrange', '0', '--orient', '0', '--slice', '0', '--export-3mf', 'result.gcode.3mf', '--outputdir', engineOutputDir]);
     assert.equal(args.some((value) => value.startsWith('--allow-rotations')), false);
     assert.equal(parseCalls.length, 1);
     assert.equal(parseCalls[0][0], path.join(engineOutputDir, 'plate_1.gcode'));

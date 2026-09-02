@@ -25,9 +25,15 @@ const ORCA_INVOCATION_POLICY = Object.freeze({
  * Bambu's `--allow-rotations` takes no value (it defaults off) so it is never
  * passed. The bed type is a per-printer registry value; the policy carries the
  * default so the digest binds a stable server-owned invocation shape.
+ *
+ * Arrangement is OFF by design. Measured on the production CLI: `--arrange 1`
+ * yawed a `262 x 100 mm` plate into a `256 x 256` diagonal bounding box even
+ * with rotations disabled, silently breaking the rotation-only transform
+ * contract. With `--arrange 0` the CLI keeps the STL coordinates exactly and
+ * grounds Z itself, so the API places the model (see `bambu-placement.js`).
  */
 const BAMBU_INVOCATION_POLICY = Object.freeze({
-    arrange: '1',
+    arrange: '0',
     orient: '0',
     slice: '0',
     bedType: 'Textured PEI Plate',
