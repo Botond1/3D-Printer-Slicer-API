@@ -917,4 +917,3 @@ secrets, deployed state, caller authorization, capacity, or live rollback.
   proxy CIDR/firewall, DNS/certificate, complete secret lifecycle, route
   activation, customer traffic and public rollback remain separately
   authorized and unverified.
-
