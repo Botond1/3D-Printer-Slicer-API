@@ -18,7 +18,7 @@ function normalizeRequestPath(value) {
 function classifyRoute(methodValue, pathValue) {
     const method = String(methodValue || 'GET').toUpperCase();
     const requestPath = normalizeRequestPath(pathValue);
-    if (method === 'POST' && /^(?:\/prusa\/slice|\/orca\/slice)$/.test(requestPath)) {
+    if (method === 'POST' && /^(?:\/prusa\/slice|\/orca\/slice|\/render)$/.test(requestPath)) {
         return ROUTE_AUDIENCES.SLICE;
     }
     if (
