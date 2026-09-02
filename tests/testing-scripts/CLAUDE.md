@@ -1,6 +1,6 @@
 # Testing Scripts - Local Claude Guide
 
-Last synchronized: 2026-08-31
+Last synchronized: 2026-09-02
 
 ## Scope
 
@@ -16,6 +16,14 @@ This folder contains API-level Python integration and workflow tests.
   - slicing/unsupported_upload_test_runner.py
   - slicing/orientation_visibility_test_runner.py
   - slicing/native_envelope_sweep_runner.py
+  - slicing/full_api_bambu_fdm_test_runner.py
+  - slicing/bambu_envelope_confirmation_runner.py
+
+- `render/` — Deterministic `POST /render` PNG preview validation
+  - render/render_preview_test_runner.py
+
+- `calibration/` — Owner-run Bambu Studio reference comparison (private inputs)
+  - calibration/bambu_reference_comparison_runner.py
 
 - `admin/` — Admin endpoint validations
   - admin/admin_output_files_test_runner.py
@@ -44,7 +52,16 @@ Located in tests/testing-scripts/common/:
 - queue_cleanup_manifest.py
 - queue_concurrency_reporting.py
 - queue_concurrency_utils.py
+- runner_support.py
 - slice_matrix_runner.py
+- synthetic_fixtures.py
+
+`synthetic_fixtures.py` generates deterministic, privacy-safe binary STL/OBJ/
+ZIP fixtures (cuboid, cylinder, 32 mm-overhang L-bracket, thin-wall open box)
+with outward non-zero normals; runners use it whenever the gitignored
+`tests/testing-files` corpus is absent and state so in their report.
+`runner_support.py` holds the shared 429-aware slice POST, the target-class
+redaction, the optional `placement_mm` check, and small contract predicates.
 
 Helpers resolve configured runner inputs for the matching audience. Slice uses
 only `x-slicer-api-key`; pricing, artifact, and operations use `x-api-key`.
@@ -111,6 +128,47 @@ python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --
 - Default concurrency remains N=1. N=2/N=3 are not qualified or deployed at
   the I12 local-implementation checkpoint.
 
+## Bambu Studio, Render, and Calibration Runners
+
+Use:
+
+```text
+python tests/testing-scripts/slicing/full_api_bambu_fdm_test_runner.py
+python tests/testing-scripts/slicing/bambu_envelope_confirmation_runner.py
+python tests/testing-scripts/render/render_preview_test_runner.py
+python tests/testing-scripts/calibration/bambu_reference_comparison_runner.py --models-dir PRIVATE_DIR --reference PRIVATE_DIR/meres.json --printer P1S --supports false
+```
+
+- All four need `SLICE_SERVICE_API_KEY` (and `SLICER_BASE_URL`); the Bambu
+  matrix additionally verifies `.gcode.3mf` artifact retention through
+  `GET /admin/output-files` only when `ARTIFACT_API_KEY` is available.
+- The Bambu matrix covers P1S x {0.12, 0.2, 0.28} x {PLA, PETG, ABS, TPU},
+  H2D x 0.2 x PLA, the L-bracket with `supports=true|false`, one identical
+  request pair proving a stable lowercase 64-hex `effective_profile_sha256`,
+  and the strict rejections (`layerHeight=0.3`, `infill=140`,
+  `printerProfile=X1C`, `supports=maybe`, `material=Standard`). Every success
+  must publish `build_volume_limits_mm.max` equal to the measured envelope.
+- The envelope confirmation uploads exact-edge cuboids with
+  `orientationMode=preserve` and zero rotation: P1S `256 x 228 x 250` (plus
+  the alternative `238 x 256` footprint of the L-shaped bed) and H2D
+  `325 x 320 x 325` pass; `+0.1 mm` on any axis is `422
+  MODEL_OUT_OF_PRINTER_BOUNDS`; `256 x 256` fails. It also requires the bambu
+  catalogue rows to publish the same measured triples.
+- The render runner proves `image/png`, a 1024 x 768 IHDR, byte-identical
+  PNGs for identical requests, a different PNG for `rotationZ=90`, and the
+  exact 400/401 rejections.
+- The calibration runner is owner-run only: the models directory and the
+  reading file are private, and its report identifies models by index and
+  SHA-256 prefix only. PASS means `max(|dt%|, |dg%|) <= 10`.
+- A `placement_mm` field on Bambu responses is optional; when present it must
+  be a numeric `{x_min, y_min}` pair.
+- The slice limiter admits 3 requests/min sustained (burst 5) per client, so
+  these runners pace at 20 s and retry HTTP 429 with the advertised wait.
+- Reports are `results/full_api_bambu_fdm_test_result.md`,
+  `results/bambu_envelope_confirmation_result.md`,
+  `results/render_preview_test_result.md`, and
+  `results/bambu_reference_comparison_result.md`; read them after every run.
+
 ## Profile Catalogue Contract
 
 Use:
@@ -121,7 +179,12 @@ python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
 
 - The required lane proves unauthenticated HTTP 200, exact FDM-only
   `r3d-profile-catalogue-v2` shape, canonical `catalogue_sha256`, strong ETag,
-  conditional 304, and all 18 per-printer/per-engine preset rows. It validates
+  conditional 304, and the current 82-row generation: 6 Prusa, 24 Orca
+  (PLA/PETG/ABS/TPU), 28 Bambu Studio P1S and 24 Bambu Studio H2D rows, with
+  three engine-scoped fleets (bambu H2D, orca and prusa H2D-QUOTE) and the
+  measured bambu envelopes P1S `256 x 228 x 250` and H2D `325 x 320 x 325`.
+  The retired 18-row J3B set is still recognised by name so a regression is
+  reported explicitly, but only the current generation passes. It validates
   the separate `declared_build_volume_dimensions_mm` metadata and authoritative
   inclusive `largest_passing_dimensions_inclusive_mm`, and independently
   rederives engine-scoped `machine_resolutions` and `fleet_resolutions` without
@@ -263,7 +326,8 @@ python tests/testing-scripts/slicing/native_envelope_sweep_runner.py
 - Preserve endpoint coverage when endpoint behavior changes.
 - Keep focused runners behavior-specific; split oversized runners into domain-focused suites.
 - Keep stable deterministic runners unchanged unless changed endpoint behavior requires edits.
-- Full slice matrix reports may mark explicitly declared fail-fast rejections as passing only when status and `errorCode` match the expected case exactly.
+- Full slice matrix reports may mark explicitly declared fail-fast rejections as passing only when status and `errorCode` match the expected case exactly. Scenario `negative_requests` (for example Orca `infill=140` -> `400 INVALID_INFILL`) follow the same rule.
+- FDM successes on every engine require a positive direct mass and a catalogue-priced quote (Orca ABS/TPU included); SLA successes require null mass, hourly rate, and price. `GET /admin/output-files` may list `.gcode`, `.sl1`, and Bambu `.gcode.3mf` names only.
 - A J0 success-contract assertion must require machine-readable
   `engine_version` and lowercase 64-hex `profiles.effective_profile_sha256`
   while retaining original selected profile basenames. Bounds failures require
