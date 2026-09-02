@@ -24,10 +24,9 @@ Version **3.2.0** (2026-09-02).
 
 The repository target is a private sidecar API behind one reverse-proxy peer.
 Development Compose binds the API to host loopback; the production manifest
-(`docker-compose.production.yml`) publishes no API port, never builds locally,
-and consumes only an immutable image digest. Deployment, route, DNS,
-allowlist, and consumer changes are owner-authorized actions outside this
-repository's authority.
+(`docker-compose.production.yml`) publishes no API port, never builds locally, and
+consumes only an immutable image digest. Deployment, route, DNS, allowlist, and
+consumer changes are owner-authorized actions outside this repository's authority.
 
 ---
 

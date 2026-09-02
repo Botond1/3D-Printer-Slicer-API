@@ -334,9 +334,11 @@ configuration. Two response fields identify that configuration:
 - `profiles.effective_profile_sha256` is a deterministic SHA-256 over the
   effective machine, process, and filament profile content, the normalised
   material, and the server-owned invocation policy. It excludes the
-  per-request `layerHeight` and `infill` overrides. Any change to profile
-  content (a speed, a temperature, a bed size) changes it; a request-level
-  change does not.
+  per-request `layerHeight` and `infill` overrides; the default
+  `supports=true` leaves it unchanged, while `supports=false` selects a
+  different effective profile and therefore a different digest. Any change to
+  profile content (a speed, a temperature, a bed size) changes it; a
+  layer-height or infill change does not.
 
 Key every calibration or correction table by
 `(slicer_engine, engine_version, effective_profile_sha256, material,
