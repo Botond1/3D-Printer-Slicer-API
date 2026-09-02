@@ -328,7 +328,7 @@ def run_case(
     status, body, duration = post_slice_with_retry(
         base_url=base_url, endpoint=BAMBU_SLICE_ENDPOINT, file_path=case.fixture_path,
         layer_height=case.layer_height, material=case.material,
-        slice_service_api_key=api_key, extra_fields=build_request_fields(case),
+        extra_fields=build_request_fields(case), slice_service_api_key=api_key,
     )
     success, observation = evaluate_case(case, status, body, pricing_map)
     result = BambuCaseResult(
