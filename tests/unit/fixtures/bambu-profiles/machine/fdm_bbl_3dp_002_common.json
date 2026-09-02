@@ -12,6 +12,14 @@
         "0x320"
     ],
     "printable_height": "325",
+    "extruder_printable_area": [
+        "0x0,325x0,325x320,0x320",
+        "25x0,350x0,350x320,25x320"
+    ],
+    "extruder_printable_height": [
+        "325",
+        "325"
+    ],
     "nozzle_diameter": [
         "0.4",
         "0.4"

@@ -160,7 +160,7 @@ test('OpenAPI exposes engine identity, W2 digest, requested omissions, and live 
     assert.deepEqual(success.properties.hourly_rate, {
         type: 'number',
         nullable: true,
-        description: 'Configured hourly rate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
+        description: 'Configured hourly rate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review. SLA is never priced automatically and always returns null.'
     });
     assert.ok(success.properties.stats.required.includes('material_used_g'));
     assert.ok(success.properties.stats.required.includes('object_height_mm'));
@@ -180,13 +180,13 @@ test('OpenAPI exposes engine identity, W2 digest, requested omissions, and live 
         type: 'number',
         nullable: true,
         minimum: 0,
-        description: 'Filament mass parsed directly from the slicer marker; null when the selected native profile emits no mass marker. It is never derived from length.'
+        description: 'Filament mass parsed directly from the slicer marker; null when the selected native profile emits no mass marker. It is never derived from length. Always null for SLA, which measures no resin mass.'
     });
     assert.ok(success.properties.stats.required.includes('estimated_price_huf'));
     assert.deepEqual(success.properties.stats.properties.estimated_price_huf, {
         type: 'number',
         nullable: true,
-        description: 'Calculated estimate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
+        description: 'Calculated estimate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review. SLA is never priced automatically and always returns null.'
     });
 
     const validation = responses[422].content['application/json'].schema;
@@ -204,6 +204,7 @@ test('OpenAPI exposes engine identity, W2 digest, requested omissions, and live 
         [
             'SLICE_OUTPUT_UNPARSED',
             'INTERNAL_PROCESSING_ERROR',
+            'NATIVE_OUTPUT_OVERFLOW',
             'QUEUE_INTERNAL_ERROR',
             'UPLOAD_STORAGE_ERROR',
             'INTERNAL_SERVER_ERROR'
@@ -449,7 +450,7 @@ test('successful Prusa slicing without a native mass marker stays explicit and m
     assert.equal(response.stats.estimated_price_huf, null);
 });
 
-test('SLA pricing remains independent of the FDM direct-mass guard', () => {
+test('SLA is never priced automatically: null rate, null price, null resin mass', () => {
     const response = buildSliceSuccessResponse({
         engine: 'prusa',
         technology: 'SLA',
@@ -479,8 +480,14 @@ test('SLA pricing remains independent of the FDM direct-mass guard', () => {
         artifactId: 'artifact-id'
     });
 
-    assert.equal(response.hourly_rate, 1800);
-    assert.equal(response.stats.estimated_price_huf, 450);
+    // The SLA print time is an uncalibrated estimate and no resin mass is
+    // measured, so pricing stays manual regardless of the FDM direct-mass guard.
+    assert.equal(response.hourly_rate, null);
+    assert.equal(response.stats.estimated_price_huf, null);
+    assert.equal(response.stats.material_used_g, null);
+    assert.equal(response.stats.material_used_ml, 1);
+    assert.equal(response.stats.print_time_seconds, 60);
+    assert.equal(Object.hasOwn(response, 'placement_mm'), false);
 });
 
 test('strict metric drift maps to a bounded HTTP 500 without paths', () => {

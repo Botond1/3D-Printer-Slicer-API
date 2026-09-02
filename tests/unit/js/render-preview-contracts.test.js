@@ -90,7 +90,9 @@ test('render service composes the slice pipeline instead of copying it and bound
     assert.match(source, /createCommandRunner\(\{ timeoutMs: RENDER_COMMAND_TIMEOUT_MS \}\)/);
     assert.match(source, /const RENDER_COMMAND_TIMEOUT_MS = 60_000;/);
     assert.doesNotMatch(source, /shell:\s*true|child_process|exec\(/);
-    assert.match(source, /path\.join\(APPLICATION_ROOT, RENDER_HELPER_NAME\)/);
+    // The renderer resolves through the shared allowlisted helper resolver.
+    assert.match(source, /resolvePythonHelper\(RENDER_HELPER_NAME\)/);
+    assert.doesNotMatch(source, /path\.join\(APPLICATION_ROOT, RENDER_HELPER_NAME\)/);
     const route = read('app/routes/render.routes.js');
     assert.match(route, /router\.post\(RENDER_ROUTE_PATH, rateLimiter, authenticate, lifecycle\(handler, 'render'\)\)/);
     const lifecycle = read('app/routes/upload-lifecycle.js');

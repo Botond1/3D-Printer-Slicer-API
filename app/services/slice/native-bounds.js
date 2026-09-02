@@ -31,6 +31,22 @@ function combinedNativeOutput(err) {
 }
 
 /**
+ * Bambu Studio placement refusals observed on the production CLI, matched as
+ * bounded lowercase substrings of the combined message/stderr/stdout:
+ *
+ * - rc 192 `Object conflicts were detected. Please verify the slicing of all
+ *   plates in Bambu Studio before uploading.` when the object overlaps the
+ *   `bed_exclude_area` corner;
+ * - rc 190 `Some filaments cannot be mapped to correct extruders for
+ *   multi-extruder Printer.` when the object leaves the first extruder's
+ *   printable area on the H2D.
+ */
+const BAMBU_PLACEMENT_DIAGNOSTICS = Object.freeze([
+    'object conflicts were detected',
+    'some filaments cannot be mapped to correct extruders'
+]);
+
+/**
  * Match only native diagnostics that explicitly reject placement in the print volume.
  * Generic slicer failures must remain internal processing errors.
  *
@@ -49,7 +65,8 @@ function isNativePlacementRejection(err) {
     ) || combined.includes('does not fit inside the print volume')
         || combined.includes('does not fit on the print bed')
         || combined.includes('outside the print volume')
-        || lastLayerExceedsBuildHeight;
+        || lastLayerExceedsBuildHeight
+        || BAMBU_PLACEMENT_DIAGNOSTICS.some((diagnostic) => combined.includes(diagnostic));
 }
 
 /**
@@ -145,6 +162,7 @@ function buildNativeBoundsResponse(err) {
 }
 
 module.exports = {
+    BAMBU_PLACEMENT_DIAGNOSTICS,
     NATIVE_BOUNDS_ERROR_CODE,
     isNativePlacementRejection,
     wrapNativePlacementRejection,

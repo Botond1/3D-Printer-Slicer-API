@@ -211,6 +211,25 @@ function resolveSupportsFlag(value) {
 }
 
 /**
+ * Bambu Studio responses publish the API-owned bed placement because
+ * `--arrange 0` keeps the STL coordinates exactly; other engines place
+ * natively and expose nothing. A Bambu response without a placement is a
+ * pipeline defect and fails closed instead of implying native arrangement.
+ * @param {'prusa'|'orca'|'bambu'} engine Engine key.
+ * @param {{x_min?: unknown, y_min?: unknown}|null|undefined} placement Chosen placement.
+ * @returns {{placement_mm: {x_min: number, y_min: number}}|{}} Optional response fragment.
+ */
+function resolvePlacementResponse(engine, placement) {
+    if (engine !== 'bambu') return {};
+    const xMin = Number(placement?.x_min);
+    const yMin = Number(placement?.y_min);
+    if (!placement || !Number.isFinite(xMin) || !Number.isFinite(yMin)) {
+        throw new Error('Bambu placement is unavailable.');
+    }
+    return { placement_mm: { x_min: roundToThree(xMin), y_min: roundToThree(yMin) } };
+}
+
+/**
  * Build successful slice response payload.
  * @param {{
  * engine: 'prusa'|'orca'|'bambu',
@@ -264,7 +283,11 @@ function buildSliceSuccessResponse(context) {
     }
 
     const profiles = resolveProfileMapper(engine)(context);
-    const requiresManualPricing = (technology === 'FDM' &&
+    // SLA is never priced automatically: its print time is an uncalibrated
+    // estimate and no resin mass is measured, so hourly rate and price stay
+    // null and the response never publishes a resin mass either.
+    const requiresManualPricing = technology === 'SLA' ||
+        (technology === 'FDM' &&
         (!Number.isFinite(stats.material_used_g) || stats.material_used_g <= 0)) ||
         (engine === 'orca' && profiles.filament_profile === null);
     const { hourlyRate, totalPrice } = requiresManualPricing
@@ -288,9 +311,11 @@ function buildSliceSuccessResponse(context) {
             max: roundDimensions(buildVolumeLimits.max),
             source_profile: buildVolumeLimits.sourceProfile
         },
+        ...resolvePlacementResponse(engine, context.placement),
         hourly_rate: hourlyRate,
         stats: {
             ...stats,
+            ...(technology === 'SLA' ? { material_used_g: null } : {}),
             object_height_mm: finalHeight,
             estimated_price_huf: totalPrice
         }
@@ -305,6 +330,7 @@ module.exports = {
     mapBambuProfileResponse,
     mapOrcaProfileResponse,
     requireEngineVersion,
+    resolvePlacementResponse,
     resolveProfileMapper,
     resolvePricingStrategy,
     resolveSupportsFlag

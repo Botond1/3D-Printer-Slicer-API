@@ -10,11 +10,16 @@ const { DEFAULTS } = require('../config/constants');
  * an idle keep-alive socket open longer than the proxy does, otherwise Node
  * closes first and the proxy's next reuse of that socket surfaces as an
  * intermittent 502 at the edge. The default therefore sits above 90 s and
- * the cap allows a further margin for a longer proxy setting.
+ * the cap allows a further margin for a longer proxy setting. The default
+ * itself has one source: `DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS`.
  */
 const TRAEFIK_DEFAULT_IDLE_CONN_TIMEOUT_MS = 90_000;
-const KEEP_ALIVE_TIMEOUT_DEFAULT_MS = 95_000;
+const KEEP_ALIVE_TIMEOUT_DEFAULT_MS = DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS;
 const KEEP_ALIVE_TIMEOUT_MAXIMUM_MS = 120_000;
+if (!(KEEP_ALIVE_TIMEOUT_DEFAULT_MS > TRAEFIK_DEFAULT_IDLE_CONN_TIMEOUT_MS)
+    || !(KEEP_ALIVE_TIMEOUT_DEFAULT_MS <= KEEP_ALIVE_TIMEOUT_MAXIMUM_MS)) {
+    throw new Error('HTTP keep-alive default must outlive the proxy idle timeout within its cap.');
+}
 
 const HTTP_SERVER_DEFAULTS = Object.freeze({
     HTTP_HEADERS_TIMEOUT_MS: DEFAULTS.HTTP_HEADERS_TIMEOUT_MS,

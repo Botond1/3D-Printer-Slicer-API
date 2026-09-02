@@ -8,7 +8,11 @@ const { readFileSyncBounded } = require('../utils/bounded-file');
 const METADATA_VERSION = 1;
 const ARTIFACT_ID_PATTERN = /^artifact-[a-f0-9]{32}$/;
 const JOB_ID_PATTERN = /^job-[a-f0-9]{32}$/;
-const FILE_NAME_PATTERN = /^[a-zA-Z0-9-]+-output-artifact-[a-f0-9]{32}\.(?:gcode|sl1)$/;
+/**
+ * Managed artifact names: Prusa/Orca `.gcode`, Prusa SLA `.sl1`, and the
+ * Bambu Studio printer-ready `.gcode.3mf` project.
+ */
+const FILE_NAME_PATTERN = /^[a-zA-Z0-9-]+-output-artifact-[a-f0-9]{32}\.(?:gcode|sl1|gcode\.3mf)$/;
 const METADATA_NAME_PATTERN = /^\.artifact-(?<hex>[a-f0-9]{32})\.json$/;
 
 function samePath(left, right) {
@@ -178,6 +182,7 @@ async function inspectMarker(root, entry, policy) {
 module.exports = {
     METADATA_VERSION,
     ARTIFACT_ID_PATTERN,
+    FILE_NAME_PATTERN,
     METADATA_NAME_PATTERN,
     samePath,
     fileIdentity,

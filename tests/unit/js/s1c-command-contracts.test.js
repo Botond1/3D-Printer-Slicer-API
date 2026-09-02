@@ -120,7 +120,7 @@ test('helper resolution is absolute, allowlisted, cwd-independent, and Docker-la
     const originalCwd = process.cwd();
     process.chdir(os.tmpdir());
     try {
-        for (const name of ['mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py']) {
+        for (const name of ['mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py', 'render_preview.py']) {
             assert.equal(resolvePythonHelper(name), path.join(APPLICATION_ROOT, name));
             assert.equal(path.isAbsolute(resolvePythonHelper(name)), true);
         }

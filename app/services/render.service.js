@@ -21,7 +21,7 @@ const {
 } = require('./slice/pipeline');
 const { applyTransformAndValidateModel } = require('./slice/transform');
 const { createCommandRunner, throwIfAborted, isAbortError } = require('./slice/command');
-const { APPLICATION_ROOT } = require('./slice/helper-paths');
+const { resolvePythonHelper } = require('./slice/helper-paths');
 const { handleProcessingError } = require('./slice/errors');
 const { getSupportedInputExtensionsText } = require('./slice/common');
 const { getRequestWorkspace } = require('./slice/workspace');
@@ -37,11 +37,12 @@ const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0
 const PREVIEW_ENVELOPE_SOURCE = 'preview-envelope';
 
 /**
- * Resolve the module-anchored absolute renderer helper path.
+ * Resolve the module-anchored absolute renderer helper path through the
+ * shared allowlisted helper resolver.
  * @returns {string} Absolute path of `app/render_preview.py`.
  */
 function resolveRenderHelperPath() {
-    return path.join(APPLICATION_ROOT, RENDER_HELPER_NAME);
+    return resolvePythonHelper(RENDER_HELPER_NAME);
 }
 
 /**

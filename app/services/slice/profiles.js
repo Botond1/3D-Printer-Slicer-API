@@ -22,6 +22,8 @@ const { readProfileText, readProfileJson, readIniKeyValues } = require('./profil
 const { parseNumberLike } = require('./value-parsers');
 const { roundToThree } = require('./common');
 const { resolveOrcaFilamentConfigPath } = require('./filament-profile');
+const { parseBambuBedGeometry } = require('./bambu-bed-geometry');
+const { validateBambuPlacementLimits } = require('./bambu-placement');
 const {
     getBambuPrinter,
     resolveBambuFilamentName,
@@ -263,23 +265,28 @@ function parseDimensionLimitsFromPrusaProfile(configPath, technology) {
 /**
  * Parse build-volume limits from a flattened Bambu machine snapshot.
  * The snapshot carries the vendor machine NAME, which is the public
- * `source_profile` and the key of the provisional admission table; the
+ * `source_profile` and the key of the measured admission table; the
  * caller-supplied public source path is ignored on purpose because the
- * pipeline passes the process selection for non-Orca engines.
+ * pipeline passes the process selection for non-Orca engines. The declared
+ * dimensions stay the plate `printable_area`/`printable_height` metadata,
+ * while `bedGeometry` carries the real placement shape (first-extruder area
+ * and excluded rectangles) that Bambu admission is decided on.
  * @param {string} machineSnapshotPath Flattened machine JSON snapshot.
  * @param {'FDM'|'SLA'} technology Active technology.
- * @returns {{min: object, max: object, sourceProfile: string, explicitMaxAxes: object}} Parsed limits.
+ * @returns {{min: object, max: object, sourceProfile: string, explicitMaxAxes: object, bedGeometry: object}} Parsed limits.
  */
 function parseDimensionLimitsFromBambuMachineSnapshot(machineSnapshotPath, technology) {
     if (!machineSnapshotPath || !fs.existsSync(machineSnapshotPath)) {
         throw new Error('Bambu machine snapshot is required for build-volume limits.');
     }
     const limits = parseDimensionLimitsFromOrcaMachineProfile(machineSnapshotPath, technology);
-    const machineName = readProfileJson(machineSnapshotPath).name;
+    const profileData = readProfileJson(machineSnapshotPath);
+    const machineName = profileData.name;
     if (typeof machineName !== 'string' || !machineName) {
         throw new Error('Bambu machine snapshot has no vendor name.');
     }
     limits.sourceProfile = machineName;
+    limits.bedGeometry = parseBambuBedGeometry(profileData);
     return limits;
 }
 
@@ -351,9 +358,15 @@ function resolveBuildVolumeLimits(
 
 /**
  * Validate model dimensions against configured printer limits.
+ *
+ * Limits that carry a `bedGeometry` (Bambu) decide X/Y admission by placement
+ * feasibility on the real bed shape and return the chosen placement, so an
+ * L-shaped footprint such as the P1S `238 x 256` is admitted although the
+ * published triple is `256 x 228`. Limits without bed geometry (Prusa, Orca,
+ * preview) keep the per-axis comparison unchanged.
  * @param {{x: number|string, y: number|string, z: number|string}} modelInfo Model dimension payload.
- * @param {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string}} buildVolumeLimits Printer limits.
- * @returns {{isValid: true, dimensions: {x: number, y: number, z: number}} | {isValid: false, dimensions: {x: number, y: number, z: number}, tooSmall: string[], tooLarge: string[]}} Validation result.
+ * @param {{min: {x: number, y: number, z: number}, max: {x: number, y: number, z: number}, sourceProfile: string, bedGeometry?: object}} buildVolumeLimits Printer limits.
+ * @returns {{isValid: true, dimensions: {x: number, y: number, z: number}, placement?: {xMin: number, yMin: number, strategy: string}} | {isValid: false, dimensions: {x: number, y: number, z: number}, tooSmall: string[], tooLarge: string[]}} Validation result.
  */
 function validateModelDimensionsAgainstLimits(modelInfo, buildVolumeLimits) {
     const dimensions = {
@@ -369,6 +382,9 @@ function validateModelDimensionsAgainstLimits(modelInfo, buildVolumeLimits) {
             tooSmall: ['Model dimensions must be finite and positive.'],
             tooLarge: []
         };
+    }
+    if (buildVolumeLimits.bedGeometry) {
+        return validateBambuPlacementLimits(dimensions, buildVolumeLimits);
     }
 
     const axes = ['x', 'y', 'z'];

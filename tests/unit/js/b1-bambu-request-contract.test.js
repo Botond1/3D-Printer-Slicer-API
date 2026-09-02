@@ -122,13 +122,13 @@ test('bambu profile selection resolves vendor names for every registry combinati
     }
 });
 
-test('bambu argv follows the owner-verified headless shape and never passes --allow-rotations', () => {
+test('bambu argv disables native arrangement (API-owned placement) and never passes --allow-rotations', () => {
     assert.deepEqual(SUPPORTED_ENGINES, ['prusa', 'orca', 'bambu']);
     assert.equal(isSupportedEngine('bambu'), true);
     assert.equal(isSupportedEngine('cura'), false);
     assert.equal(resolveSlicerExecutable('bambu'), 'bambu-studio');
     assert.deepEqual(resolveSlicerInvocationPolicy('bambu', 'FDM'), {
-        arrange: '1', orient: '0', slice: '0', bedType: 'Textured PEI Plate', export3mf: true,
+        arrange: '0', orient: '0', slice: '0', bedType: 'Textured PEI Plate', export3mf: true,
         settingsPrecedence: ['machine', 'process'], filamentOption: '--load-filaments'
     });
     const outputPath = path.join('stage', 'job', 'result.gcode.3mf');
@@ -140,7 +140,7 @@ test('bambu argv follows the owner-verified headless shape and never passes --al
         '--load-settings', 'machine.json;process.json',
         '--load-filaments', 'filament.json',
         '--curr-bed-type', 'Textured PEI Plate',
-        '--arrange', '1', '--orient', '0', '--slice', '0',
+        '--arrange', '0', '--orient', '0', '--slice', '0',
         '--export-3mf', 'result.gcode.3mf',
         '--outputdir', path.join('stage', 'job')
     ]);
