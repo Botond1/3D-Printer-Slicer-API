@@ -109,14 +109,25 @@ def resolve_model_path(models_dir: Path, file_name: object) -> Path:
     candidate = Path(file_name)
     if candidate.is_absolute() or any(part in {"..", ""} for part in candidate.parts):
         raise ReferenceFileError("entry file name must be a relative path without traversal")
-    root = models_dir.resolve(strict=True)
-    resolved = (root / candidate).resolve()
+    # Every filesystem probe is wrapped: an OSError message carries the private
+    # absolute path, so it is replaced by a fixed, path-free reason.
+    try:
+        root = models_dir.resolve(strict=True)
+    except OSError as error:
+        raise ReferenceFileError("models directory is missing or unreadable") from error
+    try:
+        resolved = (root / candidate).resolve()
+    except OSError as error:
+        raise ReferenceFileError("entry could not be resolved inside the models directory") from error
     try:
         resolved.relative_to(root)
     except ValueError as error:
         raise ReferenceFileError("entry escapes the models directory") from error
-    if not resolved.is_file() or resolved.is_symlink():
-        raise ReferenceFileError("entry is not a regular file")
+    try:
+        if not resolved.is_file() or resolved.is_symlink():
+            raise ReferenceFileError("entry is not a regular file")
+    except OSError as error:
+        raise ReferenceFileError("entry is not a regular file") from error
     if resolved.suffix.lower() not in SUPPORTED_MODEL_EXTENSIONS:
         raise ReferenceFileError("entry has an unsupported model extension")
     return resolved
@@ -124,8 +135,11 @@ def resolve_model_path(models_dir: Path, file_name: object) -> Path:
 
 def load_reference(reference_path: Path, models_dir: Path) -> list[ReferenceEntry]:
     """Parse and validate the reading file into ordered entries."""
-    if not reference_path.is_file() or reference_path.stat().st_size > MAX_REFERENCE_FILE_BYTES:
-        raise ReferenceFileError("reference file is missing or too large")
+    try:
+        if not reference_path.is_file() or reference_path.stat().st_size > MAX_REFERENCE_FILE_BYTES:
+            raise ReferenceFileError("reference file is missing or too large")
+    except OSError as error:
+        raise ReferenceFileError("reference file is missing or too large") from error
     try:
         document = json.loads(reference_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, ValueError) as error:
@@ -252,8 +266,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
     try:
         entries = load_reference(args.reference, args.models_dir)
-    except (ReferenceFileError, OSError) as error:
+    except ReferenceFileError as error:
         print(f"[BAMBU REFERENCE] ERROR: reading file unusable: {error}")
+        return 1
+    except OSError as error:
+        # An OSError message embeds the private absolute path; print only the class.
+        print(f"[BAMBU REFERENCE] ERROR: reading file unusable: {type(error).__name__}")
         return 1
     rows: list[ComparisonRow] = []
     for position, entry in enumerate(entries, 1):

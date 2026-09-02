@@ -139,7 +139,7 @@ function createRenderResponses() {
             }
         },
         429: errorCodeResponse(
-            'Slice rate limit or per-client queue fairness cap reached. `Retry-After` is set for the rate limit.',
+            'Per-client-IP slice rate limit (`RATE_LIMIT_EXCEEDED`; the shared slice limiter runs before authentication, so it keys only on the client IP) or per-client queue fairness cap (`SLICE_QUEUE_CLIENT_LIMIT`) reached. Responses carry Retry-After and retryAfterSeconds.',
             ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT']
         ),
         500: sliceResponses[500],

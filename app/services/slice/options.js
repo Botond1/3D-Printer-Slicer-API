@@ -28,7 +28,12 @@ const {
     resolveBambuProcessName
 } = require('./bambu-printer-registry');
 
-const INFILL_PATTERN = /^\s*(\d{1,3})\s*%?\s*$/;
+/**
+ * Strict infill text: 1-3 digits, an optional integral decimal tail such as
+ * `.0`/`.00` (so `20.0` and `20.00%` mean exactly 20), and an optional `%`.
+ * Non-integral values (`20.5`), exponents (`1e2`), signs, and words fail.
+ */
+const INFILL_PATTERN = /^\s*(\d{1,3})(?:\.0+)?\s*%?\s*$/;
 
 function invalid(error, errorCode) {
     return { isValid: false, response: { success: false, error, errorCode } };
@@ -76,7 +81,8 @@ function parseSupports(body) {
 
 /**
  * Parse the strict infill percentage: an integer from 0 to 100 (an optional
- * trailing `%` is tolerated), never clamped, never guessed.
+ * trailing `%` and an integral decimal spelling such as `20.0` are
+ * tolerated), never clamped, never guessed.
  * @param {Record<string, unknown>} body Request payload.
  * @returns {{isValid: true, value: number} | {isValid: false, response: {success: false, error: string, errorCode: string}}} Parse result.
  */

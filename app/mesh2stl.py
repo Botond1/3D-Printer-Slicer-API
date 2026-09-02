@@ -162,7 +162,10 @@ def convert_mesh_to_stl(input_path, output_path):
 
     Raises:
         SystemExit: Status 2 with the geometry marker for invalid geometry,
-            status 1 for every other failure.
+            status 1 for every other failure. Resource exhaustion
+            (``MemoryError``) and I/O failures (``OSError`` other than a
+            missing input) are server-side faults, so they exit 1 WITHOUT
+            the marker and are never reported as the customer's bad geometry.
     """
     print(f"[PYTHON] Loading mesh: {input_path}")
     try:
@@ -172,7 +175,10 @@ def convert_mesh_to_stl(input_path, output_path):
         sys.exit(1)
     except InvalidSourceGeometry as error:
         report_invalid_geometry(error.reason)
-    except Exception as error:  # noqa: BLE001 - any loader failure is a bad source
+    except (MemoryError, OSError) as error:
+        print(f"[PYTHON] ERROR: Could not load this mesh file. {type(error).__name__}")
+        sys.exit(1)
+    except Exception as error:  # noqa: BLE001 - any loader/parse failure is a bad source
         report_invalid_geometry(f"unloadable {type(error).__name__}")
 
     try:

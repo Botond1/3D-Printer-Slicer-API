@@ -1,6 +1,7 @@
 /** Queue-aware public slicing handlers with contained pipeline delegation. */
 
 const { getClientIp } = require('../utils/client-ip');
+const { SHARED_SLOT } = require('../middleware/requireAudience');
 const { enqueueSliceJob, sendQueueErrorResponse, toQueueErrorResponse } = require('./slice/queue');
 const {
     processSlice,
@@ -53,14 +54,17 @@ async function safelyAwaitResponseSettlement(req, res, binding, queueError) {
  * Resolve the per-client fairness key. An authenticated slice principal (a
  * WooCommerce or LeadPilot key slot attached as `req.slicePrincipal.slot` by
  * the authentication middleware) shares one key across every address it calls
- * from; anonymous or shared-key traffic keeps the historical client-IP key.
+ * from. The shared compatibility slot (`SHARED_SLOT`, used by the default
+ * `legacy` mode and by shared-key callers during `migration`) is anonymous:
+ * every shared-key caller keeps the historical client-IP key, so
+ * `MAX_SLICE_QUEUE_PER_IP` never collapses into one global cap.
  * @param {import('express').Request} req Express request.
  * @param {(req: object) => string} resolveClientIp Client IP resolver.
  * @returns {string} Queue fairness key.
  */
 function resolveQueueKey(req, resolveClientIp) {
     const slot = req?.slicePrincipal?.slot;
-    if (typeof slot === 'string' && /^[A-Za-z0-9_.:-]{1,64}$/.test(slot)) {
+    if (typeof slot === 'string' && slot !== SHARED_SLOT && /^[A-Za-z0-9_.:-]{1,64}$/.test(slot)) {
         return `principal:${slot}`;
     }
     return resolveClientIp(req);

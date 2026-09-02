@@ -189,19 +189,19 @@ class TokenBucketRateLimiter {
 }
 
 /**
- * Resolve the client key used for slice fairness.
- * An authenticated slice principal (attached by the slice audience guard)
- * keys on its rotation family so one partner cannot starve another sharing
- * an address; unauthenticated or pre-authentication traffic keys on the
- * resolved client IP.
+ * Resolve the client key used by the slice rate limiter.
+ *
+ * The slice limiter is mounted BEFORE `x-slicer-api-key` authentication on
+ * every slice and render route (`rateLimiter, authenticate, ...`), so no
+ * `req.slicePrincipal` exists when it runs and the limiter can only key on
+ * the resolved client IP. Principal-aware fairness lives in the slice queue
+ * (`resolveQueueKey` in `slice.service.js`), which runs after authentication.
+ * Keep the limiter in front of authentication: rejecting excess traffic
+ * before any digest comparison or workspace allocation is the point.
  * @param {import('express').Request} req Express request object.
- * @returns {string} Bounded limiter/queue key.
+ * @returns {string} Bounded per-client-IP limiter key.
  */
 function resolveSliceClientKey(req) {
-    const slot = req?.slicePrincipal?.slot;
-    if (typeof slot === 'string' && /^[a-z][a-z0-9_-]{0,31}$/.test(slot)) {
-        return `principal:${slot}`;
-    }
     return `ip:${getClientIp(req)}`;
 }
 

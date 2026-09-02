@@ -302,13 +302,37 @@ function createRenderProcessor(dependencies = {}) {
 }
 
 /**
+ * Build the pre-queue validator for render requests. A missing upload, an
+ * unsupported extension, or an invalid option answers HTTP 400 BEFORE the
+ * request is admitted to the shared slice queue, so it never wins the single
+ * native slot. No profile selection is needed: the preview slices nothing.
+ * @param {object} [dependencies] `resolveRequestOrResponseImpl` seam shared with the processor.
+ * @returns {(req: object, res: object) => object|null} Validator returning a settled 400 response or null.
+ */
+function createRenderPreValidator(dependencies = {}) {
+    const resolveRequest = dependencies.resolveRequestOrResponseImpl || resolveRequestOrResponse;
+    return function preValidateRenderRequest(req, res) {
+        const workspace = getRequestWorkspace(req);
+        if (!workspace) return null;
+        const resolved = resolveRequest(req, res, { engine: 'prusa', forcedTechnology: null }, workspace);
+        return resolved.response || null;
+    };
+}
+
+/**
  * Build the queue-aware render handler on top of the shared slice handler lifecycle.
- * @param {object} [options] `processRenderImpl`, `processorDependencies`, plus `createSliceHandlers` seams.
+ * @param {object} [options] `processRenderImpl`, `processorDependencies`, `validateSliceRequestImpl`, plus `createSliceHandlers` seams.
  * @returns {{handleRender: (req: object, res: object) => Promise<unknown>, processRender: Function}} Handler bundle.
  */
 function createRenderHandlers(options = {}) {
     const processRender = options.processRenderImpl || createRenderProcessor(options.processorDependencies);
-    const { handleSlicePrusa } = createSliceHandlers({ ...options, processSliceImpl: processRender });
+    const validateSliceRequestImpl = options.validateSliceRequestImpl
+        || createRenderPreValidator(options.processorDependencies);
+    const { handleSlicePrusa } = createSliceHandlers({
+        ...options,
+        processSliceImpl: processRender,
+        validateSliceRequestImpl
+    });
     return { handleRender: handleSlicePrusa, processRender };
 }
 
@@ -324,6 +348,7 @@ module.exports = {
     handleRender,
     processRender,
     createRenderHandlers,
+    createRenderPreValidator,
     createRenderProcessor,
     createPreviewBuildVolumeLimits,
     resolveRenderHelperPath,

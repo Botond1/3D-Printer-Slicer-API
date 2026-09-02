@@ -132,7 +132,7 @@ function entrypointContract(source) {
     assert.match(source,
         /for runtime_directory in \/app\/input \/app\/output \/app\/configs\/pricing-state \/tmp; do/);
     assert.match(source,
-        /for profile_directory in \/app\/configs\/prusa \/app\/configs\/orca; do/);
+        /for profile_directory in \/app\/configs\/prusa \/app\/configs\/orca \/app\/configs\/bambu; do/);
     assert.match(source, /realpath -e -- "\$profile_directory"/);
     assert.match(source, /stat -c '%A' -- "\$profile_directory"/);
     assert.match(source, /\?\?\?\?\?w\?\?\?\?\|\?\?\?\?\?\?\?\?w\?\) exit 78/);
@@ -238,6 +238,9 @@ test('service-identity startup guard weakening mutations fail closed', async (t)
         ['profile roots become writable',
             'if [ "$profile_real_path" != "$profile_directory" ] || [ -w "$profile_directory" ]; then',
             'if [ "$profile_real_path" != "$profile_directory" ]; then'],
+        ['bambu profile root dropped from the immutable loop',
+            'for profile_directory in /app/configs/prusa /app/configs/orca /app/configs/bambu; do',
+            'for profile_directory in /app/configs/prusa /app/configs/orca; do'],
         ['job scratch creation removed', '    /tmp/slice-jobs \\\n', ''],
         ['exec semantics removed', 'exec "$@"', '"$@"']
     ];

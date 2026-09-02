@@ -151,7 +151,7 @@ for (const [key, value] of Object.entries(expectedEnvironment)) {
 }
 const immutable = [
   '/app/server.js', '/app/node_modules', '/app/configs', '/app/configs/prusa',
-  '/app/configs/orca', '/opt/venv', '/opt/prusaslicer', '/opt/orcaslicer'
+  '/app/configs/orca', '/app/configs/bambu', '/opt/venv', '/opt/prusaslicer', '/opt/orcaslicer'
 ];
 for (const target of immutable) {
   const stat = fs.lstatSync(target);
@@ -181,7 +181,7 @@ for (const [executable, expectedTarget, helpSentinel] of nativeExecutables) {
   const helpOutput = (help.stdout || '') + '\n' + (help.stderr || '');
   if (help.error || help.signal || !helpSentinel.test(helpOutput)) fail('native_executable_help');
 }
-const denied = ['/app', '/app/configs', '/app/configs/prusa', '/app/configs/orca'];
+const denied = ['/app', '/app/configs', '/app/configs/prusa', '/app/configs/orca', '/app/configs/bambu'];
 for (const directory of denied) {
   const probe = directory + '/.i4-denied-probe';
   try { fs.writeFileSync(probe, 'x', { flag: 'wx', mode: 0o600 }); fail('immutable_write'); }

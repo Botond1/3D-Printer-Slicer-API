@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Install a checksum-pinned Swiper package into both OrcaSlicer web trees."""
+"""Install a checksum-pinned Swiper package into the OrcaSlicer and Bambu Studio web trees.
+
+Both extracted AppImage trees ship ``resources/web/include/swiper`` (Swiper
+7.2.0, GHSA-hmx5-qpq5-p643) and OrcaSlicer also ships
+``resources/web/guide/swiper``. Every ``swiper`` directory that exists under a
+root's ``resources/web`` at the known relative paths is replaced with the
+pinned 12.1.2 package; ``include/swiper`` is mandatory, ``guide/swiper`` is
+replaced when present. After replacement the whole ``resources/web`` tree is
+scanned and any remaining Swiper 7.2.0 metadata fails the build closed, so a
+tree cannot keep an unremediated copy the Grype HIGH gate would reject.
+"""
 
 from __future__ import annotations
 
@@ -194,30 +204,57 @@ def normalize_tree_permissions(root: Path) -> None:
             raise VendorInstallError(f"Swiper resource permissions could not be normalized: {path}") from error
 
 
-def _validated_targets(orca_root: Path) -> tuple[Path, Path, Path]:
+def _require_directory(path: Path, label: str) -> None:
     try:
-        root_details = orca_root.lstat()
+        details = path.lstat()
     except OSError as error:
-        raise VendorInstallError(f"Orca root is unavailable: {error}") from error
+        raise VendorInstallError(f"{label} is unavailable: {path}") from error
+    if not stat.S_ISDIR(details.st_mode) or stat.S_ISLNK(details.st_mode):
+        raise VendorInstallError(f"{label} must be a non-symlink directory: {path}")
+
+
+def _validated_targets(slicer_root: Path, label: str = "Orca") -> tuple[Path, tuple[Path, ...]]:
+    """Validate one extracted slicer tree and return its web root plus Swiper targets.
+
+    ``include/swiper`` is mandatory. ``guide/swiper`` is a target only when the
+    tree ships it (OrcaSlicer does; Bambu Studio may not); when present it must
+    be a real directory like every other target.
+    """
+    try:
+        root_details = slicer_root.lstat()
+    except OSError as error:
+        raise VendorInstallError(f"{label} root is unavailable: {error}") from error
     if not stat.S_ISDIR(root_details.st_mode) or stat.S_ISLNK(root_details.st_mode):
-        raise VendorInstallError("Orca root must be a non-symlink directory")
-    web_root = orca_root / "resources" / "web"
-    for path in (web_root, web_root / "include", web_root / "guide"):
+        raise VendorInstallError(f"{label} root must be a non-symlink directory")
+    web_root = slicer_root / "resources" / "web"
+    for path in (web_root, web_root / "include"):
+        _require_directory(path, f"required {label} directory")
+    include_target, guide_target = (slicer_root / relative for relative in TARGET_RELATIVE_PATHS)
+    _require_directory(include_target, "Swiper target")
+    targets: list[Path] = [include_target]
+    if guide_target.parent.exists() or guide_target.parent.is_symlink():
+        _require_directory(guide_target.parent, f"required {label} directory")
+        if guide_target.exists() or guide_target.is_symlink():
+            _require_directory(guide_target, "Swiper target")
+            targets.append(guide_target)
+    return web_root, tuple(targets)
+
+
+def _assert_no_stale_swiper(web_root: Path) -> None:
+    """Fail closed when any Swiper 7.2.0 metadata survives anywhere under the web tree."""
+    seen = 0
+    for metadata_path in sorted(web_root.rglob("package.json")):
+        seen += 1
+        if seen > MAX_ARCHIVE_ENTRIES * 16:
+            raise VendorInstallError(f"web tree package metadata count exceeds the allowed limit: {web_root}")
+        if metadata_path.is_symlink() or not metadata_path.is_file():
+            continue
         try:
-            details = path.lstat()
-        except OSError as error:
-            raise VendorInstallError(f"required Orca directory is unavailable: {path}") from error
-        if not stat.S_ISDIR(details.st_mode) or stat.S_ISLNK(details.st_mode):
-            raise VendorInstallError(f"required Orca path must be a non-symlink directory: {path}")
-    targets = tuple(orca_root / relative for relative in TARGET_RELATIVE_PATHS)
-    for target in targets:
-        try:
-            details = target.lstat()
-        except OSError as error:
-            raise VendorInstallError(f"Swiper target is unavailable: {target}") from error
-        if not stat.S_ISDIR(details.st_mode) or stat.S_ISLNK(details.st_mode):
-            raise VendorInstallError(f"Swiper target must be a non-symlink directory: {target}")
-    return web_root, targets[0], targets[1]
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            continue
+        if isinstance(metadata, dict) and metadata.get("name") == "swiper" and metadata.get("version") == OLD_VERSION:
+            raise VendorInstallError(f"unremediated Swiper {OLD_VERSION} remains at {metadata_path}")
 
 
 def cleanup_tree(path: Path) -> None:
@@ -278,8 +315,9 @@ def _tree_evidence(path: Path) -> tuple[int, int, str, str]:
     return len(files), size, js_hash, css_hash
 
 
-def install_swiper_vendor(archive_path: Path, orca_root: Path, source_url: str) -> list[str]:
-    web_root, include_target, guide_target = _validated_targets(orca_root)
+def install_swiper_vendor(archive_path: Path, slicer_root: Path, source_url: str, label: str = "orca") -> list[str]:
+    """Remediate one extracted slicer tree; ``label`` names it in the evidence lines."""
+    web_root, targets = _validated_targets(slicer_root, label.capitalize())
     staging_root = Path(tempfile.mkdtemp(prefix=".swiper-vendor-", dir=web_root))
     primary_error: Exception | None = None
     evidence: list[str] = []
@@ -287,18 +325,19 @@ def install_swiper_vendor(archive_path: Path, orca_root: Path, source_url: str) 
         package = verify_archive(archive_path, source_url, staging_root / "extracted")
         normalize_tree_permissions(package)
         hashes = validate_package(package)
-        staged = (staging_root / "include", staging_root / "guide")
+        staged = tuple(staging_root / target.parent.name for target in targets)
         for target in staged:
             shutil.copytree(package, target)
             normalize_tree_permissions(target)
             if validate_package(target) != hashes:
                 raise VendorInstallError(f"staged Swiper copy differs from verified artifact: {target}")
-        replace_trees((include_target, guide_target), staged, hashes)
-        for label, target in (("include", include_target), ("guide", guide_target)):
+        replace_trees(targets, staged, hashes)
+        _assert_no_stale_swiper(web_root)
+        for target in targets:
             count, size, js_hash, css_hash = _tree_evidence(target)
             evidence.append(
-                f"swiper_vendor tree={label} version={EXPECTED_VERSION} files={count} bytes={size} "
-                f"js_sha256={js_hash} css_sha256={css_hash}"
+                f"swiper_vendor root={label} tree={target.parent.name} version={EXPECTED_VERSION} "
+                f"files={count} bytes={size} js_sha256={js_hash} css_sha256={css_hash}"
             )
     except Exception as error:
         primary_error = error
@@ -315,10 +354,21 @@ def install_swiper_vendor(archive_path: Path, orca_root: Path, source_url: str) 
     return evidence
 
 
+def install_swiper_vendor_trees(archive_path: Path, roots: dict[str, Path], source_url: str) -> list[str]:
+    """Remediate every labelled slicer root in order; the first failure stops the run."""
+    if not roots:
+        raise VendorInstallError("at least one slicer root is required")
+    evidence: list[str] = []
+    for label, slicer_root in roots.items():
+        evidence.extend(install_swiper_vendor(archive_path, slicer_root, source_url, label))
+    return evidence
+
+
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archive", required=True, type=Path)
     parser.add_argument("--orca-root", required=True, type=Path)
+    parser.add_argument("--bambu-root", required=True, type=Path)
     parser.add_argument("--source-url", required=True)
     return parser.parse_args()
 
@@ -326,7 +376,11 @@ def _arguments() -> argparse.Namespace:
 def main() -> int:
     arguments = _arguments()
     try:
-        evidence = install_swiper_vendor(arguments.archive, arguments.orca_root, arguments.source_url)
+        evidence = install_swiper_vendor_trees(
+            arguments.archive,
+            {"orca": arguments.orca_root, "bambu": arguments.bambu_root},
+            arguments.source_url,
+        )
     except VendorInstallError as error:
         print(f"swiper_vendor status=failed error={error}", file=sys.stderr)
         return 1

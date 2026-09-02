@@ -64,9 +64,11 @@ class PricingRepository {
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
             throw new Error('Invalid pricing payload.');
         }
-        // An existing file is authoritative. Defaults seed only a missing or
-        // empty file (the caller resets to defaults when this throws), so a
-        // material deleted through the API never resurrects on restart.
+        // An existing file is authoritative. Defaults seed only a missing file
+        // or the typed `PRICING_FILE_EMPTY` case above; every other failure
+        // thrown here makes the loader refuse startup with the file untouched,
+        // so a material deleted through the API never resurrects on restart
+        // and a corrupt operator file is never silently replaced.
         return validatePricingSnapshot({
             FDM: parsed.FDM,
             SLA: parsed.SLA

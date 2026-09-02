@@ -112,15 +112,22 @@ test('rejected slice requests and non-slice audiences attach no principal', () =
     assert.equal('slicePrincipal' in req, false);
 });
 
-test('slice limiter keys on the authenticated principal and falls back to the client IP', () => {
+test('slice limiter keys only on the client IP because it runs before authentication', () => {
     const anonymous = request({});
     assert.equal(resolveSliceClientKey(anonymous), 'ip:203.0.113.10');
+    // Even if a principal were attached, the limiter must not key on it: the
+    // limiter is mounted in front of `authenticate`, so `req.slicePrincipal`
+    // can never exist when it runs. Principal fairness belongs to the queue.
     const principal = request({});
     principal.slicePrincipal = Object.freeze({ audience: 'slice', slot: 'leadpilot' });
-    assert.equal(resolveSliceClientKey(principal), 'principal:leadpilot');
-    const malformed = request({});
-    malformed.slicePrincipal = { audience: 'slice', slot: 'Bad Slot/../x' };
-    assert.equal(resolveSliceClientKey(malformed), 'ip:203.0.113.10');
+    assert.equal(resolveSliceClientKey(principal), 'ip:203.0.113.10');
+    const shared = request({});
+    shared.slicePrincipal = Object.freeze({ audience: 'slice', slot: SHARED_SLOT });
+    assert.equal(resolveSliceClientKey(shared), 'ip:203.0.113.10');
+    const otherAddress = request({});
+    otherAddress.ip = '198.51.100.7';
+    otherAddress.socket = { remoteAddress: '198.51.100.7' };
+    assert.equal(resolveSliceClientKey(otherAddress), 'ip:198.51.100.7');
 
     const keys = [];
     const middleware = createLimiterMiddleware({
@@ -130,7 +137,7 @@ test('slice limiter keys on the authenticated principal and falls back to the cl
     let passes = 0;
     middleware(principal, response().res, () => { passes += 1; });
     middleware(anonymous, response().res, () => { passes += 1; });
-    assert.deepEqual(keys, ['principal:leadpilot', 'ip:203.0.113.10']);
+    assert.deepEqual(keys, ['ip:203.0.113.10', 'ip:203.0.113.10']);
     assert.equal(passes, 2);
 
     const defaultKeyed = createLimiterMiddleware({
@@ -138,6 +145,58 @@ test('slice limiter keys on the authenticated principal and falls back to the cl
     });
     defaultKeyed(principal, response().res, () => {});
     assert.equal(keys[2], '203.0.113.10', 'admin limiters keep pure IP keying');
+});
+
+test('slice and render routes mount the limiter before authentication, so no principal can reach it', async () => {
+    const fsp = require('node:fs/promises');
+    const path = require('node:path');
+    const routesDir = path.join(__dirname, '..', '..', '..', 'app', 'routes');
+    const slice = await fsp.readFile(path.join(routesDir, 'slice.routes.js'), 'utf8');
+    const render = await fsp.readFile(path.join(routesDir, 'render.routes.js'), 'utf8');
+    for (const route of ['/prusa/slice', '/orca/slice', '/bambu/slice']) {
+        assert.ok(slice.includes(`router.post('${route}', rateLimiter, authenticate, lifecycle(`), route);
+    }
+    assert.ok(render.includes('router.post(RENDER_ROUTE_PATH, rateLimiter, authenticate, lifecycle('));
+    const limiter = await fsp.readFile(path.join(routesDir, '..', 'middleware', 'rateLimit.js'), 'utf8');
+    assert.doesNotMatch(limiter, /slicePrincipal/, 'the pre-auth limiter has no reachable principal branch');
+});
+
+test('queue fairness treats the shared slot as anonymous and principals as one key across addresses', async (t) => {
+    const previousPythonExecutable = process.env.PYTHON_EXECUTABLE;
+    process.env.PYTHON_EXECUTABLE = process.execPath;
+    t.after(() => {
+        if (previousPythonExecutable === undefined) delete process.env.PYTHON_EXECUTABLE;
+        else process.env.PYTHON_EXECUTABLE = previousPythonExecutable;
+    });
+    const { resolveQueueKey } = require('../../../app/services/slice.service');
+    const middleware = createRequireSliceService({ keyRing: keyRing('migration'), logger: { warn() {} } });
+    const ipOf = (req) => req.ip;
+
+    // Two shared-key callers from different addresses never share a bucket.
+    const sharedA = request({ 'x-slicer-api-key': SHARED_KEY });
+    const sharedB = request({ 'x-slicer-api-key': SHARED_KEY });
+    sharedB.ip = '198.51.100.7';
+    sharedB.socket = { remoteAddress: '198.51.100.7' };
+    assert.equal(authenticate(middleware, sharedA).passed, true);
+    assert.equal(authenticate(middleware, sharedB).passed, true);
+    assert.equal(sharedA.slicePrincipal.slot, SHARED_SLOT);
+    assert.equal(sharedB.slicePrincipal.slot, SHARED_SLOT);
+    assert.equal(resolveQueueKey(sharedA, ipOf), '203.0.113.10');
+    assert.equal(resolveQueueKey(sharedB, ipOf), '198.51.100.7');
+    assert.notEqual(resolveQueueKey(sharedA, ipOf), resolveQueueKey(sharedB, ipOf));
+
+    // A principal keeps one key regardless of the address it calls from.
+    const leadA = request({ 'x-slicer-api-key': LEAD_KEY });
+    const leadB = request({ 'x-slicer-api-key': LEAD_KEY });
+    leadB.ip = '198.51.100.7';
+    assert.equal(authenticate(middleware, leadA).passed, true);
+    assert.equal(authenticate(middleware, leadB).passed, true);
+    assert.equal(resolveQueueKey(leadA, ipOf), 'principal:leadpilot');
+    assert.equal(resolveQueueKey(leadB, ipOf), 'principal:leadpilot');
+    const woo = request({ 'x-slicer-api-key': WOO_PREVIOUS });
+    assert.equal(authenticate(middleware, woo).passed, true);
+    assert.equal(resolveQueueKey(woo, ipOf), 'principal:woocommerce');
+    assert.equal(resolveQueueKey({ slicePrincipal: { slot: 'shared' }, ip: '203.0.113.10' }, ipOf), '203.0.113.10');
 });
 
 test('SLICE_QUEUE_CLIENT_LIMIT carries Retry-After and retryAfterSeconds like the rate limiter', () => {

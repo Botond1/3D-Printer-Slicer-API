@@ -32,9 +32,11 @@ class SwiperSourceContractTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertEqual(result.stderr, "")
         source = INSTALLER_PATH.read_text(encoding="utf-8")
-        for option in ("--archive", "--orca-root", "--source-url"):
+        for option in ("--archive", "--orca-root", "--bambu-root", "--source-url"):
             self.assertIn(f'add_argument("{option}", required=True', source)
         self.assertIn('if __name__ == "__main__":', source)
+        # Both extracted trees are remediated by one pinned installer run.
+        self.assertIn('{"orca": arguments.orca_root, "bambu": arguments.bambu_root}', source)
 
     def test_archive_member_limit_is_enforced_while_streaming(self):
         source = INSTALLER_PATH.read_text(encoding="utf-8")
@@ -57,7 +59,11 @@ class SwiperSourceContractTests(unittest.TestCase):
         )
         self.assertRegex(dockerfile, r'install-swiper-vendor\.py[\s\\]+--archive[\s\\]+/tmp/swiper-12\.1\.2\.tgz')
         self.assertRegex(dockerfile, r'--orca-root[\s\\]+/tmp/orca-squashfs-root')
+        self.assertRegex(dockerfile, r'--bambu-root[\s\\]+/tmp/bambu-squashfs-root')
         self.assertRegex(dockerfile, r'--source-url[\s\\]+"\$SWIPER_VENDOR_URL"')
+        # The Bambu tree is remediated after extraction and before the AppImages are removed.
+        self.assertLess(dockerfile.index("mv squashfs-root bambu-squashfs-root"), dockerfile.index("--bambu-root"))
+        self.assertLess(dockerfile.index("--bambu-root"), dockerfile.index("rm -- /tmp/PrusaSlicer.AppImage"))
 
 
 if __name__ == "__main__":

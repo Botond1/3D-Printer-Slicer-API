@@ -8,11 +8,15 @@
  * triple. Three vendor keys matter:
  *
  * - `printable_area`: the plate polygon (`["0x0", "256x0", "256x256", "0x256"]`).
- * - `extruder_printable_area`: one polygon per extruder on dual-extruder
- *   machines, each written as one comma-separated string
- *   (`"0x0,325x0,325x320,0x320"`). A single-filament job can only use the
- *   FIRST extruder's area; the measured H2D admission confirmed it
- *   (`325 x 320` passes, `349` wide fails with rc 190).
+ * - `extruder_printable_area` / `extruder_printable_height`: one polygon and
+ *   one height per extruder on dual-extruder machines, each polygon written
+ *   as one comma-separated string (`"0x0,325x0,325x320,0x320"`). A
+ *   single-filament job is admitted against ONE extruder's rectangle AND
+ *   height: the extruder with the largest height, on a tie the vendor
+ *   `master_extruder_id` (1-based), else the first. Measured on the H2D
+ *   (areas `0..325` at height 320 and `25..350` at height 325, master 2):
+ *   `325 x 320 x 325` at `x_min=25` passes, `x_min=0` fails above Z 320,
+ *   and `349` wide fails with rc 190.
  * - `bed_exclude_area`: a polygon the slicer refuses to print into (the P1S
  *   `18 x 28 mm` corner at the origin); an overlapping object fails with
  *   rc 192 `Object conflicts were detected`.
@@ -84,19 +88,81 @@ function boundingRectangle(points) {
 }
 
 /**
- * Resolve the printable rectangle: the first extruder's area when the machine
- * declares per-extruder areas, otherwise the plate `printable_area`.
+ * Parse the per-extruder printable heights, which must align one-to-one with
+ * the per-extruder areas. An absent key means "use the plate height".
+ * @param {unknown} raw `extruder_printable_height` profile value.
+ * @param {number} expectedCount Number of declared extruder areas.
+ * @returns {number[]|null} Positive heights per extruder, or null when absent.
+ */
+function parseExtruderHeights(raw, expectedCount) {
+    if (raw === undefined || raw === null) return null;
+    if (!Array.isArray(raw) || raw.length !== expectedCount) {
+        throw new Error('Bambu machine snapshot declares malformed extruder printable heights.');
+    }
+    const heights = raw.map((value) => parseNumberLike(value));
+    if (heights.some((height) => !Number.isFinite(height) || height <= 0)) {
+        throw new Error('Bambu machine snapshot declares malformed extruder printable heights.');
+    }
+    return heights;
+}
+
+/**
+ * Resolve the 0-based index of the vendor master extruder (`master_extruder_id`
+ * is 1-based). Absent or unusable values resolve to the first extruder.
+ * @param {unknown} raw `master_extruder_id` profile value.
+ * @param {number} count Number of declared extruder areas.
+ * @returns {number} 0-based extruder index.
+ */
+function resolveMasterExtruderIndex(raw, count) {
+    const id = parseNumberLike(raw);
+    if (Number.isInteger(id) && id >= 1 && id <= count) return id - 1;
+    return 0;
+}
+
+/**
+ * Choose the extruder whose envelope a single-filament job is admitted
+ * against: the one with the LARGEST printable height; on a tie the vendor
+ * master extruder, else the first. Measured on the H2D (Bambu Studio
+ * 02.08.02.61): an object confined to the left area (`0..325`, height 320)
+ * fails above Z 320 with rc 190, while the right/master area (`25..350`)
+ * prints to Z 325, so the master's rectangle AND height are the envelope.
+ * @param {number[]|null} heights Per-extruder heights, or null when absent.
+ * @param {number} masterIndex 0-based master extruder index.
+ * @returns {number} Selected 0-based extruder index.
+ */
+function selectExtruderIndex(heights, masterIndex) {
+    if (!heights) return masterIndex;
+    const largest = Math.max(...heights);
+    const candidates = heights
+        .map((height, index) => (height === largest ? index : -1))
+        .filter((index) => index >= 0);
+    return candidates.includes(masterIndex) ? masterIndex : candidates[0];
+}
+
+/**
+ * Resolve the printable rectangle and height. With per-extruder areas the
+ * selected extruder (see {@link selectExtruderIndex}) supplies BOTH; without
+ * them the plate `printable_area` and `printable_height` apply.
  * @param {Record<string, unknown>} profileData Flattened machine profile.
- * @returns {{rectangle: {minX: number, minY: number, maxX: number, maxY: number}, source: 'extruder_printable_area'|'printable_area'}|null} Printable rectangle and its source key.
+ * @returns {{rectangle: {minX: number, minY: number, maxX: number, maxY: number}, source: 'extruder_printable_area'|'printable_area', height: number|null}|null} Printable rectangle, its source key, and the extruder height (null when the plate height applies).
  */
 function resolvePrintableRectangle(profileData) {
     const extruderAreas = profileData.extruder_printable_area;
     if (Array.isArray(extruderAreas) && extruderAreas.length > 0) {
-        const first = boundingRectangle(parsePolygon(extruderAreas[0]));
-        if (first) return { rectangle: first, source: 'extruder_printable_area' };
+        const rectangles = extruderAreas.map((area) => boundingRectangle(parsePolygon(area)));
+        if (rectangles.every(Boolean)) {
+            const heights = parseExtruderHeights(profileData.extruder_printable_height, extruderAreas.length);
+            const masterIndex = resolveMasterExtruderIndex(profileData.master_extruder_id, extruderAreas.length);
+            const selected = selectExtruderIndex(heights, masterIndex);
+            return {
+                rectangle: rectangles[selected],
+                source: 'extruder_printable_area',
+                height: heights ? heights[selected] : null
+            };
+        }
     }
     const plate = boundingRectangle(parsePolygon(profileData.printable_area));
-    return plate ? { rectangle: plate, source: 'printable_area' } : null;
+    return plate ? { rectangle: plate, source: 'printable_area', height: null } : null;
 }
 
 /**
@@ -133,7 +199,9 @@ function parseBambuBedGeometry(profileData) {
     if (!printable) {
         throw new Error('Bambu machine snapshot declares no printable area.');
     }
-    const printableHeight = parseNumberLike(profileData.printable_height);
+    // The selected extruder's height wins; the plate height is the fallback
+    // when the machine declares no per-extruder heights.
+    const printableHeight = printable.height ?? parseNumberLike(profileData.printable_height);
     if (!Number.isFinite(printableHeight) || printableHeight <= 0) {
         throw new Error('Bambu machine snapshot declares no printable height.');
     }
@@ -150,5 +218,9 @@ module.exports = {
     MAX_POLYGON_POINTS,
     boundingRectangle,
     parseBambuBedGeometry,
-    parsePolygon
+    parseExtruderHeights,
+    parsePolygon,
+    resolveMasterExtruderIndex,
+    resolvePrintableRectangle,
+    selectExtruderIndex
 };

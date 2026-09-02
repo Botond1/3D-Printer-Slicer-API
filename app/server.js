@@ -62,7 +62,14 @@ try {
     process.exit(1);
 }
 ensureRequiredDirectories();
-loadPricingFromDisk();
+try {
+    loadPricingFromDisk();
+} catch (error) {
+    // Fail closed: an existing pricing file that cannot be trusted is never
+    // replaced with defaults. The operator repairs or removes it and restarts.
+    console.error(`[SECURITY] Pricing configuration is invalid (${error?.code || 'PRICING_FILE_INVALID'}). Refusing to start server.`);
+    process.exit(1);
+}
 
 /** @type {import('express').Express} */
 const app = express();

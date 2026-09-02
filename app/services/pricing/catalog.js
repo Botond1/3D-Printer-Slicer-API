@@ -7,6 +7,25 @@
  */
 const { isSafeMaterialName } = require('./validation');
 
+/** Error code raised when a delete would empty a technology's pricing map. */
+const LAST_MATERIAL_PROTECTED = 'LAST_MATERIAL_PROTECTED';
+
+/**
+ * Refuse to remove the only material of a technology map.
+ * @param {Record<string, number>} entries Technology pricing map.
+ * @param {string} materialKey Material key about to be removed.
+ * @returns {void}
+ * @throws {Error & {code: 'LAST_MATERIAL_PROTECTED'}} When `materialKey` is the sole entry.
+ */
+function assertNotLastMaterial(entries, materialKey) {
+    const keys = Object.keys(entries || {});
+    if (keys.length === 1 && keys[0] === materialKey) {
+        const error = new Error('The last material of a technology cannot be deleted.');
+        error.code = LAST_MATERIAL_PROTECTED;
+        throw error;
+    }
+}
+
 class PricingCatalog {
     /**
      * @param {PricingMap} defaultPricing Default pricing configuration.
@@ -143,12 +162,19 @@ class PricingCatalog {
 
     /**
      * Remove a material from pricing map.
+     * Refuses to remove the LAST material of a technology: readiness requires
+     * non-empty FDM and SLA maps, so emptying one would take the service out
+     * of `READY` through an ordinary pricing edit.
      * @param {'FDM' | 'SLA'} technology Technology namespace.
      * @param {string} materialKey Material key to remove.
      * @returns {void}
+     * @throws {Error & {code: 'LAST_MATERIAL_PROTECTED'}} When the material is the technology's only entry.
      */
     removeMaterial(technology, materialKey) {
-        delete this.pricing[technology][materialKey];
+        const entries = this.pricing[technology];
+        if (!entries || typeof entries !== 'object' || !Object.hasOwn(entries, materialKey)) return;
+        assertNotLastMaterial(entries, materialKey);
+        delete entries[materialKey];
     }
 
     /**
@@ -173,5 +199,7 @@ class PricingCatalog {
 }
 
 module.exports = {
-    PricingCatalog
+    LAST_MATERIAL_PROTECTED,
+    PricingCatalog,
+    assertNotLastMaterial
 };

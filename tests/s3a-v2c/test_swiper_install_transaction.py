@@ -120,6 +120,50 @@ class SwiperInstallTransactionTests(unittest.TestCase):
             self.installer.replace_trees(self.targets, stages, hashes)
         self.assertTrue(all((target / "original.txt").exists() for target in self.targets))
 
+    def test_bambu_root_without_guide_tree_replaces_only_the_include_swiper(self):
+        bambu = self.root / "bambu"
+        include = bambu / "resources" / "web" / "include" / "swiper"
+        include.mkdir(parents=True)
+        (include / "original.txt").write_text("original-bambu-include", encoding="utf-8")
+        (include / "package.json").write_text('{"name":"swiper","version":"7.2.0"}', encoding="utf-8")
+        with synthetic_digest(self.installer, self.archive):
+            evidence = self.installer.install_swiper_vendor(
+                self.archive, bambu, self.installer.EXPECTED_URL, "bambu"
+            )
+        self.assertEqual(len(evidence), 1)
+        self.assertIn("root=bambu tree=include version=12.1.2", evidence[0])
+        self.assertFalse((include / "original.txt").exists())
+        self.assertEqual(set(self.installer.validate_package(include)), set(self.installer.CRITICAL_FILES))
+        self.assertFalse((bambu / "resources" / "web" / "guide").exists())
+        self.assertEqual(list((bambu / "resources" / "web").glob(".swiper-vendor-*")), [])
+
+    def test_both_roots_are_remediated_in_order_with_labelled_evidence(self):
+        bambu = self.root / "bambu"
+        (bambu / "resources" / "web" / "include" / "swiper").mkdir(parents=True)
+        with synthetic_digest(self.installer, self.archive):
+            evidence = self.installer.install_swiper_vendor_trees(
+                self.archive, {"orca": self.orca, "bambu": bambu}, self.installer.EXPECTED_URL
+            )
+        self.assertEqual([line.split()[1:3] for line in evidence], [
+            ["root=orca", "tree=include"], ["root=orca", "tree=guide"], ["root=bambu", "tree=include"],
+        ])
+        with self.assertRaisesRegex(self.installer.VendorInstallError, "at least one slicer root"):
+            self.installer.install_swiper_vendor_trees(self.archive, {}, self.installer.EXPECTED_URL)
+
+    def test_missing_include_swiper_or_unremediated_copy_fails_closed(self):
+        bambu = self.root / "bambu"
+        (bambu / "resources" / "web" / "include").mkdir(parents=True)
+        with synthetic_digest(self.installer, self.archive), self.assertRaisesRegex(
+            self.installer.VendorInstallError, "Swiper target is unavailable"
+        ):
+            self.installer.install_swiper_vendor(self.archive, bambu, self.installer.EXPECTED_URL, "bambu")
+
+        stale = self.orca / "resources" / "web" / "homepage" / "swiper"
+        stale.mkdir(parents=True)
+        (stale / "package.json").write_text('{"name":"swiper","version":"7.2.0"}', encoding="utf-8")
+        with self.assertRaisesRegex(self.installer.VendorInstallError, "unremediated Swiper 7.2.0"):
+            self.install()
+
     def test_staging_cleanup_failure_fails_closed(self):
         real_cleanup = self.installer.cleanup_tree
 

@@ -490,6 +490,11 @@ const REQUEST_VALIDATION_CODES = Object.freeze([
     'INVALID_PROCESS_PROFILE',
     'INVALID_PROFILE_NAME',
     'PROFILE_NOT_FOUND',
+    'INVALID_SIZE_UNIT',
+    'INVALID_KEEP_PROPORTIONS',
+    'INVALID_SIZE_OPTIONS',
+    'CONFLICTING_SIZE_OPTIONS',
+    'INVALID_ROTATION_OPTIONS',
     'NO_FILE_UPLOADED'
 ]);
 
@@ -537,7 +542,7 @@ function createSliceResponses() {
         ),
         422: validationErrorResponse(),
         429: errorCodeResponse(
-            'Per-client rate limit or per-client queue fairness cap reached. Responses carry Retry-After and retryAfterSeconds.',
+            'Per-client-IP rate limit (`RATE_LIMIT_EXCEEDED`; the limiter runs before authentication, so it keys only on the client IP) or per-client queue fairness cap (`SLICE_QUEUE_CLIENT_LIMIT`; keyed per WooCommerce/LeadPilot principal, or per client IP for shared-key callers) reached. Responses carry Retry-After and retryAfterSeconds.',
             ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT']
         ),
         500: errorCodeResponse('Server Error. `NATIVE_OUTPUT_OVERFLOW` means a native process exceeded its bounded stdout/stderr budget and was stopped; no estimate is returned.', [
