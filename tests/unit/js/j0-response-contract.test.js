@@ -196,6 +196,7 @@ test('OpenAPI exposes engine identity, W2 digest, requested omissions, and live 
         'FILE_PROCESSING_TIMEOUT',
         'ORCA_PROFILE_INCOMPATIBLE',
         'MODEL_DIMENSIONS_UNAVAILABLE',
+        'UNSLICEABLE_SOURCE_GEOMETRY',
         'MODEL_OUT_OF_PRINTER_BOUNDS'
     ]);
     assert.deepEqual(

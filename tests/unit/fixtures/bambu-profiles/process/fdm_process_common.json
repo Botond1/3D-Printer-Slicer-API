@@ -1,0 +1,18 @@
+{
+    "type": "process",
+    "name": "fdm_process_common",
+    "from": "system",
+    "instantiation": "false",
+    "layer_height": "0.2",
+    "initial_layer_print_height": "0.2",
+    "wall_loops": "2",
+    "sparse_infill_density": "15%",
+    "sparse_infill_pattern": "grid",
+    "enable_support": "0",
+    "support_type": "tree(auto)",
+    "top_shell_layers": "5",
+    "bottom_shell_layers": "3",
+    "outer_wall_speed": "200",
+    "inner_wall_speed": "300",
+    "travel_speed": "500"
+}

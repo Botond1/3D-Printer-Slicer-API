@@ -1,0 +1,13 @@
+{
+    "type": "filament",
+    "name": "Generic PLA @base",
+    "inherits": "fdm_filament_pla",
+    "from": "system",
+    "instantiation": "false",
+    "filament_vendor": [
+        "Generic"
+    ],
+    "filament_max_volumetric_speed": [
+        "12"
+    ]
+}

@@ -1,0 +1,5 @@
+{
+    "type": "machine",
+    "name": "Self Cycle",
+    "inherits": "Self Cycle"
+}

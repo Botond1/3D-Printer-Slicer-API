@@ -15,6 +15,7 @@ const EXPECTED_METHODS = {
     '/pricing/SLA/{material}': ['delete', 'patch'],
     '/prusa/slice': ['post'],
     '/orca/slice': ['post'],
+    '/bambu/slice': ['post'],
     '/render': ['post'],
     '/admin/output-files': ['get'],
     '/admin/download/{fileName}': ['get'],
@@ -34,8 +35,9 @@ const EXPECTED_RESPONSE_KEYS = {
     'DELETE /pricing/FDM/{material}': ['200', '400', '401', '404', '500'],
     'PATCH /pricing/SLA/{material}': ['200', '400', '401', '500'],
     'DELETE /pricing/SLA/{material}': ['200', '400', '401', '404', '500'],
-    'POST /prusa/slice': ['200', '400', '401', '408', '413', '422', '500'],
-    'POST /orca/slice': ['200', '400', '401', '408', '413', '422', '500'],
+    'POST /prusa/slice': ['200', '400', '401', '408', '413', '422', '429', '500', '503'],
+    'POST /orca/slice': ['200', '400', '401', '408', '413', '422', '429', '500', '503'],
+    'POST /bambu/slice': ['200', '400', '401', '408', '413', '422', '429', '500', '503'],
     'POST /render': ['200', '400', '401', '408', '413', '422', '429', '500', '503'],
     'GET /admin/output-files': ['200', '401', '500', '503'],
     'GET /admin/download/{fileName}': ['200', '400', '401', '404', '413', '500', '503'],
@@ -53,8 +55,10 @@ function getOperation(operationKey) {
     return document.paths[routePath][method];
 }
 
+const SLICE_OPERATIONS = ['POST /prusa/slice', 'POST /orca/slice', 'POST /bambu/slice'];
+
 test('slice success and bounds responses share the schema-v2 original-dimension invariant', () => {
-    for (const operationKey of ['POST /prusa/slice', 'POST /orca/slice']) {
+    for (const operationKey of SLICE_OPERATIONS) {
         const operation = getOperation(operationKey);
         const successTransform = operation.responses[200]
             .content['application/json'].schema.properties.model_transform;
@@ -377,9 +381,51 @@ test('profile catalogue public strings match runtime bounds and path-free identi
         entry.build_volume_limits_mm.properties.source_profile,
         {
             type: 'string', minLength: 1, maxLength: 128,
-            pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+            pattern: '^[A-Za-z0-9][A-Za-z0-9 @._+-]{0,127}$'
         }
     );
+    // The relaxed basename contract admits Bambu vendor names but never paths.
+    const basename = new RegExp(entry.build_volume_limits_mm.properties.source_profile.pattern);
+    assert.match('0.20mm Standard @BBL X1C', basename);
+    assert.match('Bambu Lab P1S 0.4 nozzle', basename);
+    assert.match('FDM_0.2mm.ini', basename);
+    assert.doesNotMatch('../private.ini', basename);
+    assert.doesNotMatch('nested/profile.json', basename);
+    assert.doesNotMatch(' leading-space', basename);
+});
+
+test('OpenAPI documents the Bambu Studio slice operation, supports, strict infill, and queue statuses', () => {
+    const bambu = getOperation('POST /bambu/slice');
+    const properties = bambu.requestBody.content['multipart/form-data'].schema.properties;
+    assert.deepEqual(properties.printerProfile.enum, ['P1S', 'H2D']);
+    assert.deepEqual(properties.layerHeight.enum, ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.28']);
+    assert.equal(properties.supports.type, 'boolean');
+    assert.equal(properties.supports.default, true);
+    assert.equal(properties.infill.minimum, 0);
+    assert.equal(properties.infill.maximum, 100);
+    assert.match(properties.infill.description, /never clamped/i);
+    assert.match(bambu.description, /\.gcode\.3mf/);
+    for (const operationKey of SLICE_OPERATIONS) {
+        const operation = getOperation(operationKey);
+        const request = operation.requestBody.content['multipart/form-data'].schema.properties;
+        assert.equal(request.supports.type, 'boolean', operationKey);
+        const success = operation.responses[200].content['application/json'].schema;
+        assert.ok(success.required.includes('supports'), operationKey);
+        assert.deepEqual(success.properties.slicer_engine.enum, ['prusa', 'orca', 'bambu'], operationKey);
+        const codes = (status) => operation.responses[status].content['application/json'].schema
+            .properties.errorCode.enum;
+        assert.deepEqual(codes(429), ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT'], operationKey);
+        assert.deepEqual(codes(503), ['SLICE_QUEUE_FULL', 'SLICE_QUEUE_TIMEOUT', 'SLICE_QUEUE_SHUTDOWN'], operationKey);
+        assert.deepEqual(codes(408), ['UPLOAD_TOTAL_TIMEOUT'], operationKey);
+        assert.ok(codes(413).includes('UPLOAD_RESOURCE_LIMIT_EXCEEDED'), operationKey);
+        for (const code of [
+            'INVALID_SUPPORTS', 'INVALID_INFILL', 'INVALID_PRINTER_PROFILE', 'INVALID_PROCESS_PROFILE',
+            'MATERIAL_PROFILE_UNAVAILABLE', 'INVALID_LAYER_HEIGHT'
+        ]) {
+            assert.ok(codes(400).includes(code), `${operationKey} ${code}`);
+        }
+        assert.ok(codes(422).includes('UNSLICEABLE_SOURCE_GEOMETRY'), operationKey);
+    }
 });
 
 test('OpenAPI slice operations expose the exact scoped authentication contract', () => {
@@ -418,7 +464,7 @@ test('OpenAPI slice operations expose the exact scoped authentication contract',
         }
     };
 
-    for (const operationKey of ['POST /prusa/slice', 'POST /orca/slice']) {
+    for (const operationKey of SLICE_OPERATIONS) {
         const operation = getOperation(operationKey);
         assert.deepEqual(operation.security, [{ SliceServiceApiKey: [] }], operationKey);
         const authHeaders = operation.parameters.filter((parameter) => (
@@ -436,7 +482,7 @@ test('OpenAPI slice operations expose the exact scoped authentication contract',
 });
 
 test('OpenAPI slice operations retain multipart choosenFile contracts', () => {
-    for (const routePath of ['/prusa/slice', '/orca/slice']) {
+    for (const routePath of ['/prusa/slice', '/orca/slice', '/bambu/slice']) {
         const content = document.paths[routePath].post.requestBody.content;
         assert.deepEqual(Object.keys(content), ['multipart/form-data']);
         const schema = content['multipart/form-data'].schema;

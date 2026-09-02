@@ -87,12 +87,15 @@ class OutputCandidateRegistry {
         this.candidates = new Map();
     }
 
-    async register(originalName, technology) {
+    async register(originalName, technology, engine = 'prusa') {
         const artifactId = this.options.artifactIdFactory
             ? String(this.options.artifactIdFactory())
             : `artifact-${randomBytes(16).toString('hex')}`;
         if (!/^artifact-[a-f0-9]{32}$/.test(artifactId)) throw new Error('Invalid artifact identifier');
-        const candidate = path.join(this.outputRoot, buildOutputFilename(originalName, technology, artifactId));
+        const candidate = path.join(
+            this.outputRoot,
+            buildOutputFilename(originalName, technology, artifactId, engine)
+        );
         if (!isDirectChild(this.outputRoot, candidate)) throw new Error('Output candidate is not a direct child');
         await this.assertSafeOutputRoot();
         if (await lstatOrNull(candidate)) throw new Error('Output candidate already exists');

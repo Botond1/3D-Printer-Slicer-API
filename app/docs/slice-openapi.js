@@ -22,7 +22,13 @@ const COMMON_MULTIPART_PROPERTIES = Object.freeze({
         type: 'integer',
         default: 20,
         minimum: 0,
-        maximum: 100
+        maximum: 100,
+        description: 'Strict infill percentage: an integer from 0 to 100 (an optional trailing `%` is tolerated). Values are never clamped; anything else returns HTTP 400 `INVALID_INFILL`.'
+    },
+    supports: {
+        type: 'boolean',
+        default: true,
+        description: 'Support generation. Omission keeps supports on for backward compatibility; `false` disables them on every engine. Any other present value returns HTTP 400 `INVALID_SUPPORTS`.'
     },
     orientationMode: {
         type: 'string',
@@ -253,6 +259,7 @@ const SUCCESS_SCHEMA = Object.freeze({
         'artifact_id',
         'slicer_engine',
         'engine_version',
+        'supports',
         'profiles',
         'model_transform',
         'build_volume_limits_mm',
@@ -263,30 +270,55 @@ const SUCCESS_SCHEMA = Object.freeze({
         success: { type: 'boolean', enum: [true] },
         job_id: { type: 'string', pattern: '^job-[a-f0-9]{32}$' },
         artifact_id: { type: 'string', pattern: '^artifact-[a-f0-9]{32}$' },
-        slicer_engine: { type: 'string', enum: ['prusa', 'orca'] },
+        slicer_engine: { type: 'string', enum: ['prusa', 'orca', 'bambu'] },
         engine_version: {
             type: 'string',
             pattern: '^[0-9]+(?:\\.[0-9]+){2,3}(?:[-+][A-Za-z0-9._-]+)?$',
             description: 'Version reported by the native slicer binary that produced the result.'
         },
+        supports: {
+            type: 'boolean',
+            description: 'Effective support-generation flag applied to this slice.'
+        },
         profiles: {
             type: 'object',
             required: ['effective_profile_sha256'],
             properties: {
+                prusa_profile: {
+                    type: 'string',
+                    description: 'PrusaSlicer only: selected INI basename.'
+                },
+                printer: {
+                    type: 'string',
+                    enum: ['P1S', 'H2D'],
+                    description: 'Bambu Studio only: registry printer id that selected the vendor machine chain.'
+                },
+                machine_profile: {
+                    type: 'string',
+                    description: 'OrcaSlicer: machine profile basename. Bambu Studio: official vendor machine profile name.'
+                },
+                process_profile: {
+                    type: 'string',
+                    description: 'OrcaSlicer: process profile basename. Bambu Studio: official vendor process profile name.'
+                },
                 filament_profile: {
                     type: 'string',
                     nullable: true,
-                    description: 'Exact Orca filament profile used, or null when the material has no mapped profile and pricing must remain manual.'
+                    description: 'Exact Orca filament profile used (or Bambu vendor filament name), or null when an Orca material has no mapped profile and pricing must remain manual.'
                 },
                 filament_diameter_mm: {
                     type: 'number',
                     nullable: true,
-                    description: 'Filament diameter read from the exact Orca profile snapshot passed to the slicer.'
+                    description: 'Filament diameter read from the exact profile snapshot passed to the slicer.'
                 },
                 filament_density_g_cm3: {
                     type: 'number',
                     nullable: true,
-                    description: 'Filament density read from the exact Orca profile snapshot passed to the slicer.'
+                    description: 'Filament density read from the exact profile snapshot passed to the slicer.'
+                },
+                bed_type: {
+                    type: 'string',
+                    description: 'Bambu Studio only: `--curr-bed-type` value taken from the printer registry.'
                 },
                 effective_profile_sha256: {
                     type: 'string',
@@ -306,6 +338,11 @@ const SUCCESS_SCHEMA = Object.freeze({
             type: 'object',
             required: ['material_used_m', 'material_used_g', 'object_height_mm', 'estimated_price_huf'],
             properties: {
+                print_time_seconds: {
+                    type: 'integer',
+                    minimum: 1,
+                    description: 'Total estimated print time. Orca and Bambu report the wall-clock total including the start sequence (`total estimated time`); Prusa reports its estimated printing time.'
+                },
                 material_used_m: {
                     type: 'number',
                     minimum: 0,
@@ -354,10 +391,11 @@ function validationErrorResponse() {
         'INVALID_SLICE_STATS',
         'FILE_PROCESSING_TIMEOUT',
         'ORCA_PROFILE_INCOMPATIBLE',
-        'MODEL_DIMENSIONS_UNAVAILABLE'
+        'MODEL_DIMENSIONS_UNAVAILABLE',
+        'UNSLICEABLE_SOURCE_GEOMETRY'
     ];
     return {
-        description: 'Model/profile validation or generated output/statistics validation failed.',
+        description: 'Model/profile validation or generated output/statistics validation failed. `UNSLICEABLE_SOURCE_GEOMETRY` carries a bounded, path-free `detail` string describing the native geometry diagnostic.',
         content: {
             'application/json': {
                 schema: {
@@ -369,6 +407,11 @@ function validationErrorResponse() {
                         errorCode: {
                             type: 'string',
                             enum: [...otherValidationCodes, 'MODEL_OUT_OF_PRINTER_BOUNDS']
+                        },
+                        detail: {
+                            type: 'string',
+                            maxLength: 256,
+                            description: 'Bounded native diagnostic classification; never contains file names or paths.'
                         }
                     },
                     oneOf: [
@@ -393,6 +436,26 @@ function validationErrorResponse() {
     };
 }
 
+const REQUEST_VALIDATION_CODES = Object.freeze([
+    'INVALID_SOURCE_ARCHIVE',
+    'INVALID_SOURCE_GEOMETRY',
+    'UNSUPPORTED_FILE_FORMAT',
+    'INVALID_ORIENTATION_MODE',
+    'INVALID_SUPPORTS',
+    'INVALID_INFILL',
+    'INVALID_LAYER_HEIGHT',
+    'INVALID_LAYER_HEIGHT_FOR_ENGINE',
+    'INVALID_LAYER_HEIGHT_FOR_TECHNOLOGY',
+    'INVALID_MATERIAL_FOR_TECHNOLOGY',
+    'MATERIAL_TECHNOLOGY_MISMATCH',
+    'MATERIAL_PROFILE_UNAVAILABLE',
+    'INVALID_PRINTER_PROFILE',
+    'INVALID_PROCESS_PROFILE',
+    'INVALID_PROFILE_NAME',
+    'PROFILE_NOT_FOUND',
+    'NO_FILE_UPLOADED'
+]);
+
 function createSliceResponses() {
     return {
         200: {
@@ -400,13 +463,8 @@ function createSliceResponses() {
             content: { 'application/json': { schema: SUCCESS_SCHEMA } }
         },
         400: errorCodeResponse(
-            'Invalid request, geometry, or source archive.',
-            [
-                'INVALID_SOURCE_ARCHIVE',
-                'INVALID_SOURCE_GEOMETRY',
-                'UNSUPPORTED_FILE_FORMAT',
-                'INVALID_ORIENTATION_MODE'
-            ]
+            'Invalid request, geometry, or source archive. Option and profile validation runs before queue admission, so these responses never consume a queue slot.',
+            [...REQUEST_VALIDATION_CODES]
         ),
         401: {
             description: 'Slice service authentication is required.',
@@ -441,13 +499,21 @@ function createSliceResponses() {
             ['UPLOAD_RESOURCE_LIMIT_EXCEEDED', 'SLICE_RESOURCE_LIMIT_EXCEEDED']
         ),
         422: validationErrorResponse(),
+        429: errorCodeResponse(
+            'Per-client rate limit or per-client queue fairness cap reached. Responses carry Retry-After and retryAfterSeconds.',
+            ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT']
+        ),
         500: errorCodeResponse('Server Error', [
             'SLICE_OUTPUT_UNPARSED',
             'INTERNAL_PROCESSING_ERROR',
             'QUEUE_INTERNAL_ERROR',
             'UPLOAD_STORAGE_ERROR',
             'INTERNAL_SERVER_ERROR'
-        ])
+        ]),
+        503: errorCodeResponse(
+            'The slice queue is full, the queued request waited past its deadline, or the service is shutting down.',
+            ['SLICE_QUEUE_FULL', 'SLICE_QUEUE_TIMEOUT', 'SLICE_QUEUE_SHUTDOWN']
+        )
     };
 }
 
@@ -466,7 +532,7 @@ function createPrusaProperties() {
         },
         infill: {
             ...COMMON_MULTIPART_PROPERTIES.infill,
-            description: 'Infill percentage from `0` to `100` (used for FDM).'
+            description: 'Infill percentage from `0` to `100` (used for FDM). Strict integer; never clamped.'
         },
         printerProfile: {
             type: 'string',
@@ -486,11 +552,11 @@ function createOrcaProperties() {
         },
         material: {
             ...COMMON_MULTIPART_PROPERTIES.material,
-            description: 'FDM material key.'
+            description: 'FDM material key. PLA, PETG, ABS and TPU carry server-owned filament profiles.'
         },
         infill: {
             ...COMMON_MULTIPART_PROPERTIES.infill,
-            description: 'Infill percentage from `0` to `100`.'
+            description: 'Infill percentage from `0` to `100`. Strict integer; never clamped.'
         },
         printerProfile: {
             type: 'string',
@@ -499,6 +565,36 @@ function createOrcaProperties() {
         processProfile: {
             type: 'string',
             description: 'Optional Orca process profile filename from `configs/orca` (for example `FDM_0.2mm.json`).'
+        }
+    };
+}
+
+function createBambuProperties() {
+    return {
+        ...COMMON_MULTIPART_PROPERTIES,
+        layerHeight: {
+            type: 'string',
+            enum: ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.28'],
+            default: '0.2',
+            description: 'Registry layer key for the selected printer. `0.1` selects the vendor 0.12 mm process with layer_height overridden to 0.1 mm, exactly as a GUI user would; `0.28` exists only on the P1S. Any other value returns HTTP 400 `INVALID_LAYER_HEIGHT` listing the allowed keys.'
+        },
+        material: {
+            ...COMMON_MULTIPART_PROPERTIES.material,
+            description: 'FDM material key mapped to the official vendor filament profile (PLA, PETG, ABS, TPU).'
+        },
+        infill: {
+            ...COMMON_MULTIPART_PROPERTIES.infill,
+            description: 'Infill percentage from `0` to `100`. Strict integer; never clamped.'
+        },
+        printerProfile: {
+            type: 'string',
+            enum: ['P1S', 'H2D'],
+            default: 'P1S',
+            description: 'Registry printer id (case-insensitive; `printer` is an accepted alias). Selects the official vendor machine profile; unknown values return HTTP 400 `INVALID_PRINTER_PROFILE`.'
+        },
+        processProfile: {
+            type: 'string',
+            description: 'Optional exact vendor process profile name offered for the selected printer (for example `0.20mm Standard @BBL X1C`). Unknown names return HTTP 400 `INVALID_PROCESS_PROFILE`.'
         }
     };
 }
@@ -540,11 +636,17 @@ function createSlicePaths() {
             summary: 'OrcaSlicer endpoint (FDM-only).',
             description: 'Requires x-slicer-api-key service authentication. Uses OrcaSlicer and always processes as FDM, including pricing. Supports optional size/scale/rotation preprocessing, machine/process profile overrides, and profile-based build-volume validation.',
             properties: createOrcaProperties()
+        }),
+        '/bambu/slice': createSliceOperation({
+            summary: 'Bambu Studio endpoint (FDM-only, official vendor profiles).',
+            description: 'Requires x-slicer-api-key service authentication. Uses the Bambu Studio headless CLI with the official vendor machine/process/filament chain flattened from the bundled BBL resources, so time and mass reproduce the Bambu Studio GUI readings. Always FDM. The retained artifact is the printer-ready `.gcode.3mf` project; statistics come from the sliced plate G-code. Supports optional size/scale/rotation preprocessing and provisional registry-based build-volume validation.',
+            properties: createBambuProperties()
         })
     };
 }
 
 module.exports = {
+    REQUEST_VALIDATION_CODES,
     createSlicePaths,
     createSliceResponses
 };

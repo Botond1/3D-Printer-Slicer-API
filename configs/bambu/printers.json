@@ -1,0 +1,45 @@
+{
+    "schema": "r3d-bambu-printer-registry-v1",
+    "default_printer": "P1S",
+    "printers": {
+        "P1S": {
+            "name": "Bambu Lab P1S",
+            "machine": "Bambu Lab P1S 0.4 nozzle",
+            "bed_type": "Textured PEI Plate",
+            "processes": {
+                "0.08": "0.08mm Extra Fine @BBL X1C",
+                "0.1": "0.12mm Fine @BBL X1C",
+                "0.12": "0.12mm Fine @BBL X1C",
+                "0.16": "0.16mm Optimal @BBL X1C",
+                "0.2": "0.20mm Standard @BBL X1C",
+                "0.24": "0.24mm Draft @BBL X1C",
+                "0.28": "0.28mm Extra Draft @BBL X1C"
+            },
+            "filaments": {
+                "PLA": "Generic PLA",
+                "PETG": "Generic PETG",
+                "ABS": "Generic ABS",
+                "TPU": "Generic TPU"
+            }
+        },
+        "H2D": {
+            "name": "Bambu Lab H2D",
+            "machine": "Bambu Lab H2D 0.4 nozzle",
+            "bed_type": "Textured PEI Plate",
+            "processes": {
+                "0.08": "0.08mm Extra Fine @BBL H2D",
+                "0.1": "0.12mm Fine @BBL H2D",
+                "0.12": "0.12mm Fine @BBL H2D",
+                "0.16": "0.16mm Standard @BBL H2D",
+                "0.2": "0.20mm Standard @BBL H2D",
+                "0.24": "0.24mm Standard @BBL H2D"
+            },
+            "filaments": {
+                "PLA": "Generic PLA @BBL H2D",
+                "PETG": "Generic PETG @BBL H2D",
+                "ABS": "Generic ABS @BBL H2D",
+                "TPU": "Generic TPU @BBL H2D"
+            }
+        }
+    }
+}

@@ -18,6 +18,21 @@ const {
     sanitizeProfileFileName
 } = require('./value-parsers');
 const { ORIENTATION_MODES } = require('./orientation-contract');
+const {
+    getBambuAllowedLayerKeys,
+    getBambuMaterials,
+    getBambuProcessNames,
+    resolveBambuFilamentName,
+    resolveBambuLayerKey,
+    resolveBambuPrinterId,
+    resolveBambuProcessName
+} = require('./bambu-printer-registry');
+
+const INFILL_PATTERN = /^\s*(\d{1,3})\s*%?\s*$/;
+
+function invalid(error, errorCode) {
+    return { isValid: false, response: { success: false, error, errorCode } };
+}
 
 /**
  * Parse the explicit automatic-or-preserve orientation policy.
@@ -33,14 +48,53 @@ function parseOrientationMode(body) {
     const raw = input.orientationMode;
     const value = typeof raw === 'string' ? raw : null;
     if (!value || !ORIENTATION_MODES.includes(value)) {
-        return {
-            isValid: false,
-            response: {
-                success: false,
-                error: 'Invalid orientationMode. Allowed values: auto, preserve.',
-                errorCode: 'INVALID_ORIENTATION_MODE'
-            }
-        };
+        return invalid('Invalid orientationMode. Allowed values: auto, preserve.', 'INVALID_ORIENTATION_MODE');
+    }
+    return { isValid: true, value };
+}
+
+/**
+ * Parse the request-controlled support-generation flag.
+ * Omission (or an empty string) keeps the historical always-on default; any
+ * other present value must be an unambiguous boolean.
+ * @param {Record<string, unknown>} body Request payload.
+ * @returns {{isValid: true, value: boolean} | {isValid: false, response: {success: false, error: string, errorCode: string}}} Parse result.
+ */
+function parseSupports(body) {
+    const input = body || {};
+    if (!Object.hasOwn(input, 'supports')) return { isValid: true, value: true };
+    const raw = input.supports;
+    if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) {
+        return { isValid: true, value: true };
+    }
+    const parsed = parseBooleanLike(raw);
+    if (parsed === null) {
+        return invalid('Invalid supports value. Allowed values: true/false.', 'INVALID_SUPPORTS');
+    }
+    return { isValid: true, value: parsed };
+}
+
+/**
+ * Parse the strict infill percentage: an integer from 0 to 100 (an optional
+ * trailing `%` is tolerated), never clamped, never guessed.
+ * @param {Record<string, unknown>} body Request payload.
+ * @returns {{isValid: true, value: number} | {isValid: false, response: {success: false, error: string, errorCode: string}}} Parse result.
+ */
+function parseInfill(body) {
+    const input = body || {};
+    const raw = input.infill;
+    if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) {
+        return { isValid: true, value: DEFAULTS.DEFAULT_INFIL_PERCENT };
+    }
+    let value = null;
+    if (typeof raw === 'number') {
+        value = Number.isInteger(raw) ? raw : null;
+    } else if (typeof raw === 'string') {
+        const match = INFILL_PATTERN.exec(raw);
+        value = match ? Number.parseInt(match[1], 10) : null;
+    }
+    if (value === null || !Number.isInteger(value) || value < 0 || value > 100) {
+        return invalid('Invalid infill value. Allowed values: an integer from 0 to 100.', 'INVALID_INFILL');
     }
     return { isValid: true, value };
 }
@@ -101,35 +155,23 @@ function validateMaterialForTechnology(technology, material) {
 
     if (!isMaterialValidForTechnology(technology, material)) {
         if (materialScope === null) {
-            return {
-                isValid: false,
-                response: {
-                    success: false,
-                    error: `Invalid material for ${technology}. Allowed values: ${allowedList}`,
-                    errorCode: 'INVALID_MATERIAL_FOR_TECHNOLOGY'
-                }
-            };
+            return invalid(
+                `Invalid material for ${technology}. Allowed values: ${allowedList}`,
+                'INVALID_MATERIAL_FOR_TECHNOLOGY'
+            );
         }
 
         if (materialScope === 'BOTH') {
-            return {
-                isValid: false,
-                response: {
-                    success: false,
-                    error: `Material is not enabled for ${technology}. Allowed values: ${allowedList}`,
-                    errorCode: 'INVALID_MATERIAL_FOR_TECHNOLOGY'
-                }
-            };
+            return invalid(
+                `Material is not enabled for ${technology}. Allowed values: ${allowedList}`,
+                'INVALID_MATERIAL_FOR_TECHNOLOGY'
+            );
         }
 
-        return {
-            isValid: false,
-            response: {
-                success: false,
-                error: `Material belongs to ${materialScope}, but request is ${technology}. Allowed ${technology} materials: ${allowedList}`,
-                errorCode: 'MATERIAL_TECHNOLOGY_MISMATCH'
-            }
-        };
+        return invalid(
+            `Material belongs to ${materialScope}, but request is ${technology}. Allowed ${technology} materials: ${allowedList}`,
+            'MATERIAL_TECHNOLOGY_MISMATCH'
+        );
     }
 
     return { isValid: true };
@@ -184,26 +226,12 @@ function parseProfileOverrides(body, engine) {
 
         const machineProfile = sanitizeProfileFileName(machineProfileRaw, '.json');
         if (machineProfile.error) {
-            return {
-                isValid: false,
-                response: {
-                    success: false,
-                    error: `Invalid Orca machine profile: ${machineProfile.error}`,
-                    errorCode: 'INVALID_PROFILE_NAME'
-                }
-            };
+            return invalid(`Invalid Orca machine profile: ${machineProfile.error}`, 'INVALID_PROFILE_NAME');
         }
 
         const processProfile = sanitizeProfileFileName(processProfileRaw, '.json');
         if (processProfile.error) {
-            return {
-                isValid: false,
-                response: {
-                    success: false,
-                    error: `Invalid Orca process profile: ${processProfile.error}`,
-                    errorCode: 'INVALID_PROFILE_NAME'
-                }
-            };
+            return invalid(`Invalid Orca process profile: ${processProfile.error}`, 'INVALID_PROFILE_NAME');
         }
 
         return {
@@ -219,14 +247,7 @@ function parseProfileOverrides(body, engine) {
     const prusaProfileRaw = pickFirstNonEmptyValue(body, ['printerProfile', 'prusaProfile', 'profile']);
     const prusaProfile = sanitizeProfileFileName(prusaProfileRaw, '.ini');
     if (prusaProfile.error) {
-        return {
-            isValid: false,
-            response: {
-                success: false,
-                error: `Invalid Prusa profile: ${prusaProfile.error}`,
-                errorCode: 'INVALID_PROFILE_NAME'
-            }
-        };
+        return invalid(`Invalid Prusa profile: ${prusaProfile.error}`, 'INVALID_PROFILE_NAME');
     }
 
     return {
@@ -240,6 +261,64 @@ function parseProfileOverrides(body, engine) {
 }
 
 /**
+ * Parse the Bambu Studio printer/process/layer selection against the registry.
+ * The printer id is case-insensitive and defaults to the registry default; an
+ * explicit process must be one of that printer's vendor process names and the
+ * layer height must be one of its registry keys.
+ * @param {Record<string, unknown>} body Request payload.
+ * @param {number} layerHeight Parsed layer height.
+ * @param {string} material Requested material key.
+ * @returns {{isValid: true, profileOverrides: object, layerKey: string} | {isValid: false, response: object}} Parse result.
+ */
+function parseBambuSelection(body, layerHeight, material) {
+    const printerRaw = pickFirstNonEmptyValue(body, ['printerProfile', 'printer']);
+    const printerId = resolveBambuPrinterId(printerRaw);
+    if (!printerId) {
+        return invalid('Invalid printerProfile for Bambu Studio. Allowed values: P1S, H2D.', 'INVALID_PRINTER_PROFILE');
+    }
+
+    const layerKey = resolveBambuLayerKey(layerHeight, printerId);
+    if (!layerKey) {
+        return invalid(
+            `Invalid layerHeight for Bambu Studio printer ${printerId}. Allowed values: ${getBambuAllowedLayerKeys(printerId).join(', ')}`,
+            'INVALID_LAYER_HEIGHT'
+        );
+    }
+
+    const processRaw = pickFirstNonEmptyValue(body, ['processProfile']);
+    let processName = null;
+    if (processRaw !== undefined) {
+        const candidate = typeof processRaw === 'string' ? processRaw.trim() : null;
+        processName = candidate ? resolveBambuProcessName(printerId, layerKey, candidate) : null;
+        if (!processName) {
+            return invalid(
+                `Invalid processProfile for Bambu Studio printer ${printerId}. Allowed values: ${getBambuProcessNames(printerId).join(', ')}`,
+                'INVALID_PROCESS_PROFILE'
+            );
+        }
+    }
+
+    if (!resolveBambuFilamentName(printerId, material)) {
+        return invalid(
+            `Material ${material} has no Bambu Studio filament profile for printer ${printerId}. Allowed values: ${getBambuMaterials(printerId).join(', ')}`,
+            'MATERIAL_PROFILE_UNAVAILABLE'
+        );
+    }
+
+    return {
+        isValid: true,
+        layerKey,
+        profileOverrides: {
+            prusaProfile: null,
+            orcaMachineProfile: null,
+            orcaProcessProfile: null,
+            bambuPrinter: printerId,
+            bambuProcessProfile: processName
+        }
+    };
+}
+
+/**
  * Parse size/scale/rotation transform options from request payload.
  * @param {Record<string, unknown>} body Request payload.
  * @returns {{isValid: true, options: {unit: 'mm'|'inch', keepProportions: boolean, requestedTargetSize: {x: number | null, y: number | null, z: number | null}, targetSizeMm: {x: number | null, y: number | null, z: number | null}, scalePercent: number | null, rotationDeg: {x: number, y: number, z: number}}} | {isValid: false, response: {success: false, error: string, errorCode: string}}} Parsed transform options.
@@ -248,14 +327,7 @@ function parseTransformOptions(body) {
     const unitRaw = pickFirstNonEmptyValue(body, ['sizeUnit', 'unit', 'dimensionUnit']);
     const normalizedUnit = normalizeSizeUnit(unitRaw);
     if (!normalizedUnit.isValid) {
-        return {
-            isValid: false,
-            response: {
-                success: false,
-                error: normalizedUnit.error,
-                errorCode: 'INVALID_SIZE_UNIT'
-            }
-        };
+        return invalid(normalizedUnit.error, 'INVALID_SIZE_UNIT');
     }
 
     let keepProportions = true;
@@ -265,28 +337,14 @@ function parseTransformOptions(body) {
         if (unlockRaw !== undefined) {
             const parsed = parseBooleanLike(unlockRaw);
             if (parsed === null) {
-                return {
-                    isValid: false,
-                    response: {
-                        success: false,
-                        error: 'Invalid unlockProportions value. Allowed values: true/false.',
-                        errorCode: 'INVALID_KEEP_PROPORTIONS'
-                    }
-                };
+                return invalid('Invalid unlockProportions value. Allowed values: true/false.', 'INVALID_KEEP_PROPORTIONS');
             }
             keepProportions = !parsed;
         }
     } else {
         const parsed = parseBooleanLike(keepRaw);
         if (parsed === null) {
-            return {
-                isValid: false,
-                response: {
-                    success: false,
-                    error: 'Invalid keepProportions value. Allowed values: true/false.',
-                    errorCode: 'INVALID_KEEP_PROPORTIONS'
-                }
-            };
+            return invalid('Invalid keepProportions value. Allowed values: true/false.', 'INVALID_KEEP_PROPORTIONS');
         }
         keepProportions = parsed;
     }
@@ -297,14 +355,10 @@ function parseTransformOptions(body) {
     const scalePercent = parseOptionalPositiveField(body, ['scalePercent'], 'scalePercent');
 
     if (targetX.error || targetY.error || targetZ.error || scalePercent.error) {
-        return {
-            isValid: false,
-            response: {
-                success: false,
-                error: targetX.error || targetY.error || targetZ.error || scalePercent.error,
-                errorCode: 'INVALID_SIZE_OPTIONS'
-            }
-        };
+        return invalid(
+            targetX.error || targetY.error || targetZ.error || scalePercent.error,
+            'INVALID_SIZE_OPTIONS'
+        );
     }
 
     const requestedTargetSize = {
@@ -315,14 +369,7 @@ function parseTransformOptions(body) {
     const hasTargetSize = requestedTargetSize.x !== null || requestedTargetSize.y !== null || requestedTargetSize.z !== null;
 
     if (hasTargetSize && scalePercent.value !== null) {
-        return {
-            isValid: false,
-            response: {
-                success: false,
-                error: 'Use either scalePercent or targetSizeX/Y/Z in one request, not both.',
-                errorCode: 'CONFLICTING_SIZE_OPTIONS'
-            }
-        };
+        return invalid('Use either scalePercent or targetSizeX/Y/Z in one request, not both.', 'CONFLICTING_SIZE_OPTIONS');
     }
 
     const rotateX = parseOptionalFiniteField(body, ['rotationX', 'rotateX'], 'rotationX');
@@ -330,14 +377,7 @@ function parseTransformOptions(body) {
     const rotateZ = parseOptionalFiniteField(body, ['rotationZ', 'rotateZ'], 'rotationZ');
 
     if (rotateX.error || rotateY.error || rotateZ.error) {
-        return {
-            isValid: false,
-            response: {
-                success: false,
-                error: rotateX.error || rotateY.error || rotateZ.error,
-                errorCode: 'INVALID_ROTATION_OPTIONS'
-            }
-        };
+        return invalid(rotateX.error || rotateY.error || rotateZ.error, 'INVALID_ROTATION_OPTIONS');
     }
 
     return {
@@ -361,52 +401,29 @@ function parseTransformOptions(body) {
  * Parse and validate full slicing option set from request body.
  * @param {Record<string, unknown>} body Request payload.
  * @param {'FDM'|'SLA'|null} forcedTechnology Endpoint-forced technology.
- * @param {'prusa'|'orca'} [engine='prusa'] Slicer engine key.
- * @returns {{isValid: true, options: {layerHeight: number, material: string, infillPercentage: string, technology: 'FDM'|'SLA', transformOptions: {unit: 'mm'|'inch', keepProportions: boolean, requestedTargetSize: {x: number | null, y: number | null, z: number | null}, targetSizeMm: {x: number | null, y: number | null, z: number | null}, scalePercent: number | null, rotationDeg: {x: number, y: number, z: number}}, profileOverrides: {prusaProfile: string | null, orcaMachineProfile: string | null, orcaProcessProfile: string | null}}} | {isValid: false, response: {success: false, error: string, errorCode: string}}} Parse result.
+ * @param {'prusa'|'orca'|'bambu'} [engine='prusa'] Slicer engine key.
+ * @returns {{isValid: true, options: {layerHeight: number, material: string, infillPercentage: string, supports: boolean, technology: 'FDM'|'SLA', orientationMode: 'auto'|'preserve', transformOptions: object, profileOverrides: object, layerKey?: string}} | {isValid: false, response: {success: false, error: string, errorCode: string}}} Parse result.
  */
 function parseSliceOptions(body, forcedTechnology, engine = 'prusa') {
     const input = body || {};
 
     const orientationModeResult = parseOrientationMode(input);
-    if (!orientationModeResult.isValid) {
-        return {
-            isValid: false,
-            response: orientationModeResult.response
-        };
-    }
+    if (!orientationModeResult.isValid) return orientationModeResult;
 
     const layerHeight = normalizeLayerHeight(input.layerHeight || `${DEFAULTS.DEFAULT_LAYER_HEIGHT}`);
     if (!layerHeight) {
-        return {
-            isValid: false,
-            response: {
-                success: false,
-                error: 'Invalid layerHeight value.',
-                errorCode: 'INVALID_LAYER_HEIGHT'
-            }
-        };
+        return invalid('Invalid layerHeight value.', 'INVALID_LAYER_HEIGHT');
     }
 
-    let infillRaw = Number.parseInt(input.infill, 10);
-    if (Number.isNaN(infillRaw)) infillRaw = DEFAULTS.DEFAULT_INFIL_PERCENT;
-    infillRaw = Math.max(0, Math.min(100, infillRaw));
-    const infillPercentage = `${infillRaw}%`;
+    const infillResult = parseInfill(input);
+    if (!infillResult.isValid) return infillResult;
+    const infillPercentage = `${infillResult.value}%`;
+
+    const supportsResult = parseSupports(input);
+    if (!supportsResult.isValid) return supportsResult;
 
     const transformOptionsResult = parseTransformOptions(input);
-    if (!transformOptionsResult.isValid) {
-        return {
-            isValid: false,
-            response: transformOptionsResult.response
-        };
-    }
-
-    const profileOverridesResult = parseProfileOverrides(input, engine);
-    if (!profileOverridesResult.isValid) {
-        return {
-            isValid: false,
-            response: profileOverridesResult.response
-        };
-    }
+    if (!transformOptionsResult.isValid) return transformOptionsResult;
 
     const technology = forcedTechnology || (layerHeight <= 0.05 ? 'SLA' : 'FDM');
     const material = input.material || (
@@ -415,21 +432,37 @@ function parseSliceOptions(body, forcedTechnology, engine = 'prusa') {
             : DEFAULTS.DEFAULT_FDM_MATERIAL
     );
 
-    const layerHeightValidationError = validateLayerHeightSelection(layerHeight, forcedTechnology, engine);
-    if (layerHeightValidationError) {
+    if (engine === 'bambu') {
+        const materialValidation = validateMaterialForTechnology(technology, material);
+        if (!materialValidation.isValid) return materialValidation;
+        const bambu = parseBambuSelection(input, layerHeight, material);
+        if (!bambu.isValid) return bambu;
         return {
-            isValid: false,
-            response: layerHeightValidationError
+            isValid: true,
+            options: {
+                layerHeight,
+                layerKey: bambu.layerKey,
+                material,
+                infillPercentage,
+                supports: supportsResult.value,
+                technology,
+                orientationMode: orientationModeResult.value,
+                transformOptions: transformOptionsResult.options,
+                profileOverrides: bambu.profileOverrides
+            }
         };
     }
 
-    const materialValidation = validateMaterialForTechnology(technology, material);
-    if (!materialValidation.isValid) {
-        return {
-            isValid: false,
-            response: materialValidation.response
-        };
+    const profileOverridesResult = parseProfileOverrides(input, engine);
+    if (!profileOverridesResult.isValid) return profileOverridesResult;
+
+    const layerHeightValidationError = validateLayerHeightSelection(layerHeight, forcedTechnology, engine);
+    if (layerHeightValidationError) {
+        return { isValid: false, response: layerHeightValidationError };
     }
+
+    const materialValidation = validateMaterialForTechnology(technology, material);
+    if (!materialValidation.isValid) return materialValidation;
 
     return {
         isValid: true,
@@ -437,6 +470,7 @@ function parseSliceOptions(body, forcedTechnology, engine = 'prusa') {
             layerHeight,
             material,
             infillPercentage,
+            supports: supportsResult.value,
             technology,
             orientationMode: orientationModeResult.value,
             transformOptions: transformOptionsResult.options,
@@ -446,7 +480,10 @@ function parseSliceOptions(body, forcedTechnology, engine = 'prusa') {
 }
 
 module.exports = {
+    parseBambuSelection,
+    parseInfill,
     parseSliceOptions,
     parseOrientationMode,
+    parseSupports,
     validateMaterialForTechnology
 };

@@ -52,18 +52,51 @@ function sanitizeOutputBaseName(fileName) {
 }
 
 /**
+ * Retained artifact extensions. Bambu Studio's printer-ready artifact is the
+ * `.gcode.3mf` project; its `plate_1.gcode` sibling is parsed for statistics
+ * but not retained.
+ */
+const OUTPUT_ARTIFACT_EXTENSIONS = Object.freeze(['.gcode', '.sl1', '.gcode.3mf']);
+
+/**
+ * Resolve the retained artifact extension for an engine/technology pair.
+ * @param {'FDM'|'SLA'} technology Active technology.
+ * @param {'prusa'|'orca'|'bambu'} [engine='prusa'] Selected engine.
+ * @returns {'.gcode'|'.sl1'|'.gcode.3mf'} Extension including the leading dot.
+ */
+function resolveOutputArtifactExtension(technology, engine = 'prusa') {
+    if (technology === 'SLA') return '.sl1';
+    return engine === 'bambu' ? '.gcode.3mf' : '.gcode';
+}
+
+/**
+ * Whether a file name ends with one of the retained artifact extensions.
+ * @param {string} fileName Candidate file name.
+ * @returns {boolean} True when the extension is allowlisted (case-insensitive).
+ */
+function hasOutputArtifactExtension(fileName) {
+    const lower = String(fileName || '').toLowerCase();
+    // A bare dotfile such as `.gcode` has no basename and is not an artifact.
+    return OUTPUT_ARTIFACT_EXTENSIONS.some((extension) => (
+        lower.length > extension.length && lower.endsWith(extension)
+    ));
+}
+
+/**
  * Build deterministic output artifact filename.
  * @param {string} originalFileName Original uploaded file name.
  * @param {'FDM'|'SLA'} technology Active technology.
+ * @param {string} [artifactId] Pre-allocated artifact identifier.
+ * @param {'prusa'|'orca'|'bambu'} [engine='prusa'] Selected engine.
  * @returns {string} Generated output file name.
  */
-function buildOutputFilename(originalFileName, technology, artifactId) {
-    const extension = technology === 'SLA' ? 'sl1' : 'gcode';
+function buildOutputFilename(originalFileName, technology, artifactId, engine = 'prusa') {
+    const extension = resolveOutputArtifactExtension(technology, engine);
     const baseName = sanitizeOutputBaseName(originalFileName);
     const uniqueSuffix = artifactId || `artifact-${require('node:crypto').randomBytes(16).toString('hex')}`;
     if (!/^artifact-[a-f0-9]{32}$/.test(uniqueSuffix)) throw new Error('Invalid artifact identifier.');
 
-    return `${baseName}-output-${uniqueSuffix}.${extension}`;
+    return `${baseName}-output-${uniqueSuffix}${extension}`;
 }
 
 /**
@@ -123,9 +156,12 @@ async function resolveSingleOutputFile(outputDir, extension, workspace) {
 }
 
 module.exports = {
+    OUTPUT_ARTIFACT_EXTENSIONS,
     isSupportedInputExtension,
     getSupportedInputExtensionsText,
     buildOutputFilename,
+    hasOutputArtifactExtension,
+    resolveOutputArtifactExtension,
     roundToThree,
     roundDimensions,
     resolveSingleOutputFile

@@ -1,0 +1,9 @@
+{
+    "type": "filament",
+    "name": "Ambiguous Density",
+    "inherits": "fdm_filament_pla",
+    "filament_density": [
+        "1.24",
+        "1.25"
+    ]
+}

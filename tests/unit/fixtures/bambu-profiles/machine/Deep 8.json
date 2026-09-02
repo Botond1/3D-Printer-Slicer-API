@@ -1,0 +1,5 @@
+{
+    "type": "machine",
+    "name": "Deep 8",
+    "inherits": "Deep 7"
+}

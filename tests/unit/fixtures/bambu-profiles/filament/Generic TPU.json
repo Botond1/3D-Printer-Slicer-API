@@ -1,0 +1,11 @@
+{
+    "type": "filament",
+    "name": "Generic TPU",
+    "inherits": "Generic TPU @base",
+    "from": "system",
+    "instantiation": "true",
+    "setting_id": "GFS_TPU_P1S",
+    "compatible_printers": [
+        "Bambu Lab P1S 0.4 nozzle"
+    ]
+}

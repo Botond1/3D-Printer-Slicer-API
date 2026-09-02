@@ -10,6 +10,19 @@ const DIGEST_SCHEMA = 'r3d-effective-slice-profile-v2';
 const PRUSA_REQUEST_OVERRIDE_KEYS = Object.freeze(new Set(['layer_height', 'fill_density']));
 const PRUSA_SLA_REQUEST_OVERRIDE_KEYS = Object.freeze(new Set(['layer_height']));
 const ORCA_REQUEST_OVERRIDE_KEYS = Object.freeze(new Set(['layer_height', 'sparse_infill_density']));
+/**
+ * Bambu is a new engine, so its identity excludes every request-controlled
+ * process key from the start. Prusa and Orca deliberately keep their support
+ * keys in the identity: the shipped repository profiles already carry
+ * `support_material`/`support_material_auto` and `enable_support`, so removing
+ * them would change every existing published digest. With the default
+ * `supports=true` the runtime profile is byte-for-byte what it was, and the
+ * digest is unchanged; `supports=false` is a different effective profile and
+ * legitimately produces a different digest.
+ */
+const BAMBU_REQUEST_OVERRIDE_KEYS = Object.freeze(new Set([
+    'layer_height', 'sparse_infill_density', 'enable_support'
+]));
 
 /**
  * Recursively sort object keys while retaining array order.
@@ -118,6 +131,60 @@ function normalizeDigestMaterial(material) {
     return normalized || null;
 }
 
+function requireFlattenedBambuProfile(profile, role) {
+    if (Object.hasOwn(profile, 'inherits') || Object.hasOwn(profile, 'include')) {
+        throw new Error('Unflattened Bambu profile cannot be hashed or sliced.');
+    }
+    if (profile.type !== role) {
+        throw new Error('Bambu profile role does not match its digest position.');
+    }
+    return profile;
+}
+
+/**
+ * Bambu identity: engine, technology, normalized material, registry printer id
+ * and bed type, the invocation policy, the canonical flattened machine, the
+ * canonical runtime process minus request keys, and the canonical flattened
+ * filament. Vendor names are part of the flattened JSON (`name`), so the same
+ * printer with a different vendor process resolves to a different digest.
+ */
+function createBambuProfileIdentity(context) {
+    const { material, runtimeConfigFile, orcaMachineConfigFile, orcaFilamentConfigFile } = context;
+    const printerId = context.bambuPrinterId;
+    const bedType = context.bambuBedType;
+    if (typeof printerId !== 'string' || !printerId) {
+        throw new Error('Bambu printer id is required for effective profile digest.');
+    }
+    if (typeof bedType !== 'string' || !bedType) {
+        throw new Error('Bambu bed type is required for effective profile digest.');
+    }
+    if (typeof orcaMachineConfigFile !== 'string' || !orcaMachineConfigFile) {
+        throw new Error('Bambu machine profile is required for effective profile digest.');
+    }
+    if (typeof orcaFilamentConfigFile !== 'string' || !orcaFilamentConfigFile) {
+        throw new Error('Bambu filament profile is required for effective profile digest.');
+    }
+    return {
+        schema: DIGEST_SCHEMA,
+        engine: 'bambu',
+        technology: 'FDM',
+        material: normalizeDigestMaterial(material),
+        printer: printerId,
+        bed_type: bedType,
+        invocation: resolveSlicerInvocationPolicy('bambu', 'FDM'),
+        machine: canonicalizeJsonValue(
+            requireFlattenedBambuProfile(readProfileJson(orcaMachineConfigFile), 'machine')
+        ),
+        process: canonicalizeJsonValue(excludeJsonKeys(
+            requireFlattenedBambuProfile(readProfileJson(runtimeConfigFile), 'process'),
+            BAMBU_REQUEST_OVERRIDE_KEYS
+        )),
+        filament: canonicalizeJsonValue(
+            requireFlattenedBambuProfile(readProfileJson(orcaFilamentConfigFile), 'filament')
+        )
+    };
+}
+
 /**
  * Build the canonical profile identity used by the native slicer invocation.
  * The runtime profile is the exact merged profile passed to the slicer, but its
@@ -125,7 +192,7 @@ function normalizeDigestMaterial(material) {
  * Stable server-added Orca settings and all other configured profile values
  * remain covered. Paths and unrelated request identity are excluded; normalized
  * material is included because it selects (or deliberately lacks) a filament layer.
- * @param {{engine: 'prusa'|'orca', technology: 'FDM'|'SLA', material?: string|null, runtimeConfigFile: string, orcaMachineConfigFile?: string|null, orcaFilamentConfigFile?: string|null}} context Profile context.
+ * @param {{engine: 'prusa'|'orca'|'bambu', technology: 'FDM'|'SLA', material?: string|null, runtimeConfigFile: string, orcaMachineConfigFile?: string|null, orcaFilamentConfigFile?: string|null, bambuPrinterId?: string, bambuBedType?: string}} context Profile context.
  * @returns {Record<string, unknown>} Canonicalizable profile identity.
  */
 function createEffectiveProfileIdentity(context) {
@@ -137,7 +204,7 @@ function createEffectiveProfileIdentity(context) {
         orcaMachineConfigFile = null,
         orcaFilamentConfigFile = null
     } = context;
-    if (engine !== 'prusa' && engine !== 'orca') {
+    if (engine !== 'prusa' && engine !== 'orca' && engine !== 'bambu') {
         throw new Error('Unsupported slicer engine for effective profile digest.');
     }
     if (technology !== 'FDM' && technology !== 'SLA') {
@@ -145,6 +212,10 @@ function createEffectiveProfileIdentity(context) {
     }
     if (typeof runtimeConfigFile !== 'string' || !runtimeConfigFile) {
         throw new Error('Runtime process profile is required for effective profile digest.');
+    }
+    if (engine === 'bambu') {
+        if (technology !== 'FDM') throw new Error('Bambu Studio supports FDM only.');
+        return createBambuProfileIdentity(context);
     }
     if (engine === 'orca' && (typeof orcaMachineConfigFile !== 'string' || !orcaMachineConfigFile)) {
         throw new Error('Orca machine profile is required for effective profile digest.');
@@ -176,7 +247,7 @@ function createEffectiveProfileIdentity(context) {
 
 /**
  * Calculate the effective profile digest used by the native slicer invocation.
- * @param {{engine: 'prusa'|'orca', technology: 'FDM'|'SLA', material?: string|null, runtimeConfigFile: string, orcaMachineConfigFile?: string|null, orcaFilamentConfigFile?: string|null}} context Profile context.
+ * @param {{engine: 'prusa'|'orca'|'bambu', technology: 'FDM'|'SLA', material?: string|null, runtimeConfigFile: string, orcaMachineConfigFile?: string|null, orcaFilamentConfigFile?: string|null, bambuPrinterId?: string, bambuBedType?: string}} context Profile context.
  * @returns {string} Lowercase SHA-256 digest.
  */
 function calculateEffectiveProfileSha256(context) {
@@ -188,6 +259,7 @@ function calculateEffectiveProfileSha256(context) {
 }
 
 module.exports = {
+    BAMBU_REQUEST_OVERRIDE_KEYS,
     DIGEST_SCHEMA,
     calculateEffectiveProfileSha256,
     canonicalizeIni,

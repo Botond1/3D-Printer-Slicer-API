@@ -86,10 +86,17 @@ test('an existing density in the base profile is replaced, not duplicated', asyn
 test('the shipped materials resolve to positive, distinct densities', () => {
     const pla = resolveMaterialFilamentMetadata('PLA');
     const petg = resolveMaterialFilamentMetadata('PETG');
+    const abs = resolveMaterialFilamentMetadata('ABS');
+    const tpu = resolveMaterialFilamentMetadata('TPU');
     assert.ok(pla.densityGcm3 > 0);
     assert.ok(petg.densityGcm3 > 0);
+    assert.ok(abs.densityGcm3 > 0);
+    assert.ok(tpu.densityGcm3 > 0);
     // Distinct on purpose: a single hardcoded density is exactly the defect
     // this seam exists to avoid, and equality here would hide it.
     assert.notEqual(pla.densityGcm3, petg.densityGcm3);
-    assert.equal(resolveMaterialFilamentMetadata('ABS'), null);
+    assert.notEqual(pla.densityGcm3, abs.densityGcm3);
+    assert.equal(abs.densityGcm3, 1.04);
+    // A material with no catalogue entry still routes to manual pricing.
+    assert.equal(resolveMaterialFilamentMetadata('NYLON'), null);
 });

@@ -1,6 +1,6 @@
 'use strict';
 
-/** Orca filament-profile selection and exact used-property extraction. */
+/** Orca/Bambu filament-profile selection and exact used-property extraction. */
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -29,20 +29,54 @@ function resolveOrcaFilamentConfigPath(material, profileOverrides = {}) {
     return fs.existsSync(candidate) ? candidate : null;
 }
 
-function readSinglePositiveSetting(profile, key) {
+/**
+ * Read one positive numeric filament setting from its per-extruder array.
+ * Orca repository profiles must carry exactly one value. Bambu vendor profiles
+ * for dual-nozzle machines (H2D) carry one entry per extruder, so identical
+ * repeated entries are accepted only when `allowIdenticalEntries` is set;
+ * differing entries are ambiguous and always fail closed.
+ */
+function readSinglePositiveSetting(profile, key, options = {}) {
     const values = profile[key];
-    if (!Array.isArray(values) || values.length !== 1) {
-        throw new Error(`Orca filament ${key} must contain exactly one value.`);
+    const label = options.label || 'Orca';
+    if (!Array.isArray(values) || values.length === 0) {
+        throw new Error(`${label} filament ${key} must contain exactly one value.`);
     }
-    const raw = String(values[0]).trim();
+    const distinct = new Set(values.map((value) => String(value).trim()));
+    if (distinct.size !== 1 || (values.length !== 1 && options.allowIdenticalEntries !== true)) {
+        throw new Error(`${label} filament ${key} must contain exactly one value.`);
+    }
+    const [raw] = distinct;
     if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(raw)) {
-        throw new Error(`Orca filament ${key} must be a canonical decimal.`);
+        throw new Error(`${label} filament ${key} must be a canonical decimal.`);
     }
     const parsed = Number(raw);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-        throw new Error(`Orca filament ${key} must be positive.`);
+        throw new Error(`${label} filament ${key} must be positive.`);
     }
     return parsed;
+}
+
+function readFilamentProfileMetadata(profilePath, material, options) {
+    if (profilePath === null || profilePath === undefined) return null;
+    const label = options.label;
+    const profile = readProfileJson(profilePath);
+    if (!profile || typeof profile !== 'object' || Array.isArray(profile) || profile.type !== 'filament') {
+        throw new Error(`Selected ${label} filament profile has an invalid role.`);
+    }
+    const expectedMaterial = normalizeMaterial(material);
+    const filamentTypes = Array.isArray(profile.filament_type)
+        ? [...new Set(profile.filament_type.map(normalizeMaterial))]
+        : [];
+    const typeCountValid = Array.isArray(profile.filament_type)
+        && (profile.filament_type.length === 1 || options.allowIdenticalEntries === true);
+    if (!expectedMaterial || !typeCountValid || filamentTypes.length !== 1 || filamentTypes[0] !== expectedMaterial) {
+        throw new Error(`Selected ${label} filament profile does not match the requested material.`);
+    }
+    return Object.freeze({
+        diameterMm: readSinglePositiveSetting(profile, 'filament_diameter', options),
+        densityGcm3: readSinglePositiveSetting(profile, 'filament_density', options)
+    });
 }
 
 /**
@@ -50,21 +84,24 @@ function readSinglePositiveSetting(profile, key) {
  * @returns {{diameterMm:number,densityGcm3:number}|null} Null only when no profile was selected.
  */
 function readOrcaFilamentProfileMetadata(profilePath, material) {
-    if (profilePath === null || profilePath === undefined) return null;
-    const profile = readProfileJson(profilePath);
-    if (!profile || typeof profile !== 'object' || Array.isArray(profile) || profile.type !== 'filament') {
-        throw new Error('Selected Orca filament profile has an invalid role.');
-    }
-    const expectedMaterial = normalizeMaterial(material);
-    const filamentTypes = Array.isArray(profile.filament_type)
-        ? profile.filament_type.map(normalizeMaterial)
-        : [];
-    if (!expectedMaterial || filamentTypes.length !== 1 || filamentTypes[0] !== expectedMaterial) {
-        throw new Error('Selected Orca filament profile does not match the requested material.');
-    }
-    return Object.freeze({
-        diameterMm: readSinglePositiveSetting(profile, 'filament_diameter'),
-        densityGcm3: readSinglePositiveSetting(profile, 'filament_density')
+    return readFilamentProfileMetadata(profilePath, material, {
+        label: 'Orca',
+        allowIdenticalEntries: false
+    });
+}
+
+/**
+ * Read the diameter and density from the flattened Bambu filament snapshot.
+ * Dual-extruder vendor profiles repeat identical per-extruder values; those
+ * are accepted, while differing entries still fail closed.
+ * @param {string|null} profilePath Flattened filament snapshot path.
+ * @param {string} material Requested material key.
+ * @returns {{diameterMm:number,densityGcm3:number}|null} Null only when no profile was selected.
+ */
+function readBambuFilamentProfileMetadata(profilePath, material) {
+    return readFilamentProfileMetadata(profilePath, material, {
+        label: 'Bambu',
+        allowIdenticalEntries: true
     });
 }
 
@@ -89,6 +126,7 @@ function resolveMaterialFilamentMetadata(material, profileOverrides = {}) {
 
 module.exports = {
     normalizeMaterial,
+    readBambuFilamentProfileMetadata,
     readOrcaFilamentProfileMetadata,
     resolveMaterialFilamentMetadata,
     resolveOrcaFilamentConfigPath

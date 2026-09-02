@@ -48,15 +48,47 @@ const PRUSA_ZERO_GRAMS_GCODE = [
     ''
 ].join('\n');
 
+const BAMBU_2862_GCODE = [
+    '; BambuStudio 02.08.02.61',
+    '; model printing time: 5m 38s; total estimated time: 11m 54s',
+    'M73 P0 R6',
+    'G90',
+    'G1 X10.5 Y10.5 Z0.2 F3000',
+    '; total filament length [mm] : 241.20',
+    '; total filament volume [cm^3] : 0.58',
+    '; total filament weight [g] : 0.72',
+    ''
+].join('\n');
+
 describe('SZ-B2 strict G-code metrics', () => {
-    it('reads Orca 2.3.1 time, mass, length, and winning pattern identity', () => {
+    it('reads Orca 2.3.1 wall-clock total time, mass, length, and winning pattern identity', () => {
         const metrics = parseGcodeMetricsStrict(ORCA_231_GCODE);
         assert.equal(metrics.filament_used_g, 38.4);
-        assert.equal(metrics.print_time_seconds, 144 * 60);
-        assert.equal(metrics.print_time_source, 'm73_p0_r_minutes');
+        // Orca writes the total on the same line as the model time; the total
+        // (which includes the start sequence) is the GUI figure customers see.
+        assert.equal(metrics.print_time_seconds, 2 * 3600 + 29 * 60 + 41);
+        assert.equal(metrics.print_time_source, 'total_estimated_time');
         assert.equal(metrics.filament_used_g_source, 'filament_used_g');
         assert.equal(metrics.filament_used_mm, 12764.31);
         assert.equal(metrics.filament_used_mm_source, 'filament_used_mm');
+    });
+
+    it('reads the Bambu Studio 2.8 footer markers and prefers the total time over M73', () => {
+        const metrics = parseGcodeMetricsStrict(BAMBU_2862_GCODE);
+        assert.equal(metrics.print_time_seconds, 11 * 60 + 54);
+        assert.equal(metrics.print_time_source, 'total_estimated_time');
+        assert.equal(metrics.filament_used_g, 0.72);
+        assert.equal(metrics.filament_used_g_source, 'total_filament_weight_g');
+        assert.equal(metrics.filament_used_mm, 241.2);
+        assert.equal(metrics.filament_used_mm_source, 'total_filament_length_mm');
+    });
+
+    it('falls back to M73 model time only when no total estimated time is present', () => {
+        const content = ORCA_231_GCODE
+            .replace('; model printing time: 2h 24m 12s; total estimated time: 2h 29m 41s', '');
+        const metrics = parseGcodeMetricsStrict(content);
+        assert.equal(metrics.print_time_source, 'm73_p0_r_minutes');
+        assert.equal(metrics.print_time_seconds, 144 * 60);
     });
 
     it('reads the Prusa FDM output shape', () => {
@@ -96,10 +128,10 @@ describe('SZ-B2 strict G-code metrics', () => {
         assert.equal(parseGcodeMetricsStrict(content).filament_used_g, 43);
     });
 
-    it('uses the bounded fallback time marker only when M73 is absent', () => {
+    it('uses the bounded fallback time marker only when both the total and M73 are absent', () => {
         const content = ORCA_231_GCODE
             .split('\n')
-            .filter((line) => !line.startsWith('M73 P0 R'))
+            .filter((line) => !line.startsWith('M73 P0 R') && !line.startsWith('; model printing time'))
             .join('\n');
         const metrics = parseGcodeMetricsStrict(content);
         assert.equal(metrics.print_time_source, 'estimated_printing_time');
