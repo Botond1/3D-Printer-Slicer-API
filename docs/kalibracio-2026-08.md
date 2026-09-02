@@ -190,3 +190,82 @@ gramm-markert, ezért a Prusa sikeres ága null tömeggel és kézi árral tér 
   dokumentummal nincs igazolva.
 - A fogyasztói automatikus árazás elfogadása külön, tulajdonos által vezérelt
   ellenőrzés; ez a repó nem módosít fogyasztói rendszert.
+
+---
+
+## Kiegészítés — 2026-09-02 (3.2.0, Bambu Studio motor)
+
+A fenti munkalap a 2026-08-as J2 állapotot rögzíti, és változatlanul marad.
+Ez a kiegészítés a `feat/bambu-engine-overhaul` ág mért eredményeit veszi fel.
+
+### Új mérőút: `POST /bambu/slice`
+
+- A szolgáltatás harmadik motorja a Bambu Studio `02.08.02.61` headless CLI
+  (`/opt/bambustudio`, wrapper `/usr/local/bin/bambu-studio`). A gép-, folyamat-
+  és filamentprofil a Bambu Studio hivatalos BBL vendor-lánca, laposítva a
+  `/opt/bambustudio/resources/profiles/BBL` könyvtárból; a nyilvános
+  azonosítókat a `configs/bambu/printers.json` regisztrációs fájl köti a pontos
+  vendor-nevekhez (`P1S` alapértelmezett, `H2D`; anyagok `PLA`/`PETG`/`ABS`/
+  `TPU` → `Generic ...` filamentek). Ezzel a korábbi
+  `ORCA_MEASUREMENT_BLOCKED_VENDOR_PROFILE` akadály a Bambu-útra nézve
+  megszűnt: a vendor-profil nem a repóban van, hanem a bináris csomagjában.
+- A hívás `--arrange 0 --orient 0`; az elhelyezést az API végzi a valódi
+  tálcageometria alapján (`bambu-bed-geometry.js`, `bambu-placement.js`,
+  `scale_model.py --place-min-x/--place-min-y`), és a válasz `placement_mm`
+  mezőben közli. Mért, befogadó (inclusive) határok: P1S `256 x 228 x 250 mm`
+  (a `18 x 28 mm` kizárt sarok miatt L alakú a tartomány, alternatív alaplap
+  `238 x 256`), H2D `325 x 320 x 325 mm` (egyszálas, első extruder terület).
+  A `+0,1 mm` bármely tengelyen HTTP 422 `MODEL_OUT_OF_PRINTER_BOUNDS`.
+- A megőrzött artefaktum a nyomtatókész `.gcode.3mf`; a statisztika a szeletelt
+  tálca G-kódjából származik (`total estimated time` az elsődleges időmarker).
+
+### Bambu Studio CLI és a tulajdonosi GUI-leolvasás egyezése
+
+A tíz referencia-modellen (`M01`–`M10`, ugyanazzal a gép-, fúvóka-, anyag-,
+réteg-, kitöltés- és orientációbeállítással, támasz nélkül) a headless CLI a
+tulajdonos Bambu Studio GUI-leolvasásaitól idő tekintetében `-1,1..+0,1 %`,
+tömeg tekintetében `0..0,2 %` eltéréssel tér el. Ez teljesíti a fenti
+`<= 10 %` elfogadási feltételt, ezért Bambu Lab nyomtatókra a
+`POST /bambu/slice` az árazási referencia. A futtató:
+`tests/testing-scripts/calibration/bambu_reference_comparison_runner.py`
+(kizárólag tulajdonosi, privát bemenettel; a jelentés csak indexet és
+SHA-256 előtagot tartalmaz).
+
+Az Orca 2.3.1 a csomagolt BBL profilokkal ugyanezeken a modelleken legfeljebb
+`+24 %`-kal becsül többet, és nincs H2D profilja; a Prusa és Orca út
+kompatibilitási céllal marad, a `H2D-QUOTE` továbbra is P1S fizika egy
+H2D-méretű tálcán, csak árajánlathoz.
+
+### Támasz-figyelmeztetés
+
+A `supports` mező minden motoron elérhető, alapértelmezése `true`. Bekapcsolt
+támasszal (fa, automatikus) a túlnyúlásos modellek ideje `+47..+140 %`-kal nő a
+támasz nélküli értékhez képest. Leolvasást és kérést csak azonos
+támaszbeállítással szabad összevetni; a támasz nélküli referenciát
+`supports=false` kéréssel kell reprodukálni.
+
+### Termelési borítékos füstpróba (2026-09-02, 40 mm PLA kocka, 0,2 mm, 20 %, támasz be)
+
+| Motor | Idő (mp) | Gramm | Ár (Ft) |
+|---|---:|---:|---:|
+| Bambu P1S | 2453 | 24,00 | 550 |
+| Bambu H2D | 2452 | 23,94 | 550 |
+| Prusa | 1980 | 24,7 | 440 |
+| Orca | 2760 | 24,2 | 620 |
+
+A Prusa ára korábban 450 Ft volt ugyanerre az időre: az árképzés mostantól
+egész számú aritmetikával számol (`ceil(max(mp, 900) * óradíj / 3600)`, majd
+felfelé 10 Ft-ra), így az 1980 mp × 800 Ft/h pontosan 440. Az Orca generikus
+profilja `estimated printing time (normal mode)` markert ad, ezért az Orca
+számai nem változtak a `total estimated time` elsőbbségétől. A `/render`
+végpont érvényes PNG-t adott.
+
+### Ami továbbra sem ellenőrzött
+
+- Fizikai nyomtatás (falióra-idő) egyik motorhoz sem készült.
+- A Bambu H2D valós hardveren nem mért; a `325 x 320 x 325` érték a CLI
+  befogadási határa, nem nyomtatott bizonyíték.
+- Az SLA út (Elegoo Saturn 4 Ultra) külön hullám; az SLA válasz tömege és ára
+  továbbra is `null`.
+- A 3.2.0 kép nincs publikálva, telepítve vagy útvonalra kötve; ezek külön
+  tulajdonosi engedélyt igényelnek.

@@ -207,12 +207,12 @@ test('bambu-studio wrapper weakening mutations fail the contract', async (t) => 
     }
 });
 
-test('Compose manifests run the service under init and the dev overlay mounts scale_model.py', () => {
+test('Compose manifests run the service under init and the dev overlay mounts every Python helper', () => {
     assert.equal(exactLines(COMPOSE, '    init: true'), 1);
     assert.equal(exactLines(PRODUCTION_COMPOSE, '    init: true'), 1);
     assert.match(COMPOSE, /^    read_only: true\n    init: true\n/m);
     assert.match(PRODUCTION_COMPOSE, /^    read_only: true\n    init: true\n/m);
-    for (const helper of ['cad2stl.py', 'mesh2stl.py', 'orient.py', 'scale_model.py']) {
+    for (const helper of ['cad2stl.py', 'mesh2stl.py', 'orient.py', 'scale_model.py', 'render_preview.py']) {
         assert.equal(exactLines(DEV_COMPOSE, `      - ./app/${helper}:/app/${helper}`), 1, helper);
     }
 });

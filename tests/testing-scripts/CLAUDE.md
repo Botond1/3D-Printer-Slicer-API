@@ -4,7 +4,10 @@ Last synchronized: 2026-09-02
 
 ## Scope
 
-This folder contains API-level Python integration and workflow tests.
+This folder contains API-level Python integration and workflow tests for the
+three engines (Prusa, Orca, Bambu), the render preview, pricing, artifacts,
+queue, rate limits, operations, and the profile catalogue. Historical J2/J3/J3B
+results referenced below are preserved verbatim in `docs/codex/history-waves.md`.
 
 ## Main Runner Groups
 
@@ -335,8 +338,9 @@ python tests/testing-scripts/slicing/native_envelope_sweep_runner.py
   live enum: `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
   `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`. The current Python matrix
   helper does not yet prove
-  actual-binary version, digest/snapshot/flattened-parent lineage, or Orca
-  `--arrange 1` / `--orient 0` / `--allow-rotations=0`; its result alone is not complete J0 response-
+  actual-binary version, digest/snapshot/flattened-parent lineage, Orca
+  `--arrange 1` / `--orient 0` / `--allow-rotations=0`, or Bambu
+  `--arrange 0` / `--orient 0`; its result alone is not complete response-
   contract evidence. Focused contracts cover the corrected placement/orientation
   and digest policy, and final exact-image evidence covers startup version
   resolution plus the HTTP transform/final-dimensions E2E for both principals.
@@ -348,10 +352,12 @@ python tests/testing-scripts/slicing/native_envelope_sweep_runner.py
 - Keep the native Orca smoke split into its thin Docker orchestrator and
   side-effect-free fixture, container-script, and contract builders; preserve
   the bounded file/function guards and exact generated-script behavior.
-- Nine numeric Bambu references plus the `M03` P1S-boundary result are recorded,
-  but the matching Orca calibration is
-  `BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`. Do not treat the reference side or
-  the profile-catalogue runner as time/mass or automatic-pricing acceptance.
+- The Bambu reference comparison (2026-09-02) passed on the ten reference
+  models: the Bambu Studio CLI matches the owner's GUI within -1.1..+0.1 %
+  time and 0..0.2 % mass with supports off, so `POST /bambu/slice` is the
+  Bambu quoting authority. Orca 2.3.1 with bundled BBL profiles deviates by up
+  to +24 % and has no H2D; do not treat the profile-catalogue runner as
+  time/mass or automatic-pricing acceptance for the generic-Marlin engines.
 - Queue timing and client start order are informational; fresh queue-state and
   exact artifact-inventory observations are authoritative. Staggered completion
   is used only as an N=1 serialization diagnostic.
