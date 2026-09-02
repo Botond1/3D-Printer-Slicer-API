@@ -96,17 +96,21 @@ def convert_cad_to_stl(input_path, output_path):
     input_abs_path = os.path.abspath(input_path)
     output_abs_path = os.path.abspath(output_path)
 
-    print(f"[PYTHON CAD] Processing: {input_abs_path}")
+    print(f"[PYTHON CAD] Processing: {os.path.basename(input_abs_path)}")
 
     if not os.path.exists(input_abs_path):
         print("[PYTHON CAD] ERROR: Input CAD file was not found.")
         sys.exit(1)
 
-    # 1. HTML check
+    # 1. HTML check. An I/O failure while reading the header is a server-side
+    # fault, not the customer's geometry: exit 1 without the marker.
     try:
         _check_not_html(input_abs_path)
     except UserFileError as error:
         report_invalid_geometry(error.reason)
+    except (MemoryError, OSError) as error:
+        print(f"[PYTHON CAD] ERROR: Could not read this CAD file. {type(error).__name__}")
+        sys.exit(1)
 
     # 2. File extension handling
     temp_igs_path = input_abs_path
@@ -122,10 +126,14 @@ def convert_cad_to_stl(input_path, output_path):
         gmsh.option.setNumber("General.Terminal", 1)
         gmsh.option.setNumber("General.Verbosity", 2)
 
-        # 3. Loading and merging
+        # 3. Loading and merging. Resource exhaustion and I/O failures are
+        # server-side faults: they propagate to the plain exit-1 branch below
+        # and are never reported as the customer's bad geometry.
         print("[PYTHON CAD] Merging file...")
         try:
             gmsh.merge(temp_igs_path)
+        except (MemoryError, OSError):
+            raise
         except Exception as error:  # noqa: BLE001 - loader failure is a bad source
             raise UserFileError(f"unloadable {type(error).__name__}") from error
 
@@ -139,13 +147,15 @@ def convert_cad_to_stl(input_path, output_path):
 
         try:
             gmsh.model.mesh.generate(2)
+        except (MemoryError, OSError):
+            raise
         except Exception as error:  # noqa: BLE001 - meshing failure is a bad source
             raise UserFileError(f"mesh generation failed {type(error).__name__}") from error
         _assert_mesh_generated()
 
         # 6. Save
         gmsh.write(output_abs_path)
-        print(f"[PYTHON CAD] Success! Exported to {output_abs_path}")
+        print(f"[PYTHON CAD] Success! Exported to {os.path.basename(output_abs_path)}")
 
     except UserFileError as error:
         geometry_failure = error.reason

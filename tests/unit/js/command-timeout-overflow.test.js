@@ -11,7 +11,9 @@ const {
     SLICE_COMMAND_TIMEOUT_RANGE_MS,
     createCommandRunner,
     createPythonHelperRunner,
-    resolveCommandTimeoutMs
+    PYTHON_HELPER_TIMEOUT_MIN_MS,
+    resolveCommandTimeoutMs,
+    resolvePythonHelperTimeoutMs
 } = require('../../../app/services/slice/command');
 const { EVENT_NAMES, createEventEmitter } = require('../../../app/services/observability/events');
 
@@ -125,8 +127,30 @@ test('the timeout path still reports the timeout wording with ETIMEDOUT', async 
     assert.equal(f.state.terminations, 1);
 });
 
+test('PYTHON_HELPER_TIMEOUT_MS is bounded 10 s..SLICE_COMMAND_TIMEOUT_MS with an invalid-to-default fallback', () => {
+    assert.equal(DEFAULTS.PYTHON_HELPER_TIMEOUT_MS, 120_000);
+    assert.equal(PYTHON_HELPER_TIMEOUT_MIN_MS, 10_000);
+    assert.equal(resolvePythonHelperTimeoutMs({}), 120_000);
+    assert.equal(resolvePythonHelperTimeoutMs({ PYTHON_HELPER_TIMEOUT_MS: '30000' }), 30_000);
+    assert.equal(resolvePythonHelperTimeoutMs({ PYTHON_HELPER_TIMEOUT_MS: '10000' }), 10_000);
+    assert.equal(resolvePythonHelperTimeoutMs({ PYTHON_HELPER_TIMEOUT_MS: '600000' }), 600_000);
+    for (const garbage of ['9999', '0', '-1', '600001', '1e5', '120000.0', ' 120000', '0120000', 'abc', '', 'Infinity']) {
+        assert.equal(resolvePythonHelperTimeoutMs({ PYTHON_HELPER_TIMEOUT_MS: garbage }), 120_000, garbage);
+    }
+    // The upper bound follows the configured native budget, and so does the default cap.
+    assert.equal(resolvePythonHelperTimeoutMs({ SLICE_COMMAND_TIMEOUT_MS: '60000', PYTHON_HELPER_TIMEOUT_MS: '45000' }), 45_000);
+    assert.equal(resolvePythonHelperTimeoutMs({ SLICE_COMMAND_TIMEOUT_MS: '60000', PYTHON_HELPER_TIMEOUT_MS: '90000' }), 60_000);
+    assert.equal(resolvePythonHelperTimeoutMs({ SLICE_COMMAND_TIMEOUT_MS: '60000' }), 60_000);
+    assert.equal(resolvePythonHelperTimeoutMs({ SLICE_COMMAND_TIMEOUT_MS: '3600000', PYTHON_HELPER_TIMEOUT_MS: '3600000' }), 3_600_000);
+    assert.equal(resolvePythonHelperTimeoutMs({ SLICE_COMMAND_TIMEOUT_MS: 'bad', PYTHON_HELPER_TIMEOUT_MS: '600000' }), 600_000);
+    assert.equal(resolvePythonHelperTimeoutMs({ SLICE_COMMAND_TIMEOUT_MS: 'bad', PYTHON_HELPER_TIMEOUT_MS: '600001' }), 120_000);
+    assert.ok(resolvePythonHelperTimeoutMs({}) <= resolveCommandTimeoutMs({}));
+});
+
 test('Python helpers receive the shorter 120 s budget and can never extend the native budget', async () => {
-    assert.equal(PYTHON_HELPER_TIMEOUT_MS, 120_000);
+    assert.equal(PYTHON_HELPER_TIMEOUT_MS, resolvePythonHelperTimeoutMs(process.env));
+    assert.ok(PYTHON_HELPER_TIMEOUT_MS >= PYTHON_HELPER_TIMEOUT_MIN_MS);
+    assert.ok(PYTHON_HELPER_TIMEOUT_MS <= resolveCommandTimeoutMs(process.env));
     assert.ok(PYTHON_HELPER_TIMEOUT_MS < DEFAULTS.SLICE_COMMAND_TIMEOUT_MS);
 
     const f = fixture();

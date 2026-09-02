@@ -202,6 +202,10 @@ test('queue fairness keys prefer the authenticated principal slot and fall back 
     assert.equal(resolveQueueKey({ slicePrincipal: null }, ip), '198.51.100.7');
     assert.equal(resolveQueueKey({ slicePrincipal: { slot: 'woocommerce' } }, ip), 'principal:woocommerce');
     assert.equal(resolveQueueKey({ slicePrincipal: { slot: 'leadpilot.active' } }, ip), 'principal:leadpilot.active');
+    // The shared compatibility slot is anonymous: it keys on the client IP so
+    // MAX_SLICE_QUEUE_PER_IP never becomes one global cap for legacy callers.
+    assert.equal(resolveQueueKey({ slicePrincipal: { slot: 'shared' } }, ip), '198.51.100.7');
+    assert.equal(resolveQueueKey({ slicePrincipal: { slot: 'shared' } }, () => '203.0.113.10'), '203.0.113.10');
     assert.equal(resolveQueueKey({ slicePrincipal: { slot: '' } }, ip), '198.51.100.7');
     assert.equal(resolveQueueKey({ slicePrincipal: { slot: 'bad slot' } }, ip), '198.51.100.7');
     assert.equal(resolveQueueKey({ slicePrincipal: { slot: 42 } }, ip), '198.51.100.7');

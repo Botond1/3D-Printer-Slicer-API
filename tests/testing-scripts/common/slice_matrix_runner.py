@@ -49,7 +49,7 @@ ENGINE_KEY_BY_ENDPOINT = {
     BAMBU_SLICE_ENDPOINT: "bambu",
 }
 SHA256_PATTERN = re.compile(r"^[a-f0-9]{64}$")
-ENGINE_VERSION_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+){1,3}(?:[-+][A-Za-z0-9.]{1,32})?$")
+ENGINE_VERSION_PATTERN = re.compile(r"^[0-9]+(?:\.[0-9]+){1,3}(?:[-+][A-Za-z0-9._-]+)?$")
 FIXTURE_SOURCE_LEGACY = "legacy corpus (tests/testing-files)"
 FIXTURE_SOURCE_SYNTHETIC = "synthetic fixtures only (tests/testing-files is empty)"
 

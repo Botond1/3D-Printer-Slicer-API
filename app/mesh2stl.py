@@ -8,6 +8,7 @@ parsing free-form text. No automatic repair is ever applied.
 """
 
 import math
+import os
 import sys
 
 import trimesh
@@ -162,9 +163,12 @@ def convert_mesh_to_stl(input_path, output_path):
 
     Raises:
         SystemExit: Status 2 with the geometry marker for invalid geometry,
-            status 1 for every other failure.
+            status 1 for every other failure. Resource exhaustion
+            (``MemoryError``) and I/O failures (``OSError`` other than a
+            missing input) are server-side faults, so they exit 1 WITHOUT
+            the marker and are never reported as the customer's bad geometry.
     """
-    print(f"[PYTHON] Loading mesh: {input_path}")
+    print(f"[PYTHON] Loading mesh: {os.path.basename(str(input_path))}")
     try:
         mesh = _load_as_mesh(input_path)
     except FileNotFoundError:
@@ -172,12 +176,15 @@ def convert_mesh_to_stl(input_path, output_path):
         sys.exit(1)
     except InvalidSourceGeometry as error:
         report_invalid_geometry(error.reason)
-    except Exception as error:  # noqa: BLE001 - any loader failure is a bad source
+    except (MemoryError, OSError) as error:
+        print(f"[PYTHON] ERROR: Could not load this mesh file. {type(error).__name__}")
+        sys.exit(1)
+    except Exception as error:  # noqa: BLE001 - any loader/parse failure is a bad source
         report_invalid_geometry(f"unloadable {type(error).__name__}")
 
     try:
         mesh.export(output_path)
-        print(f"[PYTHON] Success! Exported to {output_path}")
+        print(f"[PYTHON] Success! Exported to {os.path.basename(str(output_path))}")
     except Exception as error:  # noqa: BLE001
         print(f"[PYTHON] ERROR: Could not export this mesh file. {type(error).__name__}")
         sys.exit(1)

@@ -12,12 +12,8 @@ const { emitEvent } = require('../observability/events');
 /** Inclusive accepted range for the native slice command budget (1 s .. 60 min). */
 const SLICE_COMMAND_TIMEOUT_RANGE_MS = Object.freeze({ min: 1_000, max: 3_600_000 });
 
-/**
- * Bounded budget for the Python preprocessing helpers (mesh2stl, cad2stl,
- * orient, scale_model). These run before any native slicer and never need
- * the full native slice budget.
- */
-const PYTHON_HELPER_TIMEOUT_MS = 120_000;
+/** Lower bound of the Python helper budget; below this real CAD imports fail. */
+const PYTHON_HELPER_TIMEOUT_MIN_MS = 10_000;
 
 /** Maximum bytes accepted from a child's stdout/stderr before Node kills it. */
 const DEFAULT_MAX_BUFFER_BYTES = 1024 * 10000;
@@ -37,7 +33,29 @@ function resolveCommandTimeoutMs(env = process.env) {
     );
 }
 
+/**
+ * Resolve the bounded budget for the Python preprocessing helpers (mesh2stl,
+ * cad2stl, orient, scale_model) from `PYTHON_HELPER_TIMEOUT_MS`. These run
+ * before any native slicer and never need the full native slice budget, so
+ * the accepted range is `10 s .. SLICE_COMMAND_TIMEOUT_MS`. The default is
+ * `DEFAULTS.PYTHON_HELPER_TIMEOUT_MS` capped at the native budget; invalid,
+ * non-canonical, or out-of-range values fall back to that default.
+ * @param {NodeJS.ProcessEnv | Record<string, unknown>} [env=process.env] Environment source.
+ * @returns {number} Helper timeout in milliseconds.
+ */
+function resolvePythonHelperTimeoutMs(env = process.env) {
+    const commandTimeoutMs = resolveCommandTimeoutMs(env);
+    const fallback = Math.min(DEFAULTS.PYTHON_HELPER_TIMEOUT_MS, commandTimeoutMs);
+    return parseBoundedPositiveInt(
+        env.PYTHON_HELPER_TIMEOUT_MS,
+        fallback,
+        { min: PYTHON_HELPER_TIMEOUT_MIN_MS, max: commandTimeoutMs }
+    );
+}
+
 const COMMAND_TIMEOUT_MS = resolveCommandTimeoutMs(process.env);
+/** Process-wide Python helper budget resolved once at load, like the native budget. */
+const PYTHON_HELPER_TIMEOUT_MS = resolvePythonHelperTimeoutMs(process.env);
 
 function abortReason(signal) {
     if (signal?.reason instanceof Error) return signal.reason;
@@ -296,7 +314,7 @@ function createStartupProbeRunner(overrides = {}) {
 
 /**
  * Build a runner whose budget is the shorter Python helper timeout.
- * @param {object} [overrides] Test dependencies; `timeoutMs` is fixed.
+ * @param {object} [overrides] Test dependencies; `timeoutMs` is fixed to the resolved helper budget.
  * @returns {ReturnType<typeof createCommandRunner>} Helper command runner.
  */
 function createPythonHelperRunner(overrides = {}) {
@@ -306,6 +324,7 @@ function createPythonHelperRunner(overrides = {}) {
 const runCommand = createCommandRunner();
 
 module.exports = {
+    PYTHON_HELPER_TIMEOUT_MIN_MS,
     PYTHON_HELPER_TIMEOUT_MS,
     SLICE_COMMAND_TIMEOUT_RANGE_MS,
     runCommand,
@@ -313,6 +332,7 @@ module.exports = {
     createPythonHelperRunner,
     createStartupProbeRunner,
     resolveCommandTimeoutMs,
+    resolvePythonHelperTimeoutMs,
     abortReason,
     throwIfAborted,
     isAbortError

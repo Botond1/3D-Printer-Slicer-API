@@ -243,7 +243,7 @@ function extractMaterialUsedGramsFromGcode(content) {
  * @param {{print_time_seconds: number, print_time_readable: string, material_used_m: number, material_used_g: number|null}} stats Mutable stats object.
  * @param {'FDM'|'SLA'} technology Active technology.
  * @param {string} filePath Output file path.
- * @param {'prusa'|'orca'} [engine='prusa'] Engine identifier.
+ * @param {'prusa'|'orca'|'bambu'} [engine='prusa'] Engine identifier; selects the strict print-time ranking.
  * @returns {void}
  */
 async function parseFdmOutputStats(
@@ -261,7 +261,8 @@ async function parseFdmOutputStats(
         const content = await readBoundedText(filePath, policy.MAX_OUTPUT_PARSE_BYTES);
         if (isStrictGcodeMetricsEnabled()) {
             const metrics = parseGcodeMetricsStrict(content, {
-                requireFilamentGrams: options.requireFilamentGrams ?? engine === 'orca'
+                requireFilamentGrams: options.requireFilamentGrams ?? engine === 'orca',
+                engine
             });
             stats.print_time_seconds = metrics.print_time_seconds;
             stats.print_time_source = metrics.print_time_source;

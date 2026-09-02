@@ -84,6 +84,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && python3 /tmp/install-swiper-vendor.py \
         --archive /tmp/swiper-12.1.2.tgz \
         --orca-root /tmp/orca-squashfs-root \
+        --bambu-root /tmp/bambu-squashfs-root \
         --source-url "$SWIPER_VENDOR_URL" \
     && rm -- /tmp/PrusaSlicer.AppImage /tmp/OrcaSlicer.AppImage /tmp/BambuStudio.AppImage \
         /tmp/swiper-12.1.2.tgz /tmp/install-swiper-vendor.py
@@ -200,7 +201,7 @@ COPY --chown=0:0 --chmod=0555 scripts/i4-container-entrypoint.sh /usr/local/bin/
 
 # 6. Create only the root-scoped mutable runtime surfaces for the service user.
 # Production overlays configs/pricing-state with a dedicated writable bind mount;
-# configs/prusa and configs/orca remain immutable profile content.
+# configs/prusa, configs/orca, and configs/bambu remain immutable profile content.
 RUN chown -R root:root /app /opt/venv /opt/prusaslicer /opt/orcaslicer /opt/bambustudio \
     && chmod -R a-w /app /opt/venv /opt/prusaslicer /opt/orcaslicer /opt/bambustudio \
     && mkdir -p input output configs/pricing-state \

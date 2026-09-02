@@ -79,39 +79,77 @@ function sumNumericList(rawList) {
     return Number.isFinite(total) ? total : null;
 }
 
-/**
- * Ordered print-time patterns, strongest first.
- *
- * Bambu Studio and OrcaSlicer both write the wall-clock total on the SAME line
- * as the model time: `; model printing time: 5m 38s; total estimated time:
- * 11m 54s`. A line-anchored `^; total estimated time` pattern therefore never
- * matched and Orca silently fell through to `M73 P0 R<minutes>`, which is the
- * model time WITHOUT the start sequence. The GUI "total time" a customer is
- * quoted against is the total estimated time, so that unanchored marker ranks
- * first; `M73` remains the fallback for engines that emit no total.
- */
-const PRINT_TIME_PATTERNS = Object.freeze([
-    {
-        id: 'total_estimated_time',
-        regex: /;\s*total estimated time\s*[:=]\s*([0-9dhms ]+)/i,
-        toSeconds: (match) => parseDurationText(match[1])
-    },
-    {
+/** Print-time patterns keyed by identity; the ranking is engine-specific. */
+const PRINT_TIME_PATTERN_BY_ID = Object.freeze({
+    m73_p0_r_minutes: Object.freeze({
         id: 'm73_p0_r_minutes',
         regex: /^M73 P0 R(\d+)\s*$/im,
         toSeconds: (match) => Number.parseInt(match[1], 10) * 60
-    },
-    {
+    }),
+    estimated_printing_time: Object.freeze({
         id: 'estimated_printing_time',
         regex: /^;\s*estimated printing time(?:\s*\([^)]*\))?\s*=\s*([^\r\n]+)$/im,
         toSeconds: (match) => parseDurationText(match[1])
-    },
-    {
+    }),
+    // Bambu Studio and OrcaSlicer write the wall-clock total on the SAME line
+    // as the model time: `; model printing time: 5m 38s; total estimated
+    // time: 11m 54s`, so this marker is deliberately not line-anchored.
+    total_estimated_time: Object.freeze({
+        id: 'total_estimated_time',
+        regex: /;\s*total estimated time\s*[:=]\s*([0-9dhms ]+)/i,
+        toSeconds: (match) => parseDurationText(match[1])
+    }),
+    time_seconds: Object.freeze({
         id: 'time_seconds',
         regex: /^;\s*TIME\s*[:=]\s*(\d+)\s*$/im,
         toSeconds: (match) => Number.parseInt(match[1], 10)
-    }
+    })
+});
+
+/**
+ * Historical print-time ranking, strongest first. This is the order Prusa and
+ * Orca output has always been measured with, so their published numbers stay
+ * byte-identical: `M73 P0 R<minutes>` first, then the `estimated printing
+ * time` footer, then the total-estimated-time marker, then the bare `TIME`.
+ */
+const PRINT_TIME_PATTERNS = Object.freeze([
+    PRINT_TIME_PATTERN_BY_ID.m73_p0_r_minutes,
+    PRINT_TIME_PATTERN_BY_ID.estimated_printing_time,
+    PRINT_TIME_PATTERN_BY_ID.total_estimated_time,
+    PRINT_TIME_PATTERN_BY_ID.time_seconds
 ]);
+
+/**
+ * Bambu Studio ranking. The GUI "total time" the owner reads and quotes
+ * against is `total estimated time` (model time plus the start sequence);
+ * `M73 P0 R` on Bambu output is the model time WITHOUT that sequence, so the
+ * total ranks first and `M73` remains the fallback when no total is written.
+ */
+const BAMBU_PRINT_TIME_PATTERNS = Object.freeze([
+    PRINT_TIME_PATTERN_BY_ID.total_estimated_time,
+    PRINT_TIME_PATTERN_BY_ID.m73_p0_r_minutes,
+    PRINT_TIME_PATTERN_BY_ID.estimated_printing_time,
+    PRINT_TIME_PATTERN_BY_ID.time_seconds
+]);
+
+/** Engine-specific print-time rankings; every other engine uses the historical order. */
+const PRINT_TIME_PATTERNS_BY_ENGINE = Object.freeze({
+    bambu: BAMBU_PRINT_TIME_PATTERNS,
+    orca: PRINT_TIME_PATTERNS,
+    prusa: PRINT_TIME_PATTERNS
+});
+
+/**
+ * Resolve the ordered print-time patterns for one engine.
+ * Unknown or omitted engines keep the historical Prusa/Orca ranking.
+ * @param {unknown} engine Engine identifier (`prusa`, `orca`, `bambu`).
+ * @returns {ReadonlyArray<{id: string, regex: RegExp, toSeconds: Function}>} Ordered patterns.
+ */
+function resolvePrintTimePatterns(engine) {
+    return (typeof engine === 'string' && Object.hasOwn(PRINT_TIME_PATTERNS_BY_ENGINE, engine))
+        ? PRINT_TIME_PATTERNS_BY_ENGINE[engine]
+        : PRINT_TIME_PATTERNS;
+}
 
 /** Ordered filament-mass patterns. Grams is the billing unit. */
 const FILAMENT_GRAM_PATTERNS = Object.freeze([
@@ -178,11 +216,11 @@ function matchOrdered(content, patterns, converterKey) {
 /**
  * Extract print time and filament mass from a G-code body, or throw.
  * @param {string} content Full G-code text content.
- * @param {{requireFilamentGrams?: boolean}} [options] Extraction options.
+ * @param {{requireFilamentGrams?: boolean, engine?: 'prusa'|'orca'|'bambu'}} [options] Extraction options; `engine` selects the print-time ranking (omitted or unknown engines use the historical Prusa/Orca order).
  * @returns {{print_time_seconds:number,print_time_source:string,filament_used_g:number|null,filament_used_g_source:string|null,filament_used_mm:number|null,filament_used_mm_source:string|null}}
  */
 function parseGcodeMetricsStrict(content, options = {}) {
-    const { requireFilamentGrams = true } = options;
+    const { requireFilamentGrams = true, engine } = options;
     const text = typeof content === 'string' ? content : '';
     if (text.trim().length === 0) {
         throw new GcodeMetricsError(
@@ -191,12 +229,13 @@ function parseGcodeMetricsStrict(content, options = {}) {
         );
     }
 
-    const time = matchOrdered(text, PRINT_TIME_PATTERNS, 'toSeconds');
+    const printTimePatterns = resolvePrintTimePatterns(engine);
+    const time = matchOrdered(text, printTimePatterns, 'toSeconds');
     if (time === null) {
         throw new GcodeMetricsError(
             GCODE_METRIC_ERROR_CODES.TIME_UNPARSED,
             'No known print-time marker matched the slicer output ' +
-            `(expected one of: ${PRINT_TIME_PATTERNS.map((pattern) => pattern.id).join(', ')}). ` +
+            `(expected one of: ${printTimePatterns.map((pattern) => pattern.id).join(', ')}). ` +
             'Refusing to report 0 seconds, which would price the job as free.'
         );
     }
@@ -245,13 +284,16 @@ function parseGcodeMetricsStrict(content, options = {}) {
 }
 
 module.exports = {
+    BAMBU_PRINT_TIME_PATTERNS,
     FILAMENT_GRAM_PATTERNS,
     FILAMENT_LENGTH_PATTERNS,
     GCODE_METRIC_ERROR_CODES,
     GcodeMetricsError,
     PRINT_TIME_PATTERNS,
+    PRINT_TIME_PATTERNS_BY_ENGINE,
     looksLikeThousandsGrouping,
     parseDurationText,
     parseGcodeMetricsStrict,
+    resolvePrintTimePatterns,
     sumNumericList
 };

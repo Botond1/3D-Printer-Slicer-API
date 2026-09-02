@@ -21,6 +21,9 @@ const DEFAULTS = {
     WORKSPACE_STALE_AGE_MS: 24 * 60 * 60 * 1000,
     MAX_LOG_OUTPUT: 4000,
     SLICE_COMMAND_TIMEOUT_MS: 600000,
+    // Python preprocessing helpers (mesh2stl, cad2stl, orient, scale_model)
+    // run before any native slicer and never need the full native budget.
+    PYTHON_HELPER_TIMEOUT_MS: 120_000,
     SLICE_TIMEOUT_MINUTES: 10,
     SLICE_RATE_LIMIT_WINDOW_MS: 60_000,
     SLICE_RATE_LIMIT_MAX_REQUESTS: 3,

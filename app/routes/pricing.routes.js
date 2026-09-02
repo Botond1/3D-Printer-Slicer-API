@@ -6,11 +6,8 @@ const express = require('express');
 const requireAdmin = require('../middleware/requireAdmin');
 const { adminRateLimiter } = require('../middleware/rateLimit');
 const { emitEvent } = require('../services/observability/events');
-const {
-    getPricing,
-    commitPricingMutation,
-    findMaterialKey
-} = require('../services/pricing.service');
+const defaultPricingService = require('../services/pricing.service');
+const { LAST_MATERIAL_PROTECTED, assertNotLastMaterial } = require('../services/pricing/catalog');
 const {
     PRICING_ERROR_CODES,
     parseMaterialOrResponse,
@@ -42,9 +39,10 @@ function recordPricingMutation(req, technology, action, outcome, errorCode) {
  * @param {import('express').Request} req Express request object.
  * @param {import('express').Response} res Express response object.
  * @param {'FDM'|'SLA'} technology Technology key.
+ * @param {(mutator: Function) => Promise<unknown>} commitPricingMutation Serialized pricing mutation coordinator.
  * @returns {import('express').Response}
  */
-async function createMaterialForTechnology(req, res, technology) {
+async function createMaterialForTechnology(req, res, technology, commitPricingMutation) {
     const materialResult = parseMaterialOrResponse(res, req.body?.material);
     if (materialResult.response) {
         recordPricingMutation(req, technology, 'create', 'failure', 'PRICING_VALIDATION_FAILED');
@@ -104,6 +102,9 @@ async function createMaterialForTechnology(req, res, technology) {
 function createPricingRouter(options = {}) {
     const router = express.Router();
     const authenticatePricing = options.authenticate || requireAdmin;
+    // Injectable service seam: tests bind an isolated catalog/repository pair;
+    // production uses the module singleton backed by the root-scoped state.
+    const { getPricing, commitPricingMutation, findMaterialKey } = options.pricingService || defaultPricingService;
 
     router.get('/pricing', (req, res) => {
         res.status(200).json(getPricing());
@@ -115,7 +116,7 @@ function createPricingRouter(options = {}) {
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-    router.post('/pricing/FDM', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'FDM'));
+    router.post('/pricing/FDM', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'FDM', commitPricingMutation));
 
 /**
  * Create a new SLA material.
@@ -123,7 +124,7 @@ function createPricingRouter(options = {}) {
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-    router.post('/pricing/SLA', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'SLA'));
+    router.post('/pricing/SLA', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'SLA', commitPricingMutation));
 
 /**
  * Update an existing material hourly pricing entry.
@@ -241,6 +242,11 @@ function createPricingRouter(options = {}) {
                 missing.code = 'PRICING_NOT_FOUND';
                 throw missing;
             }
+            // Readiness requires non-empty FDM and SLA maps; the last material
+            // of a technology is protected so a pricing edit cannot take the
+            // service out of READY. Checked inside the serialized mutation so a
+            // concurrent delete cannot race past it.
+            assertNotLastMaterial(candidate[technology], current);
             delete candidate[technology][current];
             return current;
         });
@@ -251,6 +257,14 @@ function createPricingRouter(options = {}) {
                 success: false,
                 error: error.message,
                 errorCode: PRICING_ERROR_CODES.MATERIAL_NOT_FOUND
+            });
+        }
+        if (error.code === LAST_MATERIAL_PROTECTED) {
+            recordPricingMutation(req, technology, 'delete', 'failure', LAST_MATERIAL_PROTECTED);
+            return res.status(409).json({
+                success: false,
+                error: error.message,
+                errorCode: PRICING_ERROR_CODES.LAST_MATERIAL_PROTECTED
             });
         }
         recordPricingMutation(req, technology, 'delete', 'failure', 'PRICING_PERSISTENCE_FAILED');

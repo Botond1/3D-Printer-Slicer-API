@@ -385,3 +385,55 @@ test('queue rejections answer the stable queue envelopes for renders too', async
     assert.equal(res.statusCode, 503);
     assert.equal(res.jsonBody.errorCode, 'SLICE_QUEUE_FULL');
 });
+
+test('render requests are validated before enqueue: a missing upload never reaches the queue', async () => {
+    let enqueued = 0;
+    const { handleRender } = renderService.createRenderHandlers({
+        processRenderImpl: async () => { throw new Error('must not run'); },
+        enqueueSliceJobImpl: async (task, options) => { enqueued += 1; return task(options.signal); },
+        getClientIpImpl: () => '203.0.113.10'
+    });
+    const cases = [
+        [null, 'NO_FILE_UPLOADED'],
+        [{ originalname: 'model.exe', path: '/ws/upload', fieldname: 'choosenFile' }, 'UNSUPPORTED_FILE_FORMAT']
+    ];
+    for (const [file, errorCode] of cases) {
+        const res = createResponse();
+        const req = createRequest(createWorkspace('/ws'), {}, file);
+        req.socket = new EventEmitter();
+        const result = await handleRender(req, res);
+        assert.equal(result, res, errorCode);
+        assert.equal(res.statusCode, 400, errorCode);
+        assert.equal(res.jsonBody.errorCode, errorCode, errorCode);
+        assert.equal(res.jsonBody.success, false, errorCode);
+        assert.equal(enqueued, 0, `${errorCode} must be answered before enqueue`);
+    }
+    const invalidOption = createResponse();
+    const optionReq = createRequest(createWorkspace('/ws'), { infill: '140' });
+    optionReq.socket = new EventEmitter();
+    await handleRender(optionReq, invalidOption);
+    assert.equal(invalidOption.statusCode, 400);
+    assert.equal(invalidOption.jsonBody.errorCode, 'INVALID_INFILL');
+    assert.equal(enqueued, 0);
+
+    // A valid request passes the pre-validator and is enqueued exactly once.
+    let processed = 0;
+    const valid = renderService.createRenderHandlers({
+        processRenderImpl: async (req, response) => { processed += 1; response.status(200); response.end(FAKE_PNG); return response; },
+        enqueueSliceJobImpl: async (task, options) => { enqueued += 1; return task(options.signal); },
+        getClientIpImpl: () => '203.0.113.10'
+    });
+    const okRes = createResponse();
+    const okReq = createRequest(createWorkspace('/ws'), { layerHeight: '0.2', material: 'PLA' });
+    okReq.socket = new EventEmitter();
+    await valid.handleRender(okReq, okRes);
+    assert.equal(enqueued, 1);
+    assert.equal(processed, 1);
+
+    // The pre-validator itself is exported and inert without a workspace.
+    const preValidate = renderService.createRenderPreValidator();
+    assert.equal(preValidate({ body: {} }, createResponse()), null);
+    const missingRes = createResponse();
+    assert.equal(preValidate(createRequest(createWorkspace('/ws'), {}, null), missingRes), missingRes);
+    assert.equal(missingRes.jsonBody.errorCode, 'NO_FILE_UPLOADED');
+});

@@ -17,9 +17,10 @@
         "25x0,350x0,350x320,25x320"
     ],
     "extruder_printable_height": [
-        "325",
+        "320",
         "325"
     ],
+    "master_extruder_id": "2",
     "nozzle_diameter": [
         "0.4",
         "0.4"

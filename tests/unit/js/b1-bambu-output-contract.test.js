@@ -127,7 +127,7 @@ test('bambu snapshots are flattened vendor JSON written into job scratch', async
     assert.deepEqual(limits.max, { x: 325, y: 320, z: 325 });
     assert.deepEqual(limits.explicitMaxAxes, { x: true, y: true, z: true });
     assert.deepEqual(limits.bedGeometry, {
-        printable: { minX: 0, minY: 0, maxX: 325, maxY: 320 },
+        printable: { minX: 25, minY: 0, maxX: 350, maxY: 320 },
         printableSource: 'extruder_printable_area',
         excludes: [],
         printableHeight: 325

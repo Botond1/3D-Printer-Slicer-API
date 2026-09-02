@@ -189,6 +189,22 @@ class Mesh2StlTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(marker_lines(out) + marker_lines(err), [])
 
+    def test_memory_and_io_failures_exit_1_without_the_marker(self):
+        """Resource exhaustion and I/O faults are server-side, never the customer's geometry."""
+        for factory in (
+            lambda: (_ for _ in ()).throw(MemoryError("out of memory")),
+            lambda: (_ for _ in ()).throw(OSError(5, "input/output error")),
+            lambda: (_ for _ in ()).throw(PermissionError(13, "denied")),
+            lambda: (_ for _ in ()).throw(IsADirectoryError(21, "directory")),
+        ):
+            _module, (code, out, err) = self.convert(factory)
+            self.assertEqual(code, 1)
+            self.assertEqual(marker_lines(out) + marker_lines(err), [])
+            self.assertNotIn(str(self.root), out + err)
+            self.assertFalse(self.output_path.exists())
+        # Ordinary loader/parse exceptions still report the marker.
+        self.assert_marker(lambda: (_ for _ in ()).throw(ValueError("bad archive")), f"{MARKER}|unloadable ValueError")
+
     def test_reasons_are_bounded_printable_ascii_without_the_separator(self):
         module = load_module(MESH2STL_PATH, "mesh2stl_reason", {"trimesh": fake_trimesh(FakeMesh())})
         self.assertEqual(module._short_reason("a|b\ncé" + "x" * 200), "a/bc" + "x" * 76)
@@ -313,6 +329,43 @@ class Cad2StlTests(unittest.TestCase):
         code, out, err = self.convert(FakeGmsh())
         self.assertEqual(code, 1)
         self.assertEqual(marker_lines(out) + marker_lines(err), [])
+
+    def test_memory_and_io_failures_exit_1_without_the_marker_and_finalize(self):
+        """MemoryError/OSError from the loader or mesher are server faults, not bad geometry."""
+        for gmsh in (
+            FakeGmsh(merge_error=MemoryError("out of memory")),
+            FakeGmsh(merge_error=OSError(5, "input/output error")),
+            FakeGmsh(merge_error=PermissionError(13, "denied")),
+            FakeGmsh(generate_error=MemoryError("out of memory")),
+            FakeGmsh(generate_error=OSError(28, "no space left")),
+        ):
+            code, out, err = self.convert(gmsh)
+            self.assertEqual(code, 1)
+            self.assertEqual(marker_lines(out) + marker_lines(err), [])
+            self.assertNotIn(str(self.root), out + err)
+            self.assertFalse(gmsh.initialized, "gmsh is always finalized")
+            self.assertFalse(self.output_path.exists())
+        # A generic loader exception still reports the marker.
+        self.assert_marker(FakeGmsh(merge_error=ValueError("broken")), f"{MARKER}|unloadable ValueError")
+
+    def test_unreadable_input_header_exits_1_without_the_marker(self):
+        module = load_module(CAD2STL_PATH, "cad2stl_unreadable", {"gmsh": FakeGmsh()})
+        builtin_open = open
+
+        def failing_open(path, *args, **kwargs):
+            if str(path) == str(self.input_path):
+                raise OSError(5, "input/output error")
+            return builtin_open(path, *args, **kwargs)
+
+        # A module-global `open` shadows the builtin inside the module only.
+        module.open = failing_open
+        try:
+            code, out, err = capture(lambda: module.convert_cad_to_stl(str(self.input_path), str(self.output_path)))
+        finally:
+            del module.open
+        self.assertEqual(code, 1)
+        self.assertEqual(marker_lines(out) + marker_lines(err), [])
+        self.assertNotIn(str(self.root), out + err)
 
 
 if __name__ == "__main__":

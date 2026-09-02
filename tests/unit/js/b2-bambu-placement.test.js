@@ -41,7 +41,9 @@ const {
     MAX_POLYGON_POINTS,
     boundingRectangle,
     parseBambuBedGeometry,
-    parsePolygon
+    parsePolygon,
+    resolveMasterExtruderIndex,
+    selectExtruderIndex
 } = require('../../../app/services/slice/bambu-bed-geometry');
 const {
     PLACEMENT_REJECTIONS,
@@ -83,8 +85,10 @@ const P1S_BED = Object.freeze({
     excludes: [{ minX: 0, minY: 0, maxX: 18, maxY: 28 }],
     printableHeight: 250
 });
+// Measured on Bambu Studio 02.08.02.61: the master (right) extruder area
+// `25..350 x 0..320` prints to Z 325, the left one only to Z 320.
 const H2D_BED = Object.freeze({
-    printable: { minX: 0, minY: 0, maxX: 325, maxY: 320 },
+    printable: { minX: 25, minY: 0, maxX: 350, maxY: 320 },
     printableSource: 'extruder_printable_area',
     excludes: [],
     printableHeight: 325
@@ -168,7 +172,51 @@ test('bed geometry parsing: P1S excluded corner, H2D first extruder area, and fa
     // The second extruder area (25..350) must never widen a single-filament job.
     const h2d = flattenBambuProfile('machine', H2D_MACHINE);
     assert.deepEqual(h2d.extruder_printable_area, ['0x0,325x0,325x320,0x320', '25x0,350x0,350x320,25x320']);
-    assert.equal(parseBambuBedGeometry(h2d).printable.maxX, 325);
+    assert.deepEqual(h2d.extruder_printable_height, ['320', '325']);
+    assert.equal(h2d.master_extruder_id, '2');
+    // Placement rectangle x 25..350 / y 0..320 with height 325: the master
+    // extruder has the largest height, so BOTH its area and height apply and
+    // the published inclusive H2D ceiling {325, 320, 325} stays true.
+    const h2dGeometry = parseBambuBedGeometry(h2d);
+    assert.deepEqual(h2dGeometry.printable, { minX: 25, minY: 0, maxX: 350, maxY: 320 });
+    assert.equal(h2dGeometry.printableHeight, 325);
+    assert.equal(h2dGeometry.printable.maxX - h2dGeometry.printable.minX, BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[H2D_MACHINE].x);
+    assert.equal(h2dGeometry.printable.maxY - h2dGeometry.printable.minY, BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[H2D_MACHINE].y);
+    assert.equal(h2dGeometry.printableHeight, BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[H2D_MACHINE].z);
+
+    // Selection rules: largest height wins; ties go to the 1-based master, else index 0.
+    const leftTaller = parseBambuBedGeometry({ ...h2d, extruder_printable_height: ['325', '320'] });
+    assert.deepEqual(leftTaller.printable, { minX: 0, minY: 0, maxX: 325, maxY: 320 });
+    assert.equal(leftTaller.printableHeight, 325);
+    const tiedMaster = parseBambuBedGeometry({ ...h2d, extruder_printable_height: ['325', '325'] });
+    assert.deepEqual(tiedMaster.printable, { minX: 25, minY: 0, maxX: 350, maxY: 320 });
+    const tiedNoMaster = parseBambuBedGeometry({ ...h2d, extruder_printable_height: ['325', '325'], master_extruder_id: undefined });
+    assert.deepEqual(tiedNoMaster.printable, { minX: 0, minY: 0, maxX: 325, maxY: 320 });
+    const tiedBadMaster = parseBambuBedGeometry({ ...h2d, extruder_printable_height: ['325', '325'], master_extruder_id: '7' });
+    assert.deepEqual(tiedBadMaster.printable, { minX: 0, minY: 0, maxX: 325, maxY: 320 });
+    // Without per-extruder heights the plate height is the fallback and the tie rule picks the area.
+    const noHeights = parseBambuBedGeometry({ ...h2d, extruder_printable_height: undefined });
+    assert.deepEqual(noHeights.printable, { minX: 25, minY: 0, maxX: 350, maxY: 320 });
+    assert.equal(noHeights.printableHeight, 325);
+    const noHeightsNoMaster = parseBambuBedGeometry({ ...h2d, extruder_printable_height: undefined, master_extruder_id: undefined, printable_height: '300' });
+    assert.deepEqual(noHeightsNoMaster.printable, { minX: 0, minY: 0, maxX: 325, maxY: 320 });
+    assert.equal(noHeightsNoMaster.printableHeight, 300);
+    // Malformed per-extruder heights fail closed instead of guessing an envelope.
+    for (const malformed of [['320'], ['320', 'tall'], ['0', '325'], ['320', '325', '330'], 'nope', {}]) {
+        assert.throws(() => parseBambuBedGeometry({ ...h2d, extruder_printable_height: malformed }), /malformed extruder printable heights/);
+    }
+    assert.equal(selectExtruderIndex([320, 325], 1), 1);
+    assert.equal(selectExtruderIndex([325, 320], 1), 0);
+    assert.equal(selectExtruderIndex([325, 325], 1), 1);
+    assert.equal(selectExtruderIndex([325, 325], 0), 0);
+    assert.equal(selectExtruderIndex(null, 1), 1);
+    assert.equal(resolveMasterExtruderIndex('2', 2), 1);
+    assert.equal(resolveMasterExtruderIndex('1', 2), 0);
+    assert.equal(resolveMasterExtruderIndex('3', 2), 0);
+    assert.equal(resolveMasterExtruderIndex(undefined, 2), 0);
+    assert.equal(resolveMasterExtruderIndex('x', 2), 0);
+    // P1S has no per-extruder keys and is unaffected.
+    assert.equal(parseBambuBedGeometry(flattenBambuProfile('machine', P1S_MACHINE)).printableHeight, 250);
 
     // Empty or malformed extruder areas fall back to the plate polygon.
     const plateOnly = parseBambuBedGeometry({ ...h2d, extruder_printable_area: [] });
@@ -239,10 +287,13 @@ test('placement resolves centre, shift +Y, shift +X, or rejection exactly as mea
         assert.deepEqual(resolveBambuPlacement(footprint, P1S_BED), { fits: false, reason: PLACEMENT_REJECTIONS.INVALID_FOOTPRINT });
     }
 
-    assert.deepEqual(h2d(325, 320), { fits: true, strategy: PLACEMENT_STRATEGIES.CENTRED, xMin: 0, yMin: 0 });
-    assert.deepEqual(h2d(100, 100), { fits: true, strategy: PLACEMENT_STRATEGIES.CENTRED, xMin: 112.5, yMin: 110 });
+    // The 325 x 320 plate is placed flush at x_min = 25 inside the master extruder area (measured pass).
+    assert.deepEqual(h2d(325, 320), { fits: true, strategy: PLACEMENT_STRATEGIES.CENTRED, xMin: 25, yMin: 0 });
+    assert.deepEqual(h2d(100, 100), { fits: true, strategy: PLACEMENT_STRATEGIES.CENTRED, xMin: 137.5, yMin: 110 });
     assert.deepEqual(h2d(326, 10), { fits: false, reason: PLACEMENT_REJECTIONS.EXCEEDS_PRINTABLE_AREA });
     assert.deepEqual(h2d(349, 10), { fits: false, reason: PLACEMENT_REJECTIONS.EXCEEDS_PRINTABLE_AREA });
+    assert.equal(rectangleWithin({ minX: 25, minY: 0, maxX: 350, maxY: 320 }, H2D_BED.printable), true);
+    assert.equal(rectangleWithin({ minX: 0, minY: 0, maxX: 325, maxY: 320 }, H2D_BED.printable), false);
     assert.deepEqual(h2d(10, 320.1), { fits: false, reason: PLACEMENT_REJECTIONS.EXCEEDS_PRINTABLE_AREA });
 
     // Shared edges are not overlaps; float noise inside a micron is tolerated.
@@ -285,7 +336,7 @@ test('placement-aware validation admits the L-shaped P1S footprint and keeps the
     reject(P1S_LIMITS, { x: 257, y: 258, z: 251 }, [], [/^Z: 251mm > 250mm$/, /^X: 257mm > 256mm$/, /^Y: 258mm > 256mm$/]);
     reject(P1S_LIMITS, { x: 0.5, y: 20, z: 20 }, ['X: 0.5mm < 1mm'], []);
 
-    accept(H2D_LIMITS, { x: 325, y: 320, z: 325 }, { xMin: 0, yMin: 0, strategy: 'centred' });
+    accept(H2D_LIMITS, { x: 325, y: 320, z: 325 }, { xMin: 25, yMin: 0, strategy: 'centred' });
     reject(H2D_LIMITS, { x: 325, y: 320, z: 325.1 }, [], [/^Z: 325\.1mm > 325mm$/]);
     reject(H2D_LIMITS, { x: 326, y: 320, z: 10 }, [], [/^X: 326mm > 325mm$/]);
     reject(H2D_LIMITS, { x: 350, y: 320, z: 10 }, [], [/^X: 350mm > 325mm$/]);
@@ -456,10 +507,10 @@ test('placement_mm is a Bambu-only response field documented with the SLA/FDM pr
     assert.match(PLACEMENT_SCHEMA.description, /Bambu Studio only/);
     assert.match(PLACEMENT_SCHEMA.description, /Absent on Prusa and Orca/);
     assert.deepEqual(schema.properties.stats.properties.print_time_source.enum, [...PRINT_TIME_SOURCES]);
-    assert.deepEqual([...PRINT_TIME_SOURCES], [
+    assert.deepEqual([...PRINT_TIME_SOURCES].sort(), [
         ...PRINT_TIME_PATTERNS.map((pattern) => pattern.id),
         ...Object.values(SLA_PRINT_TIME_SOURCES)
-    ]);
+    ].sort());
     assert.ok(PRINT_TIME_SOURCES.includes('sla_synthetic_estimate'));
     assert.ok(PRINT_TIME_SOURCES.includes('sla_sl1_metadata_estimate'));
     assert.match(createSliceResponses()[500].description, /NATIVE_OUTPUT_OVERFLOW/);

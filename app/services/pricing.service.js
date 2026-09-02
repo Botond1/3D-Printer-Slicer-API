@@ -54,47 +54,102 @@ function savePricingToDisk() {
     }
 }
 
-/**
- * Load pricing configuration from disk and merge with defaults.
- * If file is missing or invalid, defaults are restored and persisted.
- * @returns {void}
- */
-function loadPricingFromDisk() {
-    const existingCandidates = pricingRepository.getExistingCandidates();
+/** Error code raised when an existing pricing file cannot be trusted. */
+const PRICING_FILE_INVALID = 'PRICING_FILE_INVALID';
 
-    if (existingCandidates.length === 0) {
-        pricingCatalog.resetToDefault();
-        if (savePricingToDisk()) {
-            emitEvent('pricing.mutated', {
+/**
+ * Build the typed startup refusal for an unreadable, unparsable, or invalid
+ * existing pricing file. The message never carries the path or file content.
+ * @returns {Error & {code: string, errorCode: string}} Typed error.
+ */
+function createPricingFileInvalidError() {
+    const error = new Error(
+        'The existing pricing file could not be read or validated; repair or remove it before starting.'
+    );
+    error.code = PRICING_FILE_INVALID;
+    error.errorCode = PRICING_FILE_INVALID;
+    return error;
+}
+
+/**
+ * Build the startup pricing loader over injectable collaborators.
+ *
+ * Only a MISSING pricing file or a recognized EMPTY one (`PRICING_FILE_EMPTY`)
+ * may be seeded with the compiled-in defaults. Any other read, parse, or
+ * validation failure of an existing file leaves that file untouched and
+ * throws the typed `PRICING_FILE_INVALID` error so startup refuses and the
+ * operator repairs the file; silently replacing operator data is never an
+ * option.
+ * @param {{repository?: PricingRepository, catalog?: PricingCatalog, emitEvent?: Function, primaryFile?: string}} [dependencies] Test seams; production uses the module singletons.
+ * @returns {() => void} Loader that throws `PRICING_FILE_INVALID` on an untrusted existing file.
+ */
+function createPricingLoader(dependencies = {}) {
+    const repository = dependencies.repository || pricingRepository;
+    const catalog = dependencies.catalog || pricingCatalog;
+    const emit = dependencies.emitEvent || emitEvent;
+    const primaryFile = dependencies.primaryFile || repository.primaryFile;
+
+    function persist(action) {
+        try {
+            activePricingFile = repository.saveToPrimary(catalog.getPricing());
+            emit('pricing.mutated', { audience: 'pricing', outcome: 'success', extra: { action } });
+            return true;
+        } catch {
+            emit('pricing.mutated', {
                 audience: 'pricing',
-                outcome: 'success',
-                extra: { action: 'initialize' }
+                outcome: 'failure',
+                error_code: 'PRICING_PERSISTENCE_FAILED',
+                extra: { action: 'persist' }
             });
+            return false;
         }
-        return;
     }
 
-    for (const candidateFile of existingCandidates) {
-        try {
-            const diskPricing = pricingRepository.readPricingFile(candidateFile);
-            pricingCatalog.setPricing(diskPricing);
-            activePricingFile = PRICING_FILE;
-            if (candidateFile !== PRICING_FILE) {
-                savePricingToDisk();
-            }
+    function seedDefaults() {
+        catalog.resetToDefault();
+        persist('initialize');
+    }
+
+    return function loadPricing() {
+        const existingCandidates = repository.getExistingCandidates();
+        if (existingCandidates.length === 0) {
+            seedDefaults();
             return;
-        } catch {
-            emitEvent('pricing.mutated', {
+        }
+        // Exactly one candidate is authoritative: the primary when it exists,
+        // otherwise the first safe legacy file. It is never silently replaced.
+        const candidateFile = existingCandidates[0];
+        let diskPricing;
+        try {
+            diskPricing = repository.readPricingFile(candidateFile);
+        } catch (error) {
+            if (error?.code === 'PRICING_FILE_EMPTY') {
+                seedDefaults();
+                return;
+            }
+            emit('pricing.mutated', {
                 audience: 'pricing',
                 outcome: 'failure',
                 error_code: 'PRICING_LOAD_FAILED',
                 extra: { action: 'load' }
             });
+            throw createPricingFileInvalidError();
         }
-    }
+        catalog.setPricing(diskPricing);
+        activePricingFile = primaryFile;
+        if (candidateFile !== primaryFile) persist('migrate');
+    };
+}
 
-    pricingCatalog.resetToDefault();
-    savePricingToDisk();
+/**
+ * Load pricing configuration from disk at startup.
+ * A missing or empty file is seeded with defaults; an existing file that
+ * cannot be read or validated throws `PRICING_FILE_INVALID` unchanged.
+ * @returns {void}
+ * @throws {Error & {code: 'PRICING_FILE_INVALID'}} When an existing pricing file is untrusted.
+ */
+function loadPricingFromDisk() {
+    createPricingLoader()();
 }
 
 /**
@@ -203,6 +258,8 @@ function commitPricingMutation(mutator) {
 
 module.exports = {
     DEFAULT_PRICING,
+    PRICING_FILE_INVALID,
+    createPricingLoader,
     loadPricingFromDisk,
     savePricingToDisk,
     getPricing,
