@@ -59,7 +59,7 @@ test('requirements.txt pins exactly the signed production image versions without
         'scipy==1.18.1',
         'trimesh==5.1.0'
     ]);
-    for (const line of lines) assert.match(line, /^[a-z0-9_-]+==\d+\.\d+\.\d+$/);
+    for (const line of lines) assert.match(line, /^[A-Za-z0-9_-]+==\d+\.\d+\.\d+$/);
     assert.doesNotMatch(content, /numpy-stl/);
 
     const pythonSources = ['mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py']
