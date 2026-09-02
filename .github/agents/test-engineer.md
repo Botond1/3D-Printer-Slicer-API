@@ -18,15 +18,23 @@ You own all test infrastructure in `tests/testing-scripts/`:
 - `slicing/full_api_orca_fdm_test_runner.py` — Orca FDM matrix
 - `slicing/full_api_prusa_fdm_test_runner.py` — Prusa FDM matrix
 - `slicing/full_api_prusa_sl1_test_runner.py` — Prusa SLA matrix
+- `slicing/full_api_bambu_fdm_test_runner.py` — Bambu Studio FDM matrix (P1S x {0.12, 0.2, 0.28} x four materials, H2D x 0.2 x PLA, supports on/off, stable digest pair, strict rejections, `.gcode.3mf` retention when `ARTIFACT_API_KEY` is set)
+- `slicing/bambu_envelope_confirmation_runner.py` — Exact-edge cuboids proving the measured Bambu envelopes (P1S `256 x 228 x 250` and `238 x 256`, H2D `325 x 320 x 325`, `+0.1 mm` rejected)
 - `slicing/unsupported_upload_test_runner.py` — Unsupported upload rejection checks
+- `slicing/orientation_visibility_test_runner.py` — 37-case orientation/transform matrix
+- `slicing/native_envelope_sweep_runner.py` — Prusa/Orca native envelope measurement and final admission
+- `render/render_preview_test_runner.py` — `POST /render` PNG determinism and rejections
+- `calibration/bambu_reference_comparison_runner.py` — Owner-run Bambu CLI versus GUI comparison on private inputs (`--supports false`, PASS at `max(|dt%|, |dg%|) <= 10`)
 - `pricing/pricing_cycle_test_runner.py` — Pricing CRUD lifecycle
-- `admin/admin_output_files_test_runner.py` — Admin output listing and download checks
+- `admin/admin_output_files_test_runner.py` — Admin output listing and download checks (`.gcode`, `.sl1`, `.gcode.3mf`)
 - `queue/queue_concurrency_test_runner.py` — Bounded queue/capacity
   qualification with fresh operations state and exact artifact inventory
 - `rate_limit/rate_limit_regression_test_runner.py` — Slice/admin rate-limit regression checks
+- `operations/operations_readiness_metrics_test_runner.py` — Public readiness and operations diagnostics
+- `profiles/profile_catalogue_test_runner.py` — 82-row catalogue contract
 - `tests/testing-scripts/results/` — Generated markdown reports (runtime artifacts)
 
-Covered endpoints: `/orca/slice`, `/prusa/slice`, `/pricing/*`, `/admin/output-files`, `/health`, `/health/detailed`.
+Covered endpoints: `/prusa/slice`, `/orca/slice`, `/bambu/slice`, `/render`, `/profiles`, `/pricing/*`, `/admin/output-files`, `/admin/download/*`, `/health`, `/ready`, `/health/detailed`, `/operations/*`.
 
 ## Responsibilities
 
@@ -56,12 +64,25 @@ python tests/testing-scripts/slicing/full_api_test_runner.py
 python tests/testing-scripts/slicing/full_api_orca_fdm_test_runner.py
 python tests/testing-scripts/slicing/full_api_prusa_fdm_test_runner.py
 python tests/testing-scripts/slicing/full_api_prusa_sl1_test_runner.py
+python tests/testing-scripts/slicing/full_api_bambu_fdm_test_runner.py
+python tests/testing-scripts/slicing/bambu_envelope_confirmation_runner.py
 python tests/testing-scripts/slicing/unsupported_upload_test_runner.py
+python tests/testing-scripts/slicing/orientation_visibility_test_runner.py
+python tests/testing-scripts/slicing/native_envelope_sweep_runner.py
+python tests/testing-scripts/render/render_preview_test_runner.py
+python tests/testing-scripts/calibration/bambu_reference_comparison_runner.py --models-dir PRIVATE_DIR --reference PRIVATE_DIR/meres.json --printer P1S --supports false
 python tests/testing-scripts/pricing/pricing_cycle_test_runner.py
 python tests/testing-scripts/admin/admin_output_files_test_runner.py
 python tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
+python tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py
+python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
 python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --expected-max-concurrent N --retry-on-429 1 --cleanup-manifest NEW_MANIFEST_PATH --report NEW_REPORT_PATH
 ```
+
+Unit gates: `npm run test:js` (`tests/unit/js/**/*.test.js`, including the
+instruction-mirror, OpenAPI, and Bambu image-infrastructure pins) and
+`npm run test:python`. Runners pace slice-service requests at 20 s and retry
+HTTP 429 with the advertised `Retry-After`.
 
 ## Environment Inputs
 - `SLICER_BASE_URL` — API base URL (from .env, fallback to `http://localhost:3000`)
@@ -98,23 +119,23 @@ python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --
    runner is the explicit exception: read its required create-new `--report`
    path and preserve its separate cleanup manifest.
 4. **Follow existing runner patterns** — use `common/http_utils.py` for requests, `common/env_utils.py` for config.
-5. **Do not overstate J0 evidence.** Focused contracts and exact-candidate-image
-   startup-module proof cover `engine_version`; focused/build contracts cover
-   versioned/equality-gated flattened Orca parents. Focused policy contracts
-   cover `--arrange 1` / `--orient 0`: placement may translate the already-
-   rotated model onto the build plate, but auto-orient stays disabled. Final
-   exact-image HTTP transform/final-dimensions E2E evidence passes for both
-   principals and is bound to the code/image identity in J0 evidence. The current
-   Python matrix
-   helper does not establish those facts or digest/snapshot lineage, so do not
-   classify it alone as complete J0 proof.
-   The native Orca smoke accepts positive `G1 ... E` only after the exact
-   `;BEFORE_LAYER_CHANGE` marker; prelude/purge extrusion is not model-layer
-   proof.
-   Keep it split into a thin Docker orchestrator plus side-effect-free fixture,
-   container-script, and contract builders; preserve bounded file/function
-   guards and exact generated-script behavior.
-   Filament/`material_used_g` is W8 `BLOCKED_OWNER_INPUT / NOT_STARTED`.
+5. **Do not overstate evidence.** A local unit run never proves native-slicer
+   or deployed behavior; only the built image does. The Python matrix helper
+   does not establish binary versions, digest/snapshot lineage, or the Orca
+   `--arrange 1 --orient 0 --allow-rotations=0` / Bambu `--arrange 0
+   --orient 0` policies; focused unit contracts do. The native Orca smoke
+   accepts positive `G1 ... E` only after the exact `;BEFORE_LAYER_CHANGE`
+   marker; keep it split into its thin Docker orchestrator plus
+   side-effect-free fixture, container-script, and contract builders.
+   The recorded Bambu reference comparison (2026-09-02, ten models, supports
+   off) is -1.1..+0.1 % time and 0..0.2 % mass; Orca 2.3.1 deviates up to
+   +24 % and has no H2D. Never commit private models, readings, or generated
+   reports.
+6. **Assert the numbers clients see.** FDM successes on every engine require
+   a positive direct mass and an integer, catalogue-priced quote (1980 s at
+   800 HUF/h is 440); SLA successes require null mass, hourly rate, and price;
+   Bambu successes publish `build_volume_limits_mm.max` equal to the measured
+   envelope and an optional numeric `placement_mm {x_min, y_min}`.
 
 ## Troubleshooting
 - If capacity preflight fails, verify the scoped slice, artifact, and operations

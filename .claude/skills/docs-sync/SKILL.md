@@ -25,11 +25,21 @@ Each CLAUDE guide has a mirrored Copilot counterpart and both must describe the 
 Also keep these aligned when relevant:
 - `.github/instructions/repository.instructions.md`
 - `.github/instructions/github.instructions.md`
-- `README.md`
+- `README.md` (lean current document, <= 450 lines)
 - `.claude/CLAUDE.md`
-- `.github/agents/*` and `.claude/agents/*`
-- `.github/skills/*/SKILL.md` and `.claude/skills/*/SKILL.md`
+- `AGENTS.md` (Codex routing layer; current state plus rules)
+- `docs/integration-guide.md` (consumer contract) and `CHANGELOG.md`
+  (mark consumer-visible changes **[contract]**)
+- `docs/codex/handoff-<date>.md` (add a dated handoff; never rewrite history)
+- `.github/agents/*` and `.claude/agents/*` (byte-identical; edit `.github`
+  and copy)
+- `.github/skills/*/SKILL.md` and `.claude/skills/*/SKILL.md` (byte-identical)
 - `.claude/.mcp.template.json` when optional MCP workflows change
+
+`docs/codex/history-waves.md` holds the pre-3.2.0 wave narrative verbatim;
+never edit it or move its content back into README or CLAUDE.md. The
+"Current contract" section of `CLAUDE.md` is the single place where every
+retained hard rule is stated with its exact value.
 
 ## Analysis Workflow
 

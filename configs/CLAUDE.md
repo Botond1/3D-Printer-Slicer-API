@@ -1,92 +1,120 @@
 # Configs Folder - Local Claude Guide
 
-Last synchronized: 2026-08-31
+Last synchronized: 2026-09-02
 
 ## Scope
 
-This folder contains runtime configuration files used by slicing and pricing.
+This folder contains runtime configuration files used by slicing and pricing:
+the Prusa INI profiles, the Orca JSON profiles with their pinned upstream
+parents and filament profiles, the Bambu printer registry, and the pricing
+state.
 
 ## Files
 
-- configs/pricing.json
-  - Active pricing matrix for FDM and SLA materials.
-  - Read and written by app/services/pricing.service.js.
+- configs/pricing-state/pricing.json
+  - Active pricing matrix for FDM and SLA materials, persisted atomically
+    (exclusive temp, fsync, rename) by app/services/pricing/repository.js.
+  - The file is authoritative: `DEFAULT_PRICING` in
+    `app/config/constants.js` seeds only a missing or empty file, defaults are
+    never merged back in, and a deleted material never resurrects on restart.
+    A safe legacy `configs/pricing.json` is migrated on startup.
 
 - configs/pricing.example.json
-  - Template used to initialize pricing.json when missing.
+  - Template for a first `configs/pricing.json`.
 
 - configs/prusa/*.ini
-  - Prusa profile presets by layer height.
-  - Includes FDM and SLA presets.
-  - All three shipped FDM profiles identify the P1S build envelope as
-    `256 x 256 x 250 mm`; bed size must not vary with layer height.
-  - The three `FDM_P1S_H2D_SIZE_QUOTING_*` profiles declare
-    `350 x 320 x 325 mm` using the same P1S physics, for quoting only.
+  - `FDM_0.1mm.ini`, `FDM_0.2mm.ini`, `FDM_0.3mm.ini` declare the P1S
+    `256 x 256 x 250 mm` envelope (generic Marlin profile); the admission
+    ceiling is `256 x 256 x 249.9`.
+  - `FDM_P1S_H2D_SIZE_QUOTING_0.{1,2,3}mm.ini` declare `350 x 320 x 325 mm`
+    with the same P1S physics, quote-only; admission `350 x 320 x 324.9`.
+  - `SLA_0.025mm.ini` and `SLA_0.05mm.ini` produce `.sl1`; SLA is quote-only.
+  - Every FDM INI carries per-material `filament_density` and uses the
+    `temperature` / `first_layer_temperature` / `bed_temperature` keys (never
+    `nozzle_temperature`). Bed shape and height must not vary by layer height.
 
 - configs/orca/*.json
-  - Orca machine and process presets.
-  - Machine and process compatibility must be respected.
-  - The repository P1S and historical H2D placeholder children declare
-    `256 x 256 x 250 mm` and `350 x 320 x 325 mm` respectively; these are
-    profile metadata, not proof of the current native admission ceiling.
-  - `Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json` preserves the compatible P1S
-    preset chain on a `350 x 320 x 325 mm` declared bed, quote-only.
+  - `Bambu_P1S_0.4_nozzle.json` (default machine, generic Marlin identity,
+    admission `253.9 x 253.9 x 249.9`), `Bambu_H2D_0.4_nozzle.json`
+    (historical placeholder), `Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json`
+    (quote-only, admission `347.9 x 317.9 x 324.9`), and process
+    `FDM_0.{1,2,3}mm.json`.
+  - Each repository child machine owns exact `layer_change_gcode='G92 E0'`;
+    runtime derivation clears `layer_gcode` and sets
+    `use_relative_e_distances='1'`.
 
 - configs/orca/filament/*.json
-  - Allowlisted material-selected Orca filament profiles.
-  - PLA uses diameter 1.75 mm and density 1.24 g/cm3; PETG uses 1.75 mm and
-    1.27 g/cm3, read from the exact selected job snapshot.
+  - Allowlisted material-selected Orca filament profiles: PLA 1.24, PETG 1.27,
+    ABS 1.04, TPU 1.24 g/cm3, all 1.75 mm, read from the exact job snapshot.
+    All four FDM materials therefore price automatically on Orca.
 
 - configs/orca/upstream/Custom/**/*.json
-  - Versioned runtime source for the OrcaSlicer v2.3.1 `Custom` parent chain.
-  - Docker build requires canonical semantic equality with the exact pinned
-    native resource files.
+  - Versioned runtime source for the OrcaSlicer v2.3.1 `Custom` parent chain
+    (`fdm_machine_common`, `fdm_process_common`, `fdm_process_marlin_common`).
+    `scripts/verify-orca-profile-vendor.js` requires byte equality with the
+    pinned native resources at image build. Never edit them; override in the
+    repository leaf profiles.
+
+- configs/orca/H2D-PROFIL-TODO.md
+  - Records the still-missing owner-approved vendor chain for the Orca engine.
+    Superseded for quoting purposes by the Bambu engine, which uses the
+    official vendor profiles directly.
+
+- configs/bambu/printers.json
+  - Schema `r3d-bambu-printer-registry-v1`, `default_printer: P1S`.
+  - Maps `P1S` and `H2D` to the exact vendor machine name
+    (`Bambu Lab P1S 0.4 nozzle`, `Bambu Lab H2D 0.4 nozzle`), `bed_type`
+    (`Textured PEI Plate`), the layer-key -> vendor process map (P1S `0.08`,
+    `0.1`, `0.12`, `0.16`, `0.2`, `0.24`, `0.28`; H2D `0.08`, `0.1`, `0.12`,
+    `0.16`, `0.2`, `0.24`; `0.1` reuses the 0.12 mm process with the layer
+    height overridden), and the material -> filament map (`Generic PLA`,
+    `Generic PETG`, `Generic ABS`, `Generic TPU`, `@BBL H2D` variants on the H2D).
+  - Names are resolved against the vendor resources flattened from
+    `/opt/bambustudio/resources/profiles/BBL` (or absolute
+    `BAMBU_PROFILES_ROOT`) by app/services/slice/bambu-profile-chain.js. An
+    invalid registry or an unresolvable chain refuses startup
+    (`STARTUP_BAMBU_REGISTRY_INVALID`, `STARTUP_BAMBU_PROFILE_CHAIN_FAILED`);
+    readiness probes this directory.
+  - The measured Bambu admission ceilings live in `app/config/constants.js`
+    (`BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM`: P1S `256 x 228 x 250`,
+    alternative footprint `238 x 256`; H2D `325 x 320 x 325`), keyed by the
+    vendor machine name. The bed shape itself (printable area, first-extruder
+    area, `bed_exclude_area`) is read from the flattened vendor machine.
 
 ## Safety Constraints
 
 - Keep this folder at repository root (not under app/).
-- Do not rename existing profile files without updating profile resolution logic.
+- Do not rename existing profile or registry files without updating profile
+  resolution logic.
 - Keep Prusa INI section/key case intact. Exact duplicate qualified keys fail
   closed like the native Boost parser; do not use duplicates as override order.
-- Selected profiles and allowlisted Orca parents must remain canonical regular
-  files. Runtime bounded-reads exact Prusa bytes or resolves/flattens the Orca
-  v2.3.1 parent chain into job scratch before bounds/runtime/digest/native use;
-  symlink/non-canonical sources and detected growth are rejected.
+- Selected profiles, allowlisted Orca parents, and Bambu vendor files must
+  remain canonical regular files. Runtime bounded-reads exact Prusa bytes or
+  resolves/flattens the Orca and Bambu chains into job scratch before
+  bounds/runtime/digest/native use; symlink/non-canonical sources, detected
+  growth, unknown/cyclic/name-mismatched/wrong-role parents fail closed.
 - Do not edit the vendored Orca parents independently or add runtime root
   selection. A native-version upgrade must update the pinned binary, versioned
   copies, Docker semantic-equality gate, and focused parent-identity contracts
-  together.
+  together. A Bambu Studio upgrade must update the AppImage URL/SHA-256, the
+  registry names if the vendor renamed presets, and re-measure the envelopes.
 - Keep filament profiles canonical bounded regular JSON. Their material role,
   exact one positive diameter, and exact one positive density must match the
   request; do not substitute a default when no mapping/file exists.
-- `Bambu_P1S_0.4_nozzle.json` and `Bambu_H2D_0.4_nozzle.json` currently identify
-  as generic Marlin profiles, not verified native Bambu profiles. Each child
-  must own exact `layer_change_gcode='G92 E0'` for the repository's relative-
-  extrusion Orca contract. Do not promote them to W8 live calibration without
-  the complete approved machine/process/filament chain and the missing Orca-
-  side measurements documented in `H2D-PROFIL-TODO.md`.
-- Treat the corrected build envelopes as physical fit metadata only. They do
-  not make either generic Marlin child a Bambu-faithful motion/time profile.
-- Keep the H2D-sized quoting profiles explicit on both engines. They estimate
-  with P1S physics, are not hardware-faithful H2D profiles, and must never be
-  represented as production H2D G-code. The plugin consumer uses only the
-  Prusa slice route, so the three Prusa quote profiles are required.
-- Exact helper-image measurement A established H2D-QUOTE Prusa
-  `350 x 320 x 324.9 mm` and Orca `347.9 x 317.9 x 324.9 mm`. Preserve those
-  measured inclusive ceilings; Prusa's native X/Y edge beyond its declared
-  quote bed remains `UNESTABLISHED`. Exact local final-admission B confirmed
-  those tuples and the P1S values. The owner production-identical VPS matrix
-  from exact tree `db42b93` independently confirmed every inclusive boundary
-  and all three enlarged Prusa layer profiles. Its separately built image ID is
-  not byte-identical-image evidence.
-- Keep every shipped machine-bound FDM envelope compatible with the public
-  startup `/profiles` catalogue. The application fallback remains a broad
-  compatibility envelope, while the exact configured
-  `largest_passing_dimensions_inclusive_mm` value is authoritative for upper
-  admission.
+- `Bambu_P1S_0.4_nozzle.json` and `Bambu_H2D_0.4_nozzle.json` remain generic
+  Marlin profiles, not vendor-faithful Bambu profiles. Orca 2.3.1 with the
+  bundled BBL profiles deviates by up to +24 % from Bambu Studio and has no
+  H2D; the Bambu engine is the quoting authority for Bambu Lab printers.
+- Keep the H2D-sized quoting profiles explicit on both generic-Marlin engines.
+  They estimate with P1S physics, are not hardware-faithful H2D profiles, and
+  must never be represented as production H2D G-code. Real H2D quotes and
+  printer-ready `.gcode.3mf` come only from `POST /bambu/slice`.
+- Treat declared build envelopes as physical fit metadata only. Admission uses
+  the configured per-engine `largest_passing_dimensions_inclusive_mm`, which
+  `GET /profiles` publishes separately from `declared_build_volume_dimensions_mm`.
 - Preserve pricing schema shape:
-  - FDM: material -> number
-  - SLA: material -> number
+  - FDM: material -> number (HUF per hour)
+  - SLA: material -> number (HUF per hour; SLA is never priced automatically)
 
 ## Related Runtime Keys
 
@@ -94,6 +122,7 @@ This folder contains runtime configuration files used by slicing and pricing.
 - ORCA_PROCESS_PROFILE_0_1
 - ORCA_PROCESS_PROFILE_0_2
 - ORCA_PROCESS_PROFILE_0_3
+- BAMBU_PROFILES_ROOT
 - MAX_MATERIAL_USED_METERS
 - MAX_MATERIAL_USED_GRAMS
 - MAX_MATERIAL_USED_ML
@@ -103,44 +132,30 @@ This folder contains runtime configuration files used by slicing and pricing.
 - VIRTUAL_ENV
 
 ## Notes
-- Prusa runtime profiles are generated dynamically from base ini files and request options.
-- Orca runtime process profiles are generated dynamically from base json profiles and request options.
+- Prusa runtime profiles are generated dynamically from base INI files and
+  request options (layer height, infill, supports).
+- Orca and Bambu runtime process profiles are generated dynamically from the
+  flattened base profiles and request options; the Bambu runtime process
+  overrides the layer height and `enable_support`.
 - Orca loads machine/process through `--load-settings` and a selected filament
-  separately through `--load-filaments`; a null profile omits that option.
-- A missing/unsupported filament profile remains explicit null and changes the
-  effective-profile digest; public filament basename/diameter/density,
-  `material_used_g`, `hourly_rate`, and `stats.estimated_price_huf` are null, so
-  the API does not calculate an automatic price.
+  separately through `--load-filaments`; Bambu loads the flattened vendor
+  machine/process/filament snapshots and adds `--curr-bed-type`.
+- A missing/unsupported Orca filament profile remains explicit null and
+  changes the effective-profile digest; public filament basename/diameter/
+  density, `material_used_g`, `hourly_rate`, and `stats.estimated_price_huf`
+  are null, so the API does not calculate an automatic price. A Bambu
+  material without a registry mapping is HTTP 400 `MATERIAL_PROFILE_UNAVAILABLE`.
 - Strict FDM metric parsing defaults on and returns `SLICE_OUTPUT_UNPARSED` on
-  required positive time/length drift. Direct grams are nullable for the current
-  Prusa FDM profile and profile-less Orca, but required for Orca with a selected
-  filament profile; mass is never zero-filled or derived from length.
-- Profile overrides from requests are filename-only and sanitized before lookup.
-- Public profile fields and bounds `source_profile` retain the original selected
-  basename rather than the randomized snapshot name.
-- Catalogue v2 is explicitly FDM-only. Never label the generic
-  `120 x 120 x 150 mm` SLA fallback as a profile-derived machine envelope.
-- A catalogue row must separate
-  `declared_build_volume_dimensions_mm` plus
-  `declared_source_kind: profile-explicit` from the authoritative inclusive
-  `largest_passing_dimensions_inclusive_mm`. The unchanged generic `1 mm`
-  minimum is `minimum_dimensions_inclusive_mm`, a compatibility floor rather
-  than machine metadata.
-- The owner-confirmed future SLA printer is the Elegoo Saturn 4 Ultra. Do not
-  guess its dimensions: current Prusa `--export-sla` and SL1 parsing cannot
-  represent Elegoo `.goo`/`.ctb` artifacts or credible MSLA timing. A later
-  wave must use owner Chitubox/Elegoo Satellite profiles. The generic bounded
-  v2 selector/component/identity shape can add a truthful row with separate
-  per-engine resolution; the current payload remains FDM-only.
-- Orca JSON may name only an allowlisted v2.3.1 `Custom` parent. The resolver
-  always reads the versioned repository copy, removes `inherits`, and snapshots
-  flattened JSON before downstream use; unknown, cyclic, name-mismatched, or
-  wrong-role parents fail closed. Stable runtime derivation clears `layer_gcode`
-  and sets `use_relative_e_distances='1'`, aligned with the selected repository
-  child's exact `layer_change_gcode='G92 E0'` override. The pinned upstream
-  parent remains unchanged. The direct native smoke and final
-  exact-image HTTP transform/final-dimensions E2E pass; the exact local code/
-  image identity is recorded in the J0 evidence document. That smoke accepts
-  positive
-  `G1 ... E` only after the exact `;BEFORE_LAYER_CHANGE` marker, so prelude/
-  purge extrusion does not count as model-layer proof.
+  required positive time/length drift. Direct grams are required for Orca and
+  Bambu with a selected filament profile and nullable on the Prusa path; mass
+  is never zero-filled or derived from length.
+- Profile overrides from requests are filename-only and sanitized before
+  lookup; Bambu `processProfile` is matched against the registry's vendor
+  process names instead.
+- Public profile fields and bounds `source_profile` retain the original
+  selected basename (Prusa INI, Orca machine JSON) or the vendor machine name
+  (Bambu) rather than the randomized snapshot name.
+- Catalogue v2 is explicitly FDM-only with 82 rows (6 Prusa, 24 Orca, 28 Bambu
+  P1S, 24 Bambu H2D). Never label the generic `120 x 120 x 150 mm` SLA
+  fallback as a profile-derived machine envelope, and do not guess the Elegoo
+  Saturn 4 Ultra envelope.

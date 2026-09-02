@@ -1,10 +1,10 @@
 # 3D Printer Slicer API - Copilot Instructions
 
-Last synchronized: 2026-09-01
+Last synchronized: 2026-09-02
 
 ## Architecture Notice
-This project uses both GitHub Copilot and Claude as primary agentic tools.
-If architecture/domain rules change in this file, synchronize changes in:
+This repository uses both GitHub Copilot and Claude as primary agentic tools.
+When architecture rules or domain constraints change in this file, keep these files synchronized:
 - CLAUDE.md
 - .claude/CLAUDE.md
 - .github/agents/* and .claude/agents/*
@@ -13,404 +13,220 @@ If architecture/domain rules change in this file, synchronize changes in:
 - .github/instructions/*
 
 ## Goal
-Provide a stable and secure slicing API with strict fail-fast validation and production-safe queue controls.
+Provide a reliable slicing, preview, and pricing API for 3D printing workflows with strict safety and predictable behavior.
 
-## J3B Native-Envelope and Original-Dimension Corrective Candidate
+## Current Contract (3.2.0, 2026-09-02)
 
-- J3 passed the owner's production-identical matrix on exact tree `58c0ccb`,
-  including artifact-level `--allow-rotations=0` proof. J3B does not reopen
-  that orientation contract. Measurement A and exact local final-admission B
-  are complete. B binds source `47ae13397bb4537b4bb700b8c6bf3d9648364bdc`
-  to image ID
-  `sha256:1f8ec16318eeda4b8f2e24a54e98e972ef22344126b324123f23f220916617a0`;
-  its revision label matched and the `999:999` container was healthy, read-only,
-  with its host port bound only to localhost. The owner then passed the complete
-  production-identical VPS matrix from exact tree
-  `db42b93b2416ac0b791a45a0eae1233b303cf557` after independently matching all
-  445 tracked files. Its separately built image ID differs, so this is exact
-  source-tree and production-identical-matrix proof, not byte-identical-image
-  proof.
-- `model_transform` uses `transform_schema: 2`. Success and the full K2 bounds
-  response always contain `original_dimensions_available` and nullable
-  `original_dimensions_mm`: true iff a real measurement object exists, false
-  iff null, with no oriented fallback. Unavailable/non-positive oriented or
-  final dimensions return HTTP 422 `MODEL_DIMENSIONS_UNAVAILABLE`; success
-  always requires object height equal to final Z. Canonical measured data also
-  requires `height_mm == z`: malformed tagged original data degrades to
-  false/null, while malformed oriented/final data returns that controlled 422.
-- Explicit native placement/print-volume refusal maps to HTTP 422
-  `MODEL_OUT_OF_PRINTER_BOUNDS` with the complete schema-2 transform and its
-  orientation mode/outcome. Failed commands preserve bounded stdout separately
-  from stderr. Prusa exit-zero/no-artifact maps through this safety net only
-  with an explicit placement diagnostic; other failures remain internal.
-- Catalogue schema is `r3d-profile-catalogue-v2`. Keep
-  `declared_build_volume_dimensions_mm` as profile metadata and
-  `largest_passing_dimensions_inclusive_mm` as the exact-boundary-inclusive
-  admission authority. Derive machine/fleet envelopes per engine. Accepted P1S
-  ceilings are Prusa `256 x 256 x 249.9 mm` and Orca
-  `253.9 x 253.9 x 249.9 mm`; Prusa beyond its declared X/Y edge is
-  `UNESTABLISHED`.
-- Both engines expose `H2D-QUOTE`: a quote-only P1S-physics profile on a
-  H2D-sized declared bed, never hardware-faithful H2D estimation or production
-  H2D G-code. The plugin calls only `POST /prusa/slice`. Exact helper-image
-  measurement A passed 44/44 fixture preconditions, 10/10 brackets, and 2/2
-  combined corners. Its measured ceilings are Prusa `350 x 320 x 324.9 mm` and
-  Orca `347.9 x 317.9 x 324.9 mm`; `325 mm` at `0.3 mm` returned the full K2
-  HTTP 422 twice on each engine. Prusa's native X/Y edge beyond its declared
-  quote bed remains `UNESTABLISHED`. Final-admission B passed 88/88 fixture
-  preconditions, 20/20 brackets, and 4/4 corners with all four published tuples.
-- Normal generated fixtures require outward non-zero normals and an immediate
-  native `prusa-slicer --info` precondition; the deliberate zero-normal row is
-  separate. The orientation HTTP matrix has 37 cases, including `20 x 240 x
-  245` zero-request auto, exact `18 x 130 x 240` auto replay, preserve+X90, and
-  invalid `sideways`. The A/B envelope sweep requires an exact `/profiles`
-  phase guard and exact response `max`/`source_profile`; Prusa reports its
-  selected layer INI and Orca its stable machine profile. Exact-container
-  native-info uses only a bounded fixture-addressing no-shell JSON argv template
-  and the report retains only its source label. Exact local B catalogue checks
-  passed 9/9 with optional Prusa digest parity run/pass; orientation passed
-  12/12 fixture checks, 4/4 selectors, and 37/37 HTTP rows. A legal binary zero-
-  normal regression returned HTTP 200 on both engines in exact J2 and B, with B
-  schema-2 original availability false/null. The owner VPS run confirmed all
-  four exact inclusive boundaries, full K2 422 conversion for the former native
-  500 cases, distinct applied/preserved/unchanged outcomes, unchanged Orca
-  mass/no-yaw guards, and all three enlarged Prusa layer profiles. Customer
-  exposure is zero. One branch push, one PR into `main`, and that PR's merge are
-  now authorized but not yet claimed complete. Deploy, registry/image
-  publication, route/DNS/allowlist, production-container, and consumer-
-  repository changes remain unauthorized.
-  See `docs/codex/evidence/j3b-native-envelope-and-original-dimensions.md`.
+Every retained hard rule is stated once here with its exact value. The
+pre-3.2.0 checkpoint narrative (J0..J3B, I10..I12, Hostinger route activation)
+is preserved verbatim in `docs/codex/history-waves.md`; per-wave evidence stays
+under `docs/codex/evidence/`.
 
-## J3 Orientation-Visibility Local Source Checkpoint
+### Engines and native invocation
+- Three engines: PrusaSlicer 2.8.1 (FDM + SLA), OrcaSlicer 2.3.1 (FDM), Bambu
+  Studio 02.08.02.61 (FDM) at `/opt/prusaslicer`, `/opt/orcaslicer`,
+  `/opt/bambustudio` (root-owned, read-only). `bambu-studio` is reached through
+  the root-owned 0555 wrapper `/usr/local/bin/bambu-studio`, which starts a
+  private Xvfb only for `--export-3mf`; the runtime stage installs `xvfb`,
+  `libgl1`, `libgl1-mesa-dri`, `libglx-mesa0`, `libgstreamer1.0-0`,
+  `libgstreamer-plugins-base1.0-0`. Both Compose manifests set `init: true`.
+  Candidate provenance evidence schema is `i7-s3a-candidate-provenance-v2`.
+- Startup atomically verifies all three executables' versions from bounded
+  `--help` output before listen; every success carries `engine_version`.
+- Prusa receives already transformed geometry and adds no native rotation.
+  Its INIs carry per-material density and `temperature` keys; section/key case
+  is significant and exact duplicate qualified keys fail closed.
+- Orca: `--load-settings machine;process`, selected filament through
+  `--load-filaments`, `--arrange 1 --orient 0` and exactly one single-token
+  `--allow-rotations=0`. The allowlisted v2.3.1 `Custom` parent chain is a
+  versioned repository copy verified byte-equal at image build; runtime
+  derivation clears `layer_gcode` and sets `use_relative_e_distances='1'`.
+  Filament profiles exist for PLA (1.24), PETG (1.27), ABS (1.04), TPU (1.24
+  g/cm3), all 1.75 mm, so all four FDM materials price on every engine.
+- Bambu: registry `configs/bambu/printers.json` (schema
+  `r3d-bambu-printer-registry-v1`) maps `P1S` (default) and `H2D` to exact
+  vendor machine/process/filament names. Layer keys: P1S `0.08`, `0.1`,
+  `0.12`, `0.16`, `0.2`, `0.24`, `0.28`; H2D `0.08`, `0.1`, `0.12`, `0.16`,
+  `0.2`, `0.24` (`0.1` uses the vendor 0.12 mm process with the layer height
+  overridden). Materials PLA/PETG/ABS/TPU map to the official `Generic`
+  filaments (`@BBL H2D` variants on the H2D). The vendor chain is flattened
+  fail-closed from `/opt/bambustudio/resources/profiles/BBL` or absolute
+  `BAMBU_PROFILES_ROOT`; an invalid registry or chain refuses startup. The
+  invocation is `--curr-bed-type`, `--export-3mf` (relative to
+  `--outputdir`), `--arrange 0 --orient 0`, never `--allow-rotations`.
+- Bambu placement is API-owned (`bambu-bed-geometry.js`,
+  `bambu-placement.js`, `scale_model.py --place-min-x X --place-min-y Y`) and
+  reported as `placement_mm {x_min, y_min}`. Measured inclusive ceilings: P1S
+  `256 x 228 x 250` with the alternative footprint `238 x 256` (the bed
+  excludes an `18 x 28 mm` corner at the origin, so admission is L-shaped);
+  H2D `325 x 320 x 325` (single-filament first-extruder area). Z `250.0` /
+  `325.0` pass; `+0.1 mm` on any axis fails. Native rc 192/190 refusals map to
+  the K2 `MODEL_OUT_OF_PRINTER_BOUNDS` payload.
+- Retained artifacts: Prusa `.gcode` / `.sl1`, Orca `.gcode`, Bambu
+  printer-ready `.gcode.3mf`; all three extensions are valid for naming,
+  listing, and download.
+- P1S ceilings for the generic-Marlin engines stay Prusa `256 x 256 x 249.9`
+  and Orca `253.9 x 253.9 x 249.9`; `H2D-QUOTE` stays Prusa `350 x 320 x 324.9`
+  and Orca `347.9 x 317.9 x 324.9`, P1S physics on an H2D-sized declared bed,
+  quote-only, never production H2D G-code. Prusa's native X/Y edge beyond its
+  declared bed is `UNESTABLISHED`.
 
-- J3 starts from J2 commit `9b28b95cfa9f931092044300ebfca912421bac32`.
-  Its exact code-bearing SHA is
-  `c404326f535fcc70ba62aa923fa6652f4fba5019`; local source gates are green and
-  the later exact-tree `58c0ccb` owner container/VPS matrix passed.
-  Its owner-approved request field is strict `orientationMode=auto|preserve`;
-  omission defaults to `auto` for compatibility, and every other present value
-  returns HTTP 400 `INVALID_ORIENTATION_MODE`.
-- On the historical J3 tree, success and `MODEL_OUT_OF_PRINTER_BOUNDS` shared
-  the first transform schema; J3B supersedes it with `transform_schema: 2`.
-  The orientation contract retains orientation mode and
-  outcome, requested/automatic/total rotations, and original/oriented/final
-  dimensions. The authoritative rotation is rotation-only and composes as
-  `R_total = R_requested * R_automatic`; it does not encode centering,
-  grounding, scaling, or translation. `original_dimensions_mm` is measured
-  after safe source conversion and before service orientation,
-  `oriented_dimensions_mm` after orientation, and `final_dimensions_mm` after
-  request sizing/rotation. `stats.object_height_mm` must equal
-  `model_transform.final_dimensions_mm.z`.
-- `orientation_outcome` is one of `applied`, `unchanged`, `preserved`, or
-  `fallback_unmodified`. Bounds wording must branch on the outcome: only
-  `applied` may say the model does not fit even after automatic rotation;
-  `unchanged` says automatic evaluation kept the pose, `preserved` refers to
-  the submitted pose, and `fallback_unmodified` must disclose that automatic
-  orientation was unavailable.
-- An outer ZIP admits exactly one supported source file. If that file is a 3MF
-  scene, its internal geometries are concatenated into one compound STL before
-  native slicing. The API passes one STL argv and requests no split-to-objects
-  operation, so disconnected shells retain their relative placement rather
-  than becoming independently packable objects. Orca keeps `--arrange 1` for
-  placement and
-  `--orient 0`, while exactly one single-token `--allow-rotations=0` disables
-  only whole-compound arrange yaw. Prusa receives the already transformed
-  geometry and adds no native rotation.
-- The exact Orca 2.3.1 AppImage flag shape is `OWNER_VERIFIED_INPUT`:
-  `--allow-rotations=0` produced real G-code with 6.25 g, while the split
-  `--allow-rotations 0` form failed with `No such file: 0`. This is not a
-  current J3B candidate run. The historical J3 full HTTP matrix is owner-
-  verified; the later J3B owner production-identical VPS matrix also passed on
-  exact tree `db42b93`. Neither result authorizes deploy, registry write, route
-  activation, or consumer-repository change. See
-  `docs/codex/evidence/j3-orientation-visibility.md`.
+### Request contract
+- `multipart/form-data`, single file field `choosenFile`; formats `.stl`,
+  `.obj`, `.3mf`, `.stp`, `.step`, `.igs`, `.iges`, `.ply`, `.zip`. An outer
+  ZIP admits exactly one supported source and tolerates `__MACOSX/`,
+  `.DS_Store`, `Thumbs.db`, `desktop.ini`, and directory entries; 3MF roots
+  match case-insensitively and Bambu/Orca project parts under `Metadata/` and
+  `Auxiliaries/` are admitted. `mesh2stl.py` honours the 3MF `unit` attribute
+  and concatenates a multi-object scene into one compound STL (no
+  split-to-objects). Converters print `INVALID_SOURCE_GEOMETRY|<reason>` on
+  stdout and stderr with exit 2, mapped to HTTP 400 `INVALID_SOURCE_GEOMETRY`.
+  Geometry is never repaired.
+- `supports` defaults to `true` on all engines; any other present non-empty
+  value than `true`/`false` is HTTP 400 `INVALID_SUPPORTS`. `infill` is a
+  strict integer `0..100` with an optional trailing `%`, never clamped,
+  otherwise `INVALID_INFILL`. `orientationMode` is exact `auto|preserve`,
+  omission defaults to `auto`, otherwise `INVALID_ORIENTATION_MODE`.
+  `keepProportions=true` with several target axes fits within the box
+  (smallest ratio); `scalePercent` and `targetSizeX/Y/Z` are mutually
+  exclusive. Bambu `printerProfile` (`printer` alias) is `P1S|H2D`
+  case-insensitive, otherwise `INVALID_PRINTER_PROFILE`; an unknown vendor
+  `processProfile` is `INVALID_PROCESS_PROFILE`; a material without a vendor
+  mapping is `MATERIAL_PROFILE_UNAVAILABLE`.
+- Option and profile validation runs before queue admission; a 400 never
+  consumes a queue slot. Route order is rate limiter -> `x-slicer-api-key`
+  authentication -> root-scoped workspace -> Multer -> validation -> queue ->
+  native processing.
+- `POST /render` (slice auth, shared limiter and queue) returns a deterministic
+  1024 x 768 `image/png` (`Cache-Control: no-store`) of the final pose via
+  `app/render_preview.py` (numpy + Pillow 12.3.0) with a 60 s budget; bounds
+  use the largest FDM envelope `350 x 320 x 325 mm`; timeouts map to 422
+  `FILE_PROCESSING_TIMEOUT`.
 
-## J2 Bounds/Network Baseline and J3B Catalogue Successor
+### Response contract
+- `model_transform` is `transform_schema: 2` on success and on the full K2
+  `MODEL_OUT_OF_PRINTER_BOUNDS` 422 (which also carries `model_dimensions_mm`
+  and `build_volume_limits_mm`). `original_dimensions_available` is `true` iff
+  `original_dimensions_mm` is a real measurement and `false` iff it is `null`;
+  never substitute oriented dimensions. Oriented/final dimensions must be
+  positive with `height_mm == z`, otherwise 422 `MODEL_DIMENSIONS_UNAVAILABLE`.
+  The rotation-only matrix is `R_total = R_requested * R_automatic`;
+  `stats.object_height_mm == final_dimensions_mm.z` always.
+  `orientation_outcome` is `applied`, `unchanged`, `preserved`, or
+  `fallback_unmodified`, and every fallback emits one bounded
+  `orientation.fallback` event (fixed vocabulary).
+- Success requires lowercase 64-hex `profiles.effective_profile_sha256`
+  (machine/process/filament content plus normalized material and invocation
+  policy, excluding the request `layerHeight`/`infill` overrides; the default
+  `supports=true` is digest-neutral while `supports=false` is a different
+  effective profile); public profile fields keep original basenames. Bambu responses add `printer`, vendor
+  `machine_profile` / `process_profile` / `filament_profile`, diameter,
+  density, and `bed_type`.
+- `stats.print_time_source` ranks `total_estimated_time` first (Orca and Bambu
+  report wall clock including the start sequence), then `m73_p0_r_minutes`,
+  `estimated_printing_time` (Prusa's generic profile), `time_seconds`; SLA
+  uses `sla_sl1_metadata_estimate` / `sla_synthetic_estimate`.
+  `material_used_g` comes only from a direct positive mass marker, never from
+  length; zero is never published. Orca/Bambu with a selected filament profile
+  require positive grams (missing/drifted -> 500 `SLICE_OUTPUT_UNPARSED`).
+- Price: `ceil(max(print_time_seconds, 900) * hourly_rate / 3600)` rounded up
+  to 10 HUF in integer arithmetic (1980 s at 800 HUF/h is 440, formerly 450).
+  `hourly_rate` and `estimated_price_huf` are `null` for FDM without a
+  positive mass, profile-less Orca, and always SLA (`material_used_g` also
+  `null`; SLA is quote-only).
+- Error statuses: 408 `UPLOAD_TOTAL_TIMEOUT`; 422 `UNSLICEABLE_SOURCE_GEOMETRY`
+  (native faulty-mesh/model-load diagnostics, stdout and stderr, path-free
+  `detail`), `FILE_PROCESSING_TIMEOUT` only on real timeouts (message names no
+  fixed duration); 429 `RATE_LIMIT_EXCEEDED`, `ADMIN_RATE_LIMIT_EXCEEDED`,
+  `SLICE_QUEUE_CLIENT_LIMIT` all with `Retry-After` and `retryAfterSeconds`;
+  500 `NATIVE_OUTPUT_OVERFLOW`, `SLICE_OUTPUT_UNPARSED`,
+  `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`,
+  `INTERNAL_SERVER_ERROR`; 503 `SLICE_QUEUE_FULL`, `SLICE_QUEUE_TIMEOUT`,
+  `SLICE_QUEUE_SHUTDOWN`, `PROFILE_CATALOGUE_UNAVAILABLE`. Pricing routes
+  return `INVALID_TECHNOLOGY`, `INVALID_MATERIAL`, `INVALID_PRICE`,
+  `MATERIAL_NOT_FOUND`, `MATERIAL_ALREADY_EXISTS`, `PRICING_PERSISTENCE_FAILED`.
 
-- J2 starts from protected main
-  `0dedbe1e9e4c32a0373982a45bf788cdcdb4f024`. It established the
-  physical/profile-declared P1S `256 x 256 x 250 mm` and H2D-sized
-  `350 x 320 x 325 mm` metadata, the unchanged `1 mm` compatibility minima,
-  and `MAX_MODEL_DIMENSION_MM >= 350`. J3B separates those declared values from
-  the measured, inclusive admission ceiling.
-- Public `GET /profiles` remains startup-built, immutable, informational, and
-  independent of slicing availability. Its current
-  `r3d-profile-catalogue-v2` payload contains 18 machine-bound server-owned FDM
-  rows, preserves the strong `ETag`, body `catalogue_sha256`, 304 behavior, and
-  typed non-critical 503 `PROFILE_CATALOGUE_UNAVAILABLE`, and never advertises
-  the generic `120 x 120 x 150 mm` SLA fallback as a machine.
-- Every entry exposes `declared_build_volume_dimensions_mm`,
-  `declared_source_kind: profile-explicit`,
-  `minimum_dimensions_inclusive_mm`, and the exact-boundary-inclusive admission
-  authority `largest_passing_dimensions_inclusive_mm`. Preserve the bounded
-  generic engine/selector/component shape and
-  `effective_profile_identity_schema: r3d-effective-slice-profile-v2`.
-  Machine and fleet resolutions are derived per technology and engine; never
-  merge Prusa and Orca values, synthesize a component-wise ceiling, or add a
-  manual `fleet_max`.
-- The owner-confirmed future SLA printer is the Elegoo Saturn 4 Ultra, but the
-  current Prusa `--export-sla` and SL1 metadata parser are incompatible with
-  its `.goo`/`.ctb` artifacts and credible MSLA timing. Do not guess its build
-  envelope. SLA remediation is a separate future wave using owner-supplied
-  Chitubox/Elegoo Satellite profiles. A later truthful SLA row can use catalogue
-  v2 without another schema-version change; no SLA row exists today.
-- P1S largest-passing admission is owner-accepted as Prusa
-  `256 x 256 x 249.9 mm` and Orca `253.9 x 253.9 x 249.9 mm`. Prusa's native
-  X/Y edge beyond its declared physical profile remains `UNESTABLISHED`.
-  H2D-QUOTE exists on both engines with P1S physics and an enlarged declared
-  bed, quoting only. Measurement A established and exact local final-admission B
-  confirmed Prusa `350 x 320 x 324.9 mm` and Orca
-  `347.9 x 317.9 x 324.9 mm`.
-- The Hostinger route preparation accepts exactly one canonical private IPv4
-  `/32` row in the sole `leadpilot-only` phase. A second row, broader prefix,
-  `ipStrategy`, or forwarded-header identity fails closed. The allowance is
-  machine-level: every process on the shared caller host inherits it, and an
-  unreserved-address reassignment silently admits the next holder unless the
-  consumer reports rebuilds or migrations in advance. A caller-visible
-  host-firewall timeout with an incremented deny counter and fixed private
-  `r3d-perimeter-deny: ` diagnostic, router HTTP 403, and backend HTTP 401 are
-  distinct layers. Every route action requires one inherited root-private FD9
-  lock held across the whole rehearsal plus unchanged canonical, root-owned,
-  non-writable ancestor chains and equality between the running Traefik dynamic
-  bind source and the executing operator pack. HTTP redirects target external
-  `:443`, never internal `:8443`; the IPv4 `DOCKER-USER` second layer is valid
-  only while Traefik serves one hostname. IPv6 `[::]:443` uses docker-proxy
-  without DNAT on this host and is therefore blocked in `ip6tables INPUT`, not
-  `DOCKER-USER`; IPv6 port 80 remains untouched. Terminal proof uses strict
-  `--assert-router-dark`; only logical fsync-cutpoint recovery is locally proved,
-  while real crash/power-loss durability remains external `NOT_VERIFIED`. The
-  external orchestrator must prove intended/denied callers, TLS issuance/
-  renewal, and the repeated public-route activation/rollback sequence. A
-  completed route rehearsal requires proven terminal dark; any
-  `*_rollback_uncertain` result is `STOP/UNKNOWN`. Exact protected-main source
-  `bf5e712071e3174a67fdb22ff3794003fa3ab32b` has a signed, attested candidate.
-  The operator pack must be a real Git clone or linked worktree; a tarball fails
-  as `operator_pack_file_invalid`. Every new release must normalize the private
-  directory/file modes. Lock-bearing router helpers require host Node v20.20.2
-  because the supported container path cannot preserve and prove the already-
-  held host FD 9; `--render-router` requires a canonical absolute staging path.
-  The owner first reported that exact digest running dark with the intentional
-  mounted J2/J3/J3B configs, no API host port, final `/health` and `/ready` 200,
-  and all four catalogue entries with their inclusive values alongside the declared
-  values. Orca `254.0` was rejected with schema-2 bounds, and
-  Orca `253.9` sliced successfully. The previous and candidate releases each
-  became healthy within 15 seconds during an owner-host round trip; rollback
-  assets and pricing-state stayed intact. Automatic no-deploy run `33450012850`
-  remains failed closed on its fixed previous-policy `configs/` guard; the host
-  round trip is accepted application-rollback evidence, not a CI pass. A later
-  owner-supplied record reports exact
-  `router_activation=PASS phase=leadpilot-only entries=1`, an issued
-  certificate, approved-source HTTP 200, unlisted-source HTTP 403 with body
-  `Forbidden` and no `Content-Type`, and redirect-follow completion on public
-  443. The edge 403 is intentionally distinct from the backend 401 envelope. A
-  later owner-supplied perimeter record corrects the earlier reset assumption:
-  three `REJECT` variants incremented the IPv4 deny counter but produced only a
-  caller timeout. The installed conntrack/original-port-443 rules remained
-  idempotent at three IPv4 plus one IPv6 `INPUT` rule across three applications
-  and survived a Docker-service restart. The owner then observed one normal
-  reboot at `2026-09-01 13:14:41`: the perimeter service was active/enabled and
-  reapplied the same 3+1 rules, both current containers were healthy at `t+5s`,
-  and the API remained on candidate-image prefix `sha256:153987840361...`.
-  Allowed traffic returned 200 with valid TLS in 0.13 seconds, IPv6/443 stayed
-  blocked, port 80 and ACME were unaffected, and the loopback probe returned
-  403. Retained `traefik-traefik-1` stayed stopped/exit 0 with
-  `unless-stopped`, runtime `ports={}`, and no 80/443 listener. This closes the
-  exact point-in-time perimeter-persistence exit but does not generalize to
-  future reboots or crash/power-loss recovery. Exact artifacts are versioned
-  under `ops/hostinger/perimeter/`; their real paths and hostname are mandatory
-  operator input. Successful
-  HTTP-01 alongside the redirect proves issuance compatibility, not forced
-  renewal. This repository turn is documentation-only; public router rollback,
-  monitoring, recovery acceptance, and customer readiness remain unverified.
-  See `docs/codex/evidence/hostinger-leadpilot-route-activation.md`.
-- Calibration now has nine numeric Bambu reference cases and the `M03`
-  P1S-overheight rejection. Measurement fixes Orca `--orient 0`, disables
-  support in the measurement-only runtime profile, and reuses the production
-  machine/process `--load-settings` plus separate `--load-filaments` policy.
-  Orca measurement and
-  automatic-pricing acceptance remain blocked on complete approved vendor
-  profiles and an available local Docker daemon.
+### Catalogue, pricing state, retention
+- `GET /profiles` is `r3d-profile-catalogue-v2` with 82 rows: 6 Prusa, 24
+  Orca, 28 Bambu P1S, 24 Bambu H2D. Rows keep
+  `declared_build_volume_dimensions_mm` (metadata) separate from the inclusive
+  admission authority `largest_passing_dimensions_inclusive_mm`;
+  `machine_resolutions` and `fleet_resolutions` are engine-scoped (fleets:
+  bambu -> H2D, orca and prusa -> H2D-QUOTE) and never merged. The generic
+  `120 x 120 x 150 mm` SLA fallback is never advertised as a machine; the
+  Elegoo Saturn 4 Ultra envelope is not guessed.
+- The pricing file is authoritative: defaults seed only a missing or empty
+  `configs/pricing-state/pricing.json`; a deleted material never resurrects;
+  `getRate` fails closed with `null`.
+- A per-slice retention sweep failure is non-fatal and surfaces as readiness
+  reason `RETENTION_UNSAFE`; readiness also probes `configs/bambu`.
 
-## J1 Calibration Harvest over the J0 W2/W3 Public Contract
+### Queue, rate, and runtime budgets
+- Slice limiter: 3 requests / 60 s sustained, burst 5, adaptive cooldown up to
+  30 s, keyed on the frozen `req.slicePrincipal` slot with IP fallback. Admin:
+  30 / 60 s per IP. Queue: length 100, 5 queued + active per principal/IP,
+  wait 300000 ms, concurrency default 1 (canonical `1..3`; N=2/3 unqualified).
+- `SLICE_COMMAND_TIMEOUT_MS` default 600000, bounded 1000..3600000; Python
+  helpers 120 s each, clamped to the native budget; renderer 60 s; upload
+  lifetime 600 s. Output beyond the bounded buffer is `NATIVE_OUTPUT_OVERFLOW`.
+- Process tree: TERM then KILL; post-SIGKILL settle polls up to 10 s and
+  re-kills the group once. Quarantine closes admission, drains at most 10 s,
+  exits with status 70 so `restart: unless-stopped` recovers.
+- HTTP: headers 60000 [1000,60000]; request 600000 [60000,600000]; keep-alive
+  95000 [1000,120000] (must outlive the proxy's 90 s idle timeout); headers
+  count 2000 [16,2000]; connections 128 [1,1024]; requests/socket 100
+  [1,1000]. Invalid values fall back; headers timeout is capped at request
+  timeout.
 
-- J1C's guard-only diagnostic image has owner-supplied VPS proof: recognized
-  `0.00 g` with positive length returns HTTP 200 and null mass/rate/price, while
-  selected-profile zero and marker drift remain fail closed. The combined
-  parser/Orca command/profile focused set passes 69/69; the exact final image
-  containing all corrections still awaits the owner's rerun.
-- Production Orca sends machine plus process through `--load-settings` and an
-  optional selected filament snapshot through dedicated `--load-filaments`.
-  Both repository-owned P1S/H2D children own exact
-  `layer_change_gcode='G92 E0'`; pinned upstream parents remain unchanged.
-  Owner-supplied mechanism evidence produced 4.12 g instead of 0.00 g. The
-  incomplete vendor chain remains a separate W8 calibration lane, not a J1C
-  blocker; J2 separately owns bed shape/Z. Capability readiness remains
-  proposal-only on public `/ready`, while `/health` stays cheap liveness; see
-  `docs/codex/evidence/j1c-slice-contract-corrective.md`.
-- Successful Prusa and Orca responses require lowercase
-  `profiles.effective_profile_sha256`. After selection, bounded canonical-realpath
-  Prusa bytes and the flattened, versioned repository copy of the allowlisted
-  Orca v2.3.1 `Custom` parent chain create the job-scratch lineage for bounds,
-  runtime, digest, and native use. Its exact-image build equality gate passes;
-  public fields retain child basenames. Stable Orca runtime settings enforce
-  empty `layer_gcode` plus relative extrusion, aligned with each selected
-  repository child machine's exact `layer_change_gcode='G92 E0'` override.
-- J1 selects repository PLA/PETG filament profiles, snapshots their exact bytes,
-  loads machine/process through `--load-settings`, and loads selected filament
-  separately through `--load-filaments`. The effective digest
-  binds normalized material and selected filament JSON or explicit null.
-  Successful Orca payloads expose nullable filament basename plus actual
-  diameter/density. OpenAPI requires nullable `stats.material_used_g`; it may
-  contain only a direct G-code mass marker and is never derived from filament
-  length. Strict FDM output requires positive time and length. On the optional-
-  mass Prusa path, a missing or recognized non-positive direct grams marker
-  returns `material_used_g:null`, `hourly_rate:null`, and
-  `stats.estimated_price_huf:null`; zero is never published. Orca with a selected filament profile also
-  requires positive direct grams and maps missing/drifted mass to HTTP 500
-  `SLICE_OUTPUT_UNPARSED`; profile-less Orca remains null/manual.
-- Prusa INI identity preserves section/key case. Exact duplicate qualified keys
-  fail closed like the native Boost parser; runtime generation replaces one
-  exact top-level request key, rejects duplicates, and inserts a missing key
-  before the first section.
-- OpenAPI includes the four requested omissions `FILE_PROCESSING_TIMEOUT`,
-  `INTERNAL_PROCESSING_ERROR`, `ORCA_PROFILE_INCOMPATIBLE`, and
-  `MODEL_OUT_OF_PRINTER_BOUNDS`, plus the live
-  `MODEL_DIMENSIONS_UNAVAILABLE` general-422 branch correction. The bounds code
-  requires both dimension payloads. The complete live slice-500 enum is
-  `SLICE_OUTPUT_UNPARSED`, `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`,
-  `UPLOAD_STORAGE_ERROR`, and `INTERNAL_SERVER_ERROR`.
-- Slice calls keep exactly one `x-slicer-api-key` header. Explicit `legacy`,
-  finite `migration`, and final `principals` modes govern the shared
-  compatibility and separate WooCommerce/LeadPilot families. `GET /health` and
-  `GET /pricing` stay public. Before any router action, the dark gate must prove
-  principal-only readback, one private positive slice per principal, retired-
-  shared and `x-api-key` negative cases, and exact cleanup. Missing or
-  inconclusive evidence keeps the route dark. External production activation is
-  outside repository evidence and authority.
-- Every success also requires the atomically startup-verified `engine_version`
-  parsed from both selected executables' bounded `--help` output before listen.
-  The startup module has exact-image proof and uses a telemetry-disabled runner,
-  so its probes cannot alter slice-native lifecycle metrics/events. Orca sends
-  `--arrange 1` and
-  `--orient 0`: arrangement places already-rotated geometry onto the build
-  plate, while auto-orient stays disabled and cannot replace the requested
-  rotation. Focused command/digest contracts and final exact-image HTTP
-  transform/final-dimensions E2E pass on code SHA `ed85eec63409b7362fe05c2b99031eeb24b5b9c9`
-  and local image ID `sha256:66697a1ca69e13600a91481bf474d042c0f89b236ccbaf67fcf2dea8824f2c7f`.
-  Both principal families pass; a valid key only under `x-api-key` rejects
-  without request residue. That exact-image result is historical J0 evidence,
-  not J1 deployment. J1 focused tests cover filament selection/null identity,
-  nullable Prusa/manual pricing, selected-profile Orca direct grams, and strict
-  marker-drift failure. Strict mode defaults on and never substitutes zero or a
-  length-derived mass.
-  The retained P1S and H2D candidates are generic Marlin profiles. Nine numeric
-  Bambu references plus the `M03` P1S-boundary result are recorded, but W8 Orca
-  calibration remains `BLOCKED_VENDOR_PROFILE_AND_LOCAL_DOCKER`; no automatic-
-  pricing acceptance is inferred.
-
-## Historical I12 Hostinger Production-Qualification Boundary
-
-- Checkpoint status was `I12_API_F710_DARK_N1_VERIFIED;
-  OPERATOR_MAIN_7C8AEE_RESIDUAL_RECONCILIATION_COMPLETE;
-  CORRECTED_TRAEFIK_DARK_CUTOVER_VERIFIED; PUBLIC_ROUTE_DISABLED`.
-- At that checkpoint the deployed API image source was protected-main
-  `f71069cb3ba5ddeb97e69ca1414a00a72a20ce28`; its exact signed image digest is
-  `sha256:d50c72bd084e14645f2c9c7b18a087317bf080a2d76cf1bc876d5e3427ae1e26`.
-  It was healthy and dark at retained concurrency one, without a host API
-  port or API default route.
-- Corrective operator main
-  `7c8aee0728fc8462c67b4c6d85636bffb7afcdf8` passed Source `32804297840` and
-  Image `32804297658` after protected PR `#5`. Its operator commits are separate
-  from the API-image source and did not rebuild, relabel, or republish that image.
-- The corrected socketless Traefik was healthy with exact ingress/private
-  `gw_priority: 1/0`, ingress-owned default routing, effective read-only config,
-  file provider only, and no Docker socket/provider. Docker owns exact IPv4 and
-  IPv6 host listeners for ports 80/443 while the container networks remain
-  IPv6-disabled; these are separate properties.
-- Failed-cutover resources were reconciled by exact identity into the resumed
-  successful state. The old proxy is intentionally retained stopped for
-  rollback, task-owned remote temp residue is absent, and ACME bytes are unchanged.
-- At that checkpoint no public slicer router was active. Hostname/DNS, approved caller/CIDR,
-  firewall acceptance, certificate issuance/continuity, route activation,
-  monitoring/recovery acceptance, customer traffic, and public production
-  completeness were unverified and separately authorized.
-
-## Candidate Image Publication Boundary
-
-- Normal Image Validation remains read-only and never pushes, attests, or
-  deploys.
-- I10 is live-verified at protected-main SHA
-  `8253160eef1c3e00c1e40826ec61fd97563ddd9b`. Source run `32662043454` and
-  Image run `32662043476` succeeded. Strict main protection binds both
-  no-deploy GitHub Actions contexts, requires a PR, includes administrators,
-  forbids force-push/deletion, requires conversation resolution and enables
-  merge commits only. Required approvals are zero because the sole collaborator
-  cannot self-approve; this is not human review. Required signatures are not
-  enabled.
-- I11 Candidate Publication accepts manual `workflow_dispatch` only from exact
-  current protected `main`. Repository, actor `Botond1`, main ref,
-  requested/event/checkout/remote SHA, post-I10 ancestry and fixed GHCR
-  repository must all agree; every other event or identity fails closed.
-- `publish_new` requires empty `existing_registry_digest`, exact confirmation
-  `PUBLISH_SIGNED_MAIN_CANDIDATE`, and a proven-absent SHA-derived discovery tag.
-  It may push only the once-built image after the complete exact-image gate.
-- `recover_exact_digest` requires exact confirmation
-  `RECOVER_SIGNED_MAIN_CANDIDATE` and one lowercase `sha256:<64 hex>` digest.
-  The existing SHA-derived tag, manifest digest and config identity must match
-  the once-built image. Recovery performs no registry push, overwrite or delete.
-- Only the publication job may hold packages/attestations/OIDC write
-  permissions, after read-only preflight. It binds environment
-  `candidate-publication` with `deployment: false`. Environment ID
-  `20443404498` is `LIVE_CONFIG_VERIFIED` on 2026-08-23: protected branches
-  true, custom branch policies false, exactly one `branch_policy` protection
-  rule (ID `63481958`), and no reviewer/wait-timer rules, secrets, variables or
-  deployments.
-- Both modes use digest-only downstream identity:
-  `ghcr.io/botond1/3d-printer-slicer-api@sha256:<64 lowercase hex>`. Never create
-  or overwrite mutable, release, staging or production tags.
-- Mode-aware evidence must never claim tag absence or a registry write during
-  recovery. It may report only `I11_MAIN_CANDIDATE_EVIDENCE_READY`; final
-  enforcement may claim `I11_MAIN_SIGNED_CANDIDATE_COMPLETE` only after exact
-  digest identity, attestations, verification, bounded upload and both cleanup
-  outcomes succeed.
-- A successful protected-main publication automatically starts only the
-  completed/main `workflow_run` rehearsal. It re-proves the upstream API/run and
-  one bounded six-file artifact, generates the distinct previous/current
-  digest-only manifest, verifies both images' SLSA/SPDX API+OCI attestations,
-  and executes hardened I9 readiness, `STORAGE_UNSAFE`, automatic rollback,
-  bounded evidence and exact cleanup. It has read permissions only.
-- Publication is not deployment. Preserve and classify partial candidates;
-  matching exact recovery may continue without registry mutation, while foreign
-  or ambiguous identity blocks. I11 is complete at protected-main SHA
-  `65706e381b907c6ba09a8eba504af3adaacac86b`: Source `32668796239`, Image
-  `32668796232`, Candidate Publication `32669087688`, and automatic rehearsal
-  `32669484893` all succeeded, completing the I11 checkpoint.
-- Hosted S4/S5 and I9 results remain ephemeral repository evidence. I12
-  separately verifies one exact dark digest, Hostinger VPS, private readiness,
-  API/native egress denial and corrected socketless proxy. Public callers,
-  proxy CIDR/firewall, DNS/certificate, complete secret lifecycle, route
-  activation, customer traffic and public rollback remain separately
-  authorized and unverified.
+### Measured facts and boundaries
+- Bambu Studio CLI equals the owner's GUI readings on 10 reference models
+  (-1.1..+0.1 % time, 0..0.2 % mass, supports off); Orca 2.3.1 BBL profiles
+  deviate up to +24 % and have no H2D. Supports on adds +47..+140 % time on
+  overhang models. Image smoke, 40 mm PLA cube: Bambu P1S 2453 s / 24.0 g /
+  550 HUF, H2D 2452 s / 23.94 g / 550 HUF, Prusa 1980 s / 24.7 g / 440 HUF,
+  Orca 2760 s / 24.2 g / 620 HUF; `/render` OK.
+- Deploy, registry/image publication, route/DNS/allowlist, production
+  container, and consumer-repository changes remain owner-authorized outside
+  this repository. Local unit results never prove native or deployed behavior.
 
 ## Technology Baseline
 - Backend: Node.js + Express
-- Processing: Python 3.12
-- Engines: PrusaSlicer (FDM and SLA), OrcaSlicer (FDM only)
-- Runtime: Docker Compose
+- Processing: Python 3.12 helper scripts (`cad2stl.py`, `mesh2stl.py`,
+  `orient.py`, `scale_model.py`, `render_preview.py`); pins gmsh 4.15.2,
+  lxml 6.1.2, networkx 3.6.1, numpy 2.5.2, Pillow 12.3.0, scipy 1.18.1,
+  trimesh 5.1.0
+- Engines: PrusaSlicer 2.8.1 (FDM and SLA), OrcaSlicer 2.3.1 (FDM only),
+  Bambu Studio 02.08.02.61 (FDM only)
+- Containerization: Docker Compose (`init: true`, read-only root, non-root)
 
 ## Repository Surface
-- app/: server bootstrap, routes, middleware, services, python converters
-- configs/: pricing and slicer profile configuration
+- app/: server bootstrap, routes, middleware, services, python helpers
+- configs/: pricing state, slicer profiles, and the Bambu printer registry
 - input/: temporary request input workspace
-- output/: generated .gcode/.sl1 artifacts
-- tests/testing-scripts/: Python integration tests and report generation
-- .github/: CI workflow + Copilot instructions + skill mirrors + instruction overlays
+- output/: generated .gcode/.sl1/.gcode.3mf artifacts
+- tests/: JavaScript/Python unit suites and Python integration runners
+- .github/: CI workflows + Copilot instructions + skill mirrors + instruction overlays
+
+## Non-negotiable Constraints
+- Keep runtime folders root-scoped: input/, output/, configs/.
+- Never use app/input, app/output, or app/configs.
+- Keep fail-fast policy for invalid geometry (INVALID_SOURCE_GEOMETRY, UNSLICEABLE_SOURCE_GEOMETRY).
+- Never suggest auto-healing source models.
+- Preserve queue and rate-limit protections for slicing and render endpoints.
 
 ## Runtime Flow
-Slice IP rate limit -> x-slicer-api-key authentication -> root-scoped workspace/Multer upload -> queue -> validate options -> convert/orient -> transform -> native slice -> parse stats -> compute pricing -> return response.
+1. Apply the slice rate limiter (principal-keyed, IP fallback).
+2. Authenticate `x-slicer-api-key`.
+3. Allocate a root-scoped request workspace and receive one multipart upload (field name: choosenFile).
+4. Validate options and profile selection.
+5. Enqueue the request in the FIFO queue.
+6. Convert source to STL when needed and run orientation (`auto` or `preserve`).
+7. Apply sizing/rotation, placement (Bambu), and bounds validation.
+8. Slice with the selected engine/profile (or render the preview).
+9. Parse generated output stats and return stats with calculated price.
 
 ## Endpoint Snapshot
-Public:
+Public endpoints:
 - GET /health
 - GET /ready
 - GET /pricing
@@ -419,187 +235,153 @@ Public:
 - GET /docs
 - GET /
 
-Slice-service protected (x-slicer-api-key):
+Slice-service-protected endpoints (x-slicer-api-key required):
 - POST /prusa/slice
 - POST /orca/slice
+- POST /bambu/slice
+- POST /render
 
-Pricing protected (pricing x-api-key):
+Pricing-protected endpoints (x-api-key with pricing audience):
 - POST /pricing/FDM
 - POST /pricing/SLA
 - PATCH /pricing/:technology/:material
 - DELETE /pricing/:technology/:material
 
-Artifact protected (artifact x-api-key):
+Artifact-protected endpoints (x-api-key with artifact audience):
 - GET /admin/output-files
 - GET /admin/download/:fileName
 
-Operations protected (operations x-api-key):
+Operations-protected endpoints (x-api-key with operations audience):
 - GET /health/detailed
 - GET /operations/readiness
 - GET /operations/metrics
 
-## Non-negotiable Constraints
-- Keep runtime folders root-scoped: input/, output/, configs/.
-- Never use app/input, app/output, or app/configs.
-- Keep fail-fast policy for invalid geometry (INVALID_SOURCE_GEOMETRY).
-- Never suggest auto-healing source models.
-- Preserve queue and rate-limit protections for slicing endpoints.
+## Security Rules
+- Pricing, artifact, and operations active keys are mandatory. Slice startup
+  additionally requires one complete `SLICE_SERVICE_AUTH_MODE`: default
+  `legacy` requires shared active and forbids principal material/expiry;
+  `migration` requires shared active, both principal actives, and a future
+  `SLICE_SERVICE_LEGACY_MIGRATION_UNTIL` no more than 90 days away; `principals`
+  requires both principal actives and forbids shared active/previous and expiry.
+  A previous slot is optional only with its own active. Every configured value,
+  including a valid `ADMIN_API_KEY`, must be globally unique, non-placeholder,
+  and 32-256 printable-ASCII bytes; only the admin key's exact authorized legacy
+  substitution self-reference is skipped.
+- Slice and render requests must pass exactly one x-slicer-api-key matching an
+  eligible configured slice slot; x-api-key is not an alias. In migration,
+  shared slots stop authorizing at the exact request-time expiry while
+  principals continue. Missing or wrong credentials return HTTP 401 with
+  `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
+- Pricing, artifact, and operations routes require x-api-key matching only their
+  scoped active or previous key. Cross-audience credentials are rejected.
+- Authentication uses fixed-length SHA-256 digest comparisons for active and
+  previous slots. Structured rejection events contain bounded correlation and
+  audience fields, never credentials, URLs, paths, filenames, or customer data.
+- Rotation is two-restart: restart with replacement active + former active in
+  previous, migrate the caller, then remove previous and restart to revoke.
+- ADMIN_API_KEY is allowed only for a finite migration of one non-slice
+  audience named by LEGACY_ADMIN_API_KEY_AUDIENCE with an ISO-8601
+  LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL no more than 90 days away. Normal
+  operation is scoped and fail closed; slice/broad/expired migration or any
+  other cross-slot reuse is refused.
+- Forwarded identity defaults off. TRUST_PROXY=true requires a non-empty unique
+  set of validated explicit IP/CIDR entries or loopback; malformed, wildcard,
+  overbroad, duplicate, or unknown entries refuse startup. Express selects the
+  nearest untrusted hop, and direct untrusted peers cannot spoof X-Forwarded-For.
+- Safe inbound X-Request-Id values are 1-128 characters, start alphanumeric,
+  and then use only alphanumeric, dot, underscore, colon, or hyphen. Invalid
+  values are replaced; the resolved ID is returned as X-Request-Id.
+- Requests without Origin are allowed. Browser-origin protected calls use only
+  the exact audience allowlist: SLICE_, PRICING_, ARTIFACT_, or
+  OPERATIONS_CORS_ALLOWED_ORIGINS. ADMIN_CORS_ALLOWED_ORIGINS is legacy-only
+  for the single active migration audience.
+- Shell commands use execFile with argument arrays and a minimal child
+  environment (no shell interpolation).
+- Upload accepts only a single file on choosenFile field with extension validation at upload time.
+- /admin/download/:fileName must pass filename extension validation
+  (.gcode/.sl1/.gcode.3mf), path containment checks, lstat non-symlink checks,
+  and realpath containment checks.
+- /admin/download/ALL returns a ZIP stream of all valid output files and must preserve the same containment/symlink safety guarantees plus MAX_ZIP_ENTRIES and MAX_ZIP_UNCOMPRESSED_BYTES limits.
+- Fail-fast geometry policy: invalid geometry returns INVALID_SOURCE_GEOMETRY;
+  native refusal returns UNSLICEABLE_SOURCE_GEOMETRY.
+- No automatic model healing/correction is allowed.
+
+## Readiness, Observability, and Topology
+- GET /health is public process liveness.
+- GET /ready is public minimal readiness and exposes only READY/NOT_READY.
+- GET /health/detailed uses fresh readiness probes; GET /ready and
+  GET /operations/readiness use the bounded readiness cache.
+- Operations-scoped readiness reason codes are SHUTDOWN, ADMISSION_CLOSED,
+  QUEUE_UNAVAILABLE, NATIVE_RUNTIME_QUARANTINED, STORAGE_UNSAFE,
+  RETENTION_UNSAFE, PRICING_UNAVAILABLE, and CONFIG_UNSAFE.
+- Structured JSON events use version 1, the fixed vocabulary in
+  `app/services/observability/events.js` (including `orientation.fallback`),
+  bounded request/job/artifact correlation, allowlisted fields, and
+  secret/path/customer redaction. Metrics use fixed audience/outcome/reason/bucket labels only.
+- The production topology is an internal-only API with no host port/default
+  route and one authenticated reverse-proxy peer; the proxy must not provide
+  generic forwarding, NAT, or DNS tunnelling for the API. Deployed
+  caller/proxy/firewall facts are owner-verified, not repository claims.
 
 ## Queue and Rate Defaults
-- 3 requests / 60s / IP for slicing routes
-- 30 requests / 60s / IP for admin routes
-- MAX_CONCURRENT_SLICES default: 1; explicit canonical decimal 1..3 only.
-  N=2/N=3 remain unqualified and undeployed.
-- MAX_SLICE_QUEUE_LENGTH default: 100
-- MAX_SLICE_QUEUE_PER_IP default: 5
-- MAX_SLICE_QUEUE_WAIT_MS default: 300000
-- Slice command timeout default: 600000 ms
+- Slicing rate limit: 3 requests per 60 seconds, burst 5, per principal (IP fallback)
+- Admin rate limit: 30 requests per 60 seconds per IP
+- Max concurrent slice jobs: default 1; explicit values must be exact canonical
+  decimal 1..3. N=2/N=3 remain unqualified and undeployed.
+- Max queue length: 100
+- Max queued+active slice jobs per principal/IP: 5
+- Max queue wait: 300000 ms
+- Slice command timeout: 600000 ms, bounded 1000..3600000
+- Python helper timeout: 120000 ms each; render timeout: 60000 ms
 - HTTP headers timeout: 60000 ms, bounded 1000..60000
 - HTTP request timeout: 600000 ms, bounded 60000..600000
-- HTTP keep-alive timeout: 5000 ms, bounded 1000..60000
+- HTTP keep-alive timeout: 95000 ms, bounded 1000..120000
 - HTTP header count: 2000, bounded 16..2000
 - HTTP connections: 128, bounded 1..1024
 - HTTP requests per socket: 100, bounded 1..1000
-- MAX_ZIP_ENTRIES default: 500
-- MAX_ZIP_UNCOMPRESSED_BYTES default: 524288000
+- ZIP entry limit: 500 files
+- ZIP cumulative size limit: 500 MB
 
 ## Queue and Rate Behavior Details
-- Slice and admin throttling return HTTP 429 with Retry-After and retryAfterSeconds.
-- Expired in-memory rate-limit buckets are periodically removed at max(windowMs * 2, 60000).
+- Slice and admin rate limit responses return HTTP 429 with Retry-After and retryAfterSeconds.
+- Expired in-memory rate-limit buckets are cleaned periodically at max(windowMs * 2, 60000).
 - Queue overflow returns SLICE_QUEUE_FULL (HTTP 503).
-- Per-client queue cap returns SLICE_QUEUE_CLIENT_LIMIT (HTTP 429).
+- Per-client queue cap returns SLICE_QUEUE_CLIENT_LIMIT (HTTP 429, Retry-After 5).
 - Queue wait timeout returns SLICE_QUEUE_TIMEOUT (HTTP 503).
-- Invalid, empty, non-decimal, unsafe, or out-of-range HTTP envelope values fall back to the documented defaults; effective headers timeout is capped at request timeout.
-- Actual VPS capacity and reverse-proxy timeouts remain UNVERIFIED.
+- Shutdown rejects new work as SLICE_QUEUE_SHUTDOWN (HTTP 503).
+- Invalid, empty, non-decimal, unsafe, or out-of-range HTTP envelope overrides fall back to their safe defaults; effective headers timeout is capped at request timeout.
+- Actual VPS capacity and reverse-proxy timeouts remain owner-verified.
+
+Return and preserve queue/rate errors:
+- RATE_LIMIT_EXCEEDED
+- ADMIN_RATE_LIMIT_EXCEEDED
+- SLICE_QUEUE_FULL
+- SLICE_QUEUE_CLIENT_LIMIT
+- SLICE_QUEUE_TIMEOUT
+- SLICE_QUEUE_SHUTDOWN
+- FILE_PROCESSING_TIMEOUT
+
+## Python Runtime Resolution
+- PYTHON_EXECUTABLE (optional) must be an absolute path and must exist when provided.
+- If PYTHON_EXECUTABLE is not set, runtime resolution checks VIRTUAL_ENV/bin/python3 and VIRTUAL_ENV/Scripts/python.exe.
+- Additional absolute-path fallbacks: /opt/venv/bin/python3, /usr/local/bin/python3, /usr/bin/python3.
+- Startup fails fast when no valid absolute Python executable can be resolved.
 
 ## Engine Boundaries
 Prusa:
-- Layer heights: 0.025, 0.05, 0.1, 0.2, 0.3
-- SLA inferred for 0.025 and 0.05
+- SLA layer heights: 0.025, 0.05 (quote-only: null mass, rate, and price)
+- FDM layer heights: 0.1, 0.2, 0.3
 
 Orca:
 - FDM only
-- Layer heights: 0.1, 0.2, 0.3
-- Machine/process profile compatibility is mandatory
-- Output mapping uses per-request isolated output directories to avoid cross-request artifact races.
+- Allowed layer heights: 0.1, 0.2, 0.3
+- Requires machine profile + process profile compatibility
+- Uses per-request isolated output directories before final artifact alignment.
 
-## Security Rules
-- Normal startup requires pricing, artifact, and operations active keys plus one
-  complete `SLICE_SERVICE_AUTH_MODE`. Default `legacy` requires shared active
-  and forbids principal material/expiry. `migration` requires shared active,
-  both principal actives, and a future <=90-day legacy expiry. `principals`
-  requires both principal actives and forbids shared active/previous and expiry.
-  Optional previous slots require their own active; all configured material,
-  including a valid `ADMIN_API_KEY`, is globally unique, non-placeholder, and
-  32-256 printable ASCII. Only the admin key's exact authorized legacy
-  substitution self-reference is skipped.
-- Slice endpoints require exactly one x-slicer-api-key matching an eligible
-  configured slice slot; x-api-key is not an alias. Migration shared slots stop
-  authorizing at exact request-time expiry while principals continue. Missing
-  or wrong credentials return HTTP 401 with
-  `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
-- Pricing, artifact, and operations endpoints require x-api-key matching only
-  their active or previous scoped slot. Cross-audience keys are rejected.
-- Authentication compares fixed-length SHA-256 digests for both slots.
-  Structured rejection events are bounded/redacted and contain no key, URL,
-  path, filename, or customer data.
-- Rotation uses two restarts: replacement active + former active previous,
-  caller migration, then previous removal and a second restart for revocation.
-- ADMIN_API_KEY is a finite legacy migration key only: one non-slice audience
-  named by LEGACY_ADMIN_API_KEY_AUDIENCE, with
-  LEGACY_ADMIN_API_KEY_MIGRATION_UNTIL no more than 90 days away. Any other
-  cross-slot reuse is refused.
-- Preserve slice route order: rate limiter -> service authentication -> root-scoped workspace -> Multer -> queue -> native processing.
-- Forwarded identity defaults off. TRUST_PROXY=true requires unique validated
-  explicit IP/CIDR peers or loopback; malformed, wildcard, overbroad,
-  duplicate, or unknown entries refuse startup. Nearest-untrusted-hop
-  resolution prevents a direct untrusted peer selecting spoofed XFF prefixes.
-- Safe inbound X-Request-Id values are bounded; invalid input is replaced and
-  the resolved value is returned.
-- No-Origin requests remain allowed. Browser-origin protected calls use only
-  the matching SLICE_, PRICING_, ARTIFACT_, or
-  OPERATIONS_CORS_ALLOWED_ORIGINS list. ADMIN_CORS_ALLOWED_ORIGINS is
-  legacy-only for the one migrated audience.
-- /admin/download/:fileName must enforce extension validation, path containment checks, non-symlink checks, and realpath containment checks.
-- /admin/download/ALL must return ZIP output while preserving the same containment/symlink safety checks plus MAX_ZIP_ENTRIES and MAX_ZIP_UNCOMPRESSED_BYTES limits.
-- Shell commands use execFile with argument arrays (no shell interpolation).
-- Upload accepts only a single file on choosenFile field with extension validation at upload time.
-
-## Readiness, Observability, and Topology
-- Public /health is liveness; public /ready exposes only READY/NOT_READY.
-- /health/detailed uses fresh readiness probes; /ready and
-  /operations/readiness use the bounded readiness cache.
-- Operations readiness reasons are SHUTDOWN, ADMISSION_CLOSED,
-  QUEUE_UNAVAILABLE, NATIVE_RUNTIME_QUARANTINED, STORAGE_UNSAFE,
-  RETENTION_UNSAFE, PRICING_UNAVAILABLE, and CONFIG_UNSAFE.
-- Versioned structured events use fixed names, bounded request/job/artifact
-  correlation, and allowlisted/redacted fields. Runtime metrics use only fixed
-  audience/outcome/reason/duration labels.
-- I6 selects an internal-only API with no host port/default route and one
-  authenticated reverse-proxy peer; repository validation requires calibrated
-  API/native DNS/TCP/UDP denial. The proxy must not provide generic forwarding,
-  NAT, or DNS tunnelling for the API. Decision:
-  PRIVATE_PEER_TOPOLOGY_SELECTED; ASYNC_WORKER_DEFERRED. Deployed
-  caller/proxy/firewall facts remain UNVERIFIED.
-
-## Python Runtime Resolution
-- PYTHON_EXECUTABLE is optional but must be an existing absolute path when set.
-- Fallback resolution checks VIRTUAL_ENV/bin/python3 and VIRTUAL_ENV/Scripts/python.exe.
-- Additional fallback candidates are absolute paths: /opt/venv/bin/python3, /usr/local/bin/python3, /usr/bin/python3.
-- Server startup fails if no valid absolute Python executable can be resolved.
-
-## Preferred Skills
-Skills (operational playbooks mapped to agent definitions):
-- .github/skills/docker-ops/SKILL.md
-- .github/skills/testing/SKILL.md
-- .github/skills/docs-sync/SKILL.md
-- .github/skills/best-practice/SKILL.md
-
-## Agent Definitions
-Mirrored in `.github/agents/` and `.claude/agents/`:
-- orchestrator — plans multi-domain tasks and delegates to sub-agents in parallel
-- js-developer — Node.js + Express code in app/
-- python-developer — Python converters, orientation, scaling scripts
-- test-engineer — Python integration test runners and reports
-- docs-syncer — documentation and instruction file synchronization
-- docker-specialist — Dockerfile, docker-compose, container lifecycle
-- quality-architect — iterative OOP/SOLID/design-principles refactor workflow with 23-point checklist
-
-For multi-domain tasks, use the orchestrator agent workflow to plan and delegate.
-
-Workflow gates:
-- Run fast syntax validation (`node --check`, `python -m py_compile`) before integration suites when source files change.
-- Run quality-architect for non-trivial source changes or files near the decomposition guardrails.
-- Run the smallest matching Python runner first; run full slicing validation when slicing behavior changes or the user explicitly asks for full validation.
-- Run docs-sync last and update mirrored agent/skill assets when workflow policy changes.
-- Perform changelog/version/tag work only after validation is green.
-
-Optional MCP:
-- `.claude/.mcp.template.json` is a credential-free local MCP template.
-- `.claude/.mcp.json` is local-only and must not be committed.
-
-## Test Execution Rule
-After every test run, read the generated markdown report under tests/testing-scripts/results/ before concluding.
-
-Focused test runners:
-- tests/testing-scripts/slicing/unsupported_upload_test_runner.py
-- tests/testing-scripts/slicing/orientation_visibility_test_runner.py
-- tests/testing-scripts/slicing/native_envelope_sweep_runner.py
-- tests/testing-scripts/admin/admin_output_files_test_runner.py
-- tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
-- tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py
-- tests/testing-scripts/profiles/profile_catalogue_test_runner.py
-- `python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --expected-max-concurrent N --retry-on-429 1 --cleanup-manifest NEW_MANIFEST_PATH --report NEW_REPORT_PATH`
-
-The capacity runner requires an exactly empty artifact inventory and create-new
-evidence. Host execution uses the dynamic non-root service identity; exact-image
-cleanup follows only after stopped API proof as defined in
-`ops/hostinger/RUNBOOK.md`.
-
-Test organization:
-- Keep focused runners small and behavior-specific.
-- Split overly complex runners by domain rather than appending unrelated checks.
-- Keep stable deterministic runners unchanged unless endpoint behavior requires updates.
+Bambu:
+- FDM only; printers `P1S` (default) and `H2D` from `configs/bambu/printers.json`
+- Layer keys: P1S 0.08, 0.1, 0.12, 0.16, 0.2, 0.24, 0.28; H2D 0.08, 0.1, 0.12, 0.16, 0.2, 0.24
+- `--arrange 0 --orient 0`, API-owned placement, `.gcode.3mf` artifact
 
 ## Environment and Config Keys
 - SLICE_SERVICE_AUTH_MODE
@@ -634,6 +416,7 @@ Test organization:
 - JSON_BODY_LIMIT
 - FORM_BODY_LIMIT
 - MAX_UPLOAD_BYTES
+- UPLOAD_TOTAL_TIMEOUT_MS
 - MAX_MODEL_DIMENSION_MM
 - MAX_MATERIAL_USED_METERS
 - MAX_MATERIAL_USED_GRAMS
@@ -657,25 +440,87 @@ Test organization:
 - ORCA_PROCESS_PROFILE_0_1
 - ORCA_PROCESS_PROFILE_0_2
 - ORCA_PROCESS_PROFILE_0_3
+- BAMBU_PROFILES_ROOT
 - TRUST_PROXY
 - TRUST_PROXY_CIDRS
 - SLICER_BASE_URL
 
+## Test Execution Rule
+Use Python test runners in tests/testing-scripts/.
+After each run, read corresponding markdown report in tests/testing-scripts/results/.
+
+Fast gates: `npm run test:js`, `npm run test:python`, `npm run check:syntax`,
+`npm run check:repository-safety`. `tests/unit/js/instruction-mirrors.test.js`
+requires `.github/agents` == `.claude/agents` and `.github/skills` ==
+`.claude/skills` byte for byte.
+
+Primary suite:
+- python tests/testing-scripts/slicing/full_api_test_runner.py
+
+Focused suites:
+- python tests/testing-scripts/slicing/full_api_orca_fdm_test_runner.py
+- python tests/testing-scripts/slicing/full_api_prusa_fdm_test_runner.py
+- python tests/testing-scripts/slicing/full_api_prusa_sl1_test_runner.py
+- python tests/testing-scripts/slicing/full_api_bambu_fdm_test_runner.py
+- python tests/testing-scripts/slicing/bambu_envelope_confirmation_runner.py
+- python tests/testing-scripts/slicing/unsupported_upload_test_runner.py
+- python tests/testing-scripts/slicing/orientation_visibility_test_runner.py
+- python tests/testing-scripts/slicing/native_envelope_sweep_runner.py
+- python tests/testing-scripts/render/render_preview_test_runner.py
+- python tests/testing-scripts/calibration/bambu_reference_comparison_runner.py --models-dir PRIVATE_DIR --reference PRIVATE_DIR/meres.json --printer P1S --supports false (owner-run only)
+- python tests/testing-scripts/pricing/pricing_cycle_test_runner.py
+- python tests/testing-scripts/admin/admin_output_files_test_runner.py
+- python tests/testing-scripts/rate_limit/rate_limit_regression_test_runner.py
+- python tests/testing-scripts/operations/operations_readiness_metrics_test_runner.py
+- python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
+- python tests/testing-scripts/queue/queue_concurrency_test_runner.py --count N --expected-max-concurrent N --retry-on-429 1 --cleanup-manifest NEW_MANIFEST_PATH --report NEW_REPORT_PATH
+
+Test organization:
+- Keep focused runners small and domain-specific (admin output, rate-limit, queue, pricing).
+- Split oversized runners into focused suites instead of appending unrelated checks.
+- Preserve stable, deterministic runners unless changed endpoint behavior requires updates.
+- Runners pace at 20 s and honour `Retry-After`; behavior that depends on the
+  slicer binaries is proven only on the built image.
+
+## Preferred Skills
+Skills (operational playbooks mapped to agent definitions):
+- .github/skills/docker-ops/SKILL.md
+- .github/skills/testing/SKILL.md
+- .github/skills/docs-sync/SKILL.md
+- .github/skills/best-practice/SKILL.md
+
+## Agent Definitions
+Mirrored in `.claude/agents/` and `.github/agents/`:
+- orchestrator — plans multi-domain tasks and delegates to sub-agents in parallel
+- js-developer — Node.js + Express code in app/
+- python-developer — Python converters, orientation, scaling, and preview-render scripts
+- test-engineer — Python integration test runners and reports
+- docs-syncer — documentation and instruction file synchronization
+- docker-specialist — Dockerfile, docker-compose, container lifecycle
+- quality-architect — iterative OOP/SOLID/design-principles refactor workflow with 23-point checklist
+
+For multi-domain tasks (new features, endpoint changes, cross-cutting fixes), use the orchestrator agent workflow to plan and delegate.
+
+Workflow gates:
+- Run fast syntax validation (`node --check`, `python -m py_compile`) before integration suites when source files change.
+- Run quality-architect for non-trivial source changes or files near the decomposition guardrails.
+- Run the smallest matching Python runner first; run full slicing validation when slicing behavior changes or the user explicitly asks for full validation.
+- Run docs-sync last and update mirrored agent/skill assets when workflow policy changes.
+- Perform changelog/version/tag work only after validation is green.
+
+Optional MCP:
+- `.claude/.mcp.template.json` is a credential-free local MCP template.
+- `.claude/.mcp.json` is local-only and must not be committed.
+
 ## Documentation Layout
-Global:
-- .github/copilot-instructions.md
-- CLAUDE.md
-- .claude/CLAUDE.md
-
-Folder-local:
-- app/CLAUDE.md
-- configs/CLAUDE.md
-- tests/testing-scripts/CLAUDE.md
-
-Instruction overlays:
-- .github/instructions/repository.instructions.md
-- .github/instructions/app.instructions.md
-- .github/instructions/configs.instructions.md
-- .github/instructions/testing-scripts.instructions.md
-- .github/instructions/github.instructions.md
-- .claude/.mcp.template.json
+- Global: .github/copilot-instructions.md, CLAUDE.md, .claude/CLAUDE.md
+- Codex routing layer: AGENTS.md with docs/codex/project-map.md, security-model.md, hardening-plan.md
+- Consumer contract: docs/integration-guide.md
+- Operator handoff: docs/codex/handoff-2026-09-02.md
+- Historical narrative: docs/codex/history-waves.md and docs/codex/evidence/
+- Folder-local docs:
+  - app/CLAUDE.md
+  - configs/CLAUDE.md
+  - tests/testing-scripts/CLAUDE.md
+- Instruction overlays: .github/instructions/repository.instructions.md, app.instructions.md, configs.instructions.md, testing-scripts.instructions.md, github.instructions.md
+- Optional Claude MCP template: .claude/.mcp.template.json
