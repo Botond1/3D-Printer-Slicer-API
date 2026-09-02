@@ -4,18 +4,34 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createProcessTreeTerminator } = require('../../../app/services/slice/process-tree');
 
-test('9 an exited child identity cannot target a later process that reused its PID', async () => {
-    const reusedPid = 48761;
+test('9 an exited child whose POSIX group is still alive terminates the group instead of refusing', async () => {
+    // A PID is only reused after its whole process group is gone, so a live
+    // group id still names the child's own orphaned descendants. Signals go to
+    // the group (-pid), never to the bare PID that could have been reused.
+    const pid = 48761;
     const signals = [];
-    const child = { pid: reusedPid, exitCode: 0, signalCode: null };
+    let alive = true;
+    let now = 0;
+    const child = { pid, exitCode: 0, signalCode: null };
     const terminator = createProcessTreeTerminator(child, {
         platform: 'linux',
         ownPid: process.pid,
-        kill: (...args) => { signals.push(args); }
+        graceMs: 20,
+        killSettleMs: 40,
+        pollMs: 5,
+        now: () => now,
+        setTimeout: (callback, delay) => { now += delay; queueMicrotask(callback); return { unref() {} }; },
+        kill: (target, signal) => {
+            assert.equal(target, -pid, 'only the process group is ever targeted');
+            signals.push(signal);
+            if (signal === 'SIGKILL') alive = false;
+            if (signal === 0 && !alive) throw Object.assign(new Error('gone'), { code: 'ESRCH' });
+        }
     });
 
-    await assert.rejects(terminator.terminate(), /identity was lost/);
-    assert.deepEqual(signals, [[-reusedPid, 0]]);
+    await terminator.terminate();
+    assert.deepEqual(signals.filter((signal) => signal !== 0), ['SIGTERM', 'SIGKILL']);
+    assert.equal(alive, false);
 });
 
 test('9 an exited child with a gone POSIX group settles without a termination signal', async () => {

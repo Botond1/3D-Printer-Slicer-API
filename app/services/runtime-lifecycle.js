@@ -2,7 +2,18 @@
 
 /** Process-signal and HTTP-server lifecycle coordination. */
 
+const {
+    QUARANTINE_EXIT_CODE,
+    subscribeToNativeRuntimeQuarantine
+} = require('./slice/native-runtime-status');
+
 const SHUTDOWN_SIGNALS = Object.freeze(['SIGTERM', 'SIGINT']);
+/**
+ * Bounded drain window after a native quarantine before the process exits.
+ * Kept well below the 30 s container stop grace so the supervisor observes a
+ * clean self-exit rather than a forced kill.
+ */
+const QUARANTINE_DRAIN_MS = 10_000;
 
 function createDeferred() {
     let resolve;
@@ -38,7 +49,19 @@ function closeHttpServer(server) {
 /**
  * Create an injectable, single-flight runtime lifecycle.
  * Queue shutdown starts synchronously; HTTP close waits for startup to settle.
+ *
+ * A native-runtime quarantine is terminal: the lifecycle closes admission
+ * through the normal shutdown path, waits at most `quarantineDrainMs`, and
+ * then calls the injectable `exit` seam with `quarantineExitCode` so the
+ * container supervisor (`restart: unless-stopped`) replaces the process.
  * @param {object} options Runtime dependencies.
+ * @param {Function} options.beginQueueShutdown Queue drain starter.
+ * @param {Function} [options.onShutdownStart] Admission-closing hook.
+ * @param {Function} [options.onQuarantine] Hook invoked once before the quarantine drain.
+ * @param {Function} [options.subscribeToRuntimeQuarantine] Quarantine subscription seam.
+ * @param {(code: number, reason: string) => void} [options.exit] Process exit seam.
+ * @param {number} [options.quarantineExitCode] Exit status after quarantine.
+ * @param {number} [options.quarantineDrainMs] Bounded drain window in milliseconds.
  * @returns {object} Lifecycle facade.
  */
 function createRuntimeLifecycle(options = {}) {
@@ -46,6 +69,19 @@ function createRuntimeLifecycle(options = {}) {
     const logger = options.logger || console;
     const beginQueueShutdown = options.beginQueueShutdown;
     const onShutdownStart = options.onShutdownStart || (() => {});
+    const onQuarantine = options.onQuarantine || (() => {});
+    const subscribeToQuarantine = options.subscribeToRuntimeQuarantine
+        || subscribeToNativeRuntimeQuarantine;
+    const exit = options.exit || ((code) => processRef.exit?.(code));
+    const quarantineExitCode = Number.isSafeInteger(options.quarantineExitCode)
+        ? options.quarantineExitCode
+        : QUARANTINE_EXIT_CODE;
+    const quarantineDrainMs = Number.isSafeInteger(options.quarantineDrainMs)
+        && options.quarantineDrainMs > 0
+        ? Math.min(options.quarantineDrainMs, QUARANTINE_DRAIN_MS)
+        : QUARANTINE_DRAIN_MS;
+    const setTimer = options.setTimeout || setTimeout;
+    const clearTimer = options.clearTimeout || clearTimeout;
     if (typeof beginQueueShutdown !== 'function') {
         throw new TypeError('beginQueueShutdown must be a function.');
     }
@@ -59,6 +95,9 @@ function createRuntimeLifecycle(options = {}) {
     let shuttingDown = false;
     let shutdownPromise;
     let shutdownFailureObserved = false;
+    let unsubscribeQuarantine;
+    let quarantineHandled = false;
+    let quarantineExit = null;
 
     function settleServerReady(server) {
         if (serverReadySettled) return;
@@ -73,6 +112,51 @@ function createRuntimeLifecycle(options = {}) {
         for (const [signal, handler] of signalHandlers) {
             processRef.removeListener(signal, handler);
         }
+        try {
+            unsubscribeQuarantine?.();
+        } catch {
+            // Observer teardown never blocks shutdown completion.
+        }
+        unsubscribeQuarantine = undefined;
+    }
+
+    function finishQuarantine(reason) {
+        if (quarantineExit) return;
+        quarantineExit = Object.freeze({ code: quarantineExitCode, reason });
+        try {
+            exit(quarantineExitCode, reason);
+        } catch (error) {
+            logger.error?.('[QUARANTINE] Process exit seam failed.', error);
+        }
+    }
+
+    function handleQuarantine() {
+        if (quarantineHandled) return;
+        quarantineHandled = true;
+        try {
+            onQuarantine();
+        } catch (error) {
+            logger.error?.('[QUARANTINE] Quarantine hook failed.', error);
+        }
+        // A quarantined slot never settles by design, so the drain is bounded
+        // and the process exits either way; the supervisor restarts it clean.
+        // The timer deliberately keeps the event loop alive: the exit status
+        // must be the quarantine code, never an incidental natural exit.
+        const timer = setTimer(() => finishQuarantine('drain_timeout'), quarantineDrainMs);
+        shutdown().then(
+            () => { clearTimer(timer); finishQuarantine('drained'); },
+            (error) => {
+                clearTimer(timer);
+                logger.error?.('[QUARANTINE] Drain failed before exit.', error);
+                finishQuarantine('drain_failed');
+            }
+        );
+    }
+
+    function installQuarantineSubscription() {
+        if (unsubscribeQuarantine || typeof subscribeToQuarantine !== 'function') return;
+        const unsubscribe = subscribeToQuarantine(handleQuarantine);
+        unsubscribeQuarantine = typeof unsubscribe === 'function' ? unsubscribe : () => {};
     }
 
     function shutdown() {
@@ -123,6 +207,7 @@ function createRuntimeLifecycle(options = {}) {
         if (typeof startServer !== 'function') throw new TypeError('startServer must be a function.');
         startupInvoked = true;
         installSignalListeners();
+        installQuarantineSubscription();
         try {
             const server = await startServer();
             settleServerReady(server);
@@ -145,11 +230,13 @@ function createRuntimeLifecycle(options = {}) {
         run,
         shutdown,
         isShuttingDown: () => shuttingDown,
+        getQuarantineExit: () => quarantineExit,
         removeSignalListeners
     };
 }
 
 module.exports = {
+    QUARANTINE_DRAIN_MS,
     SHUTDOWN_SIGNALS,
     closeHttpServer,
     createRuntimeLifecycle

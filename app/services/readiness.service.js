@@ -103,9 +103,20 @@ function createReadinessService(options = {}) {
         });
     }
 
+    /**
+     * Record the outcome of one artifact retention sweep.
+     * A sweep that could not satisfy the quota flips `RETENTION_UNSAFE`; the
+     * next sweep that satisfies it clears the reason again. The readiness
+     * cache is invalidated either way so `/ready` reflects the latest sweep.
+     * @param {{quotaSatisfied?: boolean} | boolean | null | undefined} summary Sweep summary or a bare boolean.
+     * @returns {boolean} The retention health now in effect.
+     */
     function recordRetentionResult(summary) {
-        retentionHealthy = Boolean(summary?.quotaSatisfied);
+        retentionHealthy = typeof summary === 'boolean'
+            ? summary
+            : summary?.quotaSatisfied === true;
         cache = undefined;
+        return retentionHealthy;
     }
 
     function runProbes() {
@@ -199,6 +210,7 @@ function createReadinessService(options = {}) {
         getFreshStatus,
         getStatus,
         isAdmissionOpen: () => admissionOpen && !shuttingDown(),
+        isRetentionHealthy: () => retentionHealthy,
         recordRetentionResult
     });
 }

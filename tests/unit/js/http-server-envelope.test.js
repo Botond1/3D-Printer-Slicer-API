@@ -18,6 +18,7 @@ test.after(() => {
 const { DEFAULTS } = require('../../../app/config/constants');
 const {
     HTTP_SERVER_BOUNDS,
+    HTTP_SERVER_DEFAULTS,
     configureHttpServer,
     createBoundedHttpServer,
     resolveHttpServerOptions
@@ -41,7 +42,9 @@ const ENVELOPE_FIELDS = Object.freeze([
     {
         envKey: 'HTTP_KEEP_ALIVE_TIMEOUT_MS',
         optionKey: 'keepAliveTimeout',
-        defaultValue: DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS
+        // The edge-aware keep-alive default lives in http-server.js so Node
+        // outlives Traefik's 90 s idle connection timeout.
+        defaultValue: HTTP_SERVER_DEFAULTS.HTTP_KEEP_ALIVE_TIMEOUT_MS
     },
     {
         envKey: 'HTTP_MAX_HEADERS_COUNT',

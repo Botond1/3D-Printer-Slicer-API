@@ -286,15 +286,29 @@ async function parseFdmOutputStats(
     }
 }
 
+/** Bounded provenance labels for SLA print time; neither is a measured value. */
+const SLA_PRINT_TIME_SOURCES = Object.freeze({
+    SYNTHETIC_ESTIMATE: 'sla_synthetic_estimate',
+    SL1_METADATA_ESTIMATE: 'sla_sl1_metadata_estimate'
+});
+
 /**
  * Backfill SLA print-time estimate when explicit metadata is missing.
- * @param {{print_time_seconds: number, object_height_mm: number}} stats Mutable stats object.
+ * The SLA path is not backed by a supported printer yet, so any SLA print
+ * time is an estimate only: either the synthetic per-layer model or the
+ * uncalibrated SL1 metadata value. `print_time_source` records which.
+ * @param {{print_time_seconds: number, object_height_mm: number, print_time_source: string|null}} stats Mutable stats object.
  * @param {'FDM'|'SLA'} technology Active technology.
  * @param {number|string} layerHeight Active layer height.
  * @returns {void}
  */
 function applySlaEstimateIfNeeded(stats, technology, layerHeight) {
-    if (technology !== 'SLA' || stats.print_time_seconds > 0 || stats.object_height_mm <= 0) return;
+    if (technology !== 'SLA') return;
+    if (stats.print_time_seconds > 0) {
+        stats.print_time_source = SLA_PRINT_TIME_SOURCES.SL1_METADATA_ESTIMATE;
+        return;
+    }
+    if (stats.object_height_mm <= 0) return;
 
     const totalLayers = Math.ceil(
         stats.object_height_mm / Math.max(Number.parseFloat(layerHeight), DEFAULTS.SLA_MIN_LAYER_HEIGHT_MM)
@@ -302,6 +316,7 @@ function applySlaEstimateIfNeeded(stats, technology, layerHeight) {
     const secondsPerLayer = DEFAULTS.SLA_SECONDS_PER_LAYER;
     const baseTime = DEFAULTS.SLA_BASE_TIME_SECONDS;
     stats.print_time_seconds = baseTime + (totalLayers * secondsPerLayer);
+    stats.print_time_source = SLA_PRINT_TIME_SOURCES.SYNTHETIC_ESTIMATE;
 }
 
 /**
@@ -346,6 +361,10 @@ async function parseOutputDetailed(filePath, technology, layerHeight, knownHeigh
     if (technology === 'SLA') {
         const slaStats = await parseSl1Stats(filePath, { resourcePolicy: policy });
         stats.material_used_ml = slaStats.material_used_ml;
+        // Resin mass is never measured on the SLA path; a zero would read as
+        // a real quantity, so the field is explicitly unavailable.
+        stats.material_used_g = null;
+        stats.material_used_g_source = null;
         if (slaStats.print_time_seconds > 0) stats.print_time_seconds = slaStats.print_time_seconds;
     }
     applySlaEstimateIfNeeded(stats, technology, layerHeight);
@@ -389,11 +408,19 @@ function validateSliceStats(stats, technology, policy = resolveResourcePolicy())
     if (technology === 'SLA' && stats.material_used_ml <= 0) {
         throw invalidStats('SLA output is missing required material usage.');
     }
+    if (technology === 'SLA' && stats.material_used_g !== null) {
+        throw invalidStats('SLA output must not publish a resin mass.');
+    }
+    if (technology === 'SLA' && !Object.values(SLA_PRINT_TIME_SOURCES).includes(stats.print_time_source)) {
+        throw invalidStats('SLA print time must be marked as an estimate.');
+    }
     return stats;
 }
 
 module.exports = {
     MODEL_INFO_MEASUREMENT_STATUSES,
+    SLA_PRINT_TIME_SOURCES,
+    applySlaEstimateIfNeeded,
     createMeasuredModelMeasurement,
     createUnavailableModelMeasurement,
     getModelInfo,

@@ -5,6 +5,15 @@ const { invalidStats, resourceLimit } = require('./resource-errors');
 const { openZipWithRetry } = require('./zip-open');
 const { isUnsafeZipPath, assertDeclaredEntryPolicy } = require('./zip-policy');
 
+/**
+ * Parse SL1 `config.ini` metadata into bounded stats.
+ * `usedMaterial` is resin volume in millilitres and is required; `printTime`
+ * is an uncalibrated slicer estimate (0 when absent) and never a measured
+ * value. No mass is derived here: the SLA path publishes `material_used_g`
+ * as null.
+ * @param {string} content Raw config.ini text.
+ * @returns {{print_time_seconds: number, material_used_ml: number}} Parsed stats.
+ */
 function parseConfig(content) {
     const values = {};
     for (const line of String(content).split(/\r?\n/)) {

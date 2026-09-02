@@ -1,6 +1,16 @@
 'use strict';
 
-/** Process-local fail-closed quarantine after unverifiable native settlement. */
+/**
+ * Process-local fail-closed quarantine after unverifiable native settlement.
+ *
+ * A quarantine is terminal for this process: the runtime lifecycle subscribes
+ * here, closes admission, drains for a bounded window, and exits with
+ * `QUARANTINE_EXIT_CODE` so the container supervisor restarts a clean process
+ * instead of leaving a silent outage where `/health` stays 200 forever.
+ */
+
+/** Exit status used when a quarantined process terminates itself. */
+const QUARANTINE_EXIT_CODE = 70;
 
 let quarantined = false;
 const quarantineSubscribers = new Set();
@@ -44,6 +54,7 @@ function subscribeToNativeRuntimeQuarantine(subscriber) {
 }
 
 module.exports = {
+    QUARANTINE_EXIT_CODE,
     getNativeRuntimeStatus,
     quarantineNativeRuntime,
     resetNativeRuntimeStatusForTests,

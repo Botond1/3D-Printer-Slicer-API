@@ -1,6 +1,11 @@
 'use strict';
 
-/** Authentication middleware for service-to-service slicing requests. */
+/**
+ * Authentication middleware for service-to-service slicing requests.
+ * On success the shared audience guard attaches a frozen
+ * `req.slicePrincipal = { audience: 'slice', slot }` (never the key) so later
+ * layers can key fairness on the authenticated caller family.
+ */
 
 const crypto = require('node:crypto');
 const { createRequireAudience, fixedDigestCompare, sanitizeLogField } = require('./requireAudience');

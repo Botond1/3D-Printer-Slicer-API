@@ -70,11 +70,20 @@ class SliceQueueTimeoutError extends SliceQueueError {
 }
 
 /**
+ * Retry hint carried by per-client 429 rejections. The cap is released as
+ * soon as one of the client's own jobs settles, so a short hint is honest.
+ */
+const CLIENT_LIMIT_RETRY_AFTER_SECONDS = 5;
+
+/**
  * Per-client fairness cap error.
  */
 class SliceQueueClientLimitError extends SliceQueueError {
-    constructor() {
+    constructor(retryAfterSeconds = CLIENT_LIMIT_RETRY_AFTER_SECONDS) {
         super('Too many queued slice jobs for this client. Please wait and retry.', 429, 'SLICE_QUEUE_CLIENT_LIMIT');
+        this.retryAfterSeconds = Number.isSafeInteger(retryAfterSeconds) && retryAfterSeconds > 0
+            ? retryAfterSeconds
+            : CLIENT_LIMIT_RETRY_AFTER_SECONDS;
     }
 }
 
@@ -116,35 +125,67 @@ function parseLegacyQueueError(err) {
 }
 
 /**
+ * Attach the retry hint every 429 queue rejection must carry, mirroring the
+ * rate limiter's `Retry-After` header plus `retryAfterSeconds` body field.
+ * @param {{status: number, body: Record<string, unknown>, headers?: Record<string, string>}} mapping Response mapping.
+ * @param {number} retryAfterSeconds Retry hint in seconds.
+ * @returns {{status: number, body: Record<string, unknown>, headers: Record<string, string>}} Mapping with retry metadata.
+ */
+function withRetryAfter(mapping, retryAfterSeconds) {
+    if (mapping.status !== 429) return { ...mapping, headers: {} };
+    const seconds = Number.isSafeInteger(retryAfterSeconds) && retryAfterSeconds > 0
+        ? retryAfterSeconds
+        : CLIENT_LIMIT_RETRY_AFTER_SECONDS;
+    return {
+        ...mapping,
+        body: { ...mapping.body, retryAfterSeconds: seconds },
+        headers: { 'Retry-After': String(seconds) }
+    };
+}
+
+/**
  * Normalize queue-domain errors into stable API response payload metadata.
+ * A 429 mapping always carries `headers['Retry-After']` and
+ * `body.retryAfterSeconds`; callers must apply `headers` before sending.
  * @param {Error} err Queue error.
- * @returns {{status: number, body: {success: boolean, error: string, errorCode: string}} | null} Queue response mapping.
+ * @returns {{status: number, body: {success: boolean, error: string, errorCode: string, retryAfterSeconds?: number}, headers: Record<string, string>} | null} Queue response mapping.
  */
 function toQueueErrorResponse(err) {
     if (err instanceof SliceQueueError) {
-        return {
+        return withRetryAfter({
             status: err.status,
             body: {
                 success: false,
                 error: err.message,
                 errorCode: err.errorCode
             }
-        };
+        }, err.retryAfterSeconds);
     }
 
     const legacy = parseLegacyQueueError(err);
     if (legacy) {
-        return {
+        return withRetryAfter({
             status: legacy.status,
             body: {
                 success: false,
                 error: legacy.error,
                 errorCode: legacy.errorCode
             }
-        };
+        }, CLIENT_LIMIT_RETRY_AFTER_SECONDS);
     }
 
     return null;
+}
+
+/**
+ * Send a mapped queue error, applying any retry headers it carries.
+ * @param {import('express').Response} res Express response object.
+ * @param {{status: number, body: Record<string, unknown>, headers?: Record<string, string>}} mapping Queue response mapping.
+ * @returns {import('express').Response} Sent response.
+ */
+function sendQueueErrorResponse(res, mapping) {
+    for (const [name, value] of Object.entries(mapping.headers || {})) res.setHeader(name, value);
+    return res.status(mapping.status).json(mapping.body);
 }
 
 /** Resolve a safe positive factory limit. */
@@ -201,11 +242,13 @@ const beginSliceQueueShutdown = defaultQueue.beginSliceQueueShutdown;
 const shutdownSliceQueue = defaultQueue.shutdownSliceQueue;
 
 module.exports = {
+    CLIENT_LIMIT_RETRY_AFTER_SECONDS,
     enqueueSliceJob,
     getQueueStatus,
     beginSliceQueueShutdown,
     shutdownSliceQueue,
     createSliceQueue,
+    sendQueueErrorResponse,
     toQueueErrorResponse,
     SliceQueueError,
     SliceQueueFullError,
