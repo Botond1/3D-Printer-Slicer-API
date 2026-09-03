@@ -14,7 +14,7 @@ footprint `238 x 256`) and H2D `325 x 320 x 325`; the retained Bambu artifact
 is `.gcode.3mf`; price rounding is integer arithmetic; the keep-alive default
 is 95000 ms. The complete current contract is in `CLAUDE.md` ("Current
 contract"), the consumer view in `docs/integration-guide.md`, and the
-operator view in `docs/codex/handoff-2026-09-02.md`. Nothing below was edited.
+operator view in `docs/codex/handoff-2026-09-03.md`. Nothing below was edited.
 
 ## Current J3B native-envelope and original-dimension corrective candidate
 

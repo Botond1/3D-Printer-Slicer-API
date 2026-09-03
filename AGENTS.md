@@ -21,43 +21,48 @@ Canonical Codex knowledge:
 Current-state references (read these before the historical material):
 
 - `docs/integration-guide.md` - the consumer contract as of 3.3.0.
-- `docs/codex/handoff-2026-09-02.md` - operator handoff, traps, open items.
+- `docs/codex/handoff-2026-09-03.md` - operator handoff, traps, open items
+  (`handoff-2026-09-02.md` still holds the three-engine FDM material).
 - `CLAUDE.md` section "Current contract (3.3.0, 2026-09-03)" - every retained
   hard rule with its exact value.
 - `CHANGELOG.md` - the 3.3.0 entry lists every consumer-visible change.
 
-## Current state (3.2.0, 2026-09-02)
+## Current state (3.3.0, 2026-09-03)
 
 Classification:
-`BAMBU_ENGINE_OVERHAUL_INTEGRATED_ON_FEAT_BRANCH;
-THREE_ENGINES_PRUSA_2_8_1_ORCA_2_3_1_BAMBU_02_08_02_61;
+`THREE_ENGINES_PRUSA_2_8_1_ORCA_2_3_1_BAMBU_02_08_02_61;
+SLA_QUOTING_ELEGOO_SATURN_4_ULTRA_PRICED_FROM_LAYER_COUNT_MODEL;
 BAMBU_CLI_EQUALS_OWNER_GUI_ON_10_REFERENCE_MODELS;
 BAMBU_ENVELOPES_MEASURED_P1S_256x228x250_ALT_238x256_H2D_325x320x325;
-RENDER_ENDPOINT_DETERMINISTIC_PNG_LOCAL_VERIFIED;
-PRODUCTION_STILL_RUNS_SIGNED_MAIN_CANDIDATE_BF5E712;
+SATURN_ENVELOPE_DECLARED_NOT_MEASURED_SLA_TIME_MODEL_UNCALIBRATED;
+PRODUCTION_RUNS_SIGNED_MAIN_CANDIDATE_4FB770D7;
 PUBLIC_ROUTE_ACTIVE_LEADPILOT_ONLY_NO_CUSTOMER_TRAFFIC;
-DEPLOY_REGISTRY_ROUTE_DNS_ALLOWLIST_CONSUMER_CHANGES_NOT_AUTHORIZED`.
+FURTHER_DEPLOY_REGISTRY_ROUTE_DNS_ALLOWLIST_CONSUMER_CHANGES_NOT_AUTHORIZED`.
 
-- The integration branch `feat/bambu-engine-overhaul` adds `POST /bambu/slice`
+- `main` is the only branch. The service has three engines: `POST /bambu/slice`
   (Bambu Studio 02.08.02.61, official BBL vendor chain, API-owned placement,
-  `.gcode.3mf` artifact), `POST /render` (deterministic 1024 x 768 PNG of the
-  final pose), `supports` on every engine, strict `infill`, ABS/TPU Orca
-  filament profiles, integer price rounding, seven new error codes
-  (`INVALID_SUPPORTS`, `INVALID_INFILL`, `INVALID_PRINTER_PROFILE`,
-  `INVALID_PROCESS_PROFILE`, `MATERIAL_PROFILE_UNAVAILABLE`,
-  `UNSLICEABLE_SOURCE_GEOMETRY`, `NATIVE_OUTPUT_OVERFLOW`), pre-enqueue
-  validation, principal-keyed limiter/queue fairness with `Retry-After` on
-  every 429, an authoritative pricing file, a 95 s keep-alive default, and the
-  runtime budgets listed in `CLAUDE.md`. `GET /profiles` publishes 82 rows.
-- Production still runs the signed main candidate for
-  `bf5e712071e3174a67fdb22ff3794003fa3ab32b`
-  (`ghcr.io/botond1/3d-printer-slicer-api@sha256:153987840361d60c365da7b105769bb112de807db39a737548b725ea857918ca`)
-  behind the LeadPilot-only route; both consumers are integrated in contract
-  and neither is switched on. The 3.2.0 image is validated locally and by the
-  production-envelope smoke recorded in `CHANGELOG.md`; it is not published,
-  deployed, or routed. Publication still requires the manual I11
-  `workflow_dispatch` from protected `main`; deploy, route, DNS, allowlist,
-  and consumer mutation still require separate owner authorization.
+  `.gcode.3mf` artifact), `POST /orca/slice`, and `POST /prusa/slice` for both
+  FDM and the Elegoo Saturn 4 Ultra SLA quoting path, plus `POST /render`
+  (deterministic 1024 x 768 PNG of the final pose). `supports` and strict
+  `infill` apply on every engine, pricing is integer-rounded, and the runtime
+  budgets are the ones listed in `CLAUDE.md`. `GET /profiles` publishes 88 rows
+  (82 FDM + 6 `SATURN4U` SLA).
+- SLA quotes are priced from the deterministic layer-count time model
+  `sla-layer-time-v1` (`configs/sla/printers.json`) and a resin-density mass;
+  the `.sl1` raster stays quote-only (a printable `.goo` needs UVtools). The
+  per-layer motion time is an assumption until the owner calibrates it, and the
+  Saturn's admission ceiling mirrors its declared metadata rather than a
+  measured native edge.
+- Production runs the signed main candidate for
+  `4fb770d792eac932f02a6c9b3f407a7822a1996b`
+  (`ghcr.io/botond1/3d-printer-slicer-api@sha256:c32b4c6f659b6b75cd504213014c1c95da9ab6d293b18906e8f3c78425f3159b`)
+  behind the LeadPilot-only route, deployed and verified on 2026-09-03 as
+  recorded in `docs/codex/handoff-2026-09-03.md`; the 3.2.0 release stays on the
+  host for rollback. Both consumers are integrated in contract and neither is
+  switched on, so there is no customer traffic. Every further publication still
+  requires the manual `workflow_dispatch` from protected `main`, and deploy,
+  route, DNS, allowlist, and consumer mutation each require separate owner
+  authorization.
 - The pre-3.2.0 narrative (J0..J3B, I10..I12, Hostinger route activation and
   perimeter persistence) is preserved verbatim in
   `docs/codex/history-waves.md`; the evidence files under `docs/codex/evidence/`
