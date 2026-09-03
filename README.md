@@ -17,7 +17,8 @@ print time and mass with three native slicers, and returns a validated HUF quote
 Version **3.3.0** (2026-09-03).
 
 - Consumer contract (WooCommerce plugin, LeadPilot): [`docs/integration-guide.md`](docs/integration-guide.md)
-- Operator handoff: [`docs/codex/handoff-2026-09-02.md`](docs/codex/handoff-2026-09-02.md)
+- Operator handoff: [`docs/codex/handoff-2026-09-03.md`](docs/codex/handoff-2026-09-03.md)
+  (previous: [`docs/codex/handoff-2026-09-02.md`](docs/codex/handoff-2026-09-02.md))
 - Release notes: [`CHANGELOG.md`](CHANGELOG.md)
 - Historical wave narrative (J0..J3B, I10..I12), moved out of this file verbatim:
   [`docs/codex/history-waves.md`](docs/codex/history-waves.md)

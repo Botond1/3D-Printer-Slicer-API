@@ -525,7 +525,8 @@ Optional MCP:
 - Global Claude guidance: CLAUDE.md and .claude/CLAUDE.md
 - Codex routing layer: AGENTS.md with docs/codex/project-map.md, security-model.md, hardening-plan.md
 - Consumer contract: docs/integration-guide.md
-- Operator handoff: docs/codex/handoff-2026-09-02.md
+- Operator handoff: docs/codex/handoff-2026-09-03.md (previous:
+  docs/codex/handoff-2026-09-02.md)
 - Historical narrative: docs/codex/history-waves.md and docs/codex/evidence/
 - Folder-local docs:
   - app/CLAUDE.md
