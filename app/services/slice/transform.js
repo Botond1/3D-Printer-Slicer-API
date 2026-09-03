@@ -387,7 +387,16 @@ async function applyTransformAndValidateModel(
         ? await getModelInfo(transformedFilePath, signal) : orientedModelMeasurement;
     throwIfAborted(signal);
     if (!isPositiveModelMeasurement(finalModelMeasurement)) return modelDimensionsUnavailableResult();
-    const effectiveModelInfo = { ...finalModelMeasurement.modelInfo, volume_mm3: volumeMm3 };
+    // The transform helper's own marker is the primary volume source; when no
+    // scale or rotation was requested the helper never runs, and the native
+    // measurement of the very same mesh carries its manifold volume instead.
+    const measuredVolumeMm3 = Number.isFinite(finalModelMeasurement.modelInfo.volume_mm3)
+        ? finalModelMeasurement.modelInfo.volume_mm3
+        : null;
+    const effectiveModelInfo = {
+        ...finalModelMeasurement.modelInfo,
+        volume_mm3: Number.isFinite(volumeMm3) ? volumeMm3 : measuredVolumeMm3
+    };
 
     const modelBoundsValidation = validateModelDimensionsAgainstLimits(effectiveModelInfo, buildVolumeLimits);
     const orientation = transformContext.orientation || createOrientationState(

@@ -122,7 +122,7 @@ test('getModelInfo distinguishes unavailable, incomplete, and measured-zero outc
     }));
     assert.deepEqual(await measuredZero.getModelInfo('model.stl'), {
         status: 'measured',
-        modelInfo: { x: 0, y: 0, z: 0, height_mm: 0 }
+        modelInfo: { x: 0, y: 0, z: 0, height_mm: 0, volume_mm3: null }
     });
 });
 
@@ -263,7 +263,7 @@ test('measured-state factory enforces the canonical height-equals-z invariant', 
         createMeasuredModelMeasurement({ x: 20, y: 30, z: 40 }),
         {
             status: 'measured',
-            modelInfo: { x: 20, y: 30, z: 40, height_mm: 40 }
+            modelInfo: { x: 20, y: 30, z: 40, height_mm: 40, volume_mm3: null }
         }
     );
 });
@@ -373,7 +373,7 @@ test('pre-orientation measurement failure does not stop a later measured oriente
     assert.deepEqual(result.originalModelMeasurement, createUnavailableModelMeasurement());
     assert.equal(result.orientedModelMeasurement.status, 'measured');
     assert.deepEqual(result.orientedModelMeasurement.modelInfo, {
-        x: 20, y: 30, z: 40, height_mm: 40
+        x: 20, y: 30, z: 40, height_mm: 40, volume_mm3: null
     });
 });
 

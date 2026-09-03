@@ -5,8 +5,11 @@
  * stdout line whenever it actually runs (a real scale/rotation transform, or
  * the Bambu-only placement pass); `transform.js` parses it with a bounded
  * regex into `effectiveModelInfo.volume_mm3` without touching the existing
- * dimension logic. This is the JS side of the SLA model-volume contract that
- * feeds `stats.model_volume_ml`/`support_volume_ml`.
+ * dimension logic. A request that asks for no scale and no rotation never
+ * invokes that helper, so the volume then comes from the native measurement
+ * of the same mesh (`prusa-slicer --info`, manifold meshes only). This is the
+ * JS side of the SLA model-volume contract that feeds
+ * `stats.model_volume_ml`/`support_volume_ml`.
  */
 
 const test = require('node:test');
@@ -181,7 +184,7 @@ test('a malformed or missing marker fails closed to null rather than throwing', 
     }
 });
 
-test('no scale/rotation requested never invokes scale_model.py, so volume stays null', async (t) => {
+test('no scale/rotation requested never invokes scale_model.py and carries the measured volume', async (t) => {
     const root = await fixture(t);
     const stl = path.join(root, 'model.stl');
     await fs.writeFile(stl, 'solid model\nendsolid model\n');
@@ -190,6 +193,27 @@ test('no scale/rotation requested never invokes scale_model.py, so volume stays 
         calls += 1;
         return { stdout: '', stderr: '' };
     });
+    t.after(restore);
+    const measured = createMeasuredModelMeasurement({ x: 20, y: 44, z: 30, volume_mm3: 12345.5 });
+    const result = await transform.applyTransformAndValidateModel(
+        stl,
+        measured,
+        NO_TRANSFORM_OPTIONS,
+        LIMITS,
+        inertWorkspace(),
+        undefined,
+        { orientation: UNCHANGED, originalModelMeasurement: measured }
+    );
+    assert.equal(calls, 0);
+    assert.equal(result.isValid, true);
+    assert.equal(result.effectiveModelInfo.volume_mm3, 12345.5);
+});
+
+test('an untransformed model without a measured volume still reports null', async (t) => {
+    const root = await fixture(t);
+    const stl = path.join(root, 'model.stl');
+    await fs.writeFile(stl, 'solid model\nendsolid model\n');
+    const { transform, restore } = loadTransformWithCommand(async () => ({ stdout: '', stderr: '' }));
     t.after(restore);
     const result = await transform.applyTransformAndValidateModel(
         stl,
@@ -200,7 +224,34 @@ test('no scale/rotation requested never invokes scale_model.py, so volume stays 
         undefined,
         { orientation: UNCHANGED, originalModelMeasurement: createMeasuredModelMeasurement({ x: 20, y: 44, z: 30 }) }
     );
-    assert.equal(calls, 0);
     assert.equal(result.isValid, true);
     assert.equal(result.effectiveModelInfo.volume_mm3, null);
+});
+
+test('getModelInfo reads the manifold mesh volume and refuses a non-manifold one', async (t) => {
+    const stl = path.join(await fixture(t), 'model.stl');
+    await fs.writeFile(stl, 'solid model\nendsolid model\n');
+    const dimensions = 'size_x = 20.000000\nsize_y = 30.000000\nsize_z = 44.000000\n';
+    const cases = [
+        [dimensions + 'manifold = yes\nnumber_of_parts =  1\nvolume = 64000.003906\n', 64000.003906],
+        [dimensions + 'manifold = no\nvolume = 64000.003906\n', null],
+        [dimensions + 'manifold = yes\nvolume = -12.5\n', null],
+        [dimensions + 'manifold = yes\n', null]
+    ];
+    for (const [stdout, expected] of cases) {
+        const command = require(COMMAND_PATH);
+        const restoreCommand = replaceModule(COMMAND_PATH, { ...command, runCommand: async () => ({ stdout, stderr: '' }) });
+        const previousModelStats = require.cache[MODEL_STATS_PATH];
+        delete require.cache[MODEL_STATS_PATH];
+        try {
+            const measurement = await require(MODEL_STATS_PATH).getModelInfo(stl);
+            assert.equal(measurement.status, 'measured');
+            assert.equal(measurement.modelInfo.volume_mm3, expected);
+            assert.equal(measurement.modelInfo.z, 44);
+        } finally {
+            if (previousModelStats) require.cache[MODEL_STATS_PATH] = previousModelStats;
+            else delete require.cache[MODEL_STATS_PATH];
+            restoreCommand();
+        }
+    }
 });

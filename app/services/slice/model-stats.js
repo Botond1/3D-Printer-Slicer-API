@@ -43,6 +43,10 @@ function createMeasuredModelMeasurement(modelInfo) {
     ) {
         throw new Error('Measured model information is invalid.');
     }
+    // The mesh volume is optional provenance, never a dimension: an absent or
+    // unusable value stays `null` and never invalidates a measurement.
+    const volumeMm3 = Number(modelInfo?.volume_mm3);
+    normalized.volume_mm3 = Number.isFinite(volumeMm3) && volumeMm3 > 0 ? volumeMm3 : null;
     return Object.freeze({
         status: MODEL_INFO_MEASUREMENT_STATUSES.MEASURED,
         modelInfo: Object.freeze(normalized)
@@ -105,12 +109,30 @@ async function readBoundedText(filePath, maximumBytes) {
 }
 
 /**
+ * Parse the native `--info` mesh volume, accepted only for a manifold mesh so
+ * a non-watertight body never reports a signed-volume artifact as a real
+ * measurement. Bounded by the same dimension policy as the axes.
+ * @param {string} stdout Bounded `prusa-slicer --info` stdout.
+ * @param {{MAX_MODEL_DIMENSION_MM: number}} policy Active resource policy.
+ * @returns {number|null} Positive mesh volume in mm3, or null when unusable.
+ */
+function parseNativeMeshVolumeMm3(stdout, policy) {
+    const text = String(stdout || '');
+    if (!/manifold\s*=\s*yes/i.test(text)) return null;
+    const match = /(?:^|\n)\s*volume\s*=\s*([0-9]+(?:\.[0-9]+)?)/i.exec(text);
+    if (!match) return null;
+    const volume = Number(match[1]);
+    const maxVolume = policy.MAX_MODEL_DIMENSION_MM ** 3;
+    return Number.isFinite(volume) && volume > 0 && volume <= maxVolume ? volume : null;
+}
+
+/**
  * Read model dimensions from `prusa-slicer --info` output.
  * @param {string} filePath Path to mesh file.
  * @returns {Promise<
- *   {status: 'measured', modelInfo: {x: number, y: number, z: number, height_mm: number}}
+ *   {status: 'measured', modelInfo: {x: number, y: number, z: number, height_mm: number, volume_mm3: number|null}}
  *   | {status: 'unavailable', modelInfo: null}
- * >} Explicit measurement result. A parsed zero-sized model remains distinct from an unavailable measurement.
+ * >} Explicit measurement result. A parsed zero-sized model remains distinct from an unavailable measurement. `volume_mm3` is the manifold mesh volume when the native output reports one, else null.
  */
 async function getModelInfo(filePath, signal) {
     throwIfAborted(signal);
@@ -126,7 +148,9 @@ async function getModelInfo(filePath, signal) {
         if (![x, y, z].every((value) => Number.isFinite(value) && value >= 0 && value <= policy.MAX_MODEL_DIMENSION_MM)) {
             return createUnavailableModelMeasurement();
         }
-        return createMeasuredModelMeasurement({ x, y, z, height_mm: z });
+        return createMeasuredModelMeasurement({
+            x, y, z, height_mm: z, volume_mm3: parseNativeMeshVolumeMm3(stdout, policy)
+        });
     } catch (err) {
         if (isAbortError(err, signal)) {
             throwIfAborted(signal);
