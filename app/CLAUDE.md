@@ -1,6 +1,6 @@
 # App Folder - Local Claude Guide
 
-Last synchronized: 2026-09-02
+Last synchronized: 2026-09-03
 
 ## Scope
 

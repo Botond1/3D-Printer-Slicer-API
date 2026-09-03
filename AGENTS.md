@@ -20,11 +20,11 @@ Canonical Codex knowledge:
 
 Current-state references (read these before the historical material):
 
-- `docs/integration-guide.md` - the consumer contract as of 3.2.0.
+- `docs/integration-guide.md` - the consumer contract as of 3.3.0.
 - `docs/codex/handoff-2026-09-02.md` - operator handoff, traps, open items.
-- `CLAUDE.md` section "Current contract (3.2.0, 2026-09-02)" - every retained
+- `CLAUDE.md` section "Current contract (3.3.0, 2026-09-03)" - every retained
   hard rule with its exact value.
-- `CHANGELOG.md` - the 3.2.0 entry lists every consumer-visible change.
+- `CHANGELOG.md` - the 3.3.0 entry lists every consumer-visible change.
 
 ## Current state (3.2.0, 2026-09-02)
 

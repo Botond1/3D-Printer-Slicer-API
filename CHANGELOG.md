@@ -7,11 +7,12 @@ All notable changes to this project are documented in this file.
 ### Added
 - **[contract]** SLA quoting for the Elegoo Saturn 4 Ultra on `POST /prusa/slice` (`layerHeight` 0.025 / 0.05): PrusaSlicer generates supports and a pad at zero elevation, `stats.print_time_seconds` comes from the layer-count time model `sla-layer-time-v1` (`configs/sla/printers.json`, owner-tunable per-layer seconds), `stats.material_used_g = material_used_ml x resin density`, plus `stats.layer_count`, `stats.model_volume_ml`, `stats.support_volume_ml`, `profiles.sla_printer`, `profiles.resin_density_g_cm3`, `profiles.sla_time_model`; SLA is priced again.
 - `GET /profiles` publishes six `SATURN4U` SLA rows (two layer heights x three resins) with the declared `218.88 x 122.88 x 220 mm` envelope.
-- `app/scale_model.py` reports the watertight mesh volume, which the API uses for the model-only resin volume.
+- The API measures the model's own mesh volume for the model-only resin volume: `app/scale_model.py` reports it whenever a scale or rotation transform runs, and otherwise the existing `prusa-slicer --info` measurement supplies it (manifold meshes only, so a non-watertight body reports `null` instead of a signed-volume artifact).
 
 ### Fixed
 - SLA slicing of any model taller than 25 mm at 0.05 mm failed with `413 SLICE_RESOURCE_LIMIT_EXCEEDED` because the `.sl1` reader applied the 500-entry upload ZIP limit to one PNG per layer; the reader now counts layers with its own bound and reads only `config.ini`.
 - Large flat SLA parts no longer exhaust memory in PrusaSlicer's support tree (zero support elevation with a pad around the object).
+- `supports=false` was silently ignored on the SLA path: the request produced the same `supports_enable = 1` profile and the same `effective_profile_sha256` as the default. The SLA runtime profile now carries `supports_enable = 0` for that request, so it is a different effective profile, as the contract already stated for every engine. The pad stays enabled either way, because it is the raft the object prints on.
 
 ### Changed
 - **[contract]** SLA `hourly_rate` / `estimated_price_huf` / `material_used_g` are numeric again; `print_time_source` is `sla_layer_time_model` (the former `sla_synthetic_estimate` / `sla_sl1_metadata_estimate` values are gone).

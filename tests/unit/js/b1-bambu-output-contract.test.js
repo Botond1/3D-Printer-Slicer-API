@@ -284,6 +284,36 @@ test('supports=true leaves Prusa and Orca runtime profiles and digests byte-iden
     assert.match(prusaOn, /^support_material_auto = 1$/m);
 });
 
+test('supports=false switches the SLA profile off and changes its digest, supports=true does not', async (t) => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'b1-sla-supports-'));
+    t.after(() => fsp.rm(root, { recursive: true, force: true }));
+    const workspace = scratchWorkspace(root);
+    const slaBase = path.join(root, 'sla.ini');
+    await fsp.writeFile(slaBase, 'layer_height = 0.05\nsupports_enable = 1\npad_enable = 1\npad_around_object = 1\nexposure_time = 2.5\n');
+    const slaDigest = async (options) => calculateEffectiveProfileSha256({
+        engine: 'prusa', technology: 'SLA',
+        runtimeConfigFile: await createRuntimeSlicerProfile('prusa', slaBase, 'SLA', 0.05, '20%', workspace, options)
+    });
+    const slaLegacy = await slaDigest({});
+    assert.equal(await slaDigest({ supports: true }), slaLegacy);
+    assert.equal(await slaDigest({ supports: undefined }), slaLegacy);
+    assert.notEqual(await slaDigest({ supports: false }), slaLegacy);
+    const slaOff = await fsp.readFile(
+        await createRuntimeSlicerProfile('prusa', slaBase, 'SLA', 0.05, '20%', workspace, { supports: false }), 'utf8'
+    );
+    assert.match(slaOff, /^supports_enable = 0$/m);
+    assert.equal(slaOff.match(/^supports_enable\s*=/gm).length, 1);
+    // The pad is the raft the object prints on, never a support structure.
+    assert.match(slaOff, /^pad_enable = 1$/m);
+    assert.match(slaOff, /^pad_around_object = 1$/m);
+    // SLA never receives an infill override, on or off.
+    assert.equal(/fill_density/.test(slaOff), false);
+    const slaOn = await fsp.readFile(
+        await createRuntimeSlicerProfile('prusa', slaBase, 'SLA', 0.05, '20%', workspace, { supports: true }), 'utf8'
+    );
+    assert.match(slaOn, /^supports_enable = 1$/m);
+});
+
 test('bambu response mapper echoes vendor names, registry printer, bed type, and metadata', () => {
     const context = {
         profileOverrides: { bambuPrinter: 'H2D', bambuProcessProfile: null },

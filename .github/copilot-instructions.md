@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Copilot Instructions
 
-Last synchronized: 2026-09-02
+Last synchronized: 2026-09-03
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -15,7 +15,7 @@ When architecture rules or domain constraints change in this file, keep these fi
 ## Goal
 Provide a reliable slicing, preview, and pricing API for 3D printing workflows with strict safety and predictable behavior.
 
-## Current Contract (3.2.0, 2026-09-02)
+## Current Contract (3.3.0, 2026-09-03)
 
 Every retained hard rule is stated once here with its exact value. The
 pre-3.2.0 checkpoint narrative (J0..J3B, I10..I12, Hostinger route activation)

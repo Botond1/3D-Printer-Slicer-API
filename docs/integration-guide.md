@@ -1,6 +1,6 @@
 # Integration guide
 
-Consumer-facing contract of the 3D Printer Slicer API as of version 3.2.0
+Consumer-facing contract of the 3D Printer Slicer API as of version 3.3.0
 (2026-09-02). It is written for the two integrating systems (the WooCommerce
 plugin and LeadPilot) and covers only what a consumer can call. The
 operator-facing surfaces (pricing administration, artifact download,
@@ -369,7 +369,14 @@ listed by `GET /profiles`, which is the reference to diff against.
   (exposure + 2.5 s tilt), owner-tunable in the server registry) and
   `material_used_g = material_used_ml x resin density` (Standard/ABS-Like
   1.10, Flexible 1.05 g/cm3). `stats.layer_count`, `stats.model_volume_ml`
-  and `stats.support_volume_ml` are reported. The per-layer motion time is a
+  and `stats.support_volume_ml` are reported; the two volumes are `null` for a
+  mesh that is not watertight, because the model's own volume cannot be
+  measured there (the price never depends on them). `supports=false` is
+  honoured on SLA too and is a different effective profile, exactly as on FDM.
+  PrusaSlicer places SLA support points non-deterministically, so two identical
+  SLA requests can differ slightly in support volume, mass and price (measured:
+  36.03 ml against 36.25 ml on the same overhang model, about 0.6%); an FDM
+  quote does not vary this way. The per-layer motion time is a
   documented assumption until the owner calibrates it against the printer's
   own estimate; treat SLA prices as calibrated only after that.
 

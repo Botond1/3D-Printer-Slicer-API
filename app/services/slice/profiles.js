@@ -565,9 +565,16 @@ async function createPrusaRuntimeProfile(baseConfigPath, technology, layerHeight
     // the INI is left untouched (so the default digest is unchanged). With
     // supports off those flags are omitted and the INI must carry explicit
     // zeros, because the shipped profile enables automatic supports itself.
-    if (technology === 'FDM' && !resolveSupports(options)) {
-        iniContent = upsertIniKey(iniContent, 'support_material', SUPPORT_OFF);
-        iniContent = upsertIniKey(iniContent, 'support_material_auto', SUPPORT_OFF);
+    // The SLA invocation has no support flags at all, so the SLA profile's own
+    // `supports_enable` is the only place the request can be honoured; the pad
+    // stays enabled either way because it is the raft the object prints on.
+    if (!resolveSupports(options)) {
+        if (technology === 'FDM') {
+            iniContent = upsertIniKey(iniContent, 'support_material', SUPPORT_OFF);
+            iniContent = upsertIniKey(iniContent, 'support_material_auto', SUPPORT_OFF);
+        } else {
+            iniContent = upsertIniKey(iniContent, 'supports_enable', SUPPORT_OFF);
+        }
     }
 
     const runtimeProfilePath = resolveRuntimeProfilePath(workspace, 'prusa-runtime', '.ini', options.pathFactory);

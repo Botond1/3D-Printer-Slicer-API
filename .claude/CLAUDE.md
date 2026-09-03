@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Claude Instructions
 
-Last synchronized: 2026-09-02
+Last synchronized: 2026-09-03
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -15,7 +15,7 @@ If rules are changed here, synchronize with:
 ## Goal
 Keep slicing, preview, and pricing behavior safe, deterministic, and production-friendly while preserving strict domain constraints.
 
-## Current contract (3.2.0, 2026-09-02)
+## Current contract (3.3.0, 2026-09-03)
 
 Every retained hard rule is stated once here with its exact value. The
 pre-3.2.0 checkpoint narrative (J0..J3B, I10..I12, Hostinger route activation)

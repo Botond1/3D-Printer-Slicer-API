@@ -14,7 +14,7 @@
 An automated 3D slicing, preview, and pricing API built with Node.js and Python.
 It converts supported 3D model and CAD inputs into printer-ready artifacts, measures
 print time and mass with three native slicers, and returns a validated HUF quote.
-Version **3.2.0** (2026-09-02).
+Version **3.3.0** (2026-09-03).
 
 - Consumer contract (WooCommerce plugin, LeadPilot): [`docs/integration-guide.md`](docs/integration-guide.md)
 - Operator handoff: [`docs/codex/handoff-2026-09-02.md`](docs/codex/handoff-2026-09-02.md)
