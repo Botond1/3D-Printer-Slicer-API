@@ -328,7 +328,7 @@ class ProfileCatalogueV2Tests(ProfileCatalogueFixtures, unittest.TestCase):
         body = self.body(self.current_profiles())
         self.assertTrue(RUNNER.validate_catalogue_shape(body)[0])
         self.assertEqual(
-            RUNNER.validate_current_v2_fdm_boundary(body),
+            RUNNER.validate_current_v2_managed_rows(body),
             (
                 True,
                 "Exactly 18 managed FDM rows publish separate declared and inclusive "

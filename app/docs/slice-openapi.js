@@ -168,16 +168,15 @@ const PLACEMENT_SCHEMA = Object.freeze({
 
 /**
  * Print-time provenance labels. The FDM entries mirror the strict G-code
- * pattern ids in `gcode-metrics.js`; the SLA entries mirror
- * `SLA_PRINT_TIME_SOURCES` in `model-stats.js`. A unit test pins both.
+ * pattern ids in `gcode-metrics.js`; the SLA entry mirrors
+ * `SLA_PRINT_TIME_SOURCE` in `model-stats.js`. A unit test pins both.
  */
 const PRINT_TIME_SOURCES = Object.freeze([
     'total_estimated_time',
     'm73_p0_r_minutes',
     'estimated_printing_time',
     'time_seconds',
-    'sla_synthetic_estimate',
-    'sla_sl1_metadata_estimate'
+    'sla_layer_time_model'
 ]);
 
 const MODEL_TRANSFORM_SCHEMA = Object.freeze({
@@ -350,6 +349,22 @@ const SUCCESS_SCHEMA = Object.freeze({
                     type: 'string',
                     description: 'Bambu Studio only: `--curr-bed-type` value taken from the printer registry.'
                 },
+                sla_printer: {
+                    type: 'string',
+                    enum: ['SATURN4U'],
+                    description: 'PrusaSlicer SLA only: SLA printer registry id used to price the quote (`configs/sla/printers.json`).'
+                },
+                resin_density_g_cm3: {
+                    type: 'number',
+                    exclusiveMinimum: true,
+                    minimum: 0,
+                    description: 'PrusaSlicer SLA only: resin density (g/cm3) used to derive stats.material_used_g from the parsed resin volume.'
+                },
+                sla_time_model: {
+                    type: 'string',
+                    enum: ['sla-layer-time-v1'],
+                    description: 'PrusaSlicer SLA only: schema id of the deterministic layer-count print-time model that produced stats.print_time_seconds.'
+                },
                 effective_profile_sha256: {
                     type: 'string',
                     pattern: '^[a-f0-9]{64}$',
@@ -360,7 +375,7 @@ const SUCCESS_SCHEMA = Object.freeze({
         hourly_rate: {
             type: 'number',
             nullable: true,
-            description: 'Configured hourly rate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review. SLA is never priced automatically and always returns null.'
+            description: 'Configured hourly rate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
         },
         model_transform: MODEL_TRANSFORM_SCHEMA,
         build_volume_limits_mm: BUILD_VOLUME_LIMITS_SCHEMA,
@@ -378,18 +393,41 @@ const SUCCESS_SCHEMA = Object.freeze({
                     type: 'string',
                     nullable: true,
                     enum: [...PRINT_TIME_SOURCES],
-                    description: 'Which marker produced print_time_seconds. FDM values name the strict G-code pattern that matched (`total_estimated_time`, `m73_p0_r_minutes`, `estimated_printing_time`, `time_seconds`). SLA values are estimates only: `sla_synthetic_estimate` is the server per-layer model used when the SL1 metadata carries no time, `sla_sl1_metadata_estimate` is the uncalibrated PrusaSlicer SL1 `printTime`. Null only when strict metric parsing is disabled.'
+                    description: 'Which marker produced print_time_seconds. FDM values name the strict G-code pattern that matched (`total_estimated_time`, `m73_p0_r_minutes`, `estimated_printing_time`, `time_seconds`). `sla_layer_time_model` is the deterministic Saturn 4 Ultra layer-count print-time model (`profiles.sla_time_model`); the native SL1 `printTime` estimate is parsed but never published. Null only when strict metric parsing is disabled.'
                 },
                 material_used_m: {
                     type: 'number',
                     minimum: 0,
-                    description: 'Filament length parsed directly from slicer output.'
+                    description: 'Filament length parsed directly from slicer output. Always 0 for SLA, which has no filament.'
                 },
                 material_used_g: {
                     type: 'number',
                     nullable: true,
                     minimum: 0,
-                    description: 'Filament mass parsed directly from the slicer marker; null when the selected native profile emits no mass marker. It is never derived from length. Always null for SLA, which measures no resin mass.'
+                    description: 'Filament mass parsed directly from the slicer marker; null when the selected native profile emits no mass marker. It is never derived from length. For SLA this is the resin mass, derived from the parsed resin volume and profiles.resin_density_g_cm3 and always positive.'
+                },
+                material_used_ml: {
+                    type: 'number',
+                    minimum: 0,
+                    description: 'PrusaSlicer SLA only: resin volume (model + supports + pad) parsed from the SL1 metadata. Always 0 for FDM.'
+                },
+                layer_count: {
+                    type: 'integer',
+                    nullable: true,
+                    minimum: 1,
+                    description: 'PrusaSlicer SLA only: total layer count (numFast + numSlow) parsed from the SL1 metadata. Null for FDM.'
+                },
+                model_volume_ml: {
+                    type: 'number',
+                    nullable: true,
+                    minimum: 0,
+                    description: 'PrusaSlicer SLA only: model-only volume in millilitres from the transformed mesh, or null when the transform pipeline did not measure a volume (for example, no scale/rotation was requested). Null for FDM.'
+                },
+                support_volume_ml: {
+                    type: 'number',
+                    nullable: true,
+                    minimum: 0,
+                    description: 'PrusaSlicer SLA only: max(0, material_used_ml - model_volume_ml), or null when model_volume_ml is unavailable. Null for FDM.'
                 },
                 object_height_mm: {
                     type: 'number',
@@ -399,7 +437,7 @@ const SUCCESS_SCHEMA = Object.freeze({
                 estimated_price_huf: {
                     type: 'number',
                     nullable: true,
-                    description: 'Calculated estimate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review. SLA is never priced automatically and always returns null.'
+                    description: 'Calculated estimate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
                 }
             }
         }

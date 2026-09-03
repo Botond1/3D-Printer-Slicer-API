@@ -12,6 +12,7 @@ const {
     MAX_BUILD_VOLUMES,
     P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    SLA_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE,
     MIN_BUILD_VOLUMES
@@ -323,11 +324,15 @@ function resolveBuildVolumeLimits(
     const h2dQuoteProfileLimits =
         H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[engine]
         || Object.freeze({});
+    const slaProfileLimits = technology === 'SLA'
+        ? (SLA_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[engine] || Object.freeze({}))
+        : Object.freeze({});
     const bambuProfileLimits = engine === 'bambu'
         ? BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM
         : Object.freeze({});
     const configuredLargestPassing = knownProfileLimits[limits.sourceProfile]
         || h2dQuoteProfileLimits[limits.sourceProfile]
+        || slaProfileLimits[limits.sourceProfile]
         || bambuProfileLimits[limits.sourceProfile]
         || null;
     let largestPassing = configuredLargestPassing
@@ -560,9 +565,17 @@ async function createPrusaRuntimeProfile(baseConfigPath, technology, layerHeight
     // the INI is left untouched (so the default digest is unchanged). With
     // supports off those flags are omitted and the INI must carry explicit
     // zeros, because the shipped profile enables automatic supports itself.
-    if (technology === 'FDM' && !resolveSupports(options)) {
-        iniContent = upsertIniKey(iniContent, 'support_material', SUPPORT_OFF);
-        iniContent = upsertIniKey(iniContent, 'support_material_auto', SUPPORT_OFF);
+    // The SLA invocation has no support flags at all, so the SLA profile's own
+    // `supports_enable` is the only place the request can be honoured. The pad
+    // keys are left alone: they are not support structures, and at zero support
+    // elevation PrusaSlicer emits no pad anyway.
+    if (!resolveSupports(options)) {
+        if (technology === 'FDM') {
+            iniContent = upsertIniKey(iniContent, 'support_material', SUPPORT_OFF);
+            iniContent = upsertIniKey(iniContent, 'support_material_auto', SUPPORT_OFF);
+        } else {
+            iniContent = upsertIniKey(iniContent, 'supports_enable', SUPPORT_OFF);
+        }
     }
 
     const runtimeProfilePath = resolveRuntimeProfilePath(workspace, 'prusa-runtime', '.ini', options.pathFactory);

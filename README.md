@@ -14,7 +14,7 @@
 An automated 3D slicing, preview, and pricing API built with Node.js and Python.
 It converts supported 3D model and CAD inputs into printer-ready artifacts, measures
 print time and mass with three native slicers, and returns a validated HUF quote.
-Version **3.2.0** (2026-09-02).
+Version **3.3.0** (2026-09-03).
 
 - Consumer contract (WooCommerce plugin, LeadPilot): [`docs/integration-guide.md`](docs/integration-guide.md)
 - Operator handoff: [`docs/codex/handoff-2026-09-02.md`](docs/codex/handoff-2026-09-02.md)
@@ -34,7 +34,7 @@ consumer changes are owner-authorized actions outside this repository's authorit
 
 | Engine | Binary | Endpoint | Technology | Printers | Inclusive admission ceiling (X x Y x Z mm) |
 | --- | --- | --- | --- | --- | --- |
-| Prusa | PrusaSlicer 2.8.1 | `POST /prusa/slice` | FDM, SLA | P1S (generic Marlin profile), `H2D-QUOTE` | P1S `256 x 256 x 249.9`; H2D-QUOTE `350 x 320 x 324.9` |
+| Prusa | PrusaSlicer 2.8.1 | `POST /prusa/slice` | FDM, SLA | P1S (generic Marlin profile), `H2D-QUOTE`, `SATURN4U` (SLA) | P1S `256 x 256 x 249.9`; H2D-QUOTE `350 x 320 x 324.9`; SATURN4U `218.88 x 122.88 x 220` |
 | Orca | OrcaSlicer 2.3.1 | `POST /orca/slice` | FDM | P1S (generic Marlin profile), `H2D-QUOTE` | P1S `253.9 x 253.9 x 249.9`; H2D-QUOTE `347.9 x 317.9 x 324.9` |
 | Bambu | Bambu Studio 02.08.02.61 | `POST /bambu/slice` | FDM | `P1S` (default), `H2D` (official vendor profiles) | P1S `256 x 228 x 250` (alternative footprint `238 x 256`); H2D `325 x 320 x 325` |
 
@@ -59,10 +59,13 @@ consumer changes are owner-authorized actions outside this repository's authorit
 - The retained artifacts are Prusa `.gcode` / `.sl1`, Orca `.gcode`, and the
   printer-ready Bambu `.gcode.3mf` project; all are listed and downloadable
   through the artifact-scoped admin routes.
-- SLA (Prusa `0.025` / `0.05` mm, `.sl1`) is quote-only: `material_used_g`,
-  `hourly_rate`, and `estimated_price_huf` are always `null`, and
-  `print_time_source` marks the estimate. The intended SLA printer (Elegoo
-  Saturn 4 Ultra) needs a separate future wave; its envelope is not guessed.
+- SLA (Prusa `0.025` / `0.05` mm, `.sl1`) quotes the Elegoo Saturn 4 Ultra
+  (`218.88 x 122.88 x 220 mm`): PrusaSlicer generates supports at zero support
+  elevation, so the object prints directly on the plate and no pad is emitted;
+  the print time is `layers x per-layer seconds`
+  (`configs/sla/printers.json`, `sla-layer-time-v1`, owner-tunable) and
+  `material_used_g = usedMaterial_ml x resin density`. The `.sl1` raster is
+  quote-only; a printable `.goo` needs UVtools conversion.
 
 Production-envelope smoke of the current image, 40 mm PLA cube at 0.2 mm,
 20 % infill, supports on: Bambu P1S `2453 s / 24.0 g / 550 HUF`, Bambu H2D
@@ -246,7 +249,7 @@ Full field semantics and examples: [`docs/integration-guide.md`](docs/integratio
 rounded up to the next 10 HUF, in integer arithmetic (1980 s at 800 HUF/h is
 exactly 440, not the former 450). Mass is reported, never billed. `null`
 price with `null` hourly rate means "quote manually": FDM output without a
-positive mass marker, Orca without a filament profile, and always SLA.
+positive mass marker and Orca without a filament profile.
 `material_used_g` comes only from the slicer's own mass marker and is never
 derived from length; zero is never published.
 
@@ -289,7 +292,7 @@ profile-explicit`, metadata only), and the admission authority
 -> `H2D-QUOTE`) and never merged across engines. Strong `ETag` + `If-None-Match`
 -> `304`; `catalogue_sha256` in the body; construction failure -> `503
 PROFILE_CATALOGUE_UNAVAILABLE` without affecting slicing. The generic
-`120 x 120 x 150 mm` SLA fallback is never advertised as a machine.
+SLA rows are the Saturn 4 Ultra quoting rows (`SATURN4U`).
 
 ---
 

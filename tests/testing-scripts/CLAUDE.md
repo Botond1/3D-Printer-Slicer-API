@@ -1,6 +1,6 @@
 # Testing Scripts - Local Claude Guide
 
-Last synchronized: 2026-09-02
+Last synchronized: 2026-09-03
 
 ## Scope
 
@@ -180,20 +180,26 @@ Use:
 python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
 ```
 
-- The required lane proves unauthenticated HTTP 200, exact FDM-only
+- The required lane proves unauthenticated HTTP 200, exact
   `r3d-profile-catalogue-v2` shape, canonical `catalogue_sha256`, strong ETag,
-  conditional 304, and the current 82-row generation: 6 Prusa, 24 Orca
-  (PLA/PETG/ABS/TPU), 28 Bambu Studio P1S and 24 Bambu Studio H2D rows, with
-  three engine-scoped fleets (bambu H2D, orca and prusa H2D-QUOTE) and the
-  measured bambu envelopes P1S `256 x 228 x 250` and H2D `325 x 320 x 325`.
-  The retired 18-row J3B set is still recognised by name so a regression is
-  reported explicitly, but only the current generation passes. It validates
-  the separate `declared_build_volume_dimensions_mm` metadata and authoritative
-  inclusive `largest_passing_dimensions_inclusive_mm`, and independently
-  rederives engine-scoped `machine_resolutions` and `fleet_resolutions` without
+  conditional 304, and the current 88-row generation: 82 FDM rows (6 Prusa, 24
+  Orca (PLA/PETG/ABS/TPU), 28 Bambu Studio P1S and 24 Bambu Studio H2D) plus 6
+  Elegoo Saturn 4 Ultra SLA quoting rows (`prusa`, `SATURN4U`, 2 layer heights
+  x 3 resins: Standard, ABS-Like, Flexible), with four engine-scoped fleets
+  (bambu H2D, orca and prusa H2D-QUOTE, and the new SLA prusa/SATURN4U fleet)
+  and the measured bambu envelopes P1S `256 x 228 x 250` and H2D
+  `325 x 320 x 325`. AS OF THIS WRITING the runner's `CURRENT_PRESETS`/
+  `EXPECTED_FLEETS`/`CURRENT_GENERATION` still assume the pre-SLA 82-row
+  generation and need a dedicated update (new SLA preset tuples and a
+  technology-aware fleet check) before this lane passes against a live
+  88-row catalogue; see the spawned follow-up task. The retired 18-row J3B set
+  is still recognised by name so a regression is reported explicitly, but only
+  the current generation passes. It validates the separate
+  `declared_build_volume_dimensions_mm` metadata and authoritative inclusive
+  `largest_passing_dimensions_inclusive_mm`, and independently rederives
+  engine-scoped `machine_resolutions` and `fleet_resolutions` without
   cross-engine merging or component-wise synthesis. Preset drift inside one
-  technology/printer/engine must fail catalogue construction. The runner also proves the generic
-  `120 x 120 x 150 mm` SLA fallback is not advertised as a machine envelope.
+  technology/printer/engine must fail catalogue construction.
 - It also proves a bounded generic `engine`, generic endpoint plus ordered
   `slice_selector.parameters[{name,value}]`, ordered path-free
   `profile_components[{role,basename,selector_parameter}]`, exact nullable
@@ -208,9 +214,13 @@ python tests/testing-scripts/profiles/profile_catalogue_test_runner.py
   native X/Y edge beyond its declared quote bed remains `UNESTABLISHED`. Exact
   local final-admission B confirmed all four tuples, and its catalogue lane
   passed 9/9 checks plus the optional Prusa digest-parity check.
-- Do not fabricate Elegoo Saturn 4 Ultra dimensions. The generic v2 entry shape
-  can later admit a truthful SLA printer without a schema-version change, after
-  the owner-profiled Chitubox/Elegoo Satellite remediation wave.
+- The Elegoo Saturn 4 Ultra `SATURN4U` catalogue rows use its real declared
+  bed/height spec (`218.88 x 122.88 x 220 mm`) but a PROVISIONAL admission
+  ceiling identical to that declared metadata; do not treat it as a measured
+  native envelope until a dedicated sweep (like the P1S/H2D-QUOTE/Bambu ones)
+  replaces it. The owner-profiled Chitubox/Elegoo Satellite SLA remediation
+  wave remains a separate, still-pending effort for a truthful print-time/mass
+  calibration beyond the current deterministic layer-time model.
 - Add `--verify-prusa-slice-parity` only when a runnable native API and
   `SLICE_SERVICE_API_KEY` are available. That optional lane performs one
   synthetic Prusa slice and requires its effective profile digest to equal the
@@ -330,7 +340,7 @@ python tests/testing-scripts/slicing/native_envelope_sweep_runner.py
 - Keep focused runners behavior-specific; split oversized runners into domain-focused suites.
 - Keep stable deterministic runners unchanged unless changed endpoint behavior requires edits.
 - Full slice matrix reports may mark explicitly declared fail-fast rejections as passing only when status and `errorCode` match the expected case exactly. Scenario `negative_requests` (for example Orca `infill=140` -> `400 INVALID_INFILL`) follow the same rule.
-- FDM successes on every engine require a positive direct mass and a catalogue-priced quote (Orca ABS/TPU included); SLA successes require null mass, hourly rate, and price. `GET /admin/output-files` may list `.gcode`, `.sl1`, and Bambu `.gcode.3mf` names only.
+- FDM successes on every engine require a positive direct mass and a catalogue-priced quote (Orca ABS/TPU included); SLA (Elegoo Saturn 4 Ultra quoting) successes require a positive resin mass, a positive `stats.layer_count`, `stats.print_time_source == sla_layer_time_model`, and a catalogue-priced quote exactly like FDM. `GET /admin/output-files` may list `.gcode`, `.sl1`, and Bambu `.gcode.3mf` names only.
 - A J0 success-contract assertion must require machine-readable
   `engine_version` and lowercase 64-hex `profiles.effective_profile_sha256`
   while retaining original selected profile basenames. Bounds failures require

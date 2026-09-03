@@ -1,6 +1,6 @@
 {
   "name": "3d-printer-slicer-api",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "packageManager": "npm@10.9.8",
   "main": "app/server.js",
   "scripts": {

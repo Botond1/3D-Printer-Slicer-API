@@ -1,6 +1,6 @@
 # 3D Printer Slicer API - Copilot Instructions
 
-Last synchronized: 2026-09-02
+Last synchronized: 2026-09-03
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -15,7 +15,7 @@ When architecture rules or domain constraints change in this file, keep these fi
 ## Goal
 Provide a reliable slicing, preview, and pricing API for 3D printing workflows with strict safety and predictable behavior.
 
-## Current Contract (3.2.0, 2026-09-02)
+## Current Contract (3.3.0, 2026-09-03)
 
 Every retained hard rule is stated once here with its exact value. The
 pre-3.2.0 checkpoint narrative (J0..J3B, I10..I12, Hostinger route activation)
@@ -125,15 +125,19 @@ under `docs/codex/evidence/`.
 - `stats.print_time_source` ranks `total_estimated_time` first (Orca and Bambu
   report wall clock including the start sequence), then `m73_p0_r_minutes`,
   `estimated_printing_time` (Prusa's generic profile), `time_seconds`; SLA
-  uses `sla_sl1_metadata_estimate` / `sla_synthetic_estimate`.
+  (Elegoo Saturn 4 Ultra quoting) always uses `sla_layer_time_model`, a
+  deterministic layer-count model (`configs/sla/printers.json`).
   `material_used_g` comes only from a direct positive mass marker, never from
-  length; zero is never published. Orca/Bambu with a selected filament profile
-  require positive grams (missing/drifted -> 500 `SLICE_OUTPUT_UNPARSED`).
+  length, except SLA's derived resin mass (parsed volume x registered resin
+  density, always positive); zero is never published. Orca/Bambu with a
+  selected filament profile require positive grams (missing/drifted -> 500
+  `SLICE_OUTPUT_UNPARSED`).
 - Price: `ceil(max(print_time_seconds, 900) * hourly_rate / 3600)` rounded up
   to 10 HUF in integer arithmetic (1980 s at 800 HUF/h is 440, formerly 450).
   `hourly_rate` and `estimated_price_huf` are `null` for FDM without a
-  positive mass, profile-less Orca, and always SLA (`material_used_g` also
-  `null`; SLA is quote-only).
+  positive mass or a profile-less Orca material. SLA always has a positive
+  resin mass and prices automatically like FDM; its SL1 raster output remains
+  quote-only (a real print needs an external UVtools conversion).
 - Error statuses: 408 `UPLOAD_TOTAL_TIMEOUT`; 422 `UNSLICEABLE_SOURCE_GEOMETRY`
   (native faulty-mesh/model-load diagnostics, stdout and stderr, path-free
   `detail`), `FILE_PROCESSING_TIMEOUT` only on real timeouts (message names no
@@ -147,14 +151,15 @@ under `docs/codex/evidence/`.
   `MATERIAL_NOT_FOUND`, `MATERIAL_ALREADY_EXISTS`, `PRICING_PERSISTENCE_FAILED`.
 
 ### Catalogue, pricing state, retention
-- `GET /profiles` is `r3d-profile-catalogue-v2` with 82 rows: 6 Prusa, 24
-  Orca, 28 Bambu P1S, 24 Bambu H2D. Rows keep
+- `GET /profiles` is `r3d-profile-catalogue-v2` with 88 rows: 82 FDM rows (6
+  Prusa, 24 Orca, 28 Bambu P1S, 24 Bambu H2D) plus 6 Elegoo Saturn 4 Ultra SLA
+  quoting rows (prusa, 2 layer heights x 3 resins). Rows keep
   `declared_build_volume_dimensions_mm` (metadata) separate from the inclusive
   admission authority `largest_passing_dimensions_inclusive_mm`;
   `machine_resolutions` and `fleet_resolutions` are engine-scoped (fleets:
-  bambu -> H2D, orca and prusa -> H2D-QUOTE) and never merged. The generic
-  `120 x 120 x 150 mm` SLA fallback is never advertised as a machine; the
-  Elegoo Saturn 4 Ultra envelope is not guessed.
+  bambu -> H2D, orca and prusa -> H2D-QUOTE) and never merged. The Saturn 4
+  Ultra's admission ceiling mirrors its declared metadata and is provisional
+  until a native envelope sweep measures it.
 - The pricing file is authoritative: defaults seed only a missing or empty
   `configs/pricing-state/pricing.json`; a deleted material never resurrects;
   `getRate` fails closed with `null`.
@@ -369,7 +374,8 @@ Return and preserve queue/rate errors:
 
 ## Engine Boundaries
 Prusa:
-- SLA layer heights: 0.025, 0.05 (quote-only: null mass, rate, and price)
+- SLA layer heights: 0.025, 0.05 (Elegoo Saturn 4 Ultra quoting; prices
+  automatically from a derived resin mass; SL1 raster output is quote-only)
 - FDM layer heights: 0.1, 0.2, 0.3
 
 Orca:
@@ -432,6 +438,7 @@ Bambu:
 - MAX_SLICE_QUEUE_WAIT_MS
 - MAX_ZIP_ENTRIES
 - MAX_ZIP_UNCOMPRESSED_BYTES
+- MAX_SL1_ENTRIES
 - SLICE_COMMAND_TIMEOUT_MS
 - SLICE_STRICT_GCODE_METRICS
 - PYTHON_EXECUTABLE

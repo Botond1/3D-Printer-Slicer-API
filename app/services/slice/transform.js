@@ -225,6 +225,26 @@ const IDENTITY_TRANSFORM_PLAN = Object.freeze({
 });
 
 /**
+ * Bounded regex for the `R3D_MESH_VOLUME_MM3=<value>` marker `scale_model.py`
+ * prints as its final stdout line. The captured value is either `unavailable`
+ * (a non-watertight mesh) or a finite non-negative decimal.
+ */
+const MESH_VOLUME_MARKER_PATTERN = /R3D_MESH_VOLUME_MM3=([A-Za-z0-9.+-]{1,64})/;
+
+/**
+ * Parse the mesh-volume marker from `scale_model.py`'s captured stdout.
+ * @param {string} stdout Bounded command stdout.
+ * @returns {number|null} Finite non-negative volume in mm3, or null when unavailable/absent/malformed.
+ */
+function parseMeshVolumeMm3(stdout) {
+    const match = MESH_VOLUME_MARKER_PATTERN.exec(String(stdout || ''));
+    if (!match) return null;
+    if (match[1] === 'unavailable') return null;
+    const value = Number(match[1]);
+    return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+/**
  * Run `scale_model.py` once. The optional placement appends the explicit
  * `--place-min-x`/`--place-min-y` pair, which translates the already scaled,
  * rotated, and grounded mesh so its bounding-box minimum corner lands on the
@@ -234,7 +254,7 @@ const IDENTITY_TRANSFORM_PLAN = Object.freeze({
  * @param {{scale: {x: number, y: number, z: number}, rotationDeg: {x: number, y: number, z: number}}} transformPlan Transform plan.
  * @param {{xMin: number, yMin: number}|null} placement Optional placement.
  * @param {AbortSignal} [signal] Request cancellation signal.
- * @returns {Promise<string>} Output STL path.
+ * @returns {Promise<{outputPath: string, volumeMm3: number|null}>} Output STL path and parsed mesh volume.
  */
 async function runScaleModelHelper(inputPath, outputPath, transformPlan, placement, signal) {
     const args = [transformPlan.scale.x, transformPlan.scale.y, transformPlan.scale.z,
@@ -248,7 +268,7 @@ async function runScaleModelHelper(inputPath, outputPath, transformPlan, placeme
         }
     }
 
-    await runCommand(PYTHON_EXECUTABLE, [
+    const result = await runCommand(PYTHON_EXECUTABLE, [
         resolvePythonHelper('scale_model.py'), inputPath, outputPath, ...args
     ], { signal, timeoutMs: PYTHON_HELPER_TIMEOUT_MS });
     throwIfAborted(signal);
@@ -256,7 +276,7 @@ async function runScaleModelHelper(inputPath, outputPath, transformPlan, placeme
     if (!outputStat.isFile() || outputStat.isSymbolicLink()) {
         throw new Error('Model transform did not produce a safe STL file.');
     }
-    return outputPath;
+    return { outputPath, volumeMm3: parseMeshVolumeMm3(result?.stdout) };
 }
 
 /**
@@ -265,7 +285,7 @@ async function runScaleModelHelper(inputPath, outputPath, transformPlan, placeme
  * @param {{scale: {x: number, y: number, z: number}, rotationDeg: {x: number, y: number, z: number}}} transformPlan Transform plan.
  * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
  * @param {() => string} [suffixFactory] Server-generated suffix factory.
- * @returns {Promise<string>} Transformed STL path.
+ * @returns {Promise<{outputPath: string, volumeMm3: number|null}>} Transformed STL path and parsed mesh volume.
  */
 async function applyModelTransform(inputPath, transformPlan, workspace, suffixFactory, signal) {
     throwIfAborted(signal);
@@ -287,7 +307,8 @@ async function applyModelTransform(inputPath, transformPlan, workspace, suffixFa
 async function applyModelPlacement(inputPath, placement, workspace, suffixFactory, signal) {
     throwIfAborted(signal);
     const placedPath = resolveTransformedPath(inputPath, workspace, suffixFactory, 'placed');
-    return runScaleModelHelper(inputPath, placedPath, IDENTITY_TRANSFORM_PLAN, placement, signal);
+    const { outputPath } = await runScaleModelHelper(inputPath, placedPath, IDENTITY_TRANSFORM_PLAN, placement, signal);
+    return outputPath;
 }
 
 /**
@@ -354,8 +375,11 @@ async function applyTransformAndValidateModel(
     const transformPlan = transformPlanResult.plan;
 
     let transformedFilePath = processableFile;
+    let volumeMm3 = null;
     if (transformPlan.requiresTransform) {
-        transformedFilePath = await applyModelTransform(processableFile, transformPlan, workspace, undefined, signal);
+        const transformResult = await applyModelTransform(processableFile, transformPlan, workspace, undefined, signal);
+        transformedFilePath = transformResult.outputPath;
+        volumeMm3 = transformResult.volumeMm3;
     }
 
     throwIfAborted(signal);
@@ -363,7 +387,16 @@ async function applyTransformAndValidateModel(
         ? await getModelInfo(transformedFilePath, signal) : orientedModelMeasurement;
     throwIfAborted(signal);
     if (!isPositiveModelMeasurement(finalModelMeasurement)) return modelDimensionsUnavailableResult();
-    const effectiveModelInfo = finalModelMeasurement.modelInfo;
+    // The transform helper's own marker is the primary volume source; when no
+    // scale or rotation was requested the helper never runs, and the native
+    // measurement of the very same mesh carries its manifold volume instead.
+    const measuredVolumeMm3 = Number.isFinite(finalModelMeasurement.modelInfo.volume_mm3)
+        ? finalModelMeasurement.modelInfo.volume_mm3
+        : null;
+    const effectiveModelInfo = {
+        ...finalModelMeasurement.modelInfo,
+        volume_mm3: Number.isFinite(volumeMm3) ? volumeMm3 : measuredVolumeMm3
+    };
 
     const modelBoundsValidation = validateModelDimensionsAgainstLimits(effectiveModelInfo, buildVolumeLimits);
     const orientation = transformContext.orientation || createOrientationState(

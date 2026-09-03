@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## v3.3.0 (2026-09-03)
+
+### Added
+- **[contract]** SLA quoting for the Elegoo Saturn 4 Ultra on `POST /prusa/slice` (`layerHeight` 0.025 / 0.05): PrusaSlicer generates supports at zero support elevation, so the object prints directly on the plate (measured: no pad is emitted, the layer count equals the object height divided by the layer height, and a support-free model's used material equals its mesh volume), `stats.print_time_seconds` comes from the layer-count time model `sla-layer-time-v1` (`configs/sla/printers.json`, owner-tunable per-layer seconds), `stats.material_used_g = material_used_ml x resin density`, plus `stats.layer_count`, `stats.model_volume_ml`, `stats.support_volume_ml`, `profiles.sla_printer`, `profiles.resin_density_g_cm3`, `profiles.sla_time_model`; SLA is priced again.
+- `GET /profiles` publishes six `SATURN4U` SLA rows (two layer heights x three resins) with the declared `218.88 x 122.88 x 220 mm` envelope.
+- The API measures the model's own mesh volume for the model-only resin volume: `app/scale_model.py` reports it whenever a scale or rotation transform runs, and otherwise the existing `prusa-slicer --info` measurement supplies it (manifold meshes only, so a non-watertight body reports `null` instead of a signed-volume artifact).
+
+### Fixed
+- SLA slicing of any model taller than 25 mm at 0.05 mm failed with `413 SLICE_RESOURCE_LIMIT_EXCEEDED` because the `.sl1` reader applied the 500-entry upload ZIP limit to one PNG per layer; the reader now counts layers with its own bound and reads only `config.ini`.
+- Large flat SLA parts no longer exhaust memory in PrusaSlicer's support tree (the profile sets zero support elevation with `pad_around_object`).
+- `supports=false` was silently ignored on the SLA path: the request produced the same `supports_enable = 1` profile and the same `effective_profile_sha256` as the default. The SLA runtime profile now carries `supports_enable = 0` for that request, so it is a different effective profile, as the contract already stated for every engine. The pad keys stay untouched: they are not support structures, and at zero elevation PrusaSlicer emits no pad at all.
+
+### Changed
+- **[contract]** SLA `hourly_rate` / `estimated_price_huf` / `material_used_g` are numeric again; `print_time_source` is `sla_layer_time_model` (the former `sla_synthetic_estimate` / `sla_sl1_metadata_estimate` values are gone).
+- The Prusa SLA invocation centres the model on the Saturn bed (`--center 109.44,61.44`), so every SLA `effective_profile_sha256` changes.
+- The `.sl1` artifact is a quote-only raster (768 x 432); a printable `.goo` still needs UVtools conversion (not bundled).
+
 ## v3.2.0 (2026-09-02)
 
 Bambu Studio engine overhaul. Consumer-visible contract changes are marked

@@ -19,6 +19,7 @@ const CONFIGS_DIR = path.join(WORKSPACE_ROOT, 'configs');
 const PRUSA_CONFIGS_DIR = path.join(CONFIGS_DIR, 'prusa');
 const ORCA_CONFIGS_DIR = path.join(CONFIGS_DIR, 'orca');
 const BAMBU_CONFIGS_DIR = path.join(CONFIGS_DIR, 'bambu');
+const SLA_CONFIGS_DIR = path.join(CONFIGS_DIR, 'sla');
 const PRICING_STATE_DIR = path.join(CONFIGS_DIR, 'pricing-state');
 const PRICING_FILE = path.join(PRICING_STATE_DIR, 'pricing.json');
 const LEGACY_PRICING_FILE = path.join(CONFIGS_DIR, 'pricing.json');
@@ -38,6 +39,7 @@ function ensureRequiredDirectories() {
     if (!fs.existsSync(PRUSA_CONFIGS_DIR)) fs.mkdirSync(PRUSA_CONFIGS_DIR, { recursive: true });
     if (!fs.existsSync(ORCA_CONFIGS_DIR)) fs.mkdirSync(ORCA_CONFIGS_DIR, { recursive: true });
     if (!fs.existsSync(BAMBU_CONFIGS_DIR)) fs.mkdirSync(BAMBU_CONFIGS_DIR, { recursive: true });
+    if (!fs.existsSync(SLA_CONFIGS_DIR)) fs.mkdirSync(SLA_CONFIGS_DIR, { recursive: true });
 }
 
 /**
@@ -69,6 +71,7 @@ module.exports = {
     PRUSA_CONFIGS_DIR,
     ORCA_CONFIGS_DIR,
     BAMBU_CONFIGS_DIR,
+    SLA_CONFIGS_DIR,
     PRICING_FILE,
     LEGACY_PRICING_FILE,
     ensureRequiredDirectories

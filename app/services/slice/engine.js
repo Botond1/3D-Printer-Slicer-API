@@ -52,8 +52,12 @@ const PRUSA_FDM_INVOCATION_POLICY = Object.freeze({
     gcodeFlavor: 'marlin',
     export: 'gcode'
 });
+/**
+ * Elegoo Saturn 4 Ultra quoting bed centre (218.88 x 122.88 mm), so `--center`
+ * places the model on the actual declared bed rather than the FDM P1S centre.
+ */
 const PRUSA_SLA_INVOCATION_POLICY = Object.freeze({
-    center: '100,100',
+    center: '109.44,61.44',
     export: 'sla'
 });
 

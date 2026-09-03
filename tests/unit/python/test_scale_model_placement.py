@@ -27,14 +27,24 @@ except ImportError:  # pragma: no cover - environment dependent
 
 
 class FakeMesh:
-    """Axis-aligned box mesh that tracks the transforms scale_model applies."""
+    """Axis-aligned box mesh that tracks the transforms scale_model applies.
 
-    def __init__(self, minimum, maximum):
+    ``is_watertight``/``volume`` are omitted by default (matching a stand-in
+    mesh with no meaningful volume concept), so accessing them raises
+    ``AttributeError`` exactly like an unexpected trimesh failure would; the
+    volume-marker tests below opt in explicitly.
+    """
+
+    def __init__(self, minimum, maximum, is_watertight=None, volume=None):
         self.minimum = np.array(minimum, dtype=float)
         self.maximum = np.array(maximum, dtype=float)
         self.translations = []
         self.transforms = []
         self.exported_to = None
+        if is_watertight is not None:
+            self.is_watertight = is_watertight
+        if volume is not None:
+            self.volume = volume
 
     @property
     def bounds(self):
@@ -184,6 +194,51 @@ class ScaleModelPlacementTransformTests(unittest.TestCase):
         module = load_scale_model(FakeMesh([0, 0, 0], [1, 1, 1]))
         with self.assertRaisesRegex(ValueError, "positive"):
             module.transform_model("in.stl", "out.stl", 0.0, 1.0, 1.0, 0.0, 0.0, 0.0, placement=(0.0, 0.0))
+
+
+@unittest.skipUnless(NUMPY_AVAILABLE, "numpy is required to import scale_model.py")
+class ScaleModelVolumeMarkerTests(unittest.TestCase):
+    """``R3D_MESH_VOLUME_MM3`` is scale_model.py's final stdout line (SLA
+    model-volume support). Only a watertight mesh reports a real volume; a
+    non-watertight mesh, or one whose volume evaluation raises, reports
+    explicit unavailability instead of a misleading number.
+    """
+
+    def test_watertight_mesh_reports_absolute_volume(self):
+        module = load_scale_model(FakeMesh([0, 0, 0], [1, 1, 1]))
+        mesh = FakeMesh([0, 0, 0], [1, 1, 1], is_watertight=True, volume=-24320.5)
+        self.assertEqual(module._format_volume_marker(mesh), "R3D_MESH_VOLUME_MM3=24320.5")
+
+    def test_non_watertight_mesh_reports_unavailable(self):
+        module = load_scale_model(FakeMesh([0, 0, 0], [1, 1, 1]))
+        mesh = FakeMesh([0, 0, 0], [1, 1, 1], is_watertight=False, volume=1000.0)
+        self.assertEqual(module._format_volume_marker(mesh), "R3D_MESH_VOLUME_MM3=unavailable")
+
+    def test_missing_watertight_attribute_reports_unavailable_without_raising(self):
+        module = load_scale_model(FakeMesh([0, 0, 0], [1, 1, 1]))
+        mesh = FakeMesh([0, 0, 0], [1, 1, 1])  # no is_watertight/volume at all
+        self.assertEqual(module._format_volume_marker(mesh), "R3D_MESH_VOLUME_MM3=unavailable")
+
+    def test_non_finite_volume_reports_unavailable(self):
+        module = load_scale_model(FakeMesh([0, 0, 0], [1, 1, 1]))
+        mesh = FakeMesh([0, 0, 0], [1, 1, 1], is_watertight=True, volume=float("nan"))
+        self.assertEqual(module._format_volume_marker(mesh), "R3D_MESH_VOLUME_MM3=unavailable")
+
+    def test_transform_model_returns_the_volume_marker(self):
+        mesh = FakeMesh([0, 0, 0], [10, 10, 10], is_watertight=True, volume=1000.0)
+        module = load_scale_model(mesh)
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        input_path = root / "input.stl"
+        output_path = root / "output.stl"
+        input_path.write_bytes(b"solid input\nendsolid input\n")
+        marker = module.transform_model(str(input_path), str(output_path), 2.0, 2.0, 2.0, 0.0, 0.0, 0.0)
+        # Scaling by 2 on every axis does not change this stand-in mesh's
+        # reported .volume (a real trimesh mesh would scale by 2**3); the
+        # marker only proves the return value is threaded through.
+        self.assertEqual(marker, "R3D_MESH_VOLUME_MM3=1000.0")
+        self.assertTrue(output_path.is_file())
 
 
 if __name__ == "__main__":

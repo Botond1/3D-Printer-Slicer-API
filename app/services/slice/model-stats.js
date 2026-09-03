@@ -3,11 +3,13 @@
  */
 
 const fs = require('node:fs/promises');
-const { DEFAULTS } = require('../../config/constants');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { runCommand, throwIfAborted, isAbortError } = require('./command');
 const { resourceLimit, invalidStats } = require('./resource-errors');
 const { parseSl1Stats } = require('./sl1-stats');
+const { resolveSlaResinDensity } = require('./sla-printer-registry');
+const { computeSlaPrintTime } = require('./sla-time-model');
+const { roundToThree } = require('./common');
 const {
     FILAMENT_GRAM_PATTERNS,
     GcodeMetricsError,
@@ -41,6 +43,10 @@ function createMeasuredModelMeasurement(modelInfo) {
     ) {
         throw new Error('Measured model information is invalid.');
     }
+    // The mesh volume is optional provenance, never a dimension: an absent or
+    // unusable value stays `null` and never invalidates a measurement.
+    const volumeMm3 = Number(modelInfo?.volume_mm3);
+    normalized.volume_mm3 = Number.isFinite(volumeMm3) && volumeMm3 > 0 ? volumeMm3 : null;
     return Object.freeze({
         status: MODEL_INFO_MEASUREMENT_STATUSES.MEASURED,
         modelInfo: Object.freeze(normalized)
@@ -103,12 +109,30 @@ async function readBoundedText(filePath, maximumBytes) {
 }
 
 /**
+ * Parse the native `--info` mesh volume, accepted only for a manifold mesh so
+ * a non-watertight body never reports a signed-volume artifact as a real
+ * measurement. Bounded by the same dimension policy as the axes.
+ * @param {string} stdout Bounded `prusa-slicer --info` stdout.
+ * @param {{MAX_MODEL_DIMENSION_MM: number}} policy Active resource policy.
+ * @returns {number|null} Positive mesh volume in mm3, or null when unusable.
+ */
+function parseNativeMeshVolumeMm3(stdout, policy) {
+    const text = String(stdout || '');
+    if (!/manifold\s*=\s*yes/i.test(text)) return null;
+    const match = /(?:^|\n)\s*volume\s*=\s*([0-9]+(?:\.[0-9]+)?)/i.exec(text);
+    if (!match) return null;
+    const volume = Number(match[1]);
+    const maxVolume = policy.MAX_MODEL_DIMENSION_MM ** 3;
+    return Number.isFinite(volume) && volume > 0 && volume <= maxVolume ? volume : null;
+}
+
+/**
  * Read model dimensions from `prusa-slicer --info` output.
  * @param {string} filePath Path to mesh file.
  * @returns {Promise<
- *   {status: 'measured', modelInfo: {x: number, y: number, z: number, height_mm: number}}
+ *   {status: 'measured', modelInfo: {x: number, y: number, z: number, height_mm: number, volume_mm3: number|null}}
  *   | {status: 'unavailable', modelInfo: null}
- * >} Explicit measurement result. A parsed zero-sized model remains distinct from an unavailable measurement.
+ * >} Explicit measurement result. A parsed zero-sized model remains distinct from an unavailable measurement. `volume_mm3` is the manifold mesh volume when the native output reports one, else null.
  */
 async function getModelInfo(filePath, signal) {
     throwIfAborted(signal);
@@ -124,7 +148,9 @@ async function getModelInfo(filePath, signal) {
         if (![x, y, z].every((value) => Number.isFinite(value) && value >= 0 && value <= policy.MAX_MODEL_DIMENSION_MM)) {
             return createUnavailableModelMeasurement();
         }
-        return createMeasuredModelMeasurement({ x, y, z, height_mm: z });
+        return createMeasuredModelMeasurement({
+            x, y, z, height_mm: z, volume_mm3: parseNativeMeshVolumeMm3(stdout, policy)
+        });
     } catch (err) {
         if (isAbortError(err, signal)) {
             throwIfAborted(signal);
@@ -287,38 +313,12 @@ async function parseFdmOutputStats(
     }
 }
 
-/** Bounded provenance labels for SLA print time; neither is a measured value. */
-const SLA_PRINT_TIME_SOURCES = Object.freeze({
-    SYNTHETIC_ESTIMATE: 'sla_synthetic_estimate',
-    SL1_METADATA_ESTIMATE: 'sla_sl1_metadata_estimate'
-});
-
 /**
- * Backfill SLA print-time estimate when explicit metadata is missing.
- * The SLA path is not backed by a supported printer yet, so any SLA print
- * time is an estimate only: either the synthetic per-layer model or the
- * uncalibrated SL1 metadata value. `print_time_source` records which.
- * @param {{print_time_seconds: number, object_height_mm: number, print_time_source: string|null}} stats Mutable stats object.
- * @param {'FDM'|'SLA'} technology Active technology.
- * @param {number|string} layerHeight Active layer height.
- * @returns {void}
+ * The single SLA print-time provenance label. The Saturn 4 Ultra layer-count
+ * time model (`sla-time-model.js`) is the only source; PrusaSlicer's own SL1
+ * `printTime` estimate is parsed but never published or used for pricing.
  */
-function applySlaEstimateIfNeeded(stats, technology, layerHeight) {
-    if (technology !== 'SLA') return;
-    if (stats.print_time_seconds > 0) {
-        stats.print_time_source = SLA_PRINT_TIME_SOURCES.SL1_METADATA_ESTIMATE;
-        return;
-    }
-    if (stats.object_height_mm <= 0) return;
-
-    const totalLayers = Math.ceil(
-        stats.object_height_mm / Math.max(Number.parseFloat(layerHeight), DEFAULTS.SLA_MIN_LAYER_HEIGHT_MM)
-    );
-    const secondsPerLayer = DEFAULTS.SLA_SECONDS_PER_LAYER;
-    const baseTime = DEFAULTS.SLA_BASE_TIME_SECONDS;
-    stats.print_time_seconds = baseTime + (totalLayers * secondsPerLayer);
-    stats.print_time_source = SLA_PRINT_TIME_SOURCES.SYNTHETIC_ESTIMATE;
-}
+const SLA_PRINT_TIME_SOURCE = 'sla_layer_time_model';
 
 /**
  * Build normalized human-readable print time string from seconds.
@@ -335,13 +335,61 @@ function finalizeReadableTime(stats, technology) {
 }
 
 /**
+ * Parse SLA (.sl1) output into the mutable stats object.
+ *
+ * Resin mass is derived from the parsed volume and the resin density
+ * registered for the requested material (`sla-printer-registry.js`); the
+ * requested material has already passed `INVALID_MATERIAL_FOR_TECHNOLOGY`
+ * validation upstream, so a missing density here is an internal defect, not
+ * a client input error. Print time comes only from the deterministic
+ * layer-count model (`sla-time-model.js`); PrusaSlicer's own uncalibrated SL1
+ * `printTime` estimate is read but never published or used for pricing.
+ * Model volume, when available from the transform pipeline, yields
+ * `model_volume_ml` and the derived `support_volume_ml`.
+ * @param {{print_time_seconds: number, material_used_g: number|null, material_used_ml: number, print_time_source: string|null, layer_count: number|null, model_volume_ml: number|null, support_volume_ml: number|null}} stats Mutable stats object.
+ * @param {string} filePath Output `.sl1` path.
+ * @param {object} policy Resolved resource policy.
+ * @param {{material?: string, slaPrinterId?: string, modelVolumeMm3?: number|null}} options SLA-specific pipeline context.
+ * @returns {Promise<void>}
+ */
+async function parseSlaOutputStats(stats, filePath, policy, options) {
+    const slaStats = await parseSl1Stats(filePath, { resourcePolicy: policy });
+    stats.material_used_ml = slaStats.material_used_ml;
+    stats.layer_count = slaStats.layer_count;
+
+    const densityGcm3 = resolveSlaResinDensity(options.material, options.slaPrinterId);
+    if (!Number.isFinite(densityGcm3) || densityGcm3 <= 0) {
+        throw new Error('SLA resin density is unavailable for a validated material.');
+    }
+    stats.material_used_g = Math.round(slaStats.material_used_ml * densityGcm3 * 100) / 100;
+    stats.material_used_g_source = 'sla_resin_density_model';
+
+    stats.print_time_seconds = computeSlaPrintTime({
+        layerCount: slaStats.layer_count,
+        layerHeight: options.layerHeight,
+        printerId: options.slaPrinterId
+    });
+    stats.print_time_source = SLA_PRINT_TIME_SOURCE;
+
+    const modelVolumeMm3 = options.modelVolumeMm3;
+    if (Number.isFinite(modelVolumeMm3) && modelVolumeMm3 >= 0) {
+        const modelVolumeMl = roundToThree(modelVolumeMm3 / 1000);
+        stats.model_volume_ml = modelVolumeMl;
+        stats.support_volume_ml = roundToThree(Math.max(0, stats.material_used_ml - modelVolumeMl));
+    } else {
+        stats.model_volume_ml = null;
+        stats.support_volume_ml = null;
+    }
+}
+
+/**
  * Build normalized print statistics from generated slicer output.
  * @param {string} filePath Output path to `.gcode` or `.sl1` artifact.
  * @param {'FDM' | 'SLA'} technology Active print technology.
  * @param {number|string} layerHeight Requested layer height.
  * @param {number} knownHeight Known model height in millimeters.
  * @param {'prusa'|'orca'} engine Slicer engine.
- * @param {{requireFilamentGrams?: boolean}} [options] Exact native mass requirement.
+ * @param {{requireFilamentGrams?: boolean, material?: string, slaPrinterId?: string, modelVolumeMm3?: number|null}} [options] Exact native mass requirement and SLA-only pipeline context.
  * @returns {Promise<{print_time_seconds: number, print_time_readable: string, material_used_m: number, material_used_g: number|null, object_height_mm: number, estimated_price_huf: number}>}
  */
 async function parseOutputDetailed(filePath, technology, layerHeight, knownHeight, engine = 'prusa', options = {}) {
@@ -354,21 +402,17 @@ async function parseOutputDetailed(filePath, technology, layerHeight, knownHeigh
         print_time_source: null,
         material_used_g_source: null,
         material_used_ml: 0,
+        layer_count: null,
+        model_volume_ml: null,
+        support_volume_ml: null,
         object_height_mm: Number.isFinite(Number(knownHeight)) ? Number(knownHeight) : 0,
         estimated_price_huf: 0
     };
 
     await parseFdmOutputStats(stats, technology, filePath, engine, policy, options);
     if (technology === 'SLA') {
-        const slaStats = await parseSl1Stats(filePath, { resourcePolicy: policy });
-        stats.material_used_ml = slaStats.material_used_ml;
-        // Resin mass is never measured on the SLA path; a zero would read as
-        // a real quantity, so the field is explicitly unavailable.
-        stats.material_used_g = null;
-        stats.material_used_g_source = null;
-        if (slaStats.print_time_seconds > 0) stats.print_time_seconds = slaStats.print_time_seconds;
+        await parseSlaOutputStats(stats, filePath, policy, { ...options, layerHeight });
     }
-    applySlaEstimateIfNeeded(stats, technology, layerHeight);
     finalizeReadableTime(stats, technology);
     return validateSliceStats(stats, technology, policy);
 }
@@ -409,19 +453,29 @@ function validateSliceStats(stats, technology, policy = resolveResourcePolicy())
     if (technology === 'SLA' && stats.material_used_ml <= 0) {
         throw invalidStats('SLA output is missing required material usage.');
     }
-    if (technology === 'SLA' && stats.material_used_g !== null) {
-        throw invalidStats('SLA output must not publish a resin mass.');
+    if (technology === 'SLA' && (!Number.isFinite(stats.material_used_g) || stats.material_used_g <= 0)) {
+        throw invalidStats('SLA output is missing a positive resin mass.');
     }
-    if (technology === 'SLA' && !Object.values(SLA_PRINT_TIME_SOURCES).includes(stats.print_time_source)) {
-        throw invalidStats('SLA print time must be marked as an estimate.');
+    if (technology === 'SLA' && (!Number.isInteger(stats.layer_count) || stats.layer_count <= 0)) {
+        throw invalidStats('SLA output is missing a positive layer count.');
+    }
+    if (technology === 'SLA' && stats.print_time_source !== SLA_PRINT_TIME_SOURCE) {
+        throw invalidStats('SLA print time must be sourced from the layer-time model.');
+    }
+    if (technology === 'SLA' && stats.model_volume_ml !== null
+        && (!Number.isFinite(stats.model_volume_ml) || stats.model_volume_ml < 0)) {
+        throw invalidStats('SLA model volume is invalid.');
+    }
+    if (technology === 'SLA' && stats.support_volume_ml !== null
+        && (!Number.isFinite(stats.support_volume_ml) || stats.support_volume_ml < 0)) {
+        throw invalidStats('SLA support volume is invalid.');
     }
     return stats;
 }
 
 module.exports = {
     MODEL_INFO_MEASUREMENT_STATUSES,
-    SLA_PRINT_TIME_SOURCES,
-    applySlaEstimateIfNeeded,
+    SLA_PRINT_TIME_SOURCE,
     createMeasuredModelMeasurement,
     createUnavailableModelMeasurement,
     getModelInfo,

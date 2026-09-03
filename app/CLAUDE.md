@@ -1,6 +1,6 @@
 # App Folder - Local Claude Guide
 
-Last synchronized: 2026-09-02
+Last synchronized: 2026-09-03
 
 ## Scope
 
@@ -21,8 +21,9 @@ this file maps them to modules.
   02.08.02.61 (FDM, official vendor chain, API-owned placement).
 - Preview: `POST /render` shares the slice limiter, authentication, upload
   lifecycle, and queue, and answers a deterministic 1024 x 768 PNG.
-- Public profile catalogue: immutable startup generation (82 rows) for
-  machine-bound, server-owned FDM presets; strong ETag/body digest;
+- Public profile catalogue: immutable startup generation (88 rows) for
+  machine-bound, server-owned FDM and Elegoo Saturn 4 Ultra SLA presets;
+  strong ETag/body digest;
   non-critical typed 503.
 - Runtime folder contract: root-scoped input/, output/, configs/ only.
 
@@ -53,11 +54,15 @@ this file maps them to modules.
     (100, 5 per client, 300000 ms wait, concurrency 1 in `1..3`), upload
     limits, command/HTTP timeouts (keep-alive 95000 ms), layer heights, default
     materials, Orca process/filament maps, `BAMBU_DEFAULT_PROFILES_ROOT`.
-  - `MAX_BUILD_VOLUMES.FDM = 350 x 320 x 325`, `MIN_BUILD_VOLUMES = 1 mm`.
+  - `MAX_BUILD_VOLUMES.FDM = 350 x 320 x 325`,
+    `MAX_BUILD_VOLUMES.SLA = 218.88 x 122.88 x 220` (Saturn 4 Ultra declared
+    bed), `MIN_BUILD_VOLUMES = 1 mm`.
   - Validation-only inclusive ceilings: `P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM`
     (Prusa `256 x 256 x 249.9`, Orca `253.9 x 253.9 x 249.9`),
     `H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM` (Prusa
     `350 x 320 x 324.9`, Orca `347.9 x 317.9 x 324.9`),
+    `SLA_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM` (Prusa
+    `218.88 x 122.88 x 220`, PROVISIONAL pending a native envelope sweep),
     `BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM` (P1S `256 x 228 x 250`,
     H2D `325 x 320 x 325`) and `BAMBU_P1S_ALTERNATIVE_FOOTPRINT_INCLUSIVE_MM`
     (`238 x 256`).
@@ -67,6 +72,8 @@ this file maps them to modules.
     ZIP/3MF, model/output/profile/pricing reads, stats ceilings, artifact
     retention, cleanup, `MAX_MODEL_DIMENSION_MM` (10000 in 350..100000), and
     `MAX_CONCURRENT_SLICES`; invalid explicit values refuse startup.
+    `MAX_SL1_ENTRIES` (20000 in 1..20000) is a dedicated SLA layer-count
+    budget, independent from the general `MAX_ZIP_ENTRIES` (500) upload policy.
 - app/config/service-auth.js
   - Requires pricing, artifact, and operations actives plus one complete
     `SLICE_SERVICE_AUTH_MODE`; all configured material is globally unique and
@@ -210,7 +217,19 @@ this file maps them to modules.
   units and compound STL), `auto`/`preserve` orientation, bounded sidecar,
   `fallback_unmodified` with one `orientation.fallback` event.
 - model-stats.js: measured/unavailable dimension results, strict FDM stats,
-  SLA estimates (`sla_sl1_metadata_estimate`, `sla_synthetic_estimate`).
+  and SLA stats sourced from `sl1-stats.js` (layer count, positive resin mass
+  from `sla-printer-registry.js` density) and `sla-time-model.js`
+  (`sla_layer_time_model` print-time source).
+- sl1-stats.js: parses `.sl1` `config.ini` only, bounded by a dedicated
+  `MAX_SL1_ENTRIES` (20000 layers) independent from the general upload ZIP
+  policy; PNG entries are counted toward the layer budget but never read.
+- sla-printer-registry.js: loads and validates `configs/sla/printers.json`
+  (`r3d-sla-printer-registry-v1`), exposing the Saturn 4 Ultra's declared
+  build volume, layer-time-model constants, and per-material resin density.
+- sla-time-model.js: deterministic layer-count print-time model
+  (`sla-layer-time-v1`) using the registry's bottom/transition/motion/
+  exposure constants; a tilt-release printer has a fixed per-layer motion
+  time independent of Z height.
 - native-bounds.js: explicit placement/print-volume diagnostics (including
   Bambu rc 192/190) -> full schema-2 K2 422 payload.
 - options.js: strict `layerHeight`, `material`, `infill` (integer 0..100,
@@ -225,20 +244,25 @@ this file maps them to modules.
   derivation (Prusa INI `temperature` keys; Orca relative extrusion; Bambu
   layer/support overrides), and the effective digest that excludes request
   layer height/infill (default `supports=true` is digest-neutral).
-- profile-catalogue.js: immutable 82-row `r3d-profile-catalogue-v2` with
-  engine-scoped machine/fleet resolutions.
+- profile-catalogue.js: immutable 88-row `r3d-profile-catalogue-v2` with
+  engine-scoped machine/fleet resolutions (82 FDM rows plus 6 Elegoo Saturn
+  4 Ultra SLA quoting rows on `prusa`).
 - queue.js, queue-scheduler.js: bounded FIFO with per-key fairness,
   timeouts, quarantine drain, `SLICE_QUEUE_SHUTDOWN`.
 - response.js: success payload (engine version, digest, schema-2 transform,
-  inclusive limits, Bambu `placement_mm` and `bed_type`), integer quarter-hour
-  price rounding, SLA/manual `null` pricing.
+  inclusive limits, Bambu `placement_mm` and `bed_type`, SLA `sla_printer`/
+  `resin_density_g_cm3`/`sla_time_model`), integer quarter-hour price rounding
+  applied uniformly to FDM (with a positive mass) and SLA; manual `null`
+  pricing remains for a massless FDM output or profile-less Orca.
 - transform.js: sizing (fit-within-box), request rotation, placement, bounds,
-  complete `model_transform` for success and K2.
+  complete `model_transform` for success and K2; parses the
+  `R3D_MESH_VOLUME_MM3` marker from `scale_model.py`'s stdout into
+  `effectiveModelInfo.volume_mm3` when a scale/rotation transform ran.
 - zip.js, zip-policy.js, zip-open.js, zip-stream.js, three-mf.js: exactly one
   supported source, junk tolerance, case-insensitive 3MF roots, Bambu/Orca
   project parts under `Metadata/` and `Auxiliaries/`.
 - workspace*.js, helper-paths.js, child-environment.js, value-parsers.js,
-  number-utils.js, common.js, sl1-stats.js, native-runtime-status.js
+  number-utils.js, common.js, native-runtime-status.js
   (`QUARANTINE_EXIT_CODE = 70`), request-abort.js, resource-errors.js.
 
 ### Utilities and docs generation
@@ -275,8 +299,11 @@ this file maps them to modules.
   `profiles.effective_profile_sha256`, `supports`, schema-2 `model_transform`,
   inclusive `build_volume_limits_mm`, and `stats.object_height_mm` equal to
   final Z; Bambu adds `placement_mm`.
-- /prusa/slice allows FDM and SLA by layerHeight; SLA is quote-only (null mass,
-  rate, price).
+- /prusa/slice allows FDM and SLA by layerHeight. SLA (Elegoo Saturn 4 Ultra
+  quoting) derives a positive resin mass from the parsed `.sl1` volume and the
+  registered resin density, prices automatically, and always publishes
+  `stats.layer_count`; the SL1 raster output remains quote-only (a real print
+  needs an external UVtools conversion to the vendor `.goo`/`.ctb` format).
 - /orca/slice is FDM-only, profile-compatibility aware, resolves output from a
   per-request isolated directory, and prices all four FDM materials.
 - /bambu/slice is FDM-only, registry-bound (`P1S`/`H2D`, registry layer keys,
@@ -320,8 +347,10 @@ this file maps them to modules.
   add an unreported rotation.
 - Keep the measured inclusive ceilings and the L-shaped P1S admission; never
   promote them to physical-print proof.
-- Keep `/profiles` startup-only, engine-scoped, FDM-only, and never a
-  prerequisite for slicing.
+- Keep `/profiles` startup-only, engine-scoped, and never a prerequisite for
+  slicing; its SLA rows remain the only non-FDM entries and stay provisional
+  (no native envelope sweep) until the orchestrator measures the Saturn 4
+  Ultra ceiling.
 - Keep the pricing file authoritative and the price formula in integer
   arithmetic.
 - Keep readiness diagnostics and metrics operations-scoped; never add

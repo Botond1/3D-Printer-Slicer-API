@@ -18,7 +18,7 @@ function createSwaggerDocument(pricing) {
         openapi: '3.0.0',
         info: {
             title: '3D Printer Slicer API for FDM and SLA',
-            version: '3.2.0',
+            version: '3.3.0',
             description: 'Automated 3D slicing and pricing engine for FDM and SLA technologies.'
         },
         tags: [

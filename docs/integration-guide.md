@@ -1,6 +1,6 @@
 # Integration guide
 
-Consumer-facing contract of the 3D Printer Slicer API as of version 3.2.0
+Consumer-facing contract of the 3D Printer Slicer API as of version 3.3.0
 (2026-09-02). It is written for the two integrating systems (the WooCommerce
 plugin and LeadPilot) and covers only what a consumer can call. The
 operator-facing surfaces (pricing administration, artifact download,
@@ -361,11 +361,26 @@ listed by `GET /profiles`, which is the reference to diff against.
   material; the public `GET /pricing` shows the current matrix.
 - `estimated_price_huf: null` (with `hourly_rate: null`) means "quote manually".
   It happens when the native output carries no positive mass marker for an FDM
-  slice, when an Orca material has no server-owned filament profile, and
-  always for SLA. Never treat `null` as zero.
-- SLA responses are always manual: `material_used_g` is `null`, the print time
-  is an uncalibrated estimate (`print_time_source` says so), and no price is
-  published.
+  slice and when an Orca material has no server-owned filament profile. Never
+  treat `null` as zero.
+- SLA responses (Elegoo Saturn 4 Ultra quoting profile) are priced: the print
+  time is `layer_count`-based (`print_time_source: sla_layer_time_model`,
+  bottom layers x (30 s + 6 s) + 8 transition layers + remaining layers x
+  (exposure + 2.5 s tilt), owner-tunable in the server registry) and
+  `material_used_g = material_used_ml x resin density` (Standard/ABS-Like
+  1.10, Flexible 1.05 g/cm3). `stats.layer_count`, `stats.model_volume_ml`
+  and `stats.support_volume_ml` are reported; the two volumes are `null` for a
+  mesh that is not watertight, because the model's own volume cannot be
+  measured there (the price never depends on them). The resin volume covers
+  the object and its supports; at zero support elevation PrusaSlicer emits no
+  pad, so no pad resin is included. `supports=false` is honoured on SLA too and
+  is a different effective profile, exactly as on FDM.
+  PrusaSlicer places SLA support points non-deterministically, so two identical
+  SLA requests can differ slightly in support volume, mass and price (measured:
+  36.03 ml against 36.25 ml on the same overhang model, about 0.6%); an FDM
+  quote does not vary this way. The per-layer motion time is a
+  documented assumption until the owner calibrates it against the printer's
+  own estimate; treat SLA prices as calibrated only after that.
 
 ## 7. Error table
 
@@ -415,6 +430,8 @@ Do not parse the `error` text; branch on `errorCode` only.
 | --- | --- | --- | --- |
 | Bambu Lab P1S | `256 × 256 × 249.9` mm (generic Marlin profile) | `253.9 × 253.9 × 249.9` mm (generic Marlin profile) | `256 × 228 × 250` mm, alternative footprint `238 × 256` (official vendor profile) |
 | Bambu Lab H2D | `350 × 320 × 324.9` mm as `H2D-QUOTE` (P1S physics on an H2D-sized bed, quote only) | `347.9 × 317.9 × 324.9` mm as `H2D-QUOTE` (same) | `325 × 320 × 325` mm, single-filament first extruder area (official vendor profile) |
+
+| Elegoo Saturn 4 Ultra (SLA) | `218.88 x 122.88 x 220` mm as `SATURN4U` (API-enforced: the PrusaSlicer SLA export itself does not refuse out-of-bed objects) | - | - |
 
 All values are inclusive: a model exactly on the value is accepted.
 
