@@ -60,8 +60,9 @@ consumer changes are owner-authorized actions outside this repository's authorit
   printer-ready Bambu `.gcode.3mf` project; all are listed and downloadable
   through the artifact-scoped admin routes.
 - SLA (Prusa `0.025` / `0.05` mm, `.sl1`) quotes the Elegoo Saturn 4 Ultra
-  (`218.88 x 122.88 x 220 mm`): PrusaSlicer generates supports and a pad at
-  zero elevation, the print time is `layers x per-layer seconds`
+  (`218.88 x 122.88 x 220 mm`): PrusaSlicer generates supports at zero support
+  elevation, so the object prints directly on the plate and no pad is emitted;
+  the print time is `layers x per-layer seconds`
   (`configs/sla/printers.json`, `sla-layer-time-v1`, owner-tunable) and
   `material_used_g = usedMaterial_ml x resin density`. The `.sl1` raster is
   quote-only; a printable `.goo` needs UVtools conversion.

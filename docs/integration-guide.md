@@ -371,8 +371,10 @@ listed by `GET /profiles`, which is the reference to diff against.
   1.10, Flexible 1.05 g/cm3). `stats.layer_count`, `stats.model_volume_ml`
   and `stats.support_volume_ml` are reported; the two volumes are `null` for a
   mesh that is not watertight, because the model's own volume cannot be
-  measured there (the price never depends on them). `supports=false` is
-  honoured on SLA too and is a different effective profile, exactly as on FDM.
+  measured there (the price never depends on them). The resin volume covers
+  the object and its supports; at zero support elevation PrusaSlicer emits no
+  pad, so no pad resin is included. `supports=false` is honoured on SLA too and
+  is a different effective profile, exactly as on FDM.
   PrusaSlicer places SLA support points non-deterministically, so two identical
   SLA requests can differ slightly in support volume, mass and price (measured:
   36.03 ml against 36.25 ml on the same overhang model, about 0.6%); an FDM

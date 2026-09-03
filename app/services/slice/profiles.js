@@ -566,8 +566,9 @@ async function createPrusaRuntimeProfile(baseConfigPath, technology, layerHeight
     // supports off those flags are omitted and the INI must carry explicit
     // zeros, because the shipped profile enables automatic supports itself.
     // The SLA invocation has no support flags at all, so the SLA profile's own
-    // `supports_enable` is the only place the request can be honoured; the pad
-    // stays enabled either way because it is the raft the object prints on.
+    // `supports_enable` is the only place the request can be honoured. The pad
+    // keys are left alone: they are not support structures, and at zero support
+    // elevation PrusaSlicer emits no pad anyway.
     if (!resolveSupports(options)) {
         if (technology === 'FDM') {
             iniContent = upsertIniKey(iniContent, 'support_material', SUPPORT_OFF);

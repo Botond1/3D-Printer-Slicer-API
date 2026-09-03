@@ -303,7 +303,7 @@ test('supports=false switches the SLA profile off and changes its digest, suppor
     );
     assert.match(slaOff, /^supports_enable = 0$/m);
     assert.equal(slaOff.match(/^supports_enable\s*=/gm).length, 1);
-    // The pad is the raft the object prints on, never a support structure.
+    // The pad keys are not support structures and stay as the profile has them.
     assert.match(slaOff, /^pad_enable = 1$/m);
     assert.match(slaOff, /^pad_around_object = 1$/m);
     // SLA never receives an infill override, on or off.
