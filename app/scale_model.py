@@ -92,6 +92,27 @@ def _place_at_minimum_corner(mesh: trimesh.Trimesh, min_x: float, min_y: float) 
     mesh.apply_translation([min_x - current_min_x, min_y - current_min_y, 0.0])
 
 
+R3D_MESH_VOLUME_MARKER = "R3D_MESH_VOLUME_MM3"
+
+
+def _format_volume_marker(mesh) -> str:
+    """Format the bounded ``R3D_MESH_VOLUME_MM3`` stdout marker.
+
+    Only a watertight mesh has a physically meaningful signed volume; a
+    non-watertight mesh -- or a stand-in test double with no such attribute --
+    reports explicit unavailability instead of a misleading number.
+    """
+    try:
+        if not bool(mesh.is_watertight):
+            return f"{R3D_MESH_VOLUME_MARKER}=unavailable"
+        volume = abs(float(mesh.volume))
+        if not math.isfinite(volume):
+            return f"{R3D_MESH_VOLUME_MARKER}=unavailable"
+        return f"{R3D_MESH_VOLUME_MARKER}={volume}"
+    except Exception:  # noqa: BLE001 - volume reporting is best-effort only.
+        return f"{R3D_MESH_VOLUME_MARKER}=unavailable"
+
+
 def transform_model(
     input_path: str,
     output_path: str,
@@ -102,8 +123,8 @@ def transform_model(
     rot_y_deg: float,
     rot_z_deg: float,
     placement: tuple[float, float] | None = None,
-) -> None:
-    """Scale, rotate, ground, optionally place the model, then export as STL."""
+) -> str:
+    """Scale, rotate, ground, optionally place, export, and return the volume marker."""
     if scale_x <= 0 or scale_y <= 0 or scale_z <= 0:
         raise ValueError("Scale factors must be positive values.")
 
@@ -117,6 +138,7 @@ def transform_model(
         _place_at_minimum_corner(mesh, placement[0], placement[1])
 
     mesh.export(output_path)
+    return _format_volume_marker(mesh)
 
 
 def _parse_placement(argv: list[str]) -> tuple[float, float] | None:
@@ -181,8 +203,11 @@ def _parse_args(
 if __name__ == "__main__":
     try:
         args = _parse_args(sys.argv)
-        transform_model(*args)
+        volume_marker = transform_model(*args)
         print(f"[PYTHON SCALE] Success! Saved transformed model: {args[1]}")
+        # Kept as the literal final stdout line so callers can parse it with a
+        # bounded regex without scanning the whole buffered output.
+        print(volume_marker)
     except Exception as exc:
         print(f"[PYTHON SCALE] ERROR: {exc}")
         if len(sys.argv) >= 3:

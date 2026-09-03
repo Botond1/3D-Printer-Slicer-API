@@ -35,6 +35,10 @@ const {
     getBambuPrinterRegistry,
     resolveBambuProcessName
 } = require('./bambu-printer-registry');
+const {
+    getSlaMaterials,
+    resolveSlaResinDensity
+} = require('./sla-printer-registry');
 
 const PROFILE_CATALOGUE_SCHEMA = 'r3d-profile-catalogue-v2';
 /**
@@ -68,6 +72,9 @@ const SERVER_OWNED_ORCA_MACHINES = Object.freeze([
         profile: 'Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json'
     })
 ]);
+const SERVER_OWNED_SLA_PRUSA_MACHINES = Object.freeze([
+    Object.freeze({ id: 'SATURN4U', name: 'Elegoo Saturn 4 Ultra', profilePrefix: 'SLA_' })
+]);
 const CATALOGUE_SEMANTICS = Object.freeze({
     authority: 'informational',
     enforcement: 'Slice endpoints remain authoritative and enforce build-volume limits.',
@@ -75,7 +82,7 @@ const CATALOGUE_SEMANTICS = Object.freeze({
     freshness: 'ETag and catalogue_sha256 identify the process startup generation.',
     build_volume_dimensions: 'declared_build_volume_dimensions_mm is physical/profile-declared metadata, not an admission limit. largest_passing_dimensions_inclusive_mm is the authoritative validation ceiling and accepts an exact boundary value. Bambu Studio ceilings are measured on the production CLI with API-owned placement (--arrange 0); the P1S publishes its 256 x 228 mm footprint while placement also admits its alternative 238 x 256 mm footprint beside the excluded bed corner, and the H2D single-filament ceiling is the first extruder area.',
     fleet_derivation: 'Machine and fleet resolutions are engine-scoped because native slicers can have different inclusive admission ceilings for the same declared profile dimensions. Every per-profile ceiling remains visible. Presets within one technology, printer, and engine must agree exactly. Each technology and engine fleet names every machine whose largest-passing envelope contains every other resolved machine envelope in that engine. Ceilings are never synthesized component by component.',
-    scope: 'Catalogue v2 lists machine-bound server-owned FDM presets on every engine, including explicitly named H2D-sized quoting profiles that retain P1S physics and are not production H2D G-code profiles, and Bambu Studio rows that use the official vendor machine/process/filament chain by name for the P1S and H2D. Server-owned filament profiles now cover PLA, PETG, ABS and TPU. Fallback-only SLA presets are never machine entries. Custom profile overrides and materials without a server-owned filament profile remain outside the catalogue.'
+    scope: 'Catalogue v2 lists machine-bound server-owned FDM presets on every engine, including explicitly named H2D-sized quoting profiles that retain P1S physics and are not production H2D G-code profiles, and Bambu Studio rows that use the official vendor machine/process/filament chain by name for the P1S and H2D. Server-owned filament profiles now cover PLA, PETG, ABS and TPU. It also lists Elegoo Saturn 4 Ultra SLA quoting rows on PrusaSlicer: the SL1 raster output is quote-only (a real print needs an external UVtools conversion to the vendor .goo/.ctb format) and its admission ceiling is provisional, not a native envelope sweep result. Fallback-only presets backed by no explicit machine-profile metadata are never machine entries. Custom profile overrides and materials without a server-owned filament or resin profile remain outside the catalogue.'
 });
 
 /** Bambu vendor names are not file paths; only file-backed selections take a basename. */
@@ -220,6 +227,17 @@ function buildProfileComponents(definition, selection) {
             }
         ];
     }
+    if (definition.engine === 'prusa' && definition.technology === 'SLA') {
+        // The default `${technology}_${layerHeight}mm.ini` naming convention
+        // already resolves the exact file from layerHeight alone, so the
+        // request needs no printerProfile override; the leading layerHeight
+        // and material selector parameters are the complete public selector.
+        return [{
+            role: 'combined',
+            basename: profileName(selection.baseConfigFile),
+            selector_parameter: null
+        }];
+    }
     return [{
         role: 'combined',
         basename: profileName(selection.baseConfigFile),
@@ -228,12 +246,20 @@ function buildProfileComponents(definition, selection) {
 }
 
 function buildLeadingSelectorParameters(definition) {
-    if (definition.engine !== 'bambu') return [];
-    return [
-        { name: 'printerProfile', value: definition.printer.id },
-        { name: 'layerHeight', value: definition.layerKey },
-        { name: 'material', value: definition.material }
-    ];
+    if (definition.engine === 'bambu') {
+        return [
+            { name: 'printerProfile', value: definition.printer.id },
+            { name: 'layerHeight', value: definition.layerKey },
+            { name: 'material', value: definition.material }
+        ];
+    }
+    if (definition.engine === 'prusa' && definition.technology === 'SLA') {
+        return [
+            { name: 'layerHeight', value: `${definition.layerHeight}` },
+            { name: 'material', value: definition.material }
+        ];
+    }
+    return [];
 }
 
 function createBambuPresetDefinitions(registry) {
@@ -271,6 +297,19 @@ function createPresetDefinitions(options = {}) {
             }));
         }
     }
+    for (const machine of SERVER_OWNED_SLA_PRUSA_MACHINES) {
+        for (const layerHeight of LAYER_HEIGHTS.BY_TECHNOLOGY.SLA) {
+            for (const material of getSlaMaterials(machine.id)) {
+                definitions.push(Object.freeze({
+                    engine: 'prusa', technology: 'SLA', layerHeight, material,
+                    printer: Object.freeze({ id: machine.id, name: machine.name }),
+                    profileOverrides: Object.freeze({
+                        prusaProfile: `${machine.profilePrefix}${layerHeight}mm.ini`
+                    })
+                }));
+            }
+        }
+    }
     for (const machine of SERVER_OWNED_ORCA_MACHINES) {
         for (const layerHeight of LAYER_HEIGHTS.ORCA) {
             for (const material of Object.keys(ORCA_FILAMENT_PROFILE_BY_MATERIAL).sort()) {
@@ -295,8 +334,19 @@ function createPresetDefinitions(options = {}) {
  * same source the runtime profile is built from. Reporting null here once the
  * runtime injects a real density would make the catalogue describe a service
  * that no longer exists.
+ *
+ * SLA has no filament diameter (resin, not filament), so that field stays
+ * null; resin density comes from the SLA printer registry by material,
+ * matching the value `model-stats.js` uses to derive `material_used_g` at
+ * slice time.
  */
-function readPrusaFilamentMetadata(profilePath, technology, material = null) {
+function readPrusaFilamentMetadata(profilePath, technology, material = null, printerId = null) {
+    if (technology === 'SLA') {
+        return Object.freeze({
+            diameterMm: null,
+            densityGcm3: resolveSlaResinDensity(material, printerId)
+        });
+    }
     if (technology !== 'FDM') return null;
     const diameterMm = parseNumberLike(readIniKeyValues(profilePath).filament_diameter);
     if (!Number.isFinite(diameterMm) || diameterMm <= 0) {
@@ -334,7 +384,7 @@ function readCatalogueFilamentMetadata(definition, snapshots, dependencies) {
         );
     }
     return readPrusaFilamentMetadata(
-        snapshots.baseConfigFile, definition.technology, definition.material
+        snapshots.baseConfigFile, definition.technology, definition.material, definition.printer.id
     );
 }
 
@@ -364,6 +414,10 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
     // The density must be injected here exactly as the slice path injects it,
     // or the catalogue would digest a runtime profile that no real request ever
     // produces and every effective_profile_sha256 comparison would diverge.
+    // SLA resin density is never injected into the runtime INI at slice time
+    // (resolveMaterialFilamentMetadata only maps the four FDM materials, and
+    // resin mass is derived independently from the parsed volume and the SLA
+    // registry), so the catalogue must not inject it here either.
     const runtimeConfigFile = await dependencies.createRuntimeSlicerProfile(
         definition.engine,
         snapshots.baseConfigFile,
@@ -371,7 +425,7 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
         definition.layerHeight,
         `${DEFAULTS.DEFAULT_INFIL_PERCENT}%`,
         workspace,
-        { filamentDensityGcm3: metadata?.densityGcm3 }
+        { filamentDensityGcm3: definition.technology === 'FDM' ? metadata?.densityGcm3 : undefined }
     );
     const limits = dependencies.resolveBuildVolumeLimits(
         definition.engine,
@@ -404,7 +458,9 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
         technology: definition.technology,
         layer_height_mm: definition.layerHeight,
         material: definition.material,
-        material_scope: definition.engine === 'prusa' ? 'request-independent' : 'exact',
+        material_scope: definition.engine === 'prusa' && definition.technology === 'FDM'
+            ? 'request-independent'
+            : 'exact',
         printer: { ...definition.printer },
         slice_selector: buildSliceSelector(
             definition, profileComponents, buildLeadingSelectorParameters(definition)
@@ -771,6 +827,7 @@ module.exports = {
     PROFILE_CATALOGUE_SCHEMA,
     SERVER_OWNED_PRUSA_MACHINES,
     SERVER_OWNED_ORCA_MACHINES,
+    SERVER_OWNED_SLA_PRUSA_MACHINES,
     buildSliceSelector,
     buildProfileCatalogue,
     createBambuPresetDefinitions,

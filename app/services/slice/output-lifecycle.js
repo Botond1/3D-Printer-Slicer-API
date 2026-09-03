@@ -298,7 +298,11 @@ async function runSlicerAndParseStats(context) {
             // and must not degrade quietly into manual pricing -- the same
             // discipline J1C applied to the G-code metrics parser. Bambu always
             // slices with a vendor filament profile, so grams are always required.
-            requireFilamentGrams: engine === 'bambu' || filamentProfileMetadata !== null
+            requireFilamentGrams: engine === 'bambu' || filamentProfileMetadata !== null,
+            // SLA-only: resin density comes from the material, and model volume
+            // (when the transform pipeline measured it) drives support_volume_ml.
+            material,
+            modelVolumeMm3: Number.isFinite(effectiveModelInfo.volume_mm3) ? effectiveModelInfo.volume_mm3 : null
         }
     );
     throwIfAborted(signal);

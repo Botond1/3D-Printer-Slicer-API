@@ -125,17 +125,19 @@ under `docs/codex/evidence/`.
 - `stats.print_time_source` ranks `total_estimated_time` first (Orca and Bambu
   report wall clock including the start sequence), then `m73_p0_r_minutes`,
   `estimated_printing_time` (Prusa's generic profile), `time_seconds`; SLA
-  uses `sla_sl1_metadata_estimate` / `sla_synthetic_estimate`.
+  (Elegoo Saturn 4 Ultra quoting) always uses `sla_layer_time_model`, a
+  deterministic layer-count model (`configs/sla/printers.json`).
   `material_used_g` comes only from a direct positive mass marker, never from
-  length; zero is never published. Orca/Bambu with a selected filament profile
-  require positive grams (missing/drifted -> 500 `SLICE_OUTPUT_UNPARSED`).
+  length, except SLA's derived resin mass (parsed volume x registered resin
+  density, always positive); zero is never published. Orca/Bambu with a
+  selected filament profile require positive grams (missing/drifted -> 500
+  `SLICE_OUTPUT_UNPARSED`).
 - Price: `ceil(max(print_time_seconds, 900) * hourly_rate / 3600)` rounded up
   to 10 HUF in integer arithmetic (1980 s at 800 HUF/h is 440, formerly 450).
   `hourly_rate` and `estimated_price_huf` are `null` for FDM without a
-  positive mass and profile-less Orca. SLA (Elegoo Saturn 4 Ultra quoting
-  profile, `configs/sla/printers.json`) is priced from the layer-count time
-  model `sla-layer-time-v1` and `material_used_g = usedMaterial_ml x resin
-  density`; its `.sl1` raster is quote-only (convert with UVtools for `.goo`).
+  positive mass or a profile-less Orca material. SLA always has a positive
+  resin mass and prices automatically like FDM; its SL1 raster output remains
+  quote-only (a real print needs an external UVtools conversion).
 - Error statuses: 408 `UPLOAD_TOTAL_TIMEOUT`; 422 `UNSLICEABLE_SOURCE_GEOMETRY`
   (native faulty-mesh/model-load diagnostics, stdout and stderr, path-free
   `detail`), `FILE_PROCESSING_TIMEOUT` only on real timeouts (message names no
@@ -149,14 +151,15 @@ under `docs/codex/evidence/`.
   `MATERIAL_NOT_FOUND`, `MATERIAL_ALREADY_EXISTS`, `PRICING_PERSISTENCE_FAILED`.
 
 ### Catalogue, pricing state, retention
-- `GET /profiles` is `r3d-profile-catalogue-v2` with 82 rows: 6 Prusa, 24
-  Orca, 28 Bambu P1S, 24 Bambu H2D. Rows keep
+- `GET /profiles` is `r3d-profile-catalogue-v2` with 88 rows: 82 FDM rows (6
+  Prusa, 24 Orca, 28 Bambu P1S, 24 Bambu H2D) plus 6 Elegoo Saturn 4 Ultra SLA
+  quoting rows (prusa, 2 layer heights x 3 resins). Rows keep
   `declared_build_volume_dimensions_mm` (metadata) separate from the inclusive
   admission authority `largest_passing_dimensions_inclusive_mm`;
   `machine_resolutions` and `fleet_resolutions` are engine-scoped (fleets:
-  bambu -> H2D, orca and prusa -> H2D-QUOTE) and never merged. The generic
-  SLA rows are the Elegoo Saturn 4 Ultra quoting rows (`SATURN4U`, prusa engine); the
-  Elegoo Saturn 4 Ultra envelope is not guessed.
+  bambu -> H2D, orca and prusa -> H2D-QUOTE) and never merged. The Saturn 4
+  Ultra's admission ceiling mirrors its declared metadata and is provisional
+  until a native envelope sweep measures it.
 - The pricing file is authoritative: defaults seed only a missing or empty
   `configs/pricing-state/pricing.json`; a deleted material never resurrects;
   `getRate` fails closed with `null`.
@@ -371,11 +374,8 @@ Return and preserve queue/rate errors:
 
 ## Engine Boundaries
 Prusa:
-- SLA layer heights: 0.025, 0.05 (Saturn 4 Ultra `218.88 x 122.88 x 220 mm`,
-  zero support elevation + pad around object; time = layer count x tunable
-  per-layer seconds, mass = ml x density; the API-side INI bounds are the
-  admission authority because PrusaSlicer's SLA export does not refuse
-  out-of-bed objects)
+- SLA layer heights: 0.025, 0.05 (Elegoo Saturn 4 Ultra quoting; prices
+  automatically from a derived resin mass; SL1 raster output is quote-only)
 - FDM layer heights: 0.1, 0.2, 0.3
 
 Orca:
@@ -438,6 +438,7 @@ Bambu:
 - MAX_SLICE_QUEUE_WAIT_MS
 - MAX_ZIP_ENTRIES
 - MAX_ZIP_UNCOMPRESSED_BYTES
+- MAX_SL1_ENTRIES
 - SLICE_COMMAND_TIMEOUT_MS
 - SLICE_STRICT_GCODE_METRICS
 - PYTHON_EXECUTABLE

@@ -1,0 +1,30 @@
+{
+    "schema": "r3d-sla-printer-registry-v1",
+    "default_printer": "SATURN4U",
+    "printers": {
+        "SATURN4U": {
+            "name": "Elegoo Saturn 4 Ultra",
+            "technology": "MSLA",
+            "declared_build_volume_mm": { "x": 218.88, "y": 122.88, "z": 220 },
+            "quote_raster_pixels": { "x": 768, "y": 432 },
+            "time_model": {
+                "version": "sla-layer-time-v1",
+                "bottom_layers": 5,
+                "transition_layers": 8,
+                "motion_seconds_per_layer": 2.5,
+                "motion_seconds_per_bottom_layer": 6.0,
+                "exposure_seconds_by_layer_height": {
+                    "0.025": 2.0,
+                    "0.05": 2.5
+                },
+                "bottom_exposure_seconds": 30,
+                "notes": "per-layer motion time is a tilt-release printer constant; calibrate against the printer's or Chitubox's displayed estimate (owner input pending)"
+            },
+            "resins": {
+                "Standard": { "density_g_cm3": 1.1 },
+                "ABS-Like": { "density_g_cm3": 1.1 },
+                "Flexible": { "density_g_cm3": 1.05 }
+            }
+        }
+    }
+}

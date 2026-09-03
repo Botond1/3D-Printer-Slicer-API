@@ -42,9 +42,6 @@ const DEFAULTS = {
     DEFAULT_INFIL_PERCENT: 20,
     DEFAULT_FDM_MATERIAL: 'PLA',
     DEFAULT_SLA_MATERIAL: 'Standard',
-    SLA_MIN_LAYER_HEIGHT_MM: 0.025,
-    SLA_BASE_TIME_SECONDS: 120,
-    SLA_SECONDS_PER_LAYER: 11,
     ORCA_DEFAULT_MACHINE_PROFILE: 'Bambu_P1S_0.4_nozzle.json'
 };
 
@@ -105,7 +102,7 @@ const DEFAULT_PRICING = {
  */
 const MAX_BUILD_VOLUMES = {
     FDM: { x: 350, y: 320, z: 325 },
-    SLA: { x: 120, y: 120, z: 150 }
+    SLA: { x: 218.88, y: 122.88, z: 220 }
 };
 
 /**
@@ -145,6 +142,22 @@ Object.freeze({
             y: 317.9,
             z: 324.9
         })
+    })
+});
+
+/**
+ * Provisional SLA (Elegoo Saturn 4 Ultra) admission ceilings, inclusive on
+ * every axis. PROVISIONAL: these mirror the declared bed/height metadata in
+ * `configs/prusa/SLA_0.025mm.ini` and `SLA_0.05mm.ini` because no native
+ * placement/print-volume sweep has measured the Saturn 4 Ultra's real
+ * edge-of-bed admission yet (unlike the P1S and H2D-QUOTE tables above, which
+ * are owner-measured). The orchestrator will replace these with measured
+ * values from a future native envelope sweep.
+ */
+const SLA_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM = Object.freeze({
+    prusa: Object.freeze({
+        'SLA_0.025mm.ini': Object.freeze({ x: 218.88, y: 122.88, z: 220 }),
+        'SLA_0.05mm.ini': Object.freeze({ x: 218.88, y: 122.88, z: 220 })
     })
 });
 
@@ -236,6 +249,7 @@ module.exports = {
     MAX_BUILD_VOLUMES,
     P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
+    SLA_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE,
     MIN_BUILD_VOLUMES,
     EXTENSIONS,

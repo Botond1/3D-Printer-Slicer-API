@@ -111,31 +111,55 @@ test('technology-specific stats reject NaN, Infinity, negative, zero-required an
     assert.throws(() => validateSliceStats({
         ...validFdm, material_used_g: policy.MAX_MATERIAL_USED_GRAMS + 1
     }, 'FDM', policy));
-    // SLA never publishes a resin mass (null, not zero) and its print time is
-    // always an explicitly marked estimate.
+    // SLA always publishes a positive resin mass derived from the parsed
+    // volume and resin density, a positive layer count, and a print time
+    // sourced from the deterministic layer-time model.
     const validSla = {
         ...validFdm,
         material_used_m: 0,
-        material_used_g: null,
+        material_used_g: 4.68,
         material_used_ml: 1,
-        print_time_source: 'sla_synthetic_estimate'
+        layer_count: 100,
+        model_volume_ml: null,
+        support_volume_ml: null,
+        print_time_source: 'sla_layer_time_model'
     };
     assert.doesNotThrow(() => validateSliceStats({ ...validSla }, 'SLA', policy));
     assert.throws(() => validateSliceStats({ ...validSla, material_used_g: 0 }, 'SLA', policy));
+    assert.throws(() => validateSliceStats({ ...validSla, material_used_g: null }, 'SLA', policy));
     assert.throws(() => validateSliceStats({ ...validSla, material_used_ml: 0 }, 'SLA', policy));
+    assert.throws(() => validateSliceStats({ ...validSla, layer_count: 0 }, 'SLA', policy));
+    assert.throws(() => validateSliceStats({ ...validSla, layer_count: null }, 'SLA', policy));
     assert.throws(() => validateSliceStats({ ...validSla, print_time_source: null }, 'SLA', policy));
+    assert.throws(() => validateSliceStats({ ...validSla, print_time_source: 'sla_synthetic_estimate' }, 'SLA', policy));
+    assert.throws(() => validateSliceStats({ ...validSla, model_volume_ml: -1 }, 'SLA', policy));
+    assert.throws(() => validateSliceStats({ ...validSla, support_volume_ml: -1 }, 'SLA', policy));
+    assert.doesNotThrow(() => validateSliceStats({ ...validSla, model_volume_ml: 0.5, support_volume_ml: 0.5 }, 'SLA', policy));
 });
 
 test('SLA config requires positive finite usedMaterial and accepts bounded printTime', () => {
-    assert.deepEqual(parseConfig('printTime = 120\nusedMaterial = 4.25\n'), {
-        print_time_seconds: 120,
-        material_used_ml: 4.25
-    });
+    assert.deepEqual(
+        parseConfig('printTime = 120\nusedMaterial = 4.25\nlayerHeight = 0.05\nnumFast = 95\nnumSlow = 5\nnumFade = 8\n'),
+        {
+            material_used_ml: 4.25,
+            layer_count: 100,
+            fade_layers: 8,
+            sl1_print_time_seconds: 120
+        }
+    );
     for (const value of ['0', '-1', 'NaN', 'Infinity']) {
-        assert.throws(() => parseConfig(`printTime=120\nusedMaterial=${value}\n`), {
+        assert.throws(() => parseConfig(`printTime=120\nusedMaterial=${value}\nlayerHeight=0.05\nnumFast=95\nnumSlow=5\n`), {
             code: 'INVALID_SLICE_STATS'
         });
     }
+    assert.throws(
+        () => parseConfig('printTime=120\nusedMaterial=4.25\nlayerHeight=0.05\nnumFast=0\nnumSlow=0\n'),
+        { code: 'INVALID_SLICE_STATS' }
+    );
+    assert.throws(
+        () => parseConfig('printTime=120\nusedMaterial=4.25\nnumFast=95\nnumSlow=5\n'),
+        { code: 'INVALID_SLICE_STATS' }
+    );
 });
 
 test('model/intermediate byte validation rejects empty, oversized and non-regular outputs', async (t) => {

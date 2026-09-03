@@ -149,7 +149,7 @@ test('profile identity binds the request-independent native invocation policy', 
         export: 'gcode'
     });
     assert.deepEqual(resolveSlicerInvocationPolicy('prusa', 'SLA'), {
-        center: '100,100', export: 'sla'
+        center: '109.44,61.44', export: 'sla'
     });
     assert.deepEqual(createEffectiveProfileIdentity({
         engine: 'prusa', technology: 'FDM', runtimeConfigFile: prusaProfile

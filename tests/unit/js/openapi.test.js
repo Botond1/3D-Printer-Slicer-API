@@ -191,10 +191,10 @@ test('profile catalogue v2 stays generic for a future real SLA machine and names
     assert.equal(entrySchema.properties.filament_diameter_mm.nullable, true);
     assert.equal(entrySchema.properties.filament_density_g_cm3.nullable, true);
     assert.deepEqual(responseSchema.properties.schema.enum, ['r3d-profile-catalogue-v2']);
-    assert.match(operation.description, /current v2 rows are .*FDM presets/);
+    assert.match(operation.description, /current v2 rows are .*FDM and SLA presets/);
     assert.match(operation.description, /H2D-sized quoting chain with P1S physics/);
-    assert.match(operation.description, /Fallback-only SLA presets are never published/);
-    assert.match(operation.description, /same v2 entry schema/);
+    assert.match(operation.description, /Fallback-only presets backed by no explicit machine-profile metadata are never published/);
+    assert.match(operation.description, /Elegoo Saturn 4 Ultra SLA rows/);
 });
 
 test('profile catalogue schema exposes engine-scoped machine and non-synthetic fleet ceilings', () => {

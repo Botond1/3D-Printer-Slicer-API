@@ -160,7 +160,7 @@ test('OpenAPI exposes engine identity, W2 digest, requested omissions, and live 
     assert.deepEqual(success.properties.hourly_rate, {
         type: 'number',
         nullable: true,
-        description: 'Configured hourly rate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review. SLA is never priced automatically and always returns null.'
+        description: 'Configured hourly rate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
     });
     assert.ok(success.properties.stats.required.includes('material_used_g'));
     assert.ok(success.properties.stats.required.includes('object_height_mm'));
@@ -180,13 +180,13 @@ test('OpenAPI exposes engine identity, W2 digest, requested omissions, and live 
         type: 'number',
         nullable: true,
         minimum: 0,
-        description: 'Filament mass parsed directly from the slicer marker; null when the selected native profile emits no mass marker. It is never derived from length. Always null for SLA, which measures no resin mass.'
+        description: 'Filament mass parsed directly from the slicer marker; null when the selected native profile emits no mass marker. It is never derived from length. For SLA this is the resin mass, derived from the parsed resin volume and profiles.resin_density_g_cm3 and always positive.'
     });
     assert.ok(success.properties.stats.required.includes('estimated_price_huf'));
     assert.deepEqual(success.properties.stats.properties.estimated_price_huf, {
         type: 'number',
         nullable: true,
-        description: 'Calculated estimate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review. SLA is never priced automatically and always returns null.'
+        description: 'Calculated estimate, or null when an Orca material has no selected filament profile or the native output has no direct mass marker and pricing requires manual review.'
     });
 
     const validation = responses[422].content['application/json'].schema;
@@ -450,7 +450,7 @@ test('successful Prusa slicing without a native mass marker stays explicit and m
     assert.equal(response.stats.estimated_price_huf, null);
 });
 
-test('SLA is never priced automatically: null rate, null price, null resin mass', () => {
+test('SLA prices automatically from its positive resin mass and publishes the SLA profile fields', () => {
     const response = buildSliceSuccessResponse({
         engine: 'prusa',
         technology: 'SLA',
@@ -465,28 +465,35 @@ test('SLA is never priced automatically: null rate, null price, null resin mass'
         modelTransform: createModelTransform(),
         buildVolumeLimits: {
             min: { x: 0, y: 0, z: 0 },
-            max: { x: 120, y: 68, z: 150 },
+            max: { x: 218.88, y: 122.88, z: 220 },
             sourceProfile: 'SLA_0.05mm.ini'
         },
         stats: {
-            print_time_seconds: 60,
-            print_time_readable: '0h 1m (Est.)',
+            print_time_seconds: 4265,
+            print_time_readable: '1h 11m (Est.)',
             material_used_m: 0,
-            material_used_g: 0,
-            material_used_ml: 1,
+            material_used_g: 4.68,
+            material_used_ml: 4.25,
+            layer_count: 800,
+            model_volume_ml: null,
+            support_volume_ml: null,
+            print_time_source: 'sla_layer_time_model',
             object_height_mm: 30
         },
         jobId: 'job-id',
         artifactId: 'artifact-id'
     });
 
-    // The SLA print time is an uncalibrated estimate and no resin mass is
-    // measured, so pricing stays manual regardless of the FDM direct-mass guard.
-    assert.equal(response.hourly_rate, null);
-    assert.equal(response.stats.estimated_price_huf, null);
-    assert.equal(response.stats.material_used_g, null);
-    assert.equal(response.stats.material_used_ml, 1);
-    assert.equal(response.stats.print_time_seconds, 60);
+    // SLA now has a real measured resin mass, so it prices exactly like FDM.
+    assert.equal(response.hourly_rate, 1800);
+    assert.equal(response.stats.estimated_price_huf, 2140);
+    assert.equal(response.stats.material_used_g, 4.68);
+    assert.equal(response.stats.material_used_ml, 4.25);
+    assert.equal(response.stats.layer_count, 800);
+    assert.equal(response.stats.print_time_seconds, 4265);
+    assert.equal(response.profiles.sla_printer, 'SATURN4U');
+    assert.equal(response.profiles.resin_density_g_cm3, 1.1);
+    assert.equal(response.profiles.sla_time_model, 'sla-layer-time-v1');
     assert.equal(Object.hasOwn(response, 'placement_mm'), false);
 });
 

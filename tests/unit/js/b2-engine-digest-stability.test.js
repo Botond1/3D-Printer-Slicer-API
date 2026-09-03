@@ -19,7 +19,10 @@ const { resolveSlicerInvocationPolicy } = require('../../../app/services/slice/e
 
 const PINNED_DIGESTS = Object.freeze({
     prusaFdm: '836ce4b05fb4dfa3d0c6a901b03b4c21904fa85a6a801c520834cd1594ade4f7',
-    prusaSla: '8e490377f40a390dfd4b89f58cffe36c13801e4cc0c373689e46c1edc6601bc1',
+    // Changed by the SLA quoting corrective: PRUSA_SLA_INVOCATION_POLICY.center
+    // moved from the FDM P1S centre (100,100) to the Saturn 4 Ultra bed centre
+    // (109.44,61.44), which is part of the digest's baked-in invocation policy.
+    prusaSla: 'c3ecedd6977254e8865c184fb35a739c56343db2c86f723276de2f6399b1a4d0',
     orcaPla: '6629acd7d42857e420409b0da6cf193b32dd270a165fbfced653b045cb8232e7',
     orcaNoFilament: 'edce09f4f42e07e6859940870c2b3648044e27f2a1b111554d80163610706ae7'
 });
@@ -72,7 +75,7 @@ test('only the Bambu invocation policy disables arrangement; Prusa and Orca poli
         gcodeFlavor: 'marlin', export: 'gcode'
     });
     assert.deepEqual(resolveSlicerInvocationPolicy('prusa', 'SLA'), {
-        center: '100,100', export: 'sla'
+        center: '109.44,61.44', export: 'sla'
     });
     assert.deepEqual(resolveSlicerInvocationPolicy('orca', 'FDM'), {
         arrange: '1', orient: '0', allowRotations: '0', slice: '0',

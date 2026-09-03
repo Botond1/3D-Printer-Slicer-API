@@ -569,7 +569,7 @@ test('bambu slice run parses plate_1.gcode, retains the .gcode.3mf, and treats a
     assert.equal(parseCalls.length, 1);
     assert.equal(parseCalls[0][0], path.join(engineOutputDir, 'plate_1.gcode'));
     assert.equal(parseCalls[0][4], 'bambu');
-    assert.deepEqual(parseCalls[0][5], { requireFilamentGrams: true });
+    assert.deepEqual(parseCalls[0][5], { requireFilamentGrams: true, material: 'PLA', modelVolumeMm3: null });
     assert.deepEqual(promoted, [{ candidate: 'candidate', source: path.join(engineOutputDir, 'result.gcode.3mf') }]);
     // Retention miss: response still succeeds, readiness observer and event learn about it.
     assert.deepEqual(retention, [false]);

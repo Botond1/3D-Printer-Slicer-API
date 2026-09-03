@@ -9,11 +9,13 @@ fixture set from ``common.synthetic_fixtures`` is generated into a temporary
 directory and the report states that only synthetic fixtures ran.
 
 Contract notes: FDM successes on every engine must publish a positive direct
-mass and a catalogue-priced quote (Orca ABS/TPU included); SLA successes must
-publish null mass, hourly rate, and price; a scenario may declare
-``negative_requests`` that are sent once against the first fixture and must be
-rejected with their exact status and error code (for example ``infill=140`` is
-``400 INVALID_INFILL``, never clamped).
+mass and a catalogue-priced quote (Orca ABS/TPU included); SLA (Elegoo Saturn
+4 Ultra quoting) successes must publish a positive resin mass, layer count,
+the ``sla_layer_time_model`` print-time source, and a catalogue-priced quote
+exactly like FDM; a scenario may declare ``negative_requests`` that are sent
+once against the first fixture and must be rejected with their exact status
+and error code (for example ``infill=140`` is ``400 INVALID_INFILL``, never
+clamped).
 """
 
 from __future__ import annotations
@@ -364,7 +366,7 @@ def _validate_engine_profiles(profiles: dict, endpoint: str) -> str | None:
 
 
 def _validate_stats_contract(body: dict, technology: str) -> str | None:
-    """Validate positive/nullable stats per technology after the pricing corrective."""
+    """Validate positive/nullable stats per technology after the SLA pricing corrective."""
     stats = body.get("stats")
     if not isinstance(stats, dict):
         return "Missing stats object in success response"
@@ -380,10 +382,27 @@ def _validate_stats_contract(body: dict, technology: str) -> str | None:
         if not _is_positive_number(body.get("hourly_rate")):
             return "hourly_rate must be positive for FDM"
         return None
-    if stats.get("material_used_g") is not None:
-        return "stats.material_used_g must be null for SLA"
-    if stats.get("estimated_price_huf") is not None or body.get("hourly_rate") is not None:
-        return "SLA responses must publish null hourly_rate and estimated_price_huf"
+    # SLA (Elegoo Saturn 4 Ultra quoting): a positive resin mass and layer
+    # count, the deterministic layer-time model source, and automatic pricing
+    # exactly like FDM. The SL1 raster output remains quote-only; only the
+    # published estimate is priced.
+    if not _is_positive_number(stats.get("material_used_ml")):
+        return "stats.material_used_ml must be positive for SLA"
+    if not _is_positive_number(stats.get("material_used_g")):
+        return "stats.material_used_g must be positive for SLA"
+    if not isinstance(stats.get("layer_count"), int) or stats.get("layer_count") <= 0:
+        return "stats.layer_count must be a positive integer for SLA"
+    if stats.get("print_time_source") != "sla_layer_time_model":
+        return "stats.print_time_source must be sla_layer_time_model for SLA"
+    if not _is_positive_number(stats.get("estimated_price_huf")):
+        return "stats.estimated_price_huf must be positive for SLA"
+    if not _is_positive_number(body.get("hourly_rate")):
+        return "hourly_rate must be positive for SLA"
+    profiles = body.get("profiles")
+    if not isinstance(profiles, dict) or not profiles.get("sla_printer"):
+        return "profiles.sla_printer must be present for SLA"
+    if not _is_positive_number(profiles.get("resin_density_g_cm3")):
+        return "profiles.resin_density_g_cm3 must be positive for SLA"
     return None
 
 
@@ -479,10 +498,13 @@ def evaluate_slice_response(
                 f"hourly_rate mismatch: expected {expected_hourly_rate} from /pricing, "
                 f"got {actual_hourly_rate}"
             )
-    elif success and technology == "FDM" and expected_hourly_rate is not None and actual_hourly_rate is None:
+    elif success and technology in ("FDM", "SLA") and expected_hourly_rate is not None and actual_hourly_rate is None:
+        # FDM without a positive mass and a profile-less Orca material are the
+        # only remaining null-rate cases; SLA always has a positive resin mass
+        # and prices automatically like FDM, so a null rate here is a defect.
         hourly_rate_matches = False
         success = False
-        error_code = error_code or "FDM_PRICING_MISSING"
+        error_code = error_code or f"{technology}_PRICING_MISSING"
         error_message = (
             f"hourly_rate is null although /pricing publishes {expected_hourly_rate} for "
             f"{technology}/{material}"
