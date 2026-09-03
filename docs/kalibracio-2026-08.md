@@ -229,7 +229,10 @@ tömeg tekintetében `0..0,2 %` eltéréssel tér el. Ez teljesíti a fenti
 `POST /bambu/slice` az árazási referencia. A futtató:
 `tests/testing-scripts/calibration/bambu_reference_comparison_runner.py`
 (kizárólag tulajdonosi, privát bemenettel; a jelentés csak indexet és
-SHA-256 előtagot tartalmaz).
+SHA-256 előtagot tartalmaz). A 3.3.0 image-en 2026-09-03-án megismételt futás
+gépi kimenete:
+`docs/codex/evidence/bambu-reference-comparison-3.3.0.md` (8 szeletelheto
+modell `+-0,7 %` idon es `0,0 %` tomegen belul, a hibas halo tipusos 422).
 
 Az Orca 2.3.1 a csomagolt BBL profilokkal ugyanezeken a modelleken legfeljebb
 `+24 %`-kal becsül többet, és nincs H2D profilja; a Prusa és Orca út
