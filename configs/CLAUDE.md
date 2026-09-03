@@ -6,8 +6,8 @@ Last synchronized: 2026-09-02
 
 This folder contains runtime configuration files used by slicing and pricing:
 the Prusa INI profiles, the Orca JSON profiles with their pinned upstream
-parents and filament profiles, the Bambu printer registry, and the pricing
-state.
+parents and filament profiles, the Bambu printer registry, the SLA (Elegoo
+Saturn 4 Ultra) printer registry, and the pricing state.
 
 ## Files
 
@@ -28,7 +28,11 @@ state.
     ceiling is `256 x 256 x 249.9`.
   - `FDM_P1S_H2D_SIZE_QUOTING_0.{1,2,3}mm.ini` declare `350 x 320 x 325 mm`
     with the same P1S physics, quote-only; admission `350 x 320 x 324.9`.
-  - `SLA_0.025mm.ini` and `SLA_0.05mm.ini` produce `.sl1`; SLA is quote-only.
+  - `SLA_0.025mm.ini` and `SLA_0.05mm.ini` declare the Elegoo Saturn 4 Ultra
+    `218.88 x 122.88 x 220 mm` bed and produce `.sl1`; the SL1 raster output
+    remains quote-only (a real print needs an external UVtools conversion to
+    the vendor `.goo`/`.ctb` format), but the quote itself now prices
+    automatically from a real parsed resin mass.
   - Every FDM INI carries per-material `filament_density` and uses the
     `temperature` / `first_layer_temperature` / `bed_temperature` keys (never
     `nozzle_temperature`). Bed shape and height must not vary by layer height.
@@ -81,6 +85,28 @@ state.
     vendor machine name. The bed shape itself (printable area, first-extruder
     area, `bed_exclude_area`) is read from the flattened vendor machine.
 
+- configs/sla/printers.json
+  - Schema `r3d-sla-printer-registry-v1`, `default_printer: SATURN4U`.
+  - `SATURN4U` (Elegoo Saturn 4 Ultra, MSLA) declares
+    `declared_build_volume_mm: 218.88 x 122.88 x 220`, `quote_raster_pixels`
+    (768 x 432, disclosure-only and not the real LCD resolution), the
+    owner-tunable `time_model` (`sla-layer-time-v1`: bottom/transition layer
+    counts, per-layer and per-bottom-layer motion seconds, exposure seconds by
+    exact layer-height key, bottom exposure seconds), and `resins` (`Standard`
+    1.10, `ABS-Like` 1.10, `Flexible` 1.05 g/cm3).
+  - Resin keys match the pricing catalogue's SLA material keys
+    case-insensitively; `app/services/slice/sla-printer-registry.js` loads and
+    validates the registry strictly at startup (`STARTUP_SLA_REGISTRY_INVALID`
+    on any structural drift) and exposes it to `model-stats.js` (resin
+    density), `sla-time-model.js` (the layer-time model), and `response.js`
+    (`profiles.sla_printer`, `profiles.resin_density_g_cm3`).
+  - The declared build volume is also `MAX_BUILD_VOLUMES.SLA` in
+    `app/config/constants.js`; the admission ceiling
+    (`SLA_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM`, currently the same
+    `218.88 x 122.88 x 220` triple) is PROVISIONAL until a native envelope
+    sweep measures the Saturn 4 Ultra's real edge-of-bed admission the way the
+    P1S and H2D-QUOTE tables were measured.
+
 ## Safety Constraints
 
 - Keep this folder at repository root (not under app/).
@@ -114,7 +140,8 @@ state.
   `GET /profiles` publishes separately from `declared_build_volume_dimensions_mm`.
 - Preserve pricing schema shape:
   - FDM: material -> number (HUF per hour)
-  - SLA: material -> number (HUF per hour; SLA is never priced automatically)
+  - SLA: material -> number (HUF per hour; prices automatically from the
+    resin mass derived from the parsed SL1 volume and resin density)
 
 ## Related Runtime Keys
 
@@ -123,6 +150,7 @@ state.
 - ORCA_PROCESS_PROFILE_0_2
 - ORCA_PROCESS_PROFILE_0_3
 - BAMBU_PROFILES_ROOT
+- MAX_SL1_ENTRIES
 - MAX_MATERIAL_USED_METERS
 - MAX_MATERIAL_USED_GRAMS
 - MAX_MATERIAL_USED_ML
@@ -155,7 +183,10 @@ state.
 - Public profile fields and bounds `source_profile` retain the original
   selected basename (Prusa INI, Orca machine JSON) or the vendor machine name
   (Bambu) rather than the randomized snapshot name.
-- Catalogue v2 is explicitly FDM-only with 82 rows (6 Prusa, 24 Orca, 28 Bambu
-  P1S, 24 Bambu H2D). Never label the generic `120 x 120 x 150 mm` SLA
-  fallback as a profile-derived machine envelope, and do not guess the Elegoo
-  Saturn 4 Ultra envelope.
+- Catalogue v2 has 88 rows: 82 FDM rows (6 Prusa, 24 Orca, 28 Bambu P1S, 24
+  Bambu H2D) plus 6 Elegoo Saturn 4 Ultra SLA rows on `prusa` (2 layer heights
+  x 3 resins). Never label a fallback-only, non-explicit-metadata profile as a
+  machine envelope. The Saturn 4 Ultra's admission ceiling mirrors its
+  declared bed/height metadata and is explicitly PROVISIONAL until a native
+  envelope sweep measures it, unlike the owner-measured P1S/H2D-QUOTE/Bambu
+  ceilings.

@@ -477,7 +477,8 @@ test('SLA prices automatically from its positive resin mass and publishes the SL
             layer_count: 800,
             model_volume_ml: null,
             support_volume_ml: null,
-            print_time_source: 'sla_layer_time_model'
+            print_time_source: 'sla_layer_time_model',
+            object_height_mm: 30
         },
         jobId: 'job-id',
         artifactId: 'artifact-id'
