@@ -1,8 +1,8 @@
 # Integration guide
 
-## Bambu automatic FDM contract — local candidate, not deployed
+## Bambu automatic FDM contract — released 2026-09-07
 
-Both updated consumers use `POST /bambu/slice`, preserving multipart `choosenFile`, wire `infill:"20%"`, and `stats.material_used_g`. Supported machine/material/layer choices come from the actual Bambu registry and current catalogue. P1S is the default; H2D is distinct. Bambu has no 0.3 mm recipe and never silently remaps that request. No fallback engine is selected.
+The released Slicer contract and local WordPress ZIP use `POST /bambu/slice`, preserving multipart `choosenFile`, wire `infill:"20%"`, and `stats.material_used_g`. Supported machine/material/layer choices come from the actual Bambu registry and current catalogue. P1S is the default; H2D is distinct. Bambu has no 0.3 mm recipe and never silently remaps that request. No fallback engine is selected.
 
 Send a bounded `X-Request-Id` identifying the logical attempt. Optional `expectedProfileSha256` and `expectedMeasurementGeneration` use lowercase64hex from the selected current Bambu catalogue row. Malformed values return400 `INVALID_SLICE_IDENTITY` before queue admission; stale values return409 `SLICE_IDENTITY_MISMATCH` before native execution (geometry preprocessing/queue admission may already have occurred). Resolve and validate a new catalogue before a controlled retry.
 
@@ -20,14 +20,14 @@ Artifact ID/hash/type/size and retention/access metadata refer to the actual ret
 
 The catalogue adds Bambu `measurement_generation`, `engine_build_sha256`, `profile_bundle_sha256` fields to both v2/v3 row variants and changes their catalogue hash/ETag. Prusa material-v1/v3 identity logic is preserved. Rows of absent optional engines are omitted; strict readers must explicitly accept the additions. The later historical statement that default-v2 bytes remain unchanged applies only to the earlier Prusa material-only patch.
 
-Readiness now requires Bambu/build and shared Python imports; protected `/operations/readiness.slicerRuntime` names optional Prusa/Orca availability. Missing optional engines do not block Bambu; selecting one returns503 `SLICER_ENGINE_UNAVAILABLE` after auth and before workspace allocation. Native version/build, startup imported dependencies and fresh file-presence checks have distinct evidence boundaries. See the dated Bambu handoff for exact local tests, migration and release blockers.
+Readiness now requires Bambu/build and shared Python imports; protected `/operations/readiness.slicerRuntime` names optional Prusa/Orca availability. Missing optional engines do not block Bambu; selecting one returns503 `SLICER_ENGINE_UNAVAILABLE` after auth and before workspace allocation. Native version/build, startup imported dependencies and fresh file-presence checks have distinct evidence boundaries. See `codex/handoff-2026-09-07-bambu-deployed.md` for the verified release and remaining acceptance boundaries.
 
 
-## Local opt-in material profile contract — 2026-09-06, not deployed
+## Opt-in material profile contract — included in the Bambu receipt release
 
-The local uncommitted continuation adds `GET /profiles?contract=material-v1`.
-Default `GET /profiles` remains `r3d-profile-catalogue-v2` with its existing row
-shape and digest. The opt-in response uses `r3d-profile-catalogue-v3`, its own
+The release includes `GET /profiles?contract=material-v1`.
+Default `GET /profiles` remains `r3d-profile-catalogue-v2`. Its Prusa generic
+rows retain their identities; Bambu adds the three generation fields documented above. The opt-in response uses `r3d-profile-catalogue-v3`, its own
 catalogue hash and ETag; `If-None-Match` is checked against the selected variant.
 If that snapshot is unavailable the opt-in route returns typed 503, never v2.
 
@@ -50,10 +50,10 @@ the older exact integer representation. No malformed/fractional/coerced value
 can authorize a different requested infill. Seconds/metres/grams and dimensions
 remain factual service outputs; consumer prices remain consumer-owned.
 
-This change is required on the service side before the updated plugin can use
-material-specific v3 identities against it. The unchanged VPS has not been
-verified or updated. Local proof uses installed Windows Prusa 2.7.2, not the
-production 2.8.1 image. See [current handoff](codex/handoff-2026-09-06-calculator.md).
+The signed Slicer image includes this contract. The Linux catalogue/Prusa gate
+passed 11/11 against the release source; the independent Windows Prusa 2.7.2
+proof remains historical. See [deployed handoff](codex/handoff-2026-09-07-bambu-deployed.md).
+The WordPress deliverable is a local ZIP; LeadPilot is not changed or reverified.
 
 ## Previously documented deployed contract
 

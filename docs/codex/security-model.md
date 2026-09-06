@@ -1,17 +1,17 @@
 # Security model
 
-For the subsequent owner-authorized VPS Docker validation and conditional
-merge/deploy continuation, read `handoff-2026-09-06-bambu-release.md`.
+For current deployment identity and proof boundaries, read
+`handoff-2026-09-07-bambu-deployed.md`. The September 6 continuation is historical.
 
-## Local Bambu dual-consumer continuation — 2026-09-06, uncommitted and undeployed
+## Bambu receipt and readiness contract — released 2026-09-07
 
-The authorized local implementation makes actual Bambu Studio the common automatic FDM path for both consumers. `POST /bambu/slice` adds `applied_layer_height_mm` and `technical_receipt` (`r3d-technical-receipt-v1`); source/native build/profile/configuration/geometry/scope/estimate/artifact identities are explicit. The existing profile digest schema and Prusa material-v1/v3 repair remain intact. Bambu catalogue rows add measurement/build/bundle hashes and unavailable optional engines are omitted; default-v2 Bambu rows therefore receive additive fields and a new ETag. Strict catalogue readers must accept these documented fields before rollout.
+The Slicer implements the Bambu automatic FDM contract and the WordPress ZIP uses it. The separate LeadPilot implementation remains outside this release under the owner stop instruction. `POST /bambu/slice` adds `applied_layer_height_mm` and `technical_receipt` (`r3d-technical-receipt-v1`); source/native build/profile/configuration/geometry/scope/estimate/artifact identities are explicit. The existing profile digest schema and Prusa material-v1/v3 repair remain intact. Bambu catalogue rows add measurement/build/bundle hashes and unavailable optional engines are omitted; default-v2 Bambu rows therefore receive additive fields and a new ETag. Strict catalogue readers must accept these documented fields before rollout.
 
 Startup requires actual Bambu version/build, the frozen resolved vendor bundle, and successful imports of the common Python dependencies. Missing Prusa/Orca is separately visible in protected readiness and cannot trigger a fallback; unavailable selected engines return503 `SLICER_ENGINE_UNAVAILABLE` before workspace allocation. Closed, finite, consistently wound single solids only: no geometry repair, multiple connected components or ambiguous 3MF object/build hierarchies. Native applied config, one plate/filament, positive toolpath totals and retained-project G-code bytes are checked before artifact promotion. Native warning text becomes bounded generic warning codes; unknown subtotals remain null.
 
-Current source map, proof boundaries and operator steps: `docs/codex/handoff-2026-09-06-bambu-dual-consumer.md`. Windows native evidence is separate from the blocked exact Linux image gate. No further remote/VPS permission is carried over from earlier tasks. No commit, publication, deploy, production DB or external message is authorized in this continuation.
+Owner-authorized release: signed main `4539c539d15dacb19cde7e246aab690cc11170e7` is deployed as `ghcr.io/botond1/3d-printer-slicer-api@sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9`. Read `docs/codex/handoff-2026-09-07-bambu-deployed.md` for exact CI, native, consumer, deployment and rollback evidence. The WordPress deliverable is a local ZIP; further LeadPilot work is forbidden by the owner. Public routes, allowlists, credentials, pricing and the existing operator packs remain unchanged. Further changes require new task-specific authorization.
 
-The sections below are historical checkpoints; their branch, consumer and production claims do not describe this local continuation.
+The sections below are historical checkpoints; their branch, consumer and production claims do not describe the current release.
 
 
 ## J3B measurement, native-envelope, and catalogue control delta
