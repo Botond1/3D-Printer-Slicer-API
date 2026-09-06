@@ -35,6 +35,7 @@ REPORT_PATH = RESULTS_DIR / "profile_catalogue_test_result.md"
 
 from common.env_utils import resolve_base_url, resolve_slice_service_api_key
 from common.http_utils import curl_json, curl_json_response, curl_multipart_slice
+from common.profile_generation_checks import generation_shape, material_parity_digest
 
 AXES = ("x", "y", "z")
 CATALOGUE_ENDPOINT = "/profiles"
@@ -455,7 +456,7 @@ def leading_parameters_name_row_identity(
 
 def validate_profile_entry_schema(profile: object) -> tuple[bool, str]:
     """Validate one technology-agnostic v2 entry."""
-    if not isinstance(profile, dict) or set(profile) != PROFILE_ENTRY_FIELDS:
+    if not generation_shape(profile, PROFILE_ENTRY_FIELDS):
         return False, "At least one profile does not have the exact v2 entry shape."
     engine = profile.get("engine")
     layer_height = profile.get("layer_height_mm")
@@ -1056,6 +1057,13 @@ def verify_slice_parity(base_url: str, body: dict) -> Check:
             "optional Prusa slice digest parity", "/prusa/slice", "NOT_RUN", False,
             "Matching catalogue entry is unavailable.",
         )
+    material_status, material_body = curl_json(
+        method="GET", base_url=base_url, endpoint="/profiles?contract=material-v1",
+    )
+    expected_digest = material_parity_digest(material_body, expected, "PLA")
+    if material_status != 200 or expected_digest is None or not validate_catalogue_digest(material_body)[0]:
+        return Check("optional Prusa material slice digest parity", "/profiles", material_status,
+                     False, "Current material-v1 catalogue does not bind the selected v2 row and PLA recipe.")
     with tempfile.TemporaryDirectory(prefix="j3b-profile-catalogue-slice-") as temp_dir:
         fixture = Path(temp_dir) / "cube.stl"
         fixture.write_bytes(cube_stl())
@@ -1075,11 +1083,11 @@ def verify_slice_parity(base_url: str, body: dict) -> Check:
         status == 200 and isinstance(response, dict) and response.get("success") is True
         and response.get("slicer_engine") == "prusa"
         and response.get("profiles", {}).get("prusa_profile") == "FDM_0.2mm.ini"
-        and observed == expected.get("effective_profile_sha256")
+        and observed == expected_digest
     )
     return Check(
         "optional Prusa slice digest parity", "/prusa/slice", status, success,
-        "Live slice digest equals the matching v2 catalogue entry.",
+        "Live PLA slice digest equals its material-v1 variant; the generic v2 row remains unchanged.",
     )
 
 

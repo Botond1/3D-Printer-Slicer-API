@@ -85,3 +85,29 @@ missing/wrong-key rejection. All four readiness/catalogue endpoints return200.
 The direct Linux Bambu control exits0 with three fresh output files; its source
 SHA matches the prior synthetic control. These are isolated image results,
 not a production deployment claim.
+
+## Linux integration runner closure
+
+PR #24 head4504cf198ef32ceb146041c1afd3b486e48bc688 passed both required
+checks (Source34057796091, Image34057796049); the hosted merge tree equals
+its source tree. The isolated Linux native matrix passed39/39, operations7/7,
+and rendering8/8. The original catalogue runner then exposed two stale test
+expectations: its exact v2 row shape omitted the documented Bambu identity
+additions, and its Prusa slice parity compared a material-specific result
+against a request-independent generic digest.
+
+The next test-only correction accepts exactly the three bounded Bambu hashes
+and rejects missing/unknown/foreign-engine fields. Prusa parity now verifies
+the material-v1 catalogue digest, exact generic-row continuity, and one valid
+PLA/supports=true variant before comparing the native response. The corrected
+live catalogue/Prusa gate passes11/11;18 focused Python tests cover missing,
+malformed, stale and duplicate identity data. Full local gates pass2746JS and
+225Python with one Windows POSIX skip. Production application and image inputs
+remain byte-identical to the2562e92 native test candidate.
+
+The existing catalogue runner exceeds the decomposition threshold. Its broad
+historical refactor is deferred: new validation responsibility lives in the
+small common/profile_generation_checks.py helper, with a separate unit file;
+the orchestration change only selects the proper existing contract. No runtime
+or public-contract changes were needed for this correction. The failed report
+and corrected report are retained separately in the release evidence ledger.
