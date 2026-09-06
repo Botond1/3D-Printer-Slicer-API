@@ -1,6 +1,6 @@
 # Codex operating guide
 
-2026-09-06 local Bambu continuation (uncommitted/undeployed): see `docs/codex/handoff-2026-09-06-bambu-dual-consumer.md` and `docs/integration-guide.md`. Bambu startup/common-dependency gates, versioned technical receipt and single-solid scope supersede earlier automatic-path statements below; unavailable optional engines remain explicit.
+Owner-authorized release: signed main `4539c539d15dacb19cde7e246aab690cc11170e7` is deployed as `ghcr.io/botond1/3d-printer-slicer-api@sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9`. Read `docs/codex/handoff-2026-09-07-bambu-deployed.md` for exact CI, native, consumer, deployment and rollback evidence. The WordPress deliverable is a local ZIP; further LeadPilot work is forbidden by the owner. Public routes, allowlists, credentials, pricing and the existing operator packs remain unchanged. Further changes require new task-specific authorization.
 
 ## Mission and scope
 
@@ -22,10 +22,12 @@ Canonical Codex knowledge:
 
 Current-state references (read these before the historical material):
 
+- `docs/codex/handoff-2026-09-07-bambu-deployed.md` - verified signed Slicer deployment, WordPress ZIP and remaining scope limits.
+
 - `docs/codex/handoff-2026-09-06-bambu-release.md` - owner-authorized VPS Docker
   validation and conditional merge/deploy continuation; WordPress ZIP delivery.
 
-- `docs/codex/handoff-2026-09-06-calculator.md` - bounded local calculator material-profile compatibility change, native Windows proof and exact VPS configuration blocker; uncommitted and undeployed.
+- `docs/codex/handoff-2026-09-06-calculator.md` - bounded local calculator material-profile compatibility change, native Windows proof and historical VPS configuration blocker; superseded by the deployed handoff above.
 
 - `docs/integration-guide.md` - the consumer contract as of 3.3.0.
 - `docs/codex/handoff-2026-09-03.md` - operator handoff, traps, open items
@@ -34,7 +36,7 @@ Current-state references (read these before the historical material):
   hard rule with its exact value.
 - `CHANGELOG.md` - the 3.3.0 entry lists every consumer-visible change.
 
-## Current state (3.3.0, 2026-09-03)
+## Current state (3.3.0 plus Bambu receipt contract, 2026-09-07)
 
 Classification:
 `THREE_ENGINES_PRUSA_2_8_1_ORCA_2_3_1_BAMBU_02_08_02_61;
@@ -42,11 +44,12 @@ SLA_QUOTING_ELEGOO_SATURN_4_ULTRA_PRICED_FROM_LAYER_COUNT_MODEL;
 BAMBU_CLI_EQUALS_OWNER_GUI_ON_10_REFERENCE_MODELS;
 BAMBU_ENVELOPES_MEASURED_P1S_256x228x250_ALT_238x256_H2D_325x320x325;
 SATURN_ENVELOPE_DECLARED_NOT_MEASURED_SLA_TIME_MODEL_UNCALIBRATED;
-PRODUCTION_RUNS_SIGNED_MAIN_CANDIDATE_4FB770D7;
-PUBLIC_ROUTE_ACTIVE_LEADPILOT_ONLY_NO_CUSTOMER_TRAFFIC;
+PRODUCTION_RUNS_SIGNED_MAIN_CANDIDATE_4539C539;
+PUBLIC_ROUTE_UNCHANGED_LEADPILOT_ONLY;
+LEADPILOT_NOT_CHANGED_OR_REVERIFIED;
 FURTHER_DEPLOY_REGISTRY_ROUTE_DNS_ALLOWLIST_CONSUMER_CHANGES_NOT_AUTHORIZED`.
 
-- `main` is the only branch. The service has three engines: `POST /bambu/slice`
+- `main` is the protected release branch. The service has three engines: `POST /bambu/slice`
   (Bambu Studio 02.08.02.61, official BBL vendor chain, API-owned placement,
   `.gcode.3mf` artifact), `POST /orca/slice`, and `POST /prusa/slice` for both
   FDM and the Elegoo Saturn 4 Ultra SLA quoting path, plus `POST /render`
@@ -60,16 +63,15 @@ FURTHER_DEPLOY_REGISTRY_ROUTE_DNS_ALLOWLIST_CONSUMER_CHANGES_NOT_AUTHORIZED`.
   per-layer motion time is an assumption until the owner calibrates it, and the
   Saturn's admission ceiling mirrors its declared metadata rather than a
   measured native edge.
-- Production runs the signed main candidate for
-  `4fb770d792eac932f02a6c9b3f407a7822a1996b`
-  (`ghcr.io/botond1/3d-printer-slicer-api@sha256:c32b4c6f659b6b75cd504213014c1c95da9ab6d293b18906e8f3c78425f3159b`)
-  behind the LeadPilot-only route, deployed and verified on 2026-09-03 as
-  recorded in `docs/codex/handoff-2026-09-03.md`; the 3.2.0 release stays on the
-  host for rollback. Both consumers are integrated in contract and neither is
-  switched on, so there is no customer traffic. Every further publication still
-  requires the manual `workflow_dispatch` from protected `main`, and deploy,
-  route, DNS, allowlist, and consumer mutation each require separate owner
-  authorization.
+- Production runs signed main `4539c539d15dacb19cde7e246aab690cc11170e7`
+  (`ghcr.io/botond1/3d-printer-slicer-api@sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9`), verified in `docs/codex/handoff-2026-09-07-bambu-deployed.md`.
+  The previous 4fb770d7 image and the older 3.2.0 image remain available for rollback.
+  The API Compose pack remains 4fb770d7; the live router pack remains 9e9621a3.
+  They are separate identities; do not repoint the live dynamic bind for an API image change.
+  The WordPress consumer is delivered as a ZIP, with no live WordPress activation.
+  LeadPilot is not changed or reverified. Every further publication requires manual
+  workflow_dispatch from protected main; deploy, route, DNS, allowlist and consumer
+  mutation still require explicit owner authorization.
 - The pre-3.2.0 narrative (J0..J3B, I10..I12, Hostinger route activation and
   perimeter persistence) is preserved verbatim in
   `docs/codex/history-waves.md`; the evidence files under `docs/codex/evidence/`

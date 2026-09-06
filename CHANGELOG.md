@@ -2,12 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
-## Unreleased local continuation (2026-09-06)
+## Bambu receipt release (2026-09-07)
 
 - **[contract]** Bambu technical receipt v1, applied native layer/config validation, immutable measurement/build/bundle catalogue identity and optional expected-identity preconditions.
 - **[contract]** Bambu requires one closed solid/build instance/plate/filament; verified native totals and artifact bytes precede promotion. Unknown subtotals stay null; successful native warnings are bounded codes.
 - **[contract]** Bambu/common dependencies determine automatic-path readiness; optional absent engines remain separately unavailable. No fallback. Prusa material-v1/v3 compatibility retained.
-- Local Windows native evidence only; exact Linux image and complete two-consumer DB/queue acceptance remain separately gated. No release or deployment.
+- Signed protected-main release deployed and verified on the Slicer VPS; exact Linux Bambu, catalogue/Prusa, render, Python and isolated Woo order evidence is recorded in `docs/codex/handoff-2026-09-07-bambu-deployed.md`. Complete two-consumer acceptance is not claimed: LeadPilot is stopped by owner instruction, physical calibration is not performed, and shared batch/interactive acceptance remains open.
 
 ## v3.3.0 (2026-09-03)
 
