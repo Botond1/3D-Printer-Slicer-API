@@ -49,3 +49,22 @@ production service mutations. See `wrong-vps-cleanup.log` in the release evidenc
 Resolve only the previously used Slicer VPS before any further remote action.
 No VPS build, merge, publication or deployment is claimed by this document;
 the release evidence ledger records their actual results.
+
+## Linux CI correction
+
+PR #22 head `e2df706955212cf69513537132bfb326379691ff` failed Source run
+`34051652599` (one of 2728 JavaScript tests) and Image run `34051652627`.
+It is not eligible for merge. The corrective branch preserves its ancestry.
+`child-environment.js` now uses Windows path semantics explicitly when the
+requested child platform is Windows, including during a Linux unit run.
+The actual Windows child paths and Linux runtime paths stay unchanged.
+
+The Image failure was `authenticated_readiness_unavailable`: the private-peer
+validator still required the old exact readiness field set. Its strict schema
+now covers the new Bambu/common dependency probes and `slicerRuntime` evidence,
+including typed optional-engine absence. Unknown fields, false probes, missing
+native identity and invalid versions still fail. An actual HTTP peer-probe
+test exercises positive and one-field negative responses plus auth rejection.
+Public readiness, network, credentials, egress and resource controls are unchanged.
+The 232-line probe module retains its existing scope; no decomposition threshold
+is crossed. Corrective gate and native-image evidence is recorded in the ledger.

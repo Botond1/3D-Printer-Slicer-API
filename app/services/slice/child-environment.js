@@ -60,10 +60,10 @@ function createChildEnvironment(source = process.env, platform = process.platfor
         });
     } else {
         const tmp = environment.TEMP || environment.TMP;
-        if (tmp && path.isAbsolute(tmp)) {
+        if (tmp && path.win32.isAbsolute(tmp)) {
             Object.assign(environment, {
-                HOME: path.join(tmp, 'slicer-home'), USERPROFILE: path.join(tmp, 'slicer-home'),
-                APPDATA: path.join(tmp, 'slicer-appdata'), LOCALAPPDATA: path.join(tmp, 'slicer-localappdata')
+                HOME: path.win32.join(tmp, 'slicer-home'), USERPROFILE: path.win32.join(tmp, 'slicer-home'),
+                APPDATA: path.win32.join(tmp, 'slicer-appdata'), LOCALAPPDATA: path.win32.join(tmp, 'slicer-localappdata')
             });
         }
     }

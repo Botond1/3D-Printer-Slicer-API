@@ -154,14 +154,28 @@ const validHealth=value=>value.status===200
   &&value.body.status==='OK'&&Number.isFinite(value.body.uptime)&&value.body.uptime>=0;
 const validReady=value=>value.status===200
   &&exactKeys(value.body,['status'])&&value.body.status==='READY';
+const validSlicerRuntime=runtime=>{
+  if(!exactKeys(runtime,['bambuReady','commonDependenciesReady','engines','dependencyEvidence'])
+    ||runtime.bambuReady!==true||runtime.commonDependenciesReady!==true
+    ||runtime.dependencyEvidence!=='startup_import_and_fresh_file_presence'
+    ||!exactKeys(runtime.engines,['bambu','prusa','orca']))return false;
+  return Object.entries(runtime.engines).every(([engine,item])=>
+    exactKeys(item,['available','version','required_for_bambu'])
+    &&typeof item.available==='boolean'&&item.required_for_bambu===(engine==='bambu')
+    &&(engine!=='bambu'||item.available===true)
+    &&(item.available
+      ?typeof item.version==='string'&&/^\d+(?:\.\d+){2,3}$/.test(item.version)
+      :item.version===null));
+};
 const validOperations=value=>{
   const body=value.body;
   if(value.status!==200
-    ||!exactKeys(body,['checkedAt','ready','admissionOpen','probes','reasonCodes','queue','legacyMigration'])
+    ||!exactKeys(body,['checkedAt','ready','admissionOpen','probes','reasonCodes','queue','legacyMigration','slicerRuntime'])
     ||typeof body.checkedAt!=='string'||body.checkedAt.length>64
     ||Number.isNaN(Date.parse(body.checkedAt))||body.ready!==true||body.admissionOpen!==true
-    ||!exactKeys(body.probes,['queue','native','storage','retention','pricing','config'])
-    ||Object.values(body.probes).some(item=>typeof item!=='boolean')
+    ||!exactKeys(body.probes,['queue','native','storage','retention','pricing','config','bambu','commonDependencies'])
+    ||Object.values(body.probes).some(item=>item!==true)
+    ||!validSlicerRuntime(body.slicerRuntime)
     ||!Array.isArray(body.reasonCodes)||body.reasonCodes.length!==0
     ||!exactKeys(body.queue,[
       'queueLength','activeJobs','maxConcurrent','maxQueueLength','maxQueuePerClient','acceptingJobs'
