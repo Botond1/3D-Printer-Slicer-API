@@ -154,6 +154,10 @@ const validHealth=value=>value.status===200
   &&value.body.status==='OK'&&Number.isFinite(value.body.uptime)&&value.body.uptime>=0;
 const validReady=value=>value.status===200
   &&exactKeys(value.body,['status'])&&value.body.status==='READY';
+const validEngineVersion=(engine,version)=>typeof version==='string'&&version.length<=64
+  &&(engine==='bambu'?/^\d+(?:\.\d+){2,3}$/
+    :engine==='prusa'?/^\d+(?:\.\d+){2}(?:[-+][A-Za-z0-9._-]+)?$/
+      :/^\d+(?:\.\d+){2,3}(?:[-+][A-Za-z0-9._-]+)?$/).test(version);
 const validSlicerRuntime=runtime=>{
   if(!exactKeys(runtime,['bambuReady','commonDependenciesReady','engines','dependencyEvidence'])
     ||runtime.bambuReady!==true||runtime.commonDependenciesReady!==true
@@ -164,7 +168,7 @@ const validSlicerRuntime=runtime=>{
     &&typeof item.available==='boolean'&&item.required_for_bambu===(engine==='bambu')
     &&(engine!=='bambu'||item.available===true)
     &&(item.available
-      ?typeof item.version==='string'&&/^\d+(?:\.\d+){2,3}$/.test(item.version)
+      ?validEngineVersion(engine,item.version)
       :item.version===null));
 };
 const validOperations=value=>{

@@ -22,7 +22,7 @@ function readiness() {
             dependencyEvidence: 'startup_import_and_fresh_file_presence',
             engines: {
                 bambu: { available: true, version: '02.08.02.61', required_for_bambu: true },
-                prusa: { available: true, version: '2.8.1', required_for_bambu: false },
+                prusa: { available: true, version: '2.8.1+linux-x64-GTK3', required_for_bambu: false },
                 orca: { available: true, version: '2.3.1', required_for_bambu: false }
             }
         }
@@ -68,6 +68,9 @@ test('actual private-peer HTTP probe strictly validates the extended readiness c
         'missing common dependencies': value => { value.slicerRuntime.commonDependenciesReady = false; },
         'wrong dependency evidence': value => { value.slicerRuntime.dependencyEvidence = 'assumed'; },
         'unbounded version': value => { value.slicerRuntime.engines.bambu.version = 'x'.repeat(100); },
+        'oversized numeric version': value => { value.slicerRuntime.engines.bambu.version = '1'.repeat(65) + '.2.3'; },
+        'untrusted version suffix': value => { value.slicerRuntime.engines.prusa.version = '2.8.1+/private'; },
+        'Bambu suffix not emitted by parser': value => { value.slicerRuntime.engines.bambu.version = '02.08.02.61+other'; },
         'invalid optional version': value => { value.slicerRuntime.engines.orca.version = null; },
         'wrong engine requirement': value => { value.slicerRuntime.engines.prusa.required_for_bambu = true; },
         'readiness reason present': value => { value.reasonCodes = ['BAMBU_RUNTIME_UNAVAILABLE']; }

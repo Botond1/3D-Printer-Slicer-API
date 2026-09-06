@@ -66,5 +66,22 @@ including typed optional-engine absence. Unknown fields, false probes, missing
 native identity and invalid versions still fail. An actual HTTP peer-probe
 test exercises positive and one-field negative responses plus auth rejection.
 Public readiness, network, credentials, egress and resource controls are unchanged.
-The 232-line probe module retains its existing scope; no decomposition threshold
+The bounded probe module retains its existing scope; no decomposition threshold
 is crossed. Corrective gate and native-image evidence is recorded in the ledger.
+
+PR #23 head `2562e92b9943a2bb415f5a08dbc6dabf10b0286b` passed Source
+`34057002932`, but Image `34057003005` still rejected authenticated readiness.
+The peer's numeric-only optional engine version check was narrower than the
+existing `engine-version.js` contract, which retains Prusa/Orca build suffixes.
+The next correction matches those engine-specific grammars with the same
+64-character bound; Bambu stays numeric-only. This changes qualification scripts
+and tests only. Application, Dockerfile, dependencies and profile bytes remain
+identical to the independently built `2562e92` native test candidate.
+
+On the isolated VPS image, native Prusa reports
+`2.8.1+linux-x64-GTK3-202409181416`. The unchanged prior peer probe rejects
+the live authenticated response; the corrected probe accepts it and still proves
+missing/wrong-key rejection. All four readiness/catalogue endpoints return200.
+The direct Linux Bambu control exits0 with three fresh output files; its source
+SHA matches the prior synthetic control. These are isolated image results,
+not a production deployment claim.
