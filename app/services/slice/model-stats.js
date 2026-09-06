@@ -137,7 +137,8 @@ function parseNativeMeshVolumeMm3(stdout, policy) {
 async function getModelInfo(filePath, signal) {
     throwIfAborted(signal);
     try {
-        const { stdout } = await runCommand('prusa-slicer', ['--info', filePath], { signal });
+        const { resolveSlicerExecutable } = require('./engine');
+        const { stdout } = await runCommand(resolveSlicerExecutable('prusa'), ['--info', filePath], { signal });
         throwIfAborted(signal);
         const matchX = /size_x\s*=\s*([0-9.]+)/i.exec(stdout);
         const matchY = /size_y\s*=\s*([0-9.]+)/i.exec(stdout);

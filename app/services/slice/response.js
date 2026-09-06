@@ -329,6 +329,10 @@ function buildSliceSuccessResponse(context) {
         material,
         infill: infillPercentage,
         supports: resolveSupportsFlag(context.supports),
+        ...(context.technicalReceipt ? {
+            applied_layer_height_mm: context.technicalReceipt.applied.layer_height_mm,
+            technical_receipt: context.technicalReceipt
+        } : {}),
         profiles,
         model_transform: modelTransform,
         build_volume_limits_mm: {

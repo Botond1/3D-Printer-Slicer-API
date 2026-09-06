@@ -23,7 +23,8 @@ function createProfileCatalogueRouter(options = {}) {
     }
     const router = express.Router();
     router.get('/profiles', (req, res) => {
-        const snapshot = service.getSnapshot();
+        const current = service.getSnapshot();
+        const snapshot = req.query.contract === 'material-v1' ? current?.materialSnapshot : current;
         if (!snapshot) {
             res.setHeader('Cache-Control', 'no-store');
             return res.status(503).json({

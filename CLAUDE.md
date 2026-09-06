@@ -1,6 +1,16 @@
 # 3D Printer Slicer API - Claude Operating Guide
 
-Last synchronized: 2026-09-03
+Last synchronized: 2026-09-06
+
+2026-09-06 local continuation: read `docs/codex/handoff-2026-09-06-calculator.md` before reusing historical integration status. The uncommitted opt-in `material-v1` catalogue v3 compiles material-specific Prusa FDM hashes with the runtime density; default v2 remains compatible. Local native Windows Prusa → isolated Woo order is proven separately from the unchanged VPS. Bounded VPS permission exists, but the discovered configuration is unreachable and has no slice credential (0/6 attempts). No deploy or new machine/business-policy approval is implied. Contract details: `docs/integration-guide.md`.
+
+## Local Bambu dual-consumer continuation — 2026-09-06, uncommitted and undeployed
+
+The authorized local implementation makes actual Bambu Studio the common automatic FDM path for both consumers. `POST /bambu/slice` adds `applied_layer_height_mm` and `technical_receipt` (`r3d-technical-receipt-v1`); source/native build/profile/configuration/geometry/scope/estimate/artifact identities are explicit. The existing profile digest schema and Prusa material-v1/v3 repair remain intact. Bambu catalogue rows add measurement/build/bundle hashes and unavailable optional engines are omitted; default-v2 Bambu rows therefore receive additive fields and a new ETag. Strict catalogue readers must accept these documented fields before rollout.
+
+Startup requires actual Bambu version/build, the frozen resolved vendor bundle, and successful imports of the common Python dependencies. Missing Prusa/Orca is separately visible in protected readiness and cannot trigger a fallback; unavailable selected engines return503 `SLICER_ENGINE_UNAVAILABLE` before workspace allocation. Closed, finite, consistently wound single solids only: no geometry repair, multiple connected components or ambiguous 3MF object/build hierarchies. Native applied config, one plate/filament, positive toolpath totals and retained-project G-code bytes are checked before artifact promotion. Native warning text becomes bounded generic warning codes; unknown subtotals remain null.
+
+Current source map, proof boundaries and operator steps: `docs/codex/handoff-2026-09-06-bambu-dual-consumer.md`. Windows native evidence is separate from the blocked exact Linux image gate. No further remote/VPS permission is carried over from earlier tasks. No commit, publication, deploy, production DB or external message is authorized in this continuation.
 
 ## Architecture Notice
 This repository uses both GitHub Copilot and Claude as primary agentic tools.
@@ -31,8 +41,10 @@ under `docs/codex/evidence/`.
   `libgl1`, `libgl1-mesa-dri`, `libglx-mesa0`, `libgstreamer1.0-0`,
   `libgstreamer-plugins-base1.0-0`. Both Compose manifests set `init: true`.
   Candidate provenance evidence schema is `i7-s3a-candidate-provenance-v2`.
-- Startup atomically verifies all three executables' versions from bounded
-  `--help` output before listen; every success carries `engine_version`.
+- Startup verifies Bambu and shared Python dependencies before listen; optional
+  Prusa/Orca versions are reported separately. Linux uses bounded `--help`; the
+  Windows GUI launcher uses OS VERSIONINFO plus the actual native G-code build
+  header. Every success carries `engine_version`.
 - Prusa receives already transformed geometry and adds no native rotation.
   Its INIs carry per-material density and `temperature` keys; section/key case
   is significant and exact duplicate qualified keys fail closed.

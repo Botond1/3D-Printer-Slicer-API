@@ -30,6 +30,7 @@ const BAMBU_PROFILE_CHAIN_ERROR_CODE = 'STARTUP_BAMBU_PROFILE_CHAIN_FAILED';
 const MAX_INHERITANCE_DEPTH = 8;
 const MAX_INCLUDES = 16;
 const STRUCTURAL_KEYS = Object.freeze(['inherits', 'include']);
+let frozenProfiles = null;
 
 /**
  * Resolve the vendor profile root, honouring `BAMBU_PROFILES_ROOT`.
@@ -166,6 +167,11 @@ function flattenFile(role, name, state) {
 function flattenBambuProfile(role, name, options = {}) {
     assertRole(role);
     assertProfileName(name, role);
+    if (frozenProfiles && !options.root && !options.env) {
+        const profile = frozenProfiles.get(`${role}:${name}`);
+        if (!profile) throw new Error('Profile is outside the frozen Bambu registry.');
+        return structuredClone(profile);
+    }
     const root = options.root ? path.resolve(options.root) : resolveBambuProfilesRoot(options.env);
     const flattened = flattenFile(role, name, { depth: 0, visited: new Set(), root });
     if (flattened.name !== name || flattened.type !== role) {
@@ -183,9 +189,11 @@ function verifyBambuRegistryChains(options = {}) {
     const registry = options.registry || getBambuPrinterRegistry();
     const root = options.root ? path.resolve(options.root) : resolveBambuProfilesRoot(options.env);
     const references = listBambuRegistryProfileReferences(registry);
+    const verifiedProfiles = new Map();
     for (const reference of references) {
         try {
-            flattenBambuProfile(reference.role, reference.name, { root });
+            const profile = flattenBambuProfile(reference.role, reference.name, { root });
+            verifiedProfiles.set(`${reference.role}:${reference.name}`, profile);
         } catch (cause) {
             const error = new Error(
                 `Bambu ${reference.role} profile "${reference.name}" could not be flattened.`,
@@ -195,6 +203,7 @@ function verifyBambuRegistryChains(options = {}) {
             throw error;
         }
     }
+    if (options.freeze === true) frozenProfiles = verifiedProfiles;
     return Object.freeze({ root, verified: references.length });
 }
 

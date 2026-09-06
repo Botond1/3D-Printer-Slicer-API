@@ -14,6 +14,7 @@ SHA-256 prefix; otherwise the report states that only synthetic fixtures ran.
 from __future__ import annotations
 
 import sys
+import argparse
 import tempfile
 import time
 from dataclasses import dataclass, field
@@ -34,6 +35,8 @@ from common.env_utils import (
     resolve_slice_service_api_key,
 )
 from common.http_utils import curl_json
+from common.bambu_receipt_checks import additional_receipt_cases, validate_receipt, retain_response
+from common.bambu_transform_cases import transform_cases
 from common.runner_support import (
     ARTIFACT_ID_PATTERN,
     axis_map_equals,
@@ -100,6 +103,7 @@ class BambuCase:
     expected_error_codes: tuple[str, ...] = ()
     stability_group: str | None = None
     field_overrides: Mapping[str, str] = field(default_factory=dict)
+    expected_dimensions_mm: Mapping[str, float] | None = None
 
 
 @dataclass
@@ -143,7 +147,7 @@ def build_request_fields(case: BambuCase) -> dict[str, str]:
         "supports": case.supports,
     }
     fields.update(case.field_overrides)
-    return fields
+    return {key: value for key, value in fields.items() if value != ''}
 
 
 def write_synthetic_fixtures(directory: Path) -> dict[str, Path]:
@@ -252,7 +256,7 @@ def validate_success_body(
         return False, "engine_version is not a machine-readable version"
     if body.get("technology") != "FDM" or body.get("material") != case.material:
         return False, "technology/material echo mismatch"
-    if body.get("infill") != EXPECTED_INFILL_ECHO:
+    if body.get("infill") != f"{int(case.infill.rstrip('%'))}%":
         return False, "infill echo is not the normalized percentage"
     if body.get("supports") is not (case.supports == "true"):
         return False, "supports flag is not echoed as the requested boolean"
@@ -278,6 +282,10 @@ def validate_success_body(
         is_positive_number(final_dimensions.get(axis)) for axis in ("x", "y", "z")
     ):
         return False, "final_dimensions_mm are not positive"
+    if case.expected_dimensions_mm is not None and not axis_map_equals(
+        final_dimensions, case.expected_dimensions_mm, 1e-4,
+    ):
+        return False, 'final dimensions disagree with independent synthetic reference'
     limits = body.get("build_volume_limits_mm")
     if not isinstance(limits, dict) or not axis_map_equals(
         limits.get("max"), MEASURED_BUILD_VOLUME_MAX_MM[case.printer], DIMENSION_TOLERANCE_MM,
@@ -304,7 +312,7 @@ def validate_success_body(
     placement_ok, placement_note = validate_optional_placement(body)
     if not placement_ok:
         return False, placement_note
-    return True, f"complete Bambu success contract ({placement_note})"
+    return validate_receipt(body, case)
 
 
 def evaluate_case(case: BambuCase, status: int, body: object, pricing_map: dict | None) -> tuple[bool, str]:
@@ -331,6 +339,8 @@ def run_case(
         extra_fields=build_request_fields(case), slice_service_api_key=api_key,
     )
     success, observation = evaluate_case(case, status, body, pricing_map)
+    if case.kind != 'legacy':
+        retain_response(body, index, RESULTS_DIR, case.fixture_path)
     result = BambuCaseResult(
         index=index, case=case, http_status=status, success=success,
         error_code=error_code_of(body), observation=observation, duration_sec=round(duration, 3),
@@ -452,6 +462,10 @@ def _cell(value: object) -> str:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--receipt-scope', action='store_true', help='Add native receipt geometry/parameter negatives and restored controls')
+    parser.add_argument('--case-indices', help='Comma-separated original case indices for a focused rerun; keep stability pair16,17 when checking digest stability')
+    args = parser.parse_args()
     base_url = resolve_base_url(PROJECT_ROOT)
     api_key = resolve_slice_service_api_key(PROJECT_ROOT)
     print(f"[BAMBU FDM TEST] slice_service_api_key_found={bool(api_key)}")
@@ -473,8 +487,15 @@ def main() -> int:
             print(f"[BAMBU FDM TEST] ERROR: synthetic fixture precondition failed: {error}")
             return 1
         cases = build_cases(fixtures, legacy_files)
-        print(f"[BAMBU FDM TEST] fixture_source={fixture_source} cases={len(cases)}")
-        for index, case in enumerate(cases, 1):
+        if args.receipt_scope:
+            cases.extend(additional_receipt_cases(BambuCase, fixtures))
+            cases.extend(transform_cases(BambuCase, fixtures))
+        selected = set(map(int, args.case_indices.split(','))) if args.case_indices else set(range(1, len(cases) + 1))
+        if not selected or not selected.issubset(set(range(1, len(cases) + 1))):
+            parser.error('case indices are outside the generated case list')
+        indexed_cases = [(index, case) for index, case in enumerate(cases, 1) if index in selected]
+        print(f"[BAMBU FDM TEST] fixture_source={fixture_source} cases={len(indexed_cases)}")
+        for position, (index, case) in enumerate(indexed_cases, 1):
             print(f"[BAMBU FDM TEST] #{index} {case.kind}: {case.name}")
             result = run_case(index, case, base_url, api_key, pricing_map)
             results.append(result)
@@ -482,7 +503,7 @@ def main() -> int:
                 f"[BAMBU FDM TEST]    status={result.http_status} success={result.success} "
                 f"errorCode={result.error_code} duration={result.duration_sec:.2f}s :: {result.observation}"
             )
-            if index < len(cases):
+            if position < len(indexed_cases):
                 time.sleep(SLEEP_SECONDS)
     checks = [
         evaluate_digest_stability(results),

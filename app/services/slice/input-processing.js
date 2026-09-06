@@ -50,7 +50,7 @@ function classifyOrientationFailure(error) {
  * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
  * @returns {Promise<string>} Final STL-compatible file path.
  */
-async function convertInputToStl(processableFile, workspace, signal) {
+async function convertInputToStl(processableFile, workspace, signal, options = {}) {
     throwIfAborted(signal);
     const currentExt = path.extname(processableFile).toLowerCase();
     let finalStlPath = processableFile;
@@ -58,6 +58,11 @@ async function convertInputToStl(processableFile, workspace, signal) {
     if (['.obj', '.3mf', '.ply'].includes(currentExt)) {
         if (currentExt === '.3mf') {
             await inspectThreeMfArchive(workspace.assertContainedPath(processableFile));
+            if (options.strictBambu) {
+                await runCommand(PYTHON_EXECUTABLE,
+                    [resolvePythonHelper('inspect_mesh.py'), '--3mf-scope', processableFile],
+                    { signal, ...HELPER_COMMAND_OPTIONS });
+            }
             throwIfAborted(signal);
         }
         finalStlPath = resolveConvertedPath(processableFile, workspace);

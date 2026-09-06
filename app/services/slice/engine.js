@@ -88,6 +88,11 @@ function resolveSlicerInvocationPolicy(engine, technology) {
  * @returns {'prusa-slicer'|'orca-slicer'|'bambu-studio'} CLI executable name.
  */
 function resolveSlicerExecutable(engine) {
+    const configured = process.env[`${String(engine).toUpperCase()}_EXECUTABLE`];
+    if (configured) {
+        if (!path.isAbsolute(configured) || configured.includes('\0')) throw new Error('Native executable must be absolute.');
+        return configured;
+    }
     return SLICER_EXECUTABLES[engine] || SLICER_EXECUTABLES.prusa;
 }
 
@@ -141,6 +146,7 @@ function buildBambuArgs(policy, configFile, outputPath, machineConfigPath, filam
         ? engineOptions.bedType
         : policy.bedType;
     return [
+        '--datadir', path.join(path.dirname(outputPath), '.bambu-data'),
         '--load-settings', composeOrcaSettingsFiles(policy, machineConfigPath, configFile),
         policy.filamentOption, filamentConfigPath,
         '--curr-bed-type', bedType,

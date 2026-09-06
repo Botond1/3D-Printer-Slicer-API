@@ -176,6 +176,16 @@ function isOrcaPresetCompatibilityError(err) {
  */
 function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, getSupportedInputExtensionsText) {
 
+    const receiptErrors = {
+        BAMBU_RESULT_UNVERIFIED: [422, 'Bambu native configuration, scope or output could not be verified.'],
+        AMBIGUOUS_MANUFACTURING_SCOPE: [422, 'Automatic Bambu slicing requires one connected solid and one build instance.'],
+        SLICE_IDENTITY_MISMATCH: [409, 'Selected profile or measurement generation is stale.']
+    };
+    if (Object.hasOwn(receiptErrors, err?.code)) {
+        const [status, error] = receiptErrors[err.code];
+        return res.status(status).json({ success: false, error, errorCode: err.code });
+    }
+
     if (err instanceof GcodeMetricsError) {
         return res.status(500).json({
             success: false,

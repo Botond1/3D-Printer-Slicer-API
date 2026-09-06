@@ -58,6 +58,14 @@ function createChildEnvironment(source = process.env, platform = process.platfor
             XDG_CONFIG_HOME: path.posix.join(trustedTmp, 'xdg-config'),
             XDG_RUNTIME_DIR: path.posix.join(trustedTmp, 'xdg-runtime')
         });
+    } else {
+        const tmp = environment.TEMP || environment.TMP;
+        if (tmp && path.win32.isAbsolute(tmp)) {
+            Object.assign(environment, {
+                HOME: path.win32.join(tmp, 'slicer-home'), USERPROFILE: path.win32.join(tmp, 'slicer-home'),
+                APPDATA: path.win32.join(tmp, 'slicer-appdata'), LOCALAPPDATA: path.win32.join(tmp, 'slicer-localappdata')
+            });
+        }
     }
     return { ...environment, ...SAFE_PYTHON_ENV };
 }

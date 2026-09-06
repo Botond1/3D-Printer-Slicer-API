@@ -39,6 +39,8 @@ test('minimal environment passes runtime essentials and excludes secret/applicat
     assert.deepEqual(env, {
         PATH: 'runtime-path', SystemRoot: 'C:\\Windows', WINDIR: 'C:\\Windows',
         PATHEXT: '.EXE', TEMP: 'C:\\Temp', TMP: 'C:\\Tmp', LANG: 'C.UTF-8',
+        HOME: path.win32.join('C:\\Temp', 'slicer-home'), USERPROFILE: path.win32.join('C:\\Temp', 'slicer-home'),
+        APPDATA: path.win32.join('C:\\Temp', 'slicer-appdata'), LOCALAPPDATA: path.win32.join('C:\\Temp', 'slicer-localappdata'),
         PYTHONDONTWRITEBYTECODE: '1', PYTHONNOUSERSITE: '1',
         PYTHONUNBUFFERED: '1', PYTHONUTF8: '1'
     });

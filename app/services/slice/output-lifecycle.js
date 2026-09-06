@@ -21,6 +21,8 @@ const { cleanupManagedArtifacts: sweepManagedArtifacts } = require('../artifact-
 const { wrapNativePlacementRejection } = require('./native-bounds');
 const { emitEvent } = require('../observability/events');
 const { recordArtifactCleanup } = require('../observability/metrics');
+const { buildBambuReceipt, assertExpectedIdentity } = require('./bambu-receipt');
+const { assertBambuBuildCurrent } = require('./bambu-generation');
 
 /** Bambu Studio writes the sliced plate beside the exported project. */
 const BAMBU_PLATE_GCODE_NAME = 'plate_1.gcode';
@@ -224,6 +226,8 @@ async function runSlicerAndParseStats(context) {
         bambuPrinterId: bambu.printerId,
         bambuBedType: bambu.bedType
     });
+    assertExpectedIdentity(context, effectiveProfileSha256);
+    if (engine === 'bambu') assertBambuBuildCurrent();
     throwIfAborted(signal);
     logEngineProfileSelection(engine);
     const slicerArgs = buildSlicerCommandArgs(
@@ -305,6 +309,9 @@ async function runSlicerAndParseStats(context) {
             modelVolumeMm3: Number.isFinite(effectiveModelInfo.volume_mm3) ? effectiveModelInfo.volume_mm3 : null
         }
     );
+    const technicalReceipt = engine === 'bambu'
+        ? await buildBambuReceipt(context, generated, stats, effectiveProfileSha256, runtimeConfigFile, nativeResult) : null;
+    if (engine === 'bambu') assertBambuBuildCurrent();
     throwIfAborted(signal);
     await workspace.promoteOutputCandidate(outputCandidate, effectiveOutputPath);
     throwIfAborted(signal);
@@ -314,7 +321,7 @@ async function runSlicerAndParseStats(context) {
         // promoted, so a retention miss changes readiness, not this response.
         recordRetentionMiss(workspace.id, cleanup);
     }
-    return { stats, effectiveProfileSha256, engineVersion, filamentProfileMetadata };
+    return { stats, effectiveProfileSha256, engineVersion, filamentProfileMetadata, technicalReceipt };
 }
 
 module.exports = {

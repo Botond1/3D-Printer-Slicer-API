@@ -72,7 +72,11 @@ def fake_trimesh(loaded):
     module = types.ModuleType("trimesh")
     module.Scene = FakeScene
     module.util = types.SimpleNamespace(concatenate=lambda value: value)
-    module.load = lambda _path: loaded() if callable(loaded) else loaded
+    def load(_path, *, process=False):
+        if process is not False:
+            raise AssertionError('Source loading must not silently repair geometry')
+        return loaded() if callable(loaded) else loaded
+    module.load = load
     return module
 
 

@@ -273,6 +273,12 @@ function createSliceRouter(options = {}) {
             let originalError;
             let cleanupError;
             try {
+                if (options.isEngineAvailable && !options.isEngineAvailable(engine)) {
+                    const error = new Error('The selected slicer engine is unavailable.');
+                    error.code = 'SLICER_ENGINE_UNAVAILABLE';
+                    error.status = 503;
+                    throw error;
+                }
                 try {
                     workspace = await allocate();
                 } catch (error) {

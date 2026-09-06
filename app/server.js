@@ -41,6 +41,8 @@ const { beginSliceQueueShutdown } = require('./services/slice/queue');
 const { initializeSlicerEngineVersions } = require('./services/slice/engine-version');
 const { getBambuPrinterRegistry } = require('./services/slice/bambu-printer-registry');
 const { verifyBambuRegistryChains } = require('./services/slice/bambu-profile-chain');
+const { initializeBambuGeneration } = require('./services/slice/bambu-generation');
+const { createBambuReadiness } = require('./services/slice/bambu-readiness');
 const { getSlaPrinterRegistry } = require('./services/slice/sla-printer-registry');
 const { configureRetentionObserver } = require('./services/slice/output-lifecycle');
 const { createProfileCatalogueService } = require('./services/slice/profile-catalogue');
@@ -75,7 +77,9 @@ try {
 /** @type {import('express').Express} */
 const app = express();
 let runtimeLifecycle;
+const bambuReadiness = createBambuReadiness();
 const readinessService = createReadinessService({
+    getSlicerRuntimeStatus: bambuReadiness.getStatus,
     isShuttingDown: () => runtimeLifecycle?.isShuttingDown() === true,
     legacyMigration: serviceKeyRing.legacyMigration
 });
@@ -98,6 +102,7 @@ const authLogger = Object.freeze({
     }
 });
 const sliceRoutes = createSliceRouter({
+    isEngineAvailable: bambuReadiness.isEngineAvailable,
     authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger }),
     resourcePolicy
 });
@@ -240,18 +245,20 @@ const httpServer = createBoundedHttpServer(app);
  * S1a intentionally keeps production startup audit-only because total request lifetime is not bounded yet.
  */
 async function startServer() {
-    const engineVersions = await initializeSlicerEngineVersions();
+    const engineVersions = await initializeSlicerEngineVersions({ requiredEngines: ['bambu'] });
     // The Bambu registry and every vendor chain it references must flatten
     // before listen; a typed failure here refuses startup rather than letting
     // /bambu/slice answer 500 on its first request. The catalogue below stays
     // non-critical and merely re-exercises the same chains.
-    verifyBambuRegistryChains({ registry: getBambuPrinterRegistry() });
+    verifyBambuRegistryChains({ registry: getBambuPrinterRegistry(), freeze: true });
+    initializeBambuGeneration(engineVersions.bambu);
+    await bambuReadiness.initialize(engineVersions);
     // The SLA printer registry has no external chain to flatten (Prusa reads
     // its own bundled SLA profiles directly), so loading it once and
     // validating it strictly is the complete startup gate.
     getSlaPrinterRegistry();
     configureRetentionObserver(readinessService);
-    await profileCatalogueService.initialize({ engineVersions });
+    await profileCatalogueService.initialize({ engineVersions, allowUnavailableEngines: true });
     const scratchCleanup = await auditStaleWorkspaces({
         jobsRoot: JOB_SCRATCH_DIR,
         delete: true,
@@ -298,7 +305,7 @@ async function startServer() {
         },
         listen() {
             if (runtimeLifecycle.isShuttingDown()) return null;
-            httpServer.listen(PORT, () => {
+            httpServer.listen(PORT, process.env.HTTP_BIND_HOST, () => {
                 emitEvent('startup.completed', { outcome: 'success' });
             });
             return httpServer;

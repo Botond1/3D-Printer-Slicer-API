@@ -190,7 +190,9 @@ test('profile catalogue v2 stays generic for a future real SLA machine and names
     );
     assert.equal(entrySchema.properties.filament_diameter_mm.nullable, true);
     assert.equal(entrySchema.properties.filament_density_g_cm3.nullable, true);
-    assert.deepEqual(responseSchema.properties.schema.enum, ['r3d-profile-catalogue-v2']);
+    assert.deepEqual(responseSchema.properties.schema.enum, ['r3d-profile-catalogue-v2', 'r3d-profile-catalogue-v3']);
+    assert.ok(operation.parameters.some(parameter => parameter.in === 'query' && parameter.name === 'contract' && parameter.schema.enum.includes('material-v1')));
+    assert.equal(entrySchema.properties.material_profiles.properties.schema.enum[0], 'r3d-prusa-material-profiles-v1');
     assert.match(operation.description, /current v2 rows are .*FDM and SLA presets/);
     assert.match(operation.description, /H2D-sized quoting chain with P1S physics/);
     assert.match(operation.description, /Fallback-only presets backed by no explicit machine-profile metadata are never published/);
@@ -415,7 +417,7 @@ test('OpenAPI documents the Bambu Studio slice operation, supports, strict infil
         const codes = (status) => operation.responses[status].content['application/json'].schema
             .properties.errorCode.enum;
         assert.deepEqual(codes(429), ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT'], operationKey);
-        assert.deepEqual(codes(503), ['SLICE_QUEUE_FULL', 'SLICE_QUEUE_TIMEOUT', 'SLICE_QUEUE_SHUTDOWN'], operationKey);
+        assert.deepEqual(codes(503), ['SLICE_QUEUE_FULL', 'SLICE_QUEUE_TIMEOUT', 'SLICE_QUEUE_SHUTDOWN', 'SLICER_ENGINE_UNAVAILABLE'], operationKey);
         assert.deepEqual(codes(408), ['UPLOAD_TOTAL_TIMEOUT'], operationKey);
         assert.ok(codes(413).includes('UPLOAD_RESOURCE_LIMIT_EXCEEDED'), operationKey);
         for (const code of [
@@ -498,6 +500,6 @@ test('OpenAPI slice operations retain multipart choosenFile contracts', () => {
 test('OpenAPI operations retain their documented response-status keys', () => {
     for (const [operationKey, expectedKeys] of Object.entries(EXPECTED_RESPONSE_KEYS)) {
         const actualKeys = Object.keys(getOperation(operationKey).responses).sort();
-        assert.deepEqual(actualKeys, [...expectedKeys].sort(), operationKey);
+        assert.deepEqual(actualKeys, [...expectedKeys, ...(operationKey === 'POST /bambu/slice' ? ['409'] : [])].sort(), operationKey);
     }
 });

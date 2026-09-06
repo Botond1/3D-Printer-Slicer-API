@@ -4,7 +4,14 @@ applyTo: "tests/testing-scripts/**"
 
 # Testing Scripts Instructions
 
-Last synchronized: 2026-09-02
+Last synchronized: 2026-09-06
+
+The local Bambu receipt gate extends
+`slicing/full_api_bambu_fdm_test_runner.py --receipt-scope` through
+`common/bambu_receipt_checks.py` and `common/bambu_transform_cases.py`.
+Retained `results/bambu-receipts` inputs/responses are synthetic only.
+Read its report and the dated2026-09-06 Codex Bambu dual-consumer handoff;
+Windows-native, Linux-image and consumer E2E evidence are separate.
 
 ## Test Entry Points
 - slicing/full_api_test_runner.py

@@ -191,6 +191,8 @@ test('OpenAPI exposes engine identity, W2 digest, requested omissions, and live 
 
     const validation = responses[422].content['application/json'].schema;
     assert.deepEqual(validation.properties.errorCode.enum, [
+        'BAMBU_RESULT_UNVERIFIED',
+        'AMBIGUOUS_MANUFACTURING_SCOPE',
         'INVALID_SLICE_OUTPUT',
         'INVALID_SLICE_STATS',
         'FILE_PROCESSING_TIMEOUT',

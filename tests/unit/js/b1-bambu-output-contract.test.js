@@ -492,7 +492,9 @@ test('native geometry diagnostics map to UNSLICEABLE_SOURCE_GEOMETRY with a boun
 });
 
 function installOutputLifecycleMocks({ runCommand, parseOutputDetailed, cleanupManagedArtifacts }) {
-    const paths = [COMMAND_PATH, MODEL_PATH, OUTPUT_PATH, ENGINE_VERSION_PATH, ARTIFACT_STORE_PATH];
+    const receiptPath = path.join(ROOT, 'app/services/slice/bambu-receipt.js');
+    const generationPath = path.join(ROOT, 'app/services/slice/bambu-generation.js');
+    const paths = [COMMAND_PATH, MODEL_PATH, OUTPUT_PATH, ENGINE_VERSION_PATH, ARTIFACT_STORE_PATH, receiptPath, generationPath];
     const originals = new Map(paths.map((modulePath) => [modulePath, require.cache[modulePath]]));
     const replace = (modulePath, exportsValue) => {
         require.cache[modulePath] = { id: modulePath, filename: modulePath, loaded: true, exports: exportsValue };
@@ -504,6 +506,10 @@ function installOutputLifecycleMocks({ runCommand, parseOutputDetailed, cleanupM
     replace(ENGINE_VERSION_PATH, { getSlicerEngineVersion: (engine) => ({ bambu: '02.08.02.61', orca: '2.3.1', prusa: '2.8.1' })[engine] });
     const artifactStore = originals.get(ARTIFACT_STORE_PATH)?.exports || require(ARTIFACT_STORE_PATH);
     replace(ARTIFACT_STORE_PATH, { ...artifactStore, cleanupManagedArtifacts });
+    // This suite isolates artifact lifecycle; native evidence guards are exercised
+    // with untouched native fixtures by bambu-receipt.test.js and the real API gate.
+    replace(receiptPath, { assertExpectedIdentity() {}, async buildBambuReceipt() { return { schema: 'lifecycle-unit-double' }; } });
+    replace(generationPath, { assertBambuBuildCurrent() {} });
     delete require.cache[OUTPUT_PATH];
     const lifecycle = require(OUTPUT_PATH);
     return {
@@ -586,7 +592,8 @@ test('bambu slice run parses plate_1.gcode, retains the .gcode.3mf, and treats a
     assert.equal(first.stats.print_time_seconds, 714);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].executable, 'bambu-studio');
-    const args = calls[0].args;
+    assert.deepEqual(calls[0].args.slice(0, 2), ['--datadir', path.join(engineOutputDir, '.bambu-data')]);
+    const args = calls[0].args.slice(2);
     assert.equal(args.at(-1), 'model.stl');
     assert.equal(args[0], '--load-settings');
     assert.equal(args[1], `${snapshots.orcaMachineConfigFile};${args[1].split(';')[1]}`);

@@ -197,6 +197,9 @@ function catalogueEntrySchema() {
         ],
         additionalProperties: false,
         properties: {
+            measurement_generation: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'Bambu only: immutable native build, resolved bundle and processing source generation.' },
+            engine_build_sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+            profile_bundle_sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' },
             id: {
                 type: 'string', minLength: 1, maxLength: 256,
                 pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$'
@@ -276,6 +279,24 @@ function catalogueEntrySchema() {
                 }
             },
             effective_profile_sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+            material_profiles: {
+                type: 'object', additionalProperties: false,
+                required: ['schema', 'profiles'],
+                description: 'Present on Prusa FDM rows only in opt-in catalogue v3. Material-specific runtime identity with supports=true; layer and infill remain separate request identity.',
+                properties: {
+                    schema: { type: 'string', enum: ['r3d-prusa-material-profiles-v1'] },
+                    profiles: { type: 'array', minItems: 1, maxItems: 32, items: {
+                        type: 'object', additionalProperties: false,
+                        required: ['material', 'supports', 'effective_profile_sha256', 'filament_density_g_cm3'],
+                        properties: {
+                            material: { type: 'string', enum: ['PLA', 'PETG', 'ABS', 'TPU'] },
+                            supports: { type: 'boolean', enum: [true] },
+                            effective_profile_sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+                            filament_density_g_cm3: { type: 'number', exclusiveMinimum: 0 }
+                        }
+                    } }
+                }
+            },
             effective_profile_identity_schema: {
                 type: 'string',
                 enum: ['r3d-effective-slice-profile-v2']
@@ -332,6 +353,10 @@ function createProfileCataloguePaths() {
                 summary: 'Get the startup profile catalogue.',
                 description: 'Public informational catalogue whose current v2 rows are machine-bound server-owned FDM and SLA presets. Every per-printer, per-engine preset row remains visible, with physical/profile-declared dimensions separated from the authoritative configured inclusive admission ceiling. Machine and fleet envelopes are resolved independently for each technology and native engine; cross-engine values are never merged or silently minimized. H2D-QUOTE is explicitly a H2D-sized quoting chain with P1S physics, not a production H2D G-code profile. Bambu Studio rows (engine `bambu`, endpoint `/bambu/slice`) name the official vendor machine/process/filament profiles for the P1S and H2D; their largest-passing ceilings are provisional until the native envelope sweep replaces them. The Elegoo Saturn 4 Ultra SLA rows (engine `prusa`, endpoint `/prusa/slice`) add separate per-engine SLA fleet resolutions; their SL1 raster output is quote-only and their largest-passing ceiling is likewise provisional until a native envelope sweep replaces it. Slice endpoints remain authoritative and keep enforcing the published largest-passing ceiling. Fallback-only presets backed by no explicit machine-profile metadata are never published as machine entries. Custom overrides and dynamic materials are outside this catalogue, and catalogue availability never gates slicing.',
                 parameters: [{
+                    name: 'contract', in: 'query', required: false,
+                    schema: { type: 'string', enum: ['material-v1'] },
+                    description: 'Opt into catalogue v3 with material-resolved Prusa runtime hashes. Omit for unchanged catalogue v2.'
+                }, {
                     name: 'If-None-Match',
                     in: 'header',
                     required: false,
@@ -357,7 +382,7 @@ function createProfileCataloguePaths() {
                                     properties: {
                                         schema: {
                                             type: 'string',
-                                            enum: ['r3d-profile-catalogue-v2']
+                                            enum: ['r3d-profile-catalogue-v2', 'r3d-profile-catalogue-v3']
                                         },
                                         catalogue_sha256: {
                                             type: 'string', pattern: '^[a-f0-9]{64}$'

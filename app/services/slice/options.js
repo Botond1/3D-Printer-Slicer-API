@@ -439,6 +439,11 @@ function parseSliceOptions(body, forcedTechnology, engine = 'prusa') {
     );
 
     if (engine === 'bambu') {
+        for (const field of ['expectedProfileSha256', 'expectedMeasurementGeneration']) {
+            if (input[field] !== undefined && (typeof input[field] !== 'string' || !/^[a-f0-9]{64}$/.test(input[field]))) {
+                return invalid('Expected slice identity must be a lowercase SHA-256.', 'INVALID_SLICE_IDENTITY');
+            }
+        }
         const materialValidation = validateMaterialForTechnology(technology, material);
         if (!materialValidation.isValid) return materialValidation;
         const bambu = parseBambuSelection(input, layerHeight, material);

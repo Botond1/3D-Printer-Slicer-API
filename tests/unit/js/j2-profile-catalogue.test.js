@@ -61,12 +61,12 @@ function createApp(service) {
     return app;
 }
 
-async function requestApp(app, headers = {}) {
+async function requestApp(app, headers = {}, query = '') {
     const server = app.listen(0, '127.0.0.1');
     await once(server, 'listening');
     try {
         const address = server.address();
-        const response = await fetch(`http://127.0.0.1:${address.port}/profiles`, { headers });
+        const response = await fetch(`http://127.0.0.1:${address.port}/profiles${query}`, { headers });
         const text = await response.text();
         return {
             status: response.status,
@@ -97,6 +97,33 @@ function findProfile(engine, printerId, layerHeight = 0.2, material = null) {
         && profile.material === material
     ));
 }
+
+test('opt-in v3 Prusa material identities match the runtime compiler; v2 stays unchanged', async () => {
+    const { resolveMaterialFilamentMetadata } = require('../../../app/services/slice/filament-profile');
+    assert.equal(snapshot.materialSnapshot.body.schema, 'r3d-profile-catalogue-v3');
+    assert.ok(snapshot.body.profiles.every(row => !Object.hasOwn(row, 'material_profiles')));
+    const workspace = await createWorkspace();
+    try {
+        for (const row of snapshot.materialSnapshot.body.profiles.filter(row => row.material_profiles)) {
+            assert.equal(row.material_profiles.schema, 'r3d-prusa-material-profiles-v1');
+            assert.equal(row.material_profiles.profiles.length, 4);
+            const filename = row.slice_selector.parameters.find(p => p.name === 'printerProfile').value;
+            const selection = resolveProfileSelection('prusa', 'FDM', row.layer_height_mm, { prusaProfile: filename }, 'PLA');
+            const sources = await snapshotProfileSelection('prusa', selection, workspace);
+            for (const variant of row.material_profiles.profiles) {
+                const density = resolveMaterialFilamentMetadata(variant.material).densityGcm3;
+                // Different infill is request identity, excluded from the profile-only digest.
+                const runtimeConfigFile = await createRuntimeSlicerProfile('prusa', sources.baseConfigFile, 'FDM', row.layer_height_mm, '37%', workspace, { filamentDensityGcm3: density, supports: true });
+                const digest = calculateEffectiveProfileSha256({engine:'prusa',technology:'FDM',material:variant.material,runtimeConfigFile});
+                assert.equal(digest, variant.effective_profile_sha256, `${filename}/${variant.material}`);
+                const changed = await createRuntimeSlicerProfile('prusa', sources.baseConfigFile, 'FDM', row.layer_height_mm, '37%', workspace, { filamentDensityGcm3: density + 0.01, supports: true });
+                assert.notEqual(calculateEffectiveProfileSha256({engine:'prusa',technology:'FDM',material:variant.material,runtimeConfigFile:changed}), digest);
+                const noSupports = await createRuntimeSlicerProfile('prusa', sources.baseConfigFile, 'FDM', row.layer_height_mm, '37%', workspace, { filamentDensityGcm3: density, supports: false });
+                assert.notEqual(calculateEffectiveProfileSha256({engine:'prusa',technology:'FDM',material:variant.material,runtimeConfigFile:noSupports}), digest);
+            }
+        }
+    } finally { await workspace.cleanup('material_identity_test'); }
+});
 
 test.before(async () => {
     snapshot = await buildProfileCatalogue({ engineVersions: ENGINE_VERSIONS, createWorkspace });
@@ -813,4 +840,21 @@ test('GET /profiles retains ETag and typed unavailable behavior for v2', async (
         error: 'Profile catalogue is unavailable.',
         errorCode: 'PROFILE_CATALOGUE_UNAVAILABLE'
     });
+});
+
+test('opt-in material contract uses its own ETag and never falls back to generic v2', async () => {
+    const app = createApp({ getSnapshot: () => snapshot });
+    const query = '?contract=material-v1';
+    const selected = await requestApp(app, { 'If-None-Match': snapshot.etag }, query);
+    assert.equal(selected.status, 200);
+    assert.equal(selected.body.schema, 'r3d-profile-catalogue-v3');
+    assert.equal(selected.headers.etag, snapshot.materialSnapshot.etag);
+    assert.notEqual(selected.headers.etag, snapshot.etag);
+    assert.equal(selected.text, snapshot.materialSnapshot.serializedBody);
+    const unchanged = await requestApp(app, { 'If-None-Match': selected.headers.etag }, query);
+    assert.equal(unchanged.status, 304);
+    assert.equal(unchanged.text, '');
+    const legacy = createApp({ getSnapshot: () => ({ ...snapshot, materialSnapshot: undefined }) });
+    assert.equal((await requestApp(legacy, {}, query)).status, 503);
+    assert.equal((await requestApp(app)).text, snapshot.serializedBody);
 });

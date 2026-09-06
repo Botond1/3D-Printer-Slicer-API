@@ -1,5 +1,7 @@
 # Codex operating guide
 
+2026-09-06 local Bambu continuation (uncommitted/undeployed): see `docs/codex/handoff-2026-09-06-bambu-dual-consumer.md` and `docs/integration-guide.md`. Bambu startup/common-dependency gates, versioned technical receipt and single-solid scope supersede earlier automatic-path statements below; unavailable optional engines remain explicit.
+
 ## Mission and scope
 
 Maintain this standalone 3D Printer Slicer API as a security-sensitive Node.js,
@@ -19,6 +21,11 @@ Canonical Codex knowledge:
 - `docs/codex/hardening-plan.md` - staged work, dependencies, and exit criteria.
 
 Current-state references (read these before the historical material):
+
+- `docs/codex/handoff-2026-09-06-bambu-release.md` - owner-authorized VPS Docker
+  validation and conditional merge/deploy continuation; WordPress ZIP delivery.
+
+- `docs/codex/handoff-2026-09-06-calculator.md` - bounded local calculator material-profile compatibility change, native Windows proof and exact VPS configuration blocker; uncommitted and undeployed.
 
 - `docs/integration-guide.md` - the consumer contract as of 3.3.0.
 - `docs/codex/handoff-2026-09-03.md` - operator handoff, traps, open items
