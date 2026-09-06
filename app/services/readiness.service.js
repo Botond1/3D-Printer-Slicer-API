@@ -25,6 +25,8 @@ const READINESS_REASON_ORDER = Object.freeze([
     'ADMISSION_CLOSED',
     'QUEUE_UNAVAILABLE',
     'NATIVE_RUNTIME_QUARANTINED',
+    'BAMBU_RUNTIME_UNAVAILABLE',
+    'COMMON_DEPENDENCIES_UNAVAILABLE',
     'STORAGE_UNSAFE',
     'RETENTION_UNSAFE',
     'PRICING_UNAVAILABLE',
@@ -123,7 +125,10 @@ function createReadinessService(options = {}) {
     function runProbes() {
         const queue = queueStatus();
         const native = nativeStatus();
+        const slicerRuntime = options.getSlicerRuntimeStatus?.();
         const probes = Object.freeze({
+            ...(slicerRuntime ? { bambu: slicerRuntime.bambuReady,
+                commonDependencies: slicerRuntime.commonDependenciesReady } : {}),
             queue: probesOverride.queue?.() ?? Boolean(
                 queue
                 && Number.isSafeInteger(queue.queueLength)
@@ -162,6 +167,8 @@ function createReadinessService(options = {}) {
         else if (!admissionOpen) reasonCodes.push('ADMISSION_CLOSED');
         if (!probes.queue) reasonCodes.push('QUEUE_UNAVAILABLE');
         if (!probes.native) reasonCodes.push('NATIVE_RUNTIME_QUARANTINED');
+        if (slicerRuntime && !probes.bambu) reasonCodes.push('BAMBU_RUNTIME_UNAVAILABLE');
+        if (slicerRuntime && !probes.commonDependencies) reasonCodes.push('COMMON_DEPENDENCIES_UNAVAILABLE');
         if (!probes.storage) reasonCodes.push('STORAGE_UNSAFE');
         if (!probes.retention) reasonCodes.push('RETENTION_UNSAFE');
         if (!probes.pricing) reasonCodes.push('PRICING_UNAVAILABLE');
@@ -175,7 +182,8 @@ function createReadinessService(options = {}) {
             probes,
             reasonCodes: Object.freeze(reasonCodes),
             queue: Object.freeze({ ...queue, acceptingJobs: queue.acceptingJobs }),
-            legacyMigration
+            legacyMigration,
+            ...(slicerRuntime ? { slicerRuntime } : {})
         });
     }
 

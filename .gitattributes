@@ -5,3 +5,6 @@ ops/hostinger/** text eol=lf
 scripts/i12-capacity-producer-exec.py text eol=lf
 scripts/i12-hostinger-operator-contract.js text eol=lf
 tests/unit/js/i12-hostinger-operator-*.test.js text eol=lf
+
+# Preserve the native control byte for byte, including Bambu-generated whitespace.
+tests/unit/fixtures/bambu-native-receipt/plate_1.gcode -text -diff

@@ -138,6 +138,7 @@ test('bambu argv disables native arrangement (API-owned placement) and never pas
         { bedType: 'Textured PEI Plate', supports: false }
     );
     assert.deepEqual(args, [
+        '--datadir', path.join(path.dirname(outputPath), '.bambu-data'),
         '--load-settings', 'machine.json;process.json',
         '--load-filaments', 'filament.json',
         '--curr-bed-type', 'Textured PEI Plate',

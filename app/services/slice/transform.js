@@ -384,7 +384,7 @@ async function applyTransformAndValidateModel(
 
     throwIfAborted(signal);
     const finalModelMeasurement = transformPlan.requiresTransform
-        ? await getModelInfo(transformedFilePath, signal) : orientedModelMeasurement;
+        ? await (transformContext.measureModel || getModelInfo)(transformedFilePath, signal) : orientedModelMeasurement;
     throwIfAborted(signal);
     if (!isPositiveModelMeasurement(finalModelMeasurement)) return modelDimensionsUnavailableResult();
     // The transform helper's own marker is the primary volume source; when no

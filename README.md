@@ -1,5 +1,7 @@
 # 3D Printer Slicer API (FDM & SLA)
 
+2026-09-06 local Bambu continuation (uncommitted/undeployed): see `docs/codex/handoff-2026-09-06-bambu-dual-consumer.md` and `docs/integration-guide.md`. Bambu startup/common-dependency gates, versioned technical receipt and single-solid scope supersede earlier automatic-path statements below; unavailable optional engines remain explicit.
+
 ![3D Printer Slicer API logo](https://github.com/user-attachments/assets/61739b97-e3ab-4335-a127-5a1370111a5a)
 
 ![Node.js](https://img.shields.io/badge/Node.js-20.20.2-339933?style=flat&logo=node.js&logoColor=white)

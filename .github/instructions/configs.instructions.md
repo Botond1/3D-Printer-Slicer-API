@@ -4,7 +4,9 @@ applyTo: "configs/**"
 
 # Configs Folder Instructions
 
-Last synchronized: 2026-09-02
+2026-09-06 local Bambu continuation (uncommitted/undeployed): see `docs/codex/handoff-2026-09-06-bambu-dual-consumer.md` and `docs/integration-guide.md`. Bambu startup/common-dependency gates, versioned technical receipt and single-solid scope supersede earlier automatic-path statements below; unavailable optional engines remain explicit.
+
+Last synchronized: 2026-09-06
 
 ## Scope
 - pricing-state/pricing.json is the runtime pricing source of truth,

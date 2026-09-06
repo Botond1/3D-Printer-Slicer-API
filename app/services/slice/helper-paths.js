@@ -4,7 +4,7 @@ const path = require('node:path');
 
 const APPLICATION_ROOT = path.resolve(__dirname, '..', '..');
 const HELPER_NAMES = new Set([
-    'mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py', 'render_preview.py'
+    'mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py', 'render_preview.py', 'inspect_mesh.py'
 ]);
 
 /**

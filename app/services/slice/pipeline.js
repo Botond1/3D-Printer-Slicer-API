@@ -24,6 +24,7 @@ const { writeJsonAndWaitForFinish, setResponseSettlement } = require('./response
 const { throwIfAborted, isAbortError } = require('./command');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { resourceLimit } = require('./resource-errors');
+const { captureBambuSource, measureBambuMesh } = require('./bambu-source');
 
 function findUploadedModelFile(req) {
     return req.file?.fieldname === 'choosenFile' ? req.file : null;
@@ -45,17 +46,19 @@ async function appendOriginalExtensionToUpload(inputFile, originalExt, workspace
     return destination;
 }
 
-async function prepareProcessableModel(inputFile, technology, orientationMode, workspace, signal) {
+async function prepareProcessableModel(inputFile, technology, orientationMode, workspace, signal, engine = 'prusa') {
     throwIfAborted(signal);
     let processableFile = workspace.assertContainedPath(inputFile);
     if (path.extname(processableFile).toLowerCase() === '.zip') {
         processableFile = await extractFirstSupportedFromZip(processableFile, workspace);
         throwIfAborted(signal);
     }
-    processableFile = await convertInputToStl(processableFile, workspace, signal);
+    processableFile = await convertInputToStl(processableFile, workspace, signal, { strictBambu: engine === 'bambu' });
     await assertBoundedModelFile(processableFile, workspace);
     throwIfAborted(signal);
-    const originalModelMeasurement = await getModelInfo(processableFile, signal);
+    const sourceEvidence = engine === 'bambu' ? await captureBambuSource(inputFile, processableFile, signal) : null;
+    const measure = engine === 'bambu' ? measureBambuMesh : getModelInfo;
+    const originalModelMeasurement = await measure(processableFile, signal);
     throwIfAborted(signal);
     const preOrientationFile = processableFile;
     const orientationResult = await tryOptimizeOrientation(
@@ -75,10 +78,11 @@ async function prepareProcessableModel(inputFile, technology, orientationMode, w
     );
     const orientedModelMeasurement = canReuseOriginalMeasurement
         ? originalModelMeasurement
-        : await getModelInfo(processableFile, signal);
+        : await measure(processableFile, signal);
     throwIfAborted(signal);
     return {
         processableFile,
+        sourceEvidence,
         originalModelMeasurement,
         orientedModelMeasurement,
         orientation: orientationResult.orientation
@@ -141,7 +145,8 @@ async function prepareModelOrResponse(
         signal,
         {
             orientation,
-            originalModelMeasurement
+            originalModelMeasurement,
+            measureModel: request.engine === 'bambu' ? measureBambuMesh : getModelInfo
         }
     );
     throwIfAborted(signal);
@@ -172,6 +177,9 @@ function resolveRequestOrResponse(req, res, options, workspace) {
         response: null,
         request: {
             ...parsed.options,
+            requestId: req.requestId,
+            expectedProfileSha256: req.body?.expectedProfileSha256,
+            expectedMeasurementGeneration: req.body?.expectedMeasurementGeneration,
             engine,
             originalName,
             originalExt,
@@ -189,7 +197,8 @@ async function prepareSliceJob(res, request, workspace, signal) {
         request.technology,
         request.orientationMode,
         workspace,
-        signal
+        signal,
+        request.engine
     );
     throwIfAborted(signal);
     const profiles = resolveProfilesOrResponse(
@@ -231,7 +240,7 @@ async function executePreparedSlice(req, res, job, workspace, signal) {
     throwIfAborted(signal);
     const { request, source, profiles, profileSnapshots, preparedModel, targets } = job;
     const { model, buildVolumeLimits } = preparedModel;
-    const { stats, effectiveProfileSha256, engineVersion, filamentProfileMetadata } = await runSlicerAndParseStats({
+    const { stats, effectiveProfileSha256, engineVersion, filamentProfileMetadata, technicalReceipt } = await runSlicerAndParseStats({
         ...request,
         ...profileSnapshots,
         ...targets,
@@ -239,6 +248,7 @@ async function executePreparedSlice(req, res, job, workspace, signal) {
         effectiveModelInfo: model.effectiveModelInfo,
         modelTransform: model.modelTransform,
         buildVolumeLimits,
+        sourceEvidence: source.sourceEvidence,
         workspace,
         signal
     });
@@ -253,6 +263,7 @@ async function executePreparedSlice(req, res, job, workspace, signal) {
         engineVersion,
         effectiveProfileSha256,
         filamentProfileMetadata,
+        technicalReceipt,
         ...workspace.getOutputCandidateInfo(targets.outputCandidate)
     });
     throwIfAborted(signal);

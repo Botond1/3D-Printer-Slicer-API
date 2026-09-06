@@ -59,6 +59,21 @@ function queryEngineVersion(engine, runner) {
     if (!args) {
         return Promise.reject(new Error('Unsupported slicer engine for version resolution.'));
     }
+    if (process.platform === 'win32' && engine === 'bambu' && runner === versionRunner) {
+        // The vendor GUI launcher reopens CONOUT$, discarding redirected help.
+        // Read OS VERSIONINFO from that executable; every Bambu success also
+        // requires the native G-code build header to match this startup value.
+        const { PYTHON_EXECUTABLE } = require('../../config/python');
+        const path = require('node:path');
+        return runner(PYTHON_EXECUTABLE, [path.join(__dirname, '../../engine_version_windows.py'),
+            resolveSlicerExecutable(engine)]).then(({ stdout }) => {
+            const data = JSON.parse(stdout);
+            if (data.source !== 'windows_versioninfo' || !/^[0-9]+(?:\.[0-9]+){2,3}$/.test(data.version)) {
+                throw new Error('Native executable version is invalid.');
+            }
+            return data.version;
+        });
+    }
     return runner(resolveSlicerExecutable(engine), [...args])
         .then((result) => parseEngineVersionOutput(engine, result));
 }
@@ -96,14 +111,22 @@ async function initializeSlicerEngineVersions(options = {}) {
     const versions = {};
     try {
         for (const engine of SUPPORTED_ENGINES) {
-            versions[engine] = await resolveSlicerEngineVersion(engine, { runner: options.runner, cache });
+            try {
+                versions[engine] = await resolveSlicerEngineVersion(engine, { runner: options.runner, cache });
+            } catch (error) {
+                if (!options.requiredEngines || options.requiredEngines.includes(engine)) throw error;
+                versions[engine] = null;
+            }
         }
     } catch (cause) {
         const error = new Error('Slicer engine startup version verification failed.', { cause });
         error.code = 'STARTUP_SLICER_VERSION_FAILED';
         throw error;
     }
-    for (const engine of SUPPORTED_ENGINES) initialized.set(engine, versions[engine]);
+    for (const engine of SUPPORTED_ENGINES) {
+        if (versions[engine]) initialized.set(engine, versions[engine]);
+        else initialized.delete(engine);
+    }
     return Object.freeze({ ...versions });
 }
 

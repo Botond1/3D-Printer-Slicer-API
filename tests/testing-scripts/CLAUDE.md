@@ -1,6 +1,13 @@
 # Testing Scripts - Local Claude Guide
 
-Last synchronized: 2026-09-03
+Last synchronized: 2026-09-06
+
+The existing `slicing/full_api_bambu_fdm_test_runner.py --receipt-scope` adds
+synthetic geometry, applied settings,3MF units/instances/XML, transforms and
+printer-boundary controls. Common `bambu_receipt_checks.py` and
+`bambu_transform_cases.py` keep them separate from runner orchestration.
+Retained `results/bambu-receipts` input/response bytes are synthetic only.
+Read the Markdown report; distinguish Windows, exact-image and consumer E2E.
 
 ## Scope
 

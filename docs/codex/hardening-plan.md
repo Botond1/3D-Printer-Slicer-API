@@ -1,5 +1,19 @@
 # Hardening plan
 
+For the subsequent owner-authorized VPS Docker validation and conditional
+merge/deploy continuation, read `handoff-2026-09-06-bambu-release.md`.
+
+## Local Bambu dual-consumer continuation — 2026-09-06, uncommitted and undeployed
+
+The authorized local implementation makes actual Bambu Studio the common automatic FDM path for both consumers. `POST /bambu/slice` adds `applied_layer_height_mm` and `technical_receipt` (`r3d-technical-receipt-v1`); source/native build/profile/configuration/geometry/scope/estimate/artifact identities are explicit. The existing profile digest schema and Prusa material-v1/v3 repair remain intact. Bambu catalogue rows add measurement/build/bundle hashes and unavailable optional engines are omitted; default-v2 Bambu rows therefore receive additive fields and a new ETag. Strict catalogue readers must accept these documented fields before rollout.
+
+Startup requires actual Bambu version/build, the frozen resolved vendor bundle, and successful imports of the common Python dependencies. Missing Prusa/Orca is separately visible in protected readiness and cannot trigger a fallback; unavailable selected engines return503 `SLICER_ENGINE_UNAVAILABLE` before workspace allocation. Closed, finite, consistently wound single solids only: no geometry repair, multiple connected components or ambiguous 3MF object/build hierarchies. Native applied config, one plate/filament, positive toolpath totals and retained-project G-code bytes are checked before artifact promotion. Native warning text becomes bounded generic warning codes; unknown subtotals remain null.
+
+Current source map, proof boundaries and operator steps: `docs/codex/handoff-2026-09-06-bambu-dual-consumer.md`. Windows native evidence is separate from the blocked exact Linux image gate. No further remote/VPS permission is carried over from earlier tasks. No commit, publication, deploy, production DB or external message is authorized in this continuation.
+
+The sections below are historical checkpoints; their branch, consumer and production claims do not describe this local continuation.
+
+
 ## J3B native-envelope and original-dimension corrective checkpoint
 
 Status:

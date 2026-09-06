@@ -1,5 +1,7 @@
 'use strict';
 
+const { technicalReceiptSchema } = require('./technical-receipt-openapi');
+
 const SLICE_SERVICE_HEADER = Object.freeze({
     name: 'x-slicer-api-key',
     in: 'header',
@@ -462,6 +464,8 @@ function errorCodeResponse(description, errorCodes) {
 
 function validationErrorResponse() {
     const otherValidationCodes = [
+        'BAMBU_RESULT_UNVERIFIED',
+        'AMBIGUOUS_MANUFACTURING_SCOPE',
         'INVALID_SLICE_OUTPUT',
         'INVALID_SLICE_STATS',
         'FILE_PROCESSING_TIMEOUT',
@@ -512,6 +516,7 @@ function validationErrorResponse() {
 }
 
 const REQUEST_VALIDATION_CODES = Object.freeze([
+    'INVALID_SLICE_IDENTITY',
     'INVALID_SOURCE_ARCHIVE',
     'INVALID_SOURCE_GEOMETRY',
     'UNSUPPORTED_FILE_FORMAT',
@@ -536,11 +541,16 @@ const REQUEST_VALIDATION_CODES = Object.freeze([
     'NO_FILE_UPLOADED'
 ]);
 
-function createSliceResponses() {
+function createSliceResponses(bambu = false) {
     return {
         200: {
             description: 'Slicing successful',
-            content: { 'application/json': { schema: SUCCESS_SCHEMA } }
+            content: { 'application/json': { schema: bambu ? {
+                ...SUCCESS_SCHEMA, required: [...SUCCESS_SCHEMA.required, 'applied_layer_height_mm', 'technical_receipt'],
+                properties: { ...SUCCESS_SCHEMA.properties,
+                    applied_layer_height_mm: { type: 'number', minimum: 0, exclusiveMinimum: true },
+                    technical_receipt: technicalReceiptSchema(MODEL_TRANSFORM_SCHEMA) }
+            } : SUCCESS_SCHEMA } }
         },
         400: errorCodeResponse(
             'Invalid request, geometry, or source archive. Option and profile validation runs before queue admission, so these responses never consume a queue slot.',
@@ -574,6 +584,7 @@ function createSliceResponses() {
             'The total multipart upload lifetime expired.',
             ['UPLOAD_TOTAL_TIMEOUT']
         ),
+        ...(bambu ? { 409: errorCodeResponse('Selected Bambu profile or measurement generation changed; resolve a fresh catalogue before retrying.', ['SLICE_IDENTITY_MISMATCH']) } : {}),
         413: errorCodeResponse(
             'Upload, archive expansion, model, intermediate, or output exceeded a resource limit.',
             ['UPLOAD_RESOURCE_LIMIT_EXCEEDED', 'SLICE_RESOURCE_LIMIT_EXCEEDED']
@@ -593,7 +604,7 @@ function createSliceResponses() {
         ]),
         503: errorCodeResponse(
             'The slice queue is full, the queued request waited past its deadline, or the service is shutting down.',
-            ['SLICE_QUEUE_FULL', 'SLICE_QUEUE_TIMEOUT', 'SLICE_QUEUE_SHUTDOWN']
+            ['SLICE_QUEUE_FULL', 'SLICE_QUEUE_TIMEOUT', 'SLICE_QUEUE_SHUTDOWN', 'SLICER_ENGINE_UNAVAILABLE']
         )
     };
 }
@@ -652,6 +663,8 @@ function createOrcaProperties() {
 
 function createBambuProperties() {
     return {
+        expectedProfileSha256: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'Optional catalogue profile precondition; stale values return 409 before native execution.' },
+        expectedMeasurementGeneration: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'Optional catalogue measurement precondition; stale values return 409 before native execution.' },
         ...COMMON_MULTIPART_PROPERTIES,
         layerHeight: {
             type: 'string',
@@ -701,7 +714,7 @@ function createSliceOperation({ summary, description, properties }) {
                     }
                 }
             },
-            responses: createSliceResponses()
+            responses: createSliceResponses(Boolean(properties.expectedMeasurementGeneration))
         }
     };
 }

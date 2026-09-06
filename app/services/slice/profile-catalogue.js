@@ -27,6 +27,7 @@ const {
     resolveMaterialFilamentMetadata
 } = require('./filament-profile');
 const { readIniKeyValues } = require('./profile-readers');
+const { catalogueGenerationFields } = require('./bambu-generation');
 const { parseNumberLike } = require('./value-parsers');
 const {
     getBambuAllowedLayerKeys,
@@ -259,6 +260,9 @@ function buildLeadingSelectorParameters(definition) {
             { name: 'material', value: definition.material }
         ];
     }
+    if (definition.engine === 'prusa' && definition.technology === 'FDM' && definition.material) {
+        return [{ name: 'material', value: definition.material }];
+    }
     return [];
 }
 
@@ -452,7 +456,7 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
         bambuBedType: bambu.bedType
     });
     const profileComponents = buildProfileComponents(definition, selection);
-    return validateCatalogueEntryIdentity({
+    const entry = validateCatalogueEntryIdentity({
         id: buildEntryId(definition, selection),
         engine: definition.engine,
         technology: definition.technology,
@@ -469,6 +473,7 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
         effective_profile_sha256: digest,
         effective_profile_identity_schema: DIGEST_SCHEMA,
         engine_version: engineVersions[definition.engine],
+        ...(definition.engine === 'bambu' ? catalogueGenerationFields() : {}),
         build_volume_limits_mm: {
             minimum_dimensions_inclusive_mm: { ...limits.min },
             declared_build_volume_dimensions_mm: { ...limits.declaredMax },
@@ -481,6 +486,23 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
         filament_diameter_mm: metadata?.diameterMm ?? null,
         filament_density_g_cm3: metadata?.densityGcm3 ?? null
     });
+    // Keep the v2 generic row and its historical digest intact. New consumers
+    // select a material identity BEFORE cache lookup. Each variant uses this
+    // same compiler, including the density override used by slice runtime.
+    if (definition.engine === 'prusa' && definition.technology === 'FDM' && definition.material === null) {
+        const profiles = [];
+        for (const material of Object.keys(ORCA_FILAMENT_PROFILE_BY_MATERIAL).sort()) {
+            const resolved = await buildCatalogueEntry({ ...definition, material }, engineVersions, workspace, dependencies);
+            profiles.push({
+                material,
+                supports: true,
+                effective_profile_sha256: resolved.effective_profile_sha256,
+                filament_density_g_cm3: resolved.filament_density_g_cm3
+            });
+        }
+        entry.material_profiles = { schema: 'r3d-prusa-material-profiles-v1', profiles };
+    }
+    return entry;
 }
 
 function hashCatalogueContent(content) {
@@ -735,8 +757,9 @@ async function buildProfileCatalogue(options = {}) {
     const engineVersions = options.engineVersions;
     const validVersion = (value) => typeof value === 'string'
         && value.length >= 1 && value.length <= 128 && /^[\x20-\x7e]+$/.test(value);
-    if (!engineVersions || !validVersion(engineVersions.prusa)
-        || !validVersion(engineVersions.orca) || !validVersion(engineVersions.bambu)) {
+    const available = options.allowUnavailableEngines === true;
+    if (!engineVersions || !validVersion(engineVersions.bambu)
+        || (!available && (!validVersion(engineVersions.prusa) || !validVersion(engineVersions.orca)))) {
         throw new Error('Startup-verified slicer engine versions are required.');
     }
     const dependencies = {
@@ -754,7 +777,8 @@ async function buildProfileCatalogue(options = {}) {
     let failure = null;
     try {
         const results = await Promise.allSettled(
-            createPresetDefinitions({ bambuRegistry: options.bambuRegistry }).map((definition) => (
+            createPresetDefinitions({ bambuRegistry: options.bambuRegistry })
+                .filter((definition) => validVersion(engineVersions[definition.engine])).map((definition) => (
                 buildCatalogueEntry(definition, engineVersions, workspace, dependencies)
             ))
         );
@@ -774,10 +798,19 @@ async function buildProfileCatalogue(options = {}) {
 
     entries.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
     const { machineResolutions, fleetResolutions } = deriveMachineAndFleetResolutions(entries);
+    const materialContent = {
+        schema: 'r3d-profile-catalogue-v3',
+        semantics: CATALOGUE_SEMANTICS,
+        profiles: entries,
+        machine_resolutions: machineResolutions,
+        fleet_resolutions: fleetResolutions
+    };
+    const materialSha256 = hashCatalogueContent(materialContent);
+    const materialBody = deepFreeze(canonicalizeJsonValue({ ...materialContent, catalogue_sha256: materialSha256 }));
     const content = {
         schema: PROFILE_CATALOGUE_SCHEMA,
         semantics: CATALOGUE_SEMANTICS,
-        profiles: entries,
+        profiles: entries.map(({ material_profiles, ...legacy }) => legacy),
         machine_resolutions: machineResolutions,
         fleet_resolutions: fleetResolutions
     };
@@ -793,7 +826,12 @@ async function buildProfileCatalogue(options = {}) {
     return Object.freeze({
         body,
         etag: `"${catalogueSha256}"`,
-        serializedBody: JSON.stringify(body)
+        serializedBody: JSON.stringify(body),
+        materialSnapshot: Object.freeze({
+            body: materialBody,
+            etag: `"${materialSha256}"`,
+            serializedBody: JSON.stringify(materialBody)
+        })
     });
 }
 
@@ -822,6 +860,7 @@ function createProfileCatalogueService(options = {}) {
 }
 
 module.exports = {
+    buildCatalogueEntry,
     CATALOGUE_SEMANTICS,
     CATALOGUE_STRING_CONTRACTS,
     PROFILE_CATALOGUE_SCHEMA,

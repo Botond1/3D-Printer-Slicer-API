@@ -132,7 +132,7 @@ def _assert_usable_mesh(mesh):
 
 def _load_as_mesh(input_path):
     """Load input file and normalize to a single millimetre-scaled mesh."""
-    loaded = trimesh.load(input_path)
+    loaded = trimesh.load(input_path, process=False)
     scene = loaded if isinstance(loaded, trimesh.Scene) else None
     if scene is not None:
         print("[PYTHON] Input is a Scene, merging geometries...")

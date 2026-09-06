@@ -18,6 +18,10 @@ function buildErrorResponse(message, errorCode) {
 }
 
 const KNOWN_ERROR_RULES = Object.freeze([
+    {
+        match: (err) => err?.code === 'SLICER_ENGINE_UNAVAILABLE', status: 503,
+        message: 'The selected slicer engine is unavailable.', errorCode: 'SLICER_ENGINE_UNAVAILABLE'
+    },
     ...[
         ['PRICING_CORS_ORIGIN_NOT_ALLOWED', 'Origin is not allowed for pricing endpoints.'],
         ['ARTIFACT_CORS_ORIGIN_NOT_ALLOWED', 'Origin is not allowed for artifact endpoints.'],

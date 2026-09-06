@@ -31,7 +31,7 @@ test('server creates required directories before invoking the audit-before-liste
     const serverPath = path.resolve(__dirname, '../../../app/server.js');
     const source = await fs.readFile(serverPath, 'utf8');
     const ensureIndex = source.indexOf('ensureRequiredDirectories();');
-    const enginePreflightIndex = source.indexOf('await initializeSlicerEngineVersions();');
+    const enginePreflightIndex = source.indexOf("await initializeSlicerEngineVersions({ requiredEngines: ['bambu'] });");
     const listenIndex = source.indexOf('httpServer.listen(PORT');
     const startIndex = source.lastIndexOf('runtimeLifecycle.run(startServer).catch');
     assert.ok(ensureIndex >= 0);
