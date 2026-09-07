@@ -1,0 +1,419 @@
+{
+  "schema": "slicer-final-release-evidence-v1",
+  "classification": "DEPLOYED_NATIVE_AND_PERIMETER_VERIFIED",
+  "release": {
+    "kind": "final_release_identity",
+    "source": "8bf11c9661c4c6bab7ff2b8343db40a6134f15a0",
+    "image": "ghcr.io/botond1/3d-printer-slicer-api@sha256:b3b7a616daa34f2635a9df8040d4b26b13a4cdd32c341de7023565a26d3eab99",
+    "registry_config_digest": "sha256:490eb0fab6b793257394f54118ff74e76d9d17ecce341007bc5e3689149a9549",
+    "runtime_image_id": "sha256:b3b7a616daa34f2635a9df8040d4b26b13a4cdd32c341de7023565a26d3eab99",
+    "registry_manifest_verified": true,
+    "container_id": "a93a5efdc97b7825cfc3a4dc27166f908fa59d7cccc09f2c2fd632bc84ae7a34",
+    "started_at": "2026-09-07T17:16:02.666158552Z",
+    "finished_at": "2026-09-07T17:22:46.892196+00:00",
+    "healthy": true,
+    "restarts": 0,
+    "readonly": true,
+    "nonroot": true,
+    "resources_unchanged": true,
+    "secrets_unchanged": true,
+    "compose_unchanged": true,
+    "proxy_unchanged": true,
+    "persisted_image_verified": true
+  },
+  "pull_requests": [
+    27,
+    28
+  ],
+  "hosted": {
+    "pr_source": 34143908455,
+    "pr_image": 34143908407,
+    "main_source": 34144459943,
+    "main_image": 34144459936,
+    "publication": 34145006742,
+    "automatic_rehearsal": 34145708341,
+    "all_conclusions": "success"
+  },
+  "publication": {
+    "registry": {
+      "repository": "ghcr.io/botond1/3d-printer-slicer-api",
+      "discovery_tag": "candidate-8bf11c9661c4c6bab7ff2b8343db40a6134f15a0",
+      "digest": "sha256:b3b7a616daa34f2635a9df8040d4b26b13a4cdd32c341de7023565a26d3eab99",
+      "subject": "ghcr.io/botond1/3d-printer-slicer-api@sha256:b3b7a616daa34f2635a9df8040d4b26b13a4cdd32c341de7023565a26d3eab99",
+      "manifest_digest": "sha256:b3b7a616daa34f2635a9df8040d4b26b13a4cdd32c341de7023565a26d3eab99",
+      "config_digest": "sha256:490eb0fab6b793257394f54118ff74e76d9d17ecce341007bc5e3689149a9549",
+      "source_revision": "8bf11c9661c4c6bab7ff2b8343db40a6134f15a0",
+      "platform": "linux/amd64",
+      "configured_user": "slicer",
+      "tag_points_to_digest": true
+    },
+    "scanner": {
+      "file_sha256": "e7af9352b6cf8650f334069a47c8a0edc062671bc3cd2c8e8be20f69cbd3896f",
+      "name": "grype",
+      "version": "0.110.0",
+      "database_timestamp": "2026-09-07T06:38:20Z",
+      "high": 0,
+      "critical": 0,
+      "known_swiper_advisory": 0
+    },
+    "attestations": {
+      "provenance": {
+        "id": "45792207",
+        "url": "https://github.com/Botond1/3D-Printer-Slicer-API/attestations/45792207",
+        "bundle_sha256": "b7df539a07f21e78d51b9995064e91259c494d320782e87918c961de7cf5cd0b",
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "subject_name": "ghcr.io/botond1/3d-printer-slicer-api",
+        "subject_digest": "sha256:b3b7a616daa34f2635a9df8040d4b26b13a4cdd32c341de7023565a26d3eab99",
+        "signer_repository": "Botond1/3D-Printer-Slicer-API",
+        "signer_workflow": ".github/workflows/candidate-publication.yml",
+        "source_ref": "refs/heads/main",
+        "source_digest": "8bf11c9661c4c6bab7ff2b8343db40a6134f15a0",
+        "push_to_registry": true,
+        "github_api_verified": true,
+        "oci_verified": true,
+        "offline_bundle_verified": true,
+        "signature_verified": true,
+        "verification_reason": "success"
+      },
+      "sbom": {
+        "id": "45792256",
+        "url": "https://github.com/Botond1/3D-Printer-Slicer-API/attestations/45792256",
+        "bundle_sha256": "076fbf53846491c6593775bd0c4e163343d5cf5bc443d980267282b3f5470d55",
+        "predicate_type": "https://spdx.dev/Document/v2.3",
+        "subject_name": "ghcr.io/botond1/3d-printer-slicer-api",
+        "subject_digest": "sha256:b3b7a616daa34f2635a9df8040d4b26b13a4cdd32c341de7023565a26d3eab99",
+        "signer_repository": "Botond1/3D-Printer-Slicer-API",
+        "signer_workflow": ".github/workflows/candidate-publication.yml",
+        "source_ref": "refs/heads/main",
+        "source_digest": "8bf11c9661c4c6bab7ff2b8343db40a6134f15a0",
+        "push_to_registry": true,
+        "github_api_verified": true,
+        "oci_verified": true,
+        "offline_bundle_verified": true,
+        "signature_verified": true,
+        "verification_reason": "success"
+      }
+    },
+    "verification": {
+      "issuer": "https://token.actions.githubusercontent.com",
+      "certificate_identity": "https://github.com/Botond1/3D-Printer-Slicer-API/.github/workflows/candidate-publication.yml@refs/heads/main",
+      "exact_digest": true,
+      "exact_repository": true,
+      "exact_workflow": true,
+      "exact_ref": true,
+      "exact_source": true,
+      "wrong_digest_rejected": true,
+      "wrong_repository_rejected": true,
+      "result": "success"
+    }
+  },
+  "automatic_rehearsal": {
+    "phase_order": [
+      "previous_initial_ready",
+      "candidate_promoted_ready",
+      "candidate_storage_failure_observed",
+      "automatic_rollback_started",
+      "previous_restored_ready",
+      "runtime_cleanup_complete"
+    ],
+    "failure_injection": {
+      "target": "pricing_state_writability",
+      "mode_before": "0700",
+      "mode_injected": "0500",
+      "mode_restored": "0700",
+      "liveness_preserved": true,
+      "fresh_detailed_503": true,
+      "storage_probe_failed": true,
+      "minimal_readiness_503": true,
+      "operations_readiness_503": true,
+      "reason_code": "STORAGE_UNSAFE",
+      "cache_expiry_bounded": true,
+      "automatic_rollback_triggered": true,
+      "result": "expected_readiness_failure_observed"
+    },
+    "rollback": {
+      "transition": {
+        "automatic": true,
+        "triggered_by": "candidate_storage_failure_observed",
+        "restored_digest": "sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9",
+        "candidate_removed": true,
+        "previous_restarted": true,
+        "state_mode_restored": true,
+        "shared_synthetic_state_preserved": true,
+        "result": "success"
+      },
+      "readiness": {
+        "container_id": "261a1e7c749c461dbc3f4214138c05920116825c466f4027e6ccd6c6f62db026",
+        "pid": 5817,
+        "image_id": "sha256:7b77f8a495abb13d78d8714afc863728a435bcbdd21720d11fd9b4eccfd8bd6e",
+        "kernel_uid": "999",
+        "kernel_gid": "999",
+        "consecutive_passes": 2,
+        "docker_healthy": true,
+        "liveness": true,
+        "minimal_readiness": true,
+        "operations_readiness": true,
+        "detailed_readiness": true,
+        "python_available": true,
+        "queue_idle": true,
+        "auth_rejection": true,
+        "orca_smoke": true,
+        "result": "success"
+      }
+    },
+    "cleanup": {
+      "containers_removed": true,
+      "network_removed": true,
+      "local_digest_refs_removed": true,
+      "temporary_state_removed": true,
+      "remote_digests_preserved": true,
+      "result": "success"
+    },
+    "aggregator": {
+      "evidence_boundary": "bounded_allowlist_only",
+      "result": "SIGNED_MAIN_CANDIDATE_REHEARSAL_EVIDENCE_READY"
+    }
+  },
+  "isolated_native": [
+    {
+      "kind": "native_control",
+      "principal": "woocommerce",
+      "request_material": "pla",
+      "supports": true,
+      "source_sha256": "40a9b73519996e5726d61b236a18b1d40992f3e8eb47d1bdb37224b104db1d28",
+      "cube_size_mm": 20,
+      "status": 200,
+      "seconds": 1262,
+      "grams": 3.96,
+      "hourly_rate": 800,
+      "price_huf": 290,
+      "measurement_generation": "4b2ee8ea76405cc7a999fff5c7fc30c0f25c844e3d9574fe32054b1d44a08544",
+      "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f",
+      "receipt_sha256": "320041ab6bcd00ae0165d38138813ba3bf7b26a44f24b49e3431311bc5a29422",
+      "artifact_sha256": "6f82340c077ac71635ecefdf8f4119dabfdf47263c5c49a7e9bcb3e20d51d43e",
+      "gcode_sha256": "ad3c4095340cc25c0aab8d054b92e86ddef1ad3bad76772025862472c91f13a3",
+      "elapsed_ms": 5170
+    },
+    {
+      "kind": "native_control",
+      "principal": "leadpilot",
+      "request_material": " PLA ",
+      "supports": true,
+      "source_sha256": "40a9b73519996e5726d61b236a18b1d40992f3e8eb47d1bdb37224b104db1d28",
+      "cube_size_mm": 20,
+      "status": 200,
+      "seconds": 1262,
+      "grams": 3.96,
+      "hourly_rate": 800,
+      "price_huf": 290,
+      "measurement_generation": "4b2ee8ea76405cc7a999fff5c7fc30c0f25c844e3d9574fe32054b1d44a08544",
+      "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f",
+      "receipt_sha256": "4a39d9b0b57e0e5917a41be645c98c624d87275c27c2ca3e5d05d86655e75a16",
+      "artifact_sha256": "e0e2021a3f7de6ec9afa8b2b5bb67338f601a1cff99a14f599b06131ec9f36d0",
+      "gcode_sha256": "ad3c4095340cc25c0aab8d054b92e86ddef1ad3bad76772025862472c91f13a3",
+      "elapsed_ms": 7821
+    },
+    {
+      "kind": "native_control",
+      "principal": "woocommerce",
+      "request_material": "PLA",
+      "supports": false,
+      "source_sha256": "40a9b73519996e5726d61b236a18b1d40992f3e8eb47d1bdb37224b104db1d28",
+      "cube_size_mm": 20,
+      "status": 200,
+      "seconds": 1262,
+      "grams": 3.96,
+      "hourly_rate": 800,
+      "price_huf": 290,
+      "measurement_generation": "4b2ee8ea76405cc7a999fff5c7fc30c0f25c844e3d9574fe32054b1d44a08544",
+      "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f",
+      "receipt_sha256": "880fb1c88a0cded5462fd55fbc1f7b90a3aba6b480ba9a90b7dfb1d7bb6bb0a9",
+      "artifact_sha256": "bc66504df0a89262466e58a6c1c2d11d17bdbff8c4351bd3e3add4392137d8e2",
+      "gcode_sha256": "fd7623a9d33e3b212b949927db0bc170522c4ff5af0fb474205e91b8a7579137",
+      "elapsed_ms": 5117
+    },
+    {
+      "kind": "native_control",
+      "principal": "leadpilot",
+      "request_material": "PLA",
+      "supports": true,
+      "source_sha256": "778f971eeaf7806dadb34f82fe3394a3a9bcddb400a49e67648bf48d81fea52a",
+      "cube_size_mm": 40,
+      "status": 200,
+      "seconds": 2453,
+      "grams": 24,
+      "hourly_rate": 800,
+      "price_huf": 550,
+      "measurement_generation": "4b2ee8ea76405cc7a999fff5c7fc30c0f25c844e3d9574fe32054b1d44a08544",
+      "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f",
+      "receipt_sha256": "c62d05980a64a20a9aaa7e14fbabac928b0627ddd0c44ae5f112d81934ffbe89",
+      "artifact_sha256": "d2c15d9916053fb46fe339520c7d27c8b1f1a0e5f5612e7327e5760eb4aede5e",
+      "gcode_sha256": "d44f610c8bd7be040a536fde01d669598f8e057a61e8c25197923853155b0efd",
+      "elapsed_ms": 5163
+    },
+    {
+      "kind": "native_control_summary",
+      "passed": 4,
+      "source_bytes": 684,
+      "shared_metrics_equal": true,
+      "ready": true,
+      "queue_empty": true
+    },
+    {
+      "kind": "independent_native_artifacts",
+      "passed": 4,
+      "single_gcode_hash_and_material_verified": true,
+      "gcode_time_mass_and_price_verified": true
+    },
+    {
+      "kind": "isolated_rollback",
+      "previous_ready": true
+    },
+    {
+      "kind": "isolated_rollback",
+      "candidate_restored_ready": true
+    },
+    {
+      "kind": "owned_stage_cleanup",
+      "production_unchanged": true,
+      "proxy_unchanged": true
+    }
+  ],
+  "live_native": [
+    {
+      "kind": "native_control",
+      "principal": "woocommerce",
+      "request_material": " pla ",
+      "supports": true,
+      "source_sha256": "40a9b73519996e5726d61b236a18b1d40992f3e8eb47d1bdb37224b104db1d28",
+      "cube_size_mm": 20,
+      "status": 200,
+      "seconds": 1262,
+      "grams": 3.96,
+      "hourly_rate": 800,
+      "price_huf": 290,
+      "measurement_generation": "4b2ee8ea76405cc7a999fff5c7fc30c0f25c844e3d9574fe32054b1d44a08544",
+      "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f",
+      "receipt_sha256": "4dee91ec4fd085f476c2c74dae670b6d190f2da1504a3ebf5884a9a0bf1258e5",
+      "artifact_sha256": "7b7de99996fc2df6daf32a202f6280ab6545263a60a05899758f91bbe55b695e",
+      "gcode_sha256": "cad53919e163b713284358ad5716b3604dd9ce9df227cae18a0abb3febc78763",
+      "elapsed_ms": 5328
+    },
+    {
+      "kind": "native_control",
+      "principal": "leadpilot",
+      "request_material": "PlA",
+      "supports": true,
+      "source_sha256": "40a9b73519996e5726d61b236a18b1d40992f3e8eb47d1bdb37224b104db1d28",
+      "cube_size_mm": 20,
+      "status": 200,
+      "seconds": 1262,
+      "grams": 3.96,
+      "hourly_rate": 800,
+      "price_huf": 290,
+      "measurement_generation": "4b2ee8ea76405cc7a999fff5c7fc30c0f25c844e3d9574fe32054b1d44a08544",
+      "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f",
+      "receipt_sha256": "7f802a952d6aa436518adab846ea7c290a4f8a30caa7acf61dd12d49bb66372c",
+      "artifact_sha256": "b43b8b89d89228c10722d8eb11b214792c2672c76fa1e29488903e6c9f661afd",
+      "gcode_sha256": "ad3c4095340cc25c0aab8d054b92e86ddef1ad3bad76772025862472c91f13a3",
+      "elapsed_ms": 5166
+    },
+    {
+      "kind": "native_control_summary",
+      "passed": 2,
+      "source_bytes": 684,
+      "shared_metrics_equal": true,
+      "ready": true,
+      "queue_empty": true,
+      "queue_evidence": "fresh_protected_detailed"
+    },
+    {
+      "kind": "deployment_completed",
+      "source": "8bf11c9661c4c6bab7ff2b8343db40a6134f15a0",
+      "image": "ghcr.io/botond1/3d-printer-slicer-api@sha256:b3b7a616daa34f2635a9df8040d4b26b13a4cdd32c341de7023565a26d3eab99",
+      "container_id": "a93a5efdc97b7825cfc3a4dc27166f908fa59d7cccc09f2c2fd632bc84ae7a34",
+      "healthy": "healthy",
+      "proxy_unchanged": true,
+      "environment_unchanged": true
+    }
+  ],
+  "perimeter": [
+    {
+      "kind": "egress_positive_control",
+      "runtime": "api",
+      "reachable": true
+    },
+    {
+      "kind": "egress_positive_control",
+      "runtime": "native",
+      "reachable": true
+    },
+    {
+      "kind": "private_peer",
+      "iteration": 1,
+      "privatePeerIngress": true,
+      "authenticatedReadiness": true,
+      "authRejectionProof": true
+    },
+    {
+      "kind": "live_egress_denied",
+      "iteration": 1,
+      "runtime": "api",
+      "dns_tcp_udp_denied": true
+    },
+    {
+      "kind": "live_egress_denied",
+      "iteration": 1,
+      "runtime": "native",
+      "dns_tcp_udp_denied": true
+    },
+    {
+      "kind": "private_peer",
+      "iteration": 2,
+      "privatePeerIngress": true,
+      "authenticatedReadiness": true,
+      "authRejectionProof": true
+    },
+    {
+      "kind": "live_egress_denied",
+      "iteration": 2,
+      "runtime": "api",
+      "dns_tcp_udp_denied": true
+    },
+    {
+      "kind": "live_egress_denied",
+      "iteration": 2,
+      "runtime": "native",
+      "dns_tcp_udp_denied": true
+    },
+    {
+      "kind": "live_perimeter",
+      "traefik_unlisted_403": true,
+      "perimeter_service_active": true
+    },
+    {
+      "kind": "perimeter_cleanup",
+      "production_id_unchanged": true,
+      "owned_network_removed": true
+    }
+  ],
+  "control_probe_repair": {
+    "first_promotion": "automatic_rollback_ready_after_control_exit1",
+    "first_control_stdout": "not_retained_exact_assertion_unavailable",
+    "isolated_reproduction": "cached_queue_reports_1_after_two_successful_native_responses_when_readiness_is_polled",
+    "fresh_queue_fix": {
+      "normal_cases_pass": 2,
+      "readiness_polling_cases_pass": 2
+    },
+    "cached_control_sha256": "38bcd12a521d21fa4fce2129d5f8f9721e470ad3aeaef5e726d0cecf88d23be7",
+    "final_control_sha256": "b488b141d334d674adb50bdbff6674685bf53b7a4ff21ba2b1ed236c95c3f712"
+  },
+  "boundaries": {
+    "consumer_business_e2e": "NOT_RUN",
+    "wordpress_activation": "NOT_RUN",
+    "leadpilot_mutation": false,
+    "route_allowlist_dns_credentials_changed": false,
+    "customer_models_submitted": false,
+    "external_business_messages_sent": false
+  }
+}

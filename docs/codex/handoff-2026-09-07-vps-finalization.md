@@ -1,5 +1,9 @@
 # VPS finalization continuation — 2026-09-07
 
+Completion: read `handoff-2026-09-07-vps-finalized.md` for the later signed
+`8bf11c966…` deployment and its exact evidence. This file retains the original
+pre-promotion and corrective qualification record, including failed earlier gates.
+
 ## Scope and baselines
 
 The owner requests committed, merged and deployed Bambu-based Slicer service,

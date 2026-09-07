@@ -1,5 +1,13 @@
 # Security model
 
+Signed source `8bf11c966…` / image `b3b7a616…` is now deployed and verified;
+see `handoff-2026-09-07-vps-finalized.md`. Both calibrated API/native egress-denial
+matrices and private-peer/auth checks passed twice, with unchanged proxy, service
+secrets, ports and resource limits. Use fresh `/health/detailed` queue observations
+for deployment controls; cached readiness can retain a completed job's active count.
+On this VPS Docker IDs refer to the manifest: bind its descriptor/raw registry
+hash and config digest separately. Historical release claims below are superseded.
+
 The rollback policy binds the real signed previous release, including manifest,
 config and source digests and its attestation ref. The source-ancestry and exact
 configs/Compose compatibility gates remain mandatory. I9 readiness must require
