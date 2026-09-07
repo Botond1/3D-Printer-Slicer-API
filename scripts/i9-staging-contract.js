@@ -77,15 +77,41 @@ function validQueue(queue) {
         && queue.queueLength === 0 && queue.activeJobs === 0;
 }
 
+function validEngineVersion(engine, version) {
+    if (typeof version !== 'string' || version.length > 64) return false;
+    const pattern = engine === 'bambu' ? /^\d+(?:\.\d+){2,3}$/
+        : engine === 'prusa' ? /^\d+(?:\.\d+){2}(?:[-+][A-Za-z0-9._-]+)?$/
+            : /^\d+(?:\.\d+){2,3}(?:[-+][A-Za-z0-9._-]+)?$/;
+    return pattern.test(version);
+}
+
+function validSlicerRuntime(runtime) {
+    if (!exactKeys(runtime, ['bambuReady', 'commonDependenciesReady', 'engines', 'dependencyEvidence'])
+        || runtime.bambuReady !== true || runtime.commonDependenciesReady !== true
+        || runtime.dependencyEvidence !== 'startup_import_and_fresh_file_presence'
+        || !exactKeys(runtime.engines, ['bambu', 'prusa', 'orca'])) return false;
+    return Object.entries(runtime.engines).every(([engine, item]) => (
+        exactKeys(item, ['available', 'version', 'required_for_bambu'])
+        && typeof item.available === 'boolean' && item.required_for_bambu === (engine === 'bambu')
+        && (engine !== 'bambu' || item.available === true)
+        && (item.available ? validEngineVersion(engine, item.version) : item.version === null)
+    ));
+}
+
 function validOperations(result, ready) {
     const body = result?.body;
     const keys = [
         'checkedAt', 'ready', 'admissionOpen', 'probes', 'reasonCodes',
-        'queue', 'legacyMigration'
+        'queue', 'legacyMigration', 'slicerRuntime'
     ];
     if (result?.status !== (ready ? 200 : 503) || !exactKeys(body, keys)
+        || typeof body.checkedAt !== 'string' || body.checkedAt.length > 64
+        || Number.isNaN(Date.parse(body.checkedAt))
         || body.ready !== ready || body.admissionOpen !== true
-        || !exactKeys(body.probes, ['queue', 'native', 'storage', 'retention', 'pricing', 'config'])
+        || !exactKeys(body.probes, [
+            'queue', 'native', 'storage', 'retention', 'pricing', 'config', 'bambu', 'commonDependencies'
+        ])
+        || !validSlicerRuntime(body.slicerRuntime)
         || !validQueue(body.queue)
         || !exactKeys(body.legacyMigration, ['enabled', 'audience', 'expiresAt'])
         || body.legacyMigration.enabled !== false
@@ -106,7 +132,8 @@ function validDetailed(result, ready) {
         || typeof body.timestamp !== 'string' || Number.isNaN(Date.parse(body.timestamp))
         || !Number.isFinite(body.uptime) || body.uptime < 0
         || !exactKeys(body.subsystems, [
-            'queue', 'native', 'storage', 'retention', 'pricing', 'config', 'python'
+            'queue', 'native', 'storage', 'retention', 'pricing', 'config', 'python',
+            'bambu', 'commonDependencies'
         ])
         || !validQueue(body.subsystems.queue)
         || !exactKeys(body.subsystems.python, ['available', 'version'])
@@ -114,7 +141,7 @@ function validDetailed(result, ready) {
         || typeof body.subsystems.python.version !== 'string'
         || body.subsystems.python.version.length < 1
         || body.subsystems.python.version.length > 128) return false;
-    return ['native', 'retention', 'pricing', 'config'].every(
+    return ['native', 'retention', 'pricing', 'config', 'bambu', 'commonDependencies'].every(
         (key) => body.subsystems[key] === true
     ) && body.subsystems.storage === ready;
 }

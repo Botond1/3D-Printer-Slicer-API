@@ -1,5 +1,12 @@
 # Hardening plan
 
+Current release exit: repair the stale I8 rollback baseline and obsolete I9
+readiness schema, then pass exact-main Source/Image, signed publication and the
+automatic failure-injection/rollback rehearsal before Slicer promotion. An active
+production route cannot use the dark-route operator substitute. The isolated
+native success for image51462e6d is retained under its original identity and is
+not a deployment or an automatic-rehearsal pass.
+
 ## Authorized VPS finalization — 2026-09-07
 
 The owner authorized the material-receipt correction through commit, protected

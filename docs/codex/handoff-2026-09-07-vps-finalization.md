@@ -100,3 +100,69 @@ migration requires proving both callers use their own keys before revocation;
 this release does not change keys or authentication mode. Existing route and
 allowlist stay unchanged. A correction in Slicer alone does not activate the
 WordPress site or complete LeadPilot business acceptance.
+
+## Release qualification follow-up
+
+PR27 merged correction `619022e6d32e19d749c275d8bb91ee472496478b` as
+main `4f7af888d45a0fa1def59db9c85edd82addcb5e9`. PR Source34140238075 and
+Image34140238074 passed; main Source34140940180 and Image34140940266 passed.
+Signed publication34141512440 passed and produced
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:51462e6d4e3622c766bd074c4c1da5fa604c3898367ec687134027f6fbe65638`.
+Both provenance and SPDX attestations passed GitHub, OCI and offline checks in
+publication. Exact-source local verification also passed both predicates; the
+first local SPDX verifier initialization failed and its bounded exact-digest
+retry passed. Grype 0.110.0 reported 0 High/0 Critical on its September7 database.
+
+This digest was tested in an owned, non-root, read-only, network-none container
+on the authorized VPS with separate synthetic credentials and storage. The first
+pull failed before container creation; one exact-digest retry succeeded. Four
+native Bambu controls passed, including lowercase/whitespace material aliases,
+both named consumers and supports on/off. A closed 20 mm cube yielded 1262 s,
+3.96 g and 290 HUF at 800 HUF/hour; a 40 mm cube yielded 2453 s,24 g and 550 HUF.
+Independent archive reads verified inner G-code/artifact hashes, material,
+G-code time/mass and the integer price formula. Previous `4539c539` and candidate
+both restarted ready in that isolated state. Owned containers were removed;
+production and Traefik container IDs stayed unchanged. Generation was
+`4b2ee8ea76405cc7a999fff5c7fc30c0f25c844e3d9574fe32054b1d44a08544`.
+This is exact-image isolated evidence, not production promotion.
+The bounded machine-readable record is
+`evidence/vps-finalization-20260907-prepromotion.json`.
+
+Automatic rehearsal34142373328 correctly stopped at
+`source_compatibility_verification_failure`: the committed previous policy still
+named the old I8 release `1fffab8796`. Both configs and production Compose differ
+from that obsolete baseline. The active-route VPS cannot use the dark-route
+operator substitute, and an isolated image restart is not its replacement.
+Consequently this candidate was not deployed.
+
+The corrective policy pins the actually deployed, signed `4539c539` release,
+verified from publication34063787067 and the live image. Its manifest digest is
+the rollback baseline above; config digest is
+`sha256:7b77f8a495abb13d78d8714afc863728a435bcbdd21720d11fd9b4eccfd8bd6e`;
+both attestation source ref and digest bind protected main and `4539c539`.
+`verifySourceCompatibility()` freshly passes ancestor, identical configs and
+identical production Compose for `4539c539` → `4f7af888`. No compatibility predicate
+or policy control is weakened. Related policy/materializer/publication tests
+are updated to the actual previous identity.
+
+The I9 rehearsal also used an obsolete exact readiness schema. Its validator
+is updated to require the actual Bambu/common-dependency probes and typed
+`slicerRuntime` evidence, while accepting unavailable optional engines and
+preserving storage-only failure injection. API response behavior is unchanged.
+The release needs new exact-main checks, signed publication and a successful
+automatic rollback rehearsal before promotion. The earlier failed rehearsal
+remains failed; rerunning its old source would not load this corrected policy.
+
+Qualification correction checks: the updated policy expectations first failed
+against the old policy (22 tests:17 pass/5 fail, exit1). The final three policy,
+materializer and publication-integration files pass 23/23 (exit0). Modern I9
+readiness positives first reproduced four failures (58 pass/4 fail); the final
+all-I9 suite passes 279/279, including 60 malformed-readiness subcases. Final
+syntax passes 311 JavaScript/64 Python files. Full JavaScript passes 2817/2817;
+Python discovers 226 with 218 pass/8 environment skips. Instruction mirrors
+pass 2/2, tracked repository safety passes 606 files. Independent quality and
+security review found no blocking issue; contract218 lines/test248 lines and
+new helpers under60 lines need no decomposition. These local results do not
+replace the new hosted/native release gates.
+The final aggregate `npm test` also exits0:2817 JavaScript pass and 218 Python
+pass/8 environment skips; no failed tests. Lockfile/dependencies are unchanged.

@@ -152,7 +152,7 @@ test('publication identity flows to digest-only runtime and bounded no-deploy ev
     assert.equal(validateStagingRehearsalEvidence(evidence), null);
     assert.equal(evidence.publication.artifact_id, manifest.artifact.artifact_id);
     assert.equal(evidence.images.previous.attestation.source_ref,
-        'refs/heads/codex/i8-s3a-ghcr-signed-candidate');
+        'refs/heads/main');
     assert.equal(evidence.images.candidate.attestation.source_ref, 'refs/heads/main');
     assert.equal(evidence.deployed_digest, 'not_applicable_ephemeral_no_deploy');
 });

@@ -10,9 +10,9 @@ const {
 } = require('../../../scripts/release-rehearsal-input');
 
 const ROOT = path.resolve(__dirname, '../../..');
-const PREVIOUS_SOURCE = '1fffab87960c675a053ae814d374cab331fbb14d';
+const PREVIOUS_SOURCE = '4539c539d15dacb19cde7e246aab690cc11170e7';
 const PREVIOUS_DIGEST =
-    'sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5';
+    'sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9';
 
 function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -24,6 +24,9 @@ test('committed release policy pins only the immutable previous candidate', () =
     assert.equal(record.value.schema_version, POLICY_SCHEMA_VERSION);
     assert.equal(record.value.previous.source_sha, PREVIOUS_SOURCE);
     assert.equal(record.value.previous.digest, PREVIOUS_DIGEST);
+    assert.equal(record.value.previous.config_digest,
+        'sha256:7b77f8a495abb13d78d8714afc863728a435bcbdd21720d11fd9b4eccfd8bd6e');
+    assert.equal(record.value.previous.attestation.source_ref, 'refs/heads/main');
     assert.equal(record.value.previous.attestation.source_digest, PREVIOUS_SOURCE);
     assert.equal(record.value.candidate.source_ref, 'refs/heads/main');
     assert.equal(Object.hasOwn(record.value.candidate, 'digest'), false);

@@ -1,0 +1,115 @@
+{
+  "schema": "slicer-owned-native-evidence-v1",
+  "classification": "ISOLATED_NATIVE_PASS_NOT_DEPLOYED",
+  "source_sha": "4f7af888d45a0fa1def59db9c85edd82addcb5e9",
+  "image": "ghcr.io/botond1/3d-printer-slicer-api@sha256:51462e6d4e3622c766bd074c4c1da5fa604c3898367ec687134027f6fbe65638",
+  "publication_run": 34141512440,
+  "automatic_rehearsal_run": 34142373328,
+  "automatic_rehearsal_result": "FAIL_SOURCE_COMPATIBILITY_STALE_PREVIOUS_POLICY",
+  "native_control_script_sha256": "38bcd12a521d21fa4fce2129d5f8f9721e470ad3aeaef5e726d0cecf88d23be7",
+  "controls": [
+    {
+      "kind": "native_control",
+      "principal": "woocommerce",
+      "request_material": "pla",
+      "supports": true,
+      "source_sha256": "40a9b73519996e5726d61b236a18b1d40992f3e8eb47d1bdb37224b104db1d28",
+      "cube_size_mm": 20,
+      "status": 200,
+      "seconds": 1262,
+      "grams": 3.96,
+      "hourly_rate": 800,
+      "price_huf": 290,
+      "measurement_generation": "4b2ee8ea76405cc7a999fff5c7fc30c0f25c844e3d9574fe32054b1d44a08544",
+      "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f",
+      "receipt_sha256": "abd1dbfa02dd385817893fad90f1911dc6ef730e7898dc6c5be746fb6ec985fd",
+      "artifact_sha256": "9cd0711e5121bd68e305510d583a572c70ccabfe020d5f72eb760f5e39214745",
+      "gcode_sha256": "cad53919e163b713284358ad5716b3604dd9ce9df227cae18a0abb3febc78763",
+      "elapsed_ms": 8114
+    },
+    {
+      "kind": "native_control",
+      "principal": "leadpilot",
+      "request_material": " PLA ",
+      "supports": true,
+      "source_sha256": "40a9b73519996e5726d61b236a18b1d40992f3e8eb47d1bdb37224b104db1d28",
+      "cube_size_mm": 20,
+      "status": 200,
+      "seconds": 1262,
+      "grams": 3.96,
+      "hourly_rate": 800,
+      "price_huf": 290,
+      "measurement_generation": "4b2ee8ea76405cc7a999fff5c7fc30c0f25c844e3d9574fe32054b1d44a08544",
+      "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f",
+      "receipt_sha256": "d0eb40718fe8cca63f95299aa2fe61d705de6d95ef2a3b7442e9e165b279cd41",
+      "artifact_sha256": "868d56f06df97ef2a10cc217d5994b33e1a82d5d8a0d479dffd66c5c20712c8d",
+      "gcode_sha256": "ad3c4095340cc25c0aab8d054b92e86ddef1ad3bad76772025862472c91f13a3",
+      "elapsed_ms": 5326
+    },
+    {
+      "kind": "native_control",
+      "principal": "woocommerce",
+      "request_material": "PLA",
+      "supports": false,
+      "source_sha256": "40a9b73519996e5726d61b236a18b1d40992f3e8eb47d1bdb37224b104db1d28",
+      "cube_size_mm": 20,
+      "status": 200,
+      "seconds": 1262,
+      "grams": 3.96,
+      "hourly_rate": 800,
+      "price_huf": 290,
+      "measurement_generation": "4b2ee8ea76405cc7a999fff5c7fc30c0f25c844e3d9574fe32054b1d44a08544",
+      "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f",
+      "receipt_sha256": "da453875120d5bd42ce1536f1bd67bee12019d414a874acd6b50214be311179b",
+      "artifact_sha256": "c936956621e1444eec27cc5a0747c121a97a68fd316c1595f021f9ed4d3052ce",
+      "gcode_sha256": "fd7623a9d33e3b212b949927db0bc170522c4ff5af0fb474205e91b8a7579137",
+      "elapsed_ms": 8333
+    },
+    {
+      "kind": "native_control",
+      "principal": "leadpilot",
+      "request_material": "PLA",
+      "supports": true,
+      "source_sha256": "778f971eeaf7806dadb34f82fe3394a3a9bcddb400a49e67648bf48d81fea52a",
+      "cube_size_mm": 40,
+      "status": 200,
+      "seconds": 2453,
+      "grams": 24,
+      "hourly_rate": 800,
+      "price_huf": 550,
+      "measurement_generation": "4b2ee8ea76405cc7a999fff5c7fc30c0f25c844e3d9574fe32054b1d44a08544",
+      "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f",
+      "receipt_sha256": "8969a5f491538931e8f23f7981c36c301a1a1cb2dd75b273f98516148a479c6b",
+      "artifact_sha256": "a36e19fcc3ea0c04649642ab920a73d3ac46600d13ec857e0e09ac3b2be4747a",
+      "gcode_sha256": "d44f610c8bd7be040a536fde01d669598f8e057a61e8c25197923853155b0efd",
+      "elapsed_ms": 5130
+    },
+    {
+      "kind": "native_control_summary",
+      "passed": 4,
+      "source_bytes": 684,
+      "shared_metrics_equal": true,
+      "ready": true,
+      "queue_empty": true
+    },
+    {
+      "kind": "independent_native_artifacts",
+      "passed": 4,
+      "single_gcode_hash_and_material_verified": true,
+      "gcode_time_mass_and_price_verified": true
+    },
+    {
+      "kind": "isolated_rollback",
+      "previous_ready": true
+    },
+    {
+      "kind": "isolated_rollback",
+      "candidate_restored_ready": true
+    },
+    {
+      "kind": "owned_stage_cleanup",
+      "production_unchanged": true,
+      "proxy_unchanged": true
+    }
+  ]
+}
