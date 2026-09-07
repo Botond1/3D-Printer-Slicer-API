@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## Bambu material spelling correction (2026-09-07)
+
+- Restore accepted case-insensitive and trimmed material requests at native
+  receipt validation: `pla`, `PlA` and ` PLA ` authorize canonical `PLA`
+  evidence while other materials remain rejected. Price calculation, native
+  command and effective-profile digest semantics are unchanged.
+- Processing-source identity changes the Bambu measurement generation; consumers
+  must resolve the current catalogue before issuing new pinned requests.
+- Correct consumer guidance for Bambu supports identity, the 88-row catalogue
+  and model-priced SLA. Separate Opus 5 prompts cover the existing plugin
+  deliverable and the LeadPilot receipt/generation catch-up.
+
 ## Bambu receipt release (2026-09-07)
 
 - **[contract]** Bambu technical receipt v1, applied native layer/config validation, immutable measurement/build/bundle catalogue identity and optional expected-identity preconditions.

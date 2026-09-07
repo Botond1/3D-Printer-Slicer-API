@@ -40,9 +40,12 @@ function validateAppliedConfig(content, context, version) {
     const layer = Number(config.layer_height);
     const infill = /^(\d{1,3})%$/.exec(config.sparse_infill_density || '');
     const support = config.enable_support === '1' ? true : config.enable_support === '0' ? false : null;
+    // The registry accepts trimmed, case-insensitive request material names;
+    // the native value must still exactly match that canonical material.
+    const material = String(context.material || '').trim().toUpperCase();
     if (!Number.isFinite(layer) || layer <= 0 || layer !== context.layerHeight
         || !infill || Number(infill[1]) !== Number.parseInt(context.infillPercentage, 10)
-        || support !== context.supports || config.filament_type !== context.material) {
+        || support !== context.supports || config.filament_type !== material) {
         throw unverified('Native applied layer, infill, support or material does not match the request.');
     }
     const printer = getBambuPrinter(context.profileOverrides?.bambuPrinter);

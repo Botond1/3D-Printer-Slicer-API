@@ -1,5 +1,16 @@
 # Hardening plan
 
+## Authorized VPS finalization — 2026-09-07
+
+The owner authorized the material-receipt correction through commit, protected
+merge, signed publication and Slicer deployment, plus read-only LeadPilot
+verification and separate consumer execution prompts. Preserve the original
+dirty checkout, native/profile/price rules and existing network/credential policy.
+The release exit requires exact candidate/main checks, attested digest, isolated
+native material-variant proof, rollback preparation and fresh production probes.
+Consumer rollout and business effects remain separate; a prompt is not deployment.
+Evidence and remaining exits: `handoff-2026-09-07-vps-finalization.md`.
+
 For current deployment identity and proof boundaries, read
 `handoff-2026-09-07-bambu-deployed.md`. The September 6 continuation is historical.
 

@@ -1,5 +1,14 @@
 # Verified project map
 
+## Material spelling continuation — 2026-09-07
+
+`app/services/slice/bambu-receipt.js::validateAppliedConfig` canonicalizes the
+already accepted request material before comparing the native configuration.
+This restores case/whitespace compatibility without changing native profile or
+pricing semantics. Processing-source identity changes the measurement generation.
+See `handoff-2026-09-07-vps-finalization.md` for this continuation and the two
+consumer prompts; earlier release and consumer-stop statements below are historical.
+
 For current deployment identity and proof boundaries, read
 `handoff-2026-09-07-bambu-deployed.md`. The September 6 continuation is historical.
 
