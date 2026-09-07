@@ -1,14 +1,19 @@
 # Codex operating guide
 
+Current deployed release: `8bf11c9661c4c6bab7ff2b8343db40a6134f15a0`, image
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:b3b7a616daa34f2635a9df8040d4b26b13a4cdd32c341de7023565a26d3eab99`.
+Read `docs/codex/handoff-2026-09-07-vps-finalized.md` first: exact publication,
+automatic rollback, native production and repeated perimeter proofs are complete.
+The prior continuation/release paragraphs below retain their historical scope.
+
 Current continuation: `docs/codex/handoff-2026-09-07-vps-finalization.md`
 records the owner-authorized material-receipt correction, protected release
 gates and read-only LeadPilot check. The two `claude-opus-5-*20260907.md`
 documents are consumer execution prompts, not evidence of consumer deployment.
 The earlier LeadPilot stop below is a historical release boundary; the current
 task permits verification and prompt preparation, not consumer mutation.
-The continuation also repairs the stale I8 rollback policy and obsolete I9
-readiness schema. Production remains on `4539c539` until a newly published
-candidate passes automatic rollback rehearsal and the live promotion gates.
+The continuation repaired the stale I8 rollback policy and obsolete I9 readiness
+schema. The new candidate passed automatic rollback and live promotion gates.
 
 Owner-authorized release: signed main `4539c539d15dacb19cde7e246aab690cc11170e7` is deployed as `ghcr.io/botond1/3d-printer-slicer-api@sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9`. Read `docs/codex/handoff-2026-09-07-bambu-deployed.md` for exact CI, native, consumer, deployment and rollback evidence. The WordPress deliverable is a local ZIP; further LeadPilot work is forbidden by the owner. Public routes, allowlists, credentials, pricing and the existing operator packs remain unchanged. Further changes require new task-specific authorization.
 
@@ -54,9 +59,9 @@ SLA_QUOTING_ELEGOO_SATURN_4_ULTRA_PRICED_FROM_LAYER_COUNT_MODEL;
 BAMBU_CLI_EQUALS_OWNER_GUI_ON_10_REFERENCE_MODELS;
 BAMBU_ENVELOPES_MEASURED_P1S_256x228x250_ALT_238x256_H2D_325x320x325;
 SATURN_ENVELOPE_DECLARED_NOT_MEASURED_SLA_TIME_MODEL_UNCALIBRATED;
-PRODUCTION_RUNS_SIGNED_MAIN_CANDIDATE_4539C539;
+PRODUCTION_RUNS_SIGNED_MAIN_CANDIDATE_8BF11C96;
 PUBLIC_ROUTE_UNCHANGED_LEADPILOT_ONLY;
-LEADPILOT_NOT_CHANGED_OR_REVERIFIED;
+LEADPILOT_READ_ONLY_CONFIG_VERIFIED_BAMBU_P1S_NOT_MODIFIED;
 FURTHER_DEPLOY_REGISTRY_ROUTE_DNS_ALLOWLIST_CONSUMER_CHANGES_NOT_AUTHORIZED`.
 
 - `main` is the protected release branch. The service has three engines: `POST /bambu/slice`
@@ -73,13 +78,14 @@ FURTHER_DEPLOY_REGISTRY_ROUTE_DNS_ALLOWLIST_CONSUMER_CHANGES_NOT_AUTHORIZED`.
   per-layer motion time is an assumption until the owner calibrates it, and the
   Saturn's admission ceiling mirrors its declared metadata rather than a
   measured native edge.
-- Production runs signed main `4539c539d15dacb19cde7e246aab690cc11170e7`
-  (`ghcr.io/botond1/3d-printer-slicer-api@sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9`), verified in `docs/codex/handoff-2026-09-07-bambu-deployed.md`.
-  The previous 4fb770d7 image and the older 3.2.0 image remain available for rollback.
+- Production runs signed main `8bf11c9661c4c6bab7ff2b8343db40a6134f15a0`
+  (`ghcr.io/botond1/3d-printer-slicer-api@sha256:b3b7a616daa34f2635a9df8040d4b26b13a4cdd32c341de7023565a26d3eab99`), verified in `docs/codex/handoff-2026-09-07-vps-finalized.md`.
+  The signed `4539c539` image is the verified immediate rollback release.
   The API Compose pack remains 4fb770d7; the live router pack remains 9e9621a3.
   They are separate identities; do not repoint the live dynamic bind for an API image change.
   The WordPress consumer is delivered as a ZIP, with no live WordPress activation.
-  LeadPilot is not changed or reverified. Every further publication requires manual
+  LeadPilot configuration was read-only verified as Bambu/P1S; consumer code and
+  business activation are outside this release. Every further publication requires manual
   workflow_dispatch from protected main; deploy, route, DNS, allowlist and consumer
   mutation still require explicit owner authorization.
 - The pre-3.2.0 narrative (J0..J3B, I10..I12, Hostinger route activation and

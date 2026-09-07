@@ -1,11 +1,12 @@
 # Hardening plan
 
-Current release exit: repair the stale I8 rollback baseline and obsolete I9
-readiness schema, then pass exact-main Source/Image, signed publication and the
-automatic failure-injection/rollback rehearsal before Slicer promotion. An active
-production route cannot use the dark-route operator substitute. The isolated
-native success for image51462e6d is retained under its original identity and is
-not a deployment or an automatic-rehearsal pass.
+Release exit COMPLETE for signed source `8bf11c966…` / image `b3b7a616…`:
+stale rollback baseline and I9 schema corrected; exact-main checks, signed
+publication, automatic failure/rollback, native promotion and repeated perimeter
+checks passed. See `handoff-2026-09-07-vps-finalized.md`. The earlier image51462e6d
+proof remains isolated and unpromoted. No dark-route substitute was used.
+Next independent lanes are the two consumer prompts, actual caller-key migration
+and consumer business acceptance; this Slicer task does not activate them.
 
 ## Authorized VPS finalization — 2026-09-07
 

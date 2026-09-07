@@ -1,11 +1,17 @@
 # Verified project map
 
+Current production identity and completed release evidence are in
+`handoff-2026-09-07-vps-finalized.md`: signed source `8bf11c966…`, image
+`b3b7a616…`, exact automatic rollback, native dual-principal controls and repeated
+private-peer/egress/perimeter verification. Earlier release statements below
+are historical. Consumer business E2E and WordPress activation remain separate.
+
 Rollback qualification now pins the actually deployed signed `4539c539` release
 in `.github/release-rehearsal-policy.json`. The I9 readiness validator follows
 the current exact Bambu/runtime schema. The former I8 policy caused automatic
 rehearsal34142373328 to fail closed before runtime; see the qualification section
 of `handoff-2026-09-07-vps-finalization.md`. Image51462e6d passed isolated native
-tests but was not promoted; fresh publication/rehearsal gates remain required.
+tests but was not promoted; the later `8bf11c966…` release passed the fresh gates.
 
 ## Material spelling continuation — 2026-09-07
 
