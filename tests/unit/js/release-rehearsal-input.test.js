@@ -28,7 +28,7 @@ const {MANIFEST_FILE, loadStagingRehearsalManifest} =
     require('../../../scripts/staging-rehearsal-manifest');
 const ROOT = path.resolve(__dirname, '../../..');
 const SOURCE_SHA = '0123456789abcdef0123456789abcdef01234567';
-const PREVIOUS_SHA = '1fffab87960c675a053ae814d374cab331fbb14d';
+const PREVIOUS_SHA = '4539c539d15dacb19cde7e246aab690cc11170e7';
 const LOCAL_ID = `sha256:${'a'.repeat(64)}`;
 const REGISTRY_DIGEST = `sha256:${'b'.repeat(64)}`;
 const [RUN_ID, RUN_ATTEMPT] = ['32670000001', '1'];

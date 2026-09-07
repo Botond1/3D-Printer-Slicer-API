@@ -1,5 +1,13 @@
 # Security model
 
+The rollback policy binds the real signed previous release, including manifest,
+config and source digests and its attestation ref. The source-ancestry and exact
+configs/Compose compatibility gates remain mandatory. I9 readiness must require
+the current typed Bambu/runtime fields; accepting extra keys or dropping probes
+would hide degradation. `STORAGE_UNSAFE` injection must remain the sole expected
+readiness failure. See `handoff-2026-09-07-vps-finalization.md` for the failed old
+policy run and the corrective qualification scope.
+
 ## Material receipt correction — 2026-09-07
 
 `bambu-receipt.js::validateAppliedConfig` normalizes the accepted request-side

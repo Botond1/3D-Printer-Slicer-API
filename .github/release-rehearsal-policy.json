@@ -4,15 +4,15 @@
   "platform": "linux/amd64",
   "previous": {
     "role": "previous_signed_candidate",
-    "source_sha": "1fffab87960c675a053ae814d374cab331fbb14d",
-    "digest": "sha256:4c0439c9cbc0b52dc0bf88d47e7151ca997073108b20f9c063d614a25a1f8bb5",
-    "config_digest": "sha256:b16f951a9701335b35b4ef248c2b1764d06c17f5e90ee6c2c2245bedc3026d42",
+    "source_sha": "4539c539d15dacb19cde7e246aab690cc11170e7",
+    "digest": "sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9",
+    "config_digest": "sha256:7b77f8a495abb13d78d8714afc863728a435bcbdd21720d11fd9b4eccfd8bd6e",
     "configured_user": "slicer",
     "attestation": {
       "signer_repository": "Botond1/3D-Printer-Slicer-API",
       "signer_workflow": ".github/workflows/candidate-publication.yml",
-      "source_ref": "refs/heads/codex/i8-s3a-ghcr-signed-candidate",
-      "source_digest": "1fffab87960c675a053ae814d374cab331fbb14d",
+      "source_ref": "refs/heads/main",
+      "source_digest": "4539c539d15dacb19cde7e246aab690cc11170e7",
       "issuer": "https://token.actions.githubusercontent.com",
       "provenance_predicate": "https://slsa.dev/provenance/v1",
       "sbom_predicate": "https://spdx.dev/Document/v2.3"

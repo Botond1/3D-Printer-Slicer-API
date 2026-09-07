@@ -1,5 +1,12 @@
 # Verified project map
 
+Rollback qualification now pins the actually deployed signed `4539c539` release
+in `.github/release-rehearsal-policy.json`. The I9 readiness validator follows
+the current exact Bambu/runtime schema. The former I8 policy caused automatic
+rehearsal34142373328 to fail closed before runtime; see the qualification section
+of `handoff-2026-09-07-vps-finalization.md`. Image51462e6d passed isolated native
+tests but was not promoted; fresh publication/rehearsal gates remain required.
+
 ## Material spelling continuation — 2026-09-07
 
 `app/services/slice/bambu-receipt.js::validateAppliedConfig` canonicalizes the
