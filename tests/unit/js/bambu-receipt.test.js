@@ -24,6 +24,25 @@ test('native fixture config and independent result.json agree at documented sour
     assert.equal(stats.material_used_g, 1.78);
 });
 
+for (const material of ['PLA', 'pla', 'PlA', ' PLA ']) {
+    test(`accepted material spelling ${JSON.stringify(material)} matches the native receipt`, () => {
+        const { parseSliceOptions } = require('../../../app/services/slice/options');
+        const parsed = parseSliceOptions({ layerHeight: '0.2', material, infill: '20%', supports: 'true' }, 'FDM', 'bambu');
+        assert.equal(parsed.isValid, true);
+        const applied = validateAppliedConfig(gcode, parsed.options, '02.08.02.61').applied;
+        assert.equal(applied.material, 'PLA');
+    });
+}
+
+for (const material of ['petg', ' ABS ', 'tpu']) {
+    test(`accepted foreign material ${JSON.stringify(material)} cannot authorize a PLA receipt`, () => {
+        const { parseSliceOptions } = require('../../../app/services/slice/options');
+        const parsed = parseSliceOptions({ layerHeight: '0.2', material, infill: '20%', supports: 'true' }, 'FDM', 'bambu');
+        assert.equal(parsed.isValid, true);
+        assert.throws(() => validateAppliedConfig(gcode, parsed.options, '02.08.02.61'), { code: 'BAMBU_RESULT_UNVERIFIED' });
+    });
+}
+
 for (const [key, value] of [['layer_height', '0.1'], ['sparse_infill_density', '30%'],
     ['enable_support', '0'], ['filament_type', 'ABS'], ['printer_settings_id', 'foreign'], ['curr_bed_type', 'foreign']]) {
     test(`native ${key} mutation cannot become an applied fact`, () => {

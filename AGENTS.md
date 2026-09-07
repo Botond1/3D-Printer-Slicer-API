@@ -1,5 +1,12 @@
 # Codex operating guide
 
+Current continuation: `docs/codex/handoff-2026-09-07-vps-finalization.md`
+records the owner-authorized material-receipt correction, protected release
+gates and read-only LeadPilot check. The two `claude-opus-5-*20260907.md`
+documents are consumer execution prompts, not evidence of consumer deployment.
+The earlier LeadPilot stop below is a historical release boundary; the current
+task permits verification and prompt preparation, not consumer mutation.
+
 Owner-authorized release: signed main `4539c539d15dacb19cde7e246aab690cc11170e7` is deployed as `ghcr.io/botond1/3d-printer-slicer-api@sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9`. Read `docs/codex/handoff-2026-09-07-bambu-deployed.md` for exact CI, native, consumer, deployment and rollback evidence. The WordPress deliverable is a local ZIP; further LeadPilot work is forbidden by the owner. Public routes, allowlists, credentials, pricing and the existing operator packs remain unchanged. Further changes require new task-specific authorization.
 
 ## Mission and scope

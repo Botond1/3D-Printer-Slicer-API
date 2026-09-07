@@ -1,5 +1,13 @@
 # Security model
 
+## Material receipt correction — 2026-09-07
+
+`bambu-receipt.js::validateAppliedConfig` normalizes the accepted request-side
+material with the registry's trim/uppercase convention; native evidence remains
+an exact canonical match. Parser-to-native-fixture regression tests reject a
+different material and preserve the existing config/scope/total mutation guards.
+Current continuation evidence is in `handoff-2026-09-07-vps-finalization.md`.
+
 For current deployment identity and proof boundaries, read
 `handoff-2026-09-07-bambu-deployed.md`. The September 6 continuation is historical.
 
