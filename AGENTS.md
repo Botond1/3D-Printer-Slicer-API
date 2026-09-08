@@ -52,7 +52,7 @@ Current-state references (read these before the historical material):
 - `CHANGELOG.md` - the 3.4.0 entry (Bambu automatic orientation follows Bambu
   Studio's own orienter) and the 3.3.0 entry list every consumer-visible change.
 
-## Current state (3.4.0: Bambu-orienter automatic orientation, 2026-09-08; verified in an isolated container on the production VPS, not yet published or deployed)
+## Current state (3.4.0: Bambu-orienter automatic orientation, 2026-09-08; signed image `sha256:8362ca36…` deployed on the Slicer VPS — see `docs/codex/handoff-2026-09-08-bambu-orient-deployed.md`)
 
 Classification:
 `THREE_ENGINES_PRUSA_2_8_1_ORCA_2_3_1_BAMBU_02_08_02_61;
