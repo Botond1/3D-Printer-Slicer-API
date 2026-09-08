@@ -25,7 +25,7 @@ If rules are changed here, synchronize with:
 ## Goal
 Keep slicing, preview, and pricing behavior safe, deterministic, and production-friendly while preserving strict domain constraints.
 
-## Current contract (3.3.0, 2026-09-03)
+## Current contract (3.4.0, 2026-09-08)
 
 Every retained hard rule is stated once here with its exact value. The
 pre-3.2.0 checkpoint narrative (J0..J3B, I10..I12, Hostinger route activation)
@@ -127,6 +127,14 @@ under `docs/codex/evidence/`.
   `orientation_outcome` is `applied`, `unchanged`, `preserved`, or
   `fallback_unmodified`, and every fallback emits one bounded
   `orientation.fallback` event (fixed vocabulary).
+- Bambu FDM `auto` orientation is Bambu Studio's own pose: the CLI exports it
+  (`--orient 1 --arrange 0 --export-stl`, no display, no profiles, one STL
+  under `<outputdir>/stl/`) and `orient.py` recovers the exact rotation from
+  that export (Kabsch on triangle centroids, refused above 0.01 mm RMS /
+  0.05 mm max) and applies it to the submitted geometry; the rest of the
+  pipeline is unchanged. Prusa, Orca and SLA keep the stable-pose heuristic,
+  which is also the Bambu fallback, recorded by one bounded
+  `orientation.reference_fallback` event (`outcome: heuristic`).
 - Success requires lowercase 64-hex `profiles.effective_profile_sha256`
   (machine/process/filament content plus normalized material and invocation
   policy, excluding the request `layerHeight`/`infill` overrides; the default
@@ -325,7 +333,8 @@ Operations-protected endpoints (x-api-key with operations audience):
   QUEUE_UNAVAILABLE, NATIVE_RUNTIME_QUARANTINED, STORAGE_UNSAFE,
   RETENTION_UNSAFE, PRICING_UNAVAILABLE, and CONFIG_UNSAFE.
 - Structured JSON events use version 1, the fixed vocabulary in
-  `app/services/observability/events.js` (including `orientation.fallback`),
+  `app/services/observability/events.js` (including `orientation.fallback`
+  and `orientation.reference_fallback`),
   bounded request/job/artifact correlation, allowlisted fields, and
   secret/path/customer redaction. Metrics use fixed audience/outcome/reason/bucket labels only.
 - The production topology is an internal-only API with no host port/default

@@ -66,7 +66,8 @@ async function prepareProcessableModel(inputFile, technology, orientationMode, w
         technology,
         orientationMode,
         workspace,
-        signal
+        signal,
+        { engine }
     );
     processableFile = orientationResult.processableFile;
     await assertBoundedModelFile(processableFile, workspace);

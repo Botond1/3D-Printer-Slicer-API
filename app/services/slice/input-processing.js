@@ -14,6 +14,7 @@ const {
 } = require('./command');
 const { resolvePythonHelper } = require('./helper-paths');
 const { inspectThreeMfArchive } = require('./three-mf');
+const { resolveSlicerExecutable } = require('./engine');
 const { emitEvent } = require('../observability/events');
 const {
     createOrientationState,
@@ -25,6 +26,103 @@ const MAX_ORIENTATION_METADATA_BYTES = 4096;
 
 /** Per-call budget for Python helpers; the runner clamps it to the native budget. */
 const HELPER_COMMAND_OPTIONS = Object.freeze({ timeoutMs: PYTHON_HELPER_TIMEOUT_MS });
+
+/**
+ * Bambu Studio's own orienter, asked for the pose it would print. `--export-stl`
+ * needs neither a display nor loaded profiles, and the exported triangles keep
+ * the submitted order (measured on the production CLI), so `orient.py` can
+ * recover the exact rotation from the export and apply it to the submitted
+ * geometry itself. The CLI writes `<outputdir>/stl/obj_<n>_<name>.stl`.
+ */
+const REFERENCE_POSE_ARGS = Object.freeze(['--orient', '1', '--arrange', '0', '--export-stl']);
+const REFERENCE_POSE_DIRECTORY_SUFFIX = '_bambu-orient';
+const REFERENCE_POSE_MISMATCH_MARKER = 'ORIENTATION_REFERENCE_MISMATCH';
+
+/**
+ * Whether automatic orientation should follow the printing engine's own pose.
+ * Only the Bambu FDM path prints on the engine that chose the pose; the other
+ * engines keep the stable-pose heuristic.
+ * @param {'FDM'|'SLA'} technology Active technology mode.
+ * @param {'auto'|'preserve'} orientationMode Requested orientation policy.
+ * @param {string|undefined} engine Slicer engine key of the request.
+ * @returns {boolean} True when the Bambu reference pose is used.
+ */
+function usesReferencePose(technology, orientationMode, engine) {
+    return orientationMode === 'auto' && technology === 'FDM' && engine === 'bambu';
+}
+
+/**
+ * Classify why the reference pose could not be used. Only a bounded class is
+ * returned; native output and paths never reach telemetry.
+ * @param {unknown} error Failure raised while exporting or applying the reference.
+ * @returns {string} Bounded failure class.
+ */
+function classifyReferencePoseFailure(error) {
+    if (error?.code === 'ETIMEDOUT' || error?.name === 'TimeoutError') return 'ORIENTATION_REFERENCE_TIMEOUT';
+    if (error?.code === 'NATIVE_OUTPUT_OVERFLOW') return 'ORIENTATION_REFERENCE_OUTPUT_OVERFLOW';
+    if (String(error?.stdout || '').includes(REFERENCE_POSE_MISMATCH_MARKER)
+        || String(error?.stderr || '').includes(REFERENCE_POSE_MISMATCH_MARKER)) {
+        return 'ORIENTATION_REFERENCE_MISMATCH';
+    }
+    return 'ORIENTATION_REFERENCE_UNAVAILABLE';
+}
+
+function resolveReferencePoseDirectory(processableFile, workspace) {
+    return workspace.assertContainedPath(processableFile.replace(/\.stl$/i, REFERENCE_POSE_DIRECTORY_SUFFIX));
+}
+
+/**
+ * Export the engine's chosen pose of the submitted STL into a contained
+ * directory beside it and return the single exported STL.
+ * @param {string} processableFile STL input path.
+ * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
+ * @param {AbortSignal} [signal] Request cancellation signal.
+ * @returns {Promise<string>} Contained reference STL path.
+ */
+async function produceReferencePose(processableFile, workspace, signal) {
+    const outputDirectory = resolveReferencePoseDirectory(processableFile, workspace);
+    await fs.mkdir(outputDirectory, { recursive: true });
+    await runCommand(
+        resolveSlicerExecutable('bambu'),
+        [...REFERENCE_POSE_ARGS, '--outputdir', outputDirectory, processableFile],
+        { signal, ...HELPER_COMMAND_OPTIONS }
+    );
+    throwIfAborted(signal);
+    const stlDirectory = workspace.assertContainedPath(path.join(outputDirectory, 'stl'));
+    const entries = await fs.readdir(stlDirectory, { withFileTypes: true });
+    const exported = entries.filter((entry) => entry.isFile() && /\.stl$/i.test(entry.name));
+    if (exported.length !== 1) {
+        throw Object.assign(
+            new Error('The reference pose export did not produce exactly one STL.'),
+            { code: 'ORIENTATION_REFERENCE_UNAVAILABLE' }
+        );
+    }
+    const referencePath = workspace.assertContainedPath(path.join(stlDirectory, exported[0].name));
+    if (!(await isRegularNonSymlink(referencePath))) {
+        throw Object.assign(
+            new Error('The reference pose export is not a regular file.'),
+            { code: 'ORIENTATION_REFERENCE_UNAVAILABLE' }
+        );
+    }
+    return referencePath;
+}
+
+function emitReferencePoseFallback(emit, error, technology) {
+    try {
+        emit('orientation.reference_fallback', {
+            audience: 'slice',
+            outcome: 'heuristic',
+            error_code: classifyReferencePoseFailure(error),
+            extra: { reason: 'auto', technology, native_kind: 'bambu' }
+        });
+    } catch {
+        // Telemetry can never alter the orientation contract.
+    }
+}
+
+async function discardPartialOrientation(orientedStlPath, metadataPath) {
+    await Promise.all([orientedStlPath, metadataPath].map((target) => fs.rm(target, { force: true })));
+}
 
 /**
  * Classify why the orientation helper could not produce a trusted result.
@@ -169,40 +267,79 @@ async function readOrientationMetadata(metadataPath, expectedMode, workspace) {
 }
 
 /**
+ * Run the orientation helper once. With a reference pose the helper applies
+ * that pose's rotation to the submitted geometry; without one it selects a
+ * stable pose itself (or preserves the submitted pose).
+ * @param {string} processableFile STL input path.
+ * @param {string} orientedStlPath Contained oriented output path.
+ * @param {'FDM'|'SLA'} technology Active technology mode.
+ * @param {'auto'|'preserve'} orientationMode Requested orientation policy.
+ * @param {string} metadataPath Contained metadata output path.
+ * @param {string|null} referencePose Contained reference STL, or null for the heuristic.
+ * @param {AbortSignal} [signal] Request cancellation signal.
+ * @returns {Promise<void>} Resolves when the helper exited successfully.
+ */
+async function runOrientationHelper(processableFile, orientedStlPath, technology, orientationMode, metadataPath, referencePose, signal) {
+    await runCommand(
+        PYTHON_EXECUTABLE,
+        [
+            resolvePythonHelper('orient.py'),
+            processableFile,
+            orientedStlPath,
+            technology,
+            orientationMode,
+            metadataPath,
+            ...(referencePose === null ? [] : [referencePose])
+        ],
+        { signal, ...HELPER_COMMAND_OPTIONS }
+    );
+}
+
+/**
  * Attempt orientation optimization and fall back to original file on failure.
  *
- * The fallback keeps the submitted geometry untouched and reports an honest
- * outcome (`preserved` for preserve mode, `fallback_unmodified` for auto).
- * Every fallback also emits one bounded `orientation.fallback` event carrying
- * only the failure class, never helper output or paths.
+ * On the Bambu FDM path the automatic pose is the one Bambu Studio's own
+ * orienter chooses (`produceReferencePose`); when that export is unavailable,
+ * or the helper refuses it as not being this mesh, the stable-pose heuristic
+ * runs instead and one bounded `orientation.reference_fallback` event records
+ * the degradation. The final fallback keeps the submitted geometry untouched
+ * and reports an honest outcome (`preserved` for preserve mode,
+ * `fallback_unmodified` for auto). Every such fallback also emits one bounded
+ * `orientation.fallback` event carrying only the failure class, never helper
+ * output or paths.
  * @param {string} processableFile STL input path.
  * @param {'FDM'|'SLA'} technology Active technology mode.
  * @param {'auto'|'preserve'} orientationMode Requested orientation policy.
  * @param {{assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
  * @param {AbortSignal} [signal] Request cancellation signal.
- * @param {{emitEvent?: Function}} [dependencies] Injectable telemetry seam.
+ * @param {{emitEvent?: Function, engine?: string}} [options] Injectable telemetry seam and the request's engine.
  * @returns {Promise<{processableFile: string, orientation: Readonly<Record<string, unknown>>}>} Oriented candidate and trusted metadata.
  */
-async function tryOptimizeOrientation(processableFile, technology, orientationMode, workspace, signal, dependencies = {}) {
+async function tryOptimizeOrientation(processableFile, technology, orientationMode, workspace, signal, options = {}) {
     throwIfAborted(signal);
     const orientedStlPath = resolveOrientedPath(processableFile, workspace);
     const metadataPath = resolveOrientationMetadataPath(orientedStlPath, workspace);
-    const emit = dependencies.emitEvent || emitEvent;
+    const emit = options.emitEvent || emitEvent;
     let failure = null;
 
     try {
-        await runCommand(
-            PYTHON_EXECUTABLE,
-            [
-                resolvePythonHelper('orient.py'),
-                processableFile,
-                orientedStlPath,
-                technology,
-                orientationMode,
-                metadataPath
-            ],
-            { signal, ...HELPER_COMMAND_OPTIONS }
-        );
+        let referencePose = null;
+        if (usesReferencePose(technology, orientationMode, options.engine)) {
+            try {
+                referencePose = await produceReferencePose(processableFile, workspace, signal);
+            } catch (referenceError) {
+                if (isAbortError(referenceError, signal)) throw referenceError;
+                emitReferencePoseFallback(emit, referenceError, technology);
+            }
+        }
+        try {
+            await runOrientationHelper(processableFile, orientedStlPath, technology, orientationMode, metadataPath, referencePose, signal);
+        } catch (helperError) {
+            if (referencePose === null || isAbortError(helperError, signal)) throw helperError;
+            emitReferencePoseFallback(emit, helperError, technology);
+            await discardPartialOrientation(orientedStlPath, metadataPath);
+            await runOrientationHelper(processableFile, orientedStlPath, technology, orientationMode, metadataPath, null, signal);
+        }
         throwIfAborted(signal);
         if (await isRegularNonSymlink(orientedStlPath)) {
             const orientation = await readOrientationMetadata(metadataPath, orientationMode, workspace);
@@ -245,9 +382,13 @@ async function tryOptimizeOrientation(processableFile, technology, orientationMo
 }
 
 module.exports = {
+    REFERENCE_POSE_ARGS,
     classifyOrientationFailure,
+    classifyReferencePoseFailure,
     convertInputToStl,
     tryOptimizeOrientation,
+    usesReferencePose,
+    resolveReferencePoseDirectory,
     resolveConvertedPath,
     resolveOrientedPath,
     resolveOrientationMetadataPath,
