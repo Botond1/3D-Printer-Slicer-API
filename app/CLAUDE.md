@@ -180,7 +180,8 @@ this file maps them to modules.
     post-slice retention sweep is non-fatal (`RETENTION_UNSAFE` on failure).
 - app/services/observability/
   - Bounded correlation, versioned allowlisted events (fixed vocabulary
-    including `orientation.fallback`), fixed-cardinality metrics.
+    including `orientation.fallback` and `orientation.reference_fallback`),
+    fixed-cardinality metrics.
 
 ### Services: slice submodules
 
@@ -217,7 +218,10 @@ this file maps them to modules.
   Orca mass/length markers; grams never derived from length.
 - input-processing.js: conversion (`cad2stl.py`, `mesh2stl.py` with 3MF
   units and compound STL), `auto`/`preserve` orientation, bounded sidecar,
-  `fallback_unmodified` with one `orientation.fallback` event.
+  `fallback_unmodified` with one `orientation.fallback` event. On the Bambu
+  FDM path the automatic pose comes from `bambu-studio --orient 1 --arrange 0
+  --export-stl` and `orient.py` applies its exact rotation (sixth argument);
+  a degradation to the heuristic emits one `orientation.reference_fallback`.
 - model-stats.js: measured/unavailable dimension results, strict FDM stats,
   and SLA stats sourced from `sl1-stats.js` (layer count, positive resin mass
   from `sla-printer-registry.js` density) and `sla-time-model.js`

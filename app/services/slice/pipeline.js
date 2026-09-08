@@ -24,7 +24,7 @@ const { writeJsonAndWaitForFinish, setResponseSettlement } = require('./response
 const { throwIfAborted, isAbortError } = require('./command');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { resourceLimit } = require('./resource-errors');
-const { captureBambuSource, measureBambuMesh } = require('./bambu-source');
+const { captureBambuSource, measureBambuMesh, measurementFromBambuInspection } = require('./bambu-source');
 
 function findUploadedModelFile(req) {
     return req.file?.fieldname === 'choosenFile' ? req.file : null;
@@ -58,7 +58,11 @@ async function prepareProcessableModel(inputFile, technology, orientationMode, w
     throwIfAborted(signal);
     const sourceEvidence = engine === 'bambu' ? await captureBambuSource(inputFile, processableFile, signal) : null;
     const measure = engine === 'bambu' ? measureBambuMesh : getModelInfo;
-    const originalModelMeasurement = await measure(processableFile, signal);
+    // The source evidence already inspected this very file; a second helper
+    // run on it would only repeat the same trimesh import and answer.
+    const originalModelMeasurement = sourceEvidence !== null
+        ? measurementFromBambuInspection(sourceEvidence.inspection)
+        : await measure(processableFile, signal);
     throwIfAborted(signal);
     const preOrientationFile = processableFile;
     const orientationResult = await tryOptimizeOrientation(
@@ -66,7 +70,8 @@ async function prepareProcessableModel(inputFile, technology, orientationMode, w
         technology,
         orientationMode,
         workspace,
-        signal
+        signal,
+        { engine }
     );
     processableFile = orientationResult.processableFile;
     await assertBoundedModelFile(processableFile, workspace);

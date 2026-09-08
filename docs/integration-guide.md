@@ -59,8 +59,9 @@ The WordPress deliverable is a local ZIP; LeadPilot is not changed or reverified
 
 ## Previously documented deployed contract
 
-Consumer-facing contract of the 3D Printer Slicer API as of version 3.3.0
-(2026-09-02). It is written for the two integrating systems (the WooCommerce
+Consumer-facing contract of the 3D Printer Slicer API as of version 3.4.0
+(2026-09-08; the Bambu automatic orientation changed in 3.4.0, everything else
+below dates from 3.3.0 / 2026-09-02). It is written for the two integrating systems (the WooCommerce
 plugin and LeadPilot) and covers only what a consumer can call. The
 operator-facing surfaces (pricing administration, artifact download,
 operations diagnostics) are documented in `README.md` and are never exposed
@@ -159,6 +160,14 @@ Processing order: format conversion → automatic orientation (unless
 `preserve`) → sizing → requested rotation → placement on the plate. Option and
 profile validation runs before queue admission, so a `400` never consumes a
 queue slot.
+
+Since 3.4.0 the automatic orientation on `POST /bambu/slice` is the pose Bambu
+Studio's own orienter chooses (the same one the printer farm's slicer would
+pick): the CLI exports that pose and the API applies its exact rotation to the
+submitted geometry, so `model_transform` keeps schema 2 and the printed part is
+what `automatic_rotation_matrix` describes. `POST /prusa/slice` and
+`POST /orca/slice` keep the stable-pose heuristic, which is also the Bambu
+fallback when the export is unavailable.
 
 ### 3.2 `POST /prusa/slice`
 

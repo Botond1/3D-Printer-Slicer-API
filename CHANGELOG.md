@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## v3.4.0 (2026-09-08)
+
+### Changed
+- **[contract]** `POST /bambu/slice` automatic orientation (`orientationMode=auto`, the default) now follows Bambu Studio's own orienter instead of the stable-pose heuristic. The API first asks the CLI for the pose it would print (`bambu-studio --orient 1 --arrange 0 --export-stl`, which needs neither a display nor loaded profiles), then `orient.py` recovers that pose's exact rotation from the export (a Kabsch fit on the triangle centroids, which keep the submitted order; refused above 0.01 mm RMS / 0.05 mm maximum residual) and applies it to the submitted geometry itself. Measurement, sizing, placement, bounds and the final `--orient 0` slice are unchanged, so `model_transform` keeps `transform_schema: 2`, `R_total = R_requested * R_automatic`, and `orientation_outcome` keeps its four values. Prusa, Orca and SLA keep the stable-pose heuristic; it is also the Bambu fallback. Measured on the production CLI in an isolated container: a `60 x 24 x 8 mm` box submitted tilted by 35°/20° now prints flat (8 mm, 974 s, 6.27 g) instead of 39.6 mm / 1991 s / 7.44 g, and a `50 x 20 x 30 mm` wedge rests on its largest face (1288 s / 7.35 g instead of 2333 s / 11.16 g with supports).
+- The Bambu `measurement_generation` changes with this release (`orient.py`, `input-processing.js` and `pipeline.js` are part of it); consumers re-read the catalogue before pinning new requests.
+- Bambu requests no longer inspect the submitted STL twice: the source-evidence inspection is also the original measurement (same file, same helper, same answer), saving one Python start per request (about 0.7 s for a 20k-triangle model, 1.4 s for 200k, measured on the production image).
+
+### Added
+- `orientation.reference_fallback` event (`outcome: heuristic`; `error_code` one of `ORIENTATION_REFERENCE_UNAVAILABLE`, `ORIENTATION_REFERENCE_MISMATCH`, `ORIENTATION_REFERENCE_TIMEOUT`, `ORIENTATION_REFERENCE_OUTPUT_OVERFLOW`; `extra.native_kind: bambu`) whenever the Bambu path degrades to the heuristic. `orient.py` accepts an optional sixth argument, the reference STL, and exits with status 3, `ORIENTATION_REFERENCE_MISMATCH|<reason>` on stdout and stderr, and no output when the reference is not this mesh.
+
 ## Bambu material spelling correction (2026-09-07)
 
 - Restore accepted case-insensitive and trimmed material requests at native

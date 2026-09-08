@@ -44,14 +44,15 @@ Current-state references (read these before the historical material):
 
 - `docs/codex/handoff-2026-09-06-calculator.md` - bounded local calculator material-profile compatibility change, native Windows proof and historical VPS configuration blocker; superseded by the deployed handoff above.
 
-- `docs/integration-guide.md` - the consumer contract as of 3.3.0.
+- `docs/integration-guide.md` - the consumer contract as of 3.4.0.
 - `docs/codex/handoff-2026-09-03.md` - operator handoff, traps, open items
   (`handoff-2026-09-02.md` still holds the three-engine FDM material).
-- `CLAUDE.md` section "Current contract (3.3.0, 2026-09-03)" - every retained
+- `CLAUDE.md` section "Current contract (3.4.0, 2026-09-08)" - every retained
   hard rule with its exact value.
-- `CHANGELOG.md` - the 3.3.0 entry lists every consumer-visible change.
+- `CHANGELOG.md` - the 3.4.0 entry (Bambu automatic orientation follows Bambu
+  Studio's own orienter) and the 3.3.0 entry list every consumer-visible change.
 
-## Current state (3.3.0 plus Bambu receipt contract, 2026-09-07)
+## Current state (3.4.0: Bambu-orienter automatic orientation, 2026-09-08; verified in an isolated container on the production VPS, not yet published or deployed)
 
 Classification:
 `THREE_ENGINES_PRUSA_2_8_1_ORCA_2_3_1_BAMBU_02_08_02_61;

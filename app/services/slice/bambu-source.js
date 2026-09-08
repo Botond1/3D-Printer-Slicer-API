@@ -37,10 +37,18 @@ async function inspectBambuMesh(filePath, signal) {
     }
 }
 
-async function measureBambuMesh(filePath, signal) {
-    const inspection = await inspectBambuMesh(filePath, signal);
+/**
+ * The measured-model contract for an inspection that already ran on the file.
+ * @param {{dimensions_mm: {x: number, y: number, z: number}, volume_mm3: number}} inspection Validated inspection.
+ * @returns {ReturnType<typeof createMeasuredModelMeasurement>} Measured model measurement.
+ */
+function measurementFromBambuInspection(inspection) {
     return createMeasuredModelMeasurement({ ...inspection.dimensions_mm,
         height_mm: inspection.dimensions_mm.z, volume_mm3: inspection.volume_mm3 });
+}
+
+async function measureBambuMesh(filePath, signal) {
+    return measurementFromBambuInspection(await inspectBambuMesh(filePath, signal));
 }
 
 async function captureBambuSource(inputFile, normalizedFile, signal) {
@@ -52,4 +60,4 @@ async function captureBambuSource(inputFile, normalizedFile, signal) {
     } };
 }
 
-module.exports = { hashFile, inspectBambuMesh, measureBambuMesh, captureBambuSource };
+module.exports = { hashFile, inspectBambuMesh, measureBambuMesh, measurementFromBambuInspection, captureBambuSource };

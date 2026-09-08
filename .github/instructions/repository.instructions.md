@@ -146,8 +146,8 @@ Last synchronized: 2026-09-06
   health/readiness/metrics require operations scope. Keep readiness reason
   codes stable (retention sweep failures surface as RETENTION_UNSAFE and are
   non-fatal to the slice) and all event/metric fields bounded, allowlisted,
-  redacted, and fixed-cardinality; `orientation.fallback` is part of the fixed
-  event vocabulary.
+  redacted, and fixed-cardinality; `orientation.fallback` and
+  `orientation.reference_fallback` are part of the fixed event vocabulary.
 - Development Compose remains loopback-published on an ordinary bridge; the
   production manifest uses an internal private bridge, no host port, a
   digest-only image, and `init: true` (both manifests). Production still runs
