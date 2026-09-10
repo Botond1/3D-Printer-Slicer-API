@@ -2,7 +2,7 @@
 
 ## Bambu automatic FDM contract — released 2026-09-07
 
-The released Slicer contract and local WordPress ZIP use `POST /bambu/slice`, preserving multipart `choosenFile`, wire `infill:"20%"`, and `stats.material_used_g`. Supported machine/material/layer choices come from the actual Bambu registry and current catalogue. P1S is the default; H2D is distinct. Bambu has no 0.3 mm recipe and never silently remaps that request. No fallback engine is selected.
+The released Slicer contract and local WordPress ZIP use `POST /bambu/slice`, preserving multipart `choosenFile`, wire `infill:"20%"`, and `stats.material_used_g`. Supported machine/material/layer choices come from the actual Bambu registry and current catalogue. P1S is the default; H2D is distinct. Since 3.5.0 (2026-09-10) the `0.3` layer key exists on both printers: it rides the coarsest vendor process of the printer with the layer height overridden to 0.3 mm, and the native receipt reports `applied.layer_height_mm: 0.3`; a request is never silently remapped to another value. No fallback engine is selected.
 
 Material requests retain their case-insensitive, surrounding-whitespace-tolerant contract. Native applied evidence uses the canonical material (`PLA`, `PETG`, `ABS`, `TPU`); compare a validated canonical request material to `technical_receipt.applied.material`. The legacy top-level `material` field may preserve the accepted request spelling. A different material must still fail native verification.
 
@@ -197,10 +197,12 @@ and mass reproduce the Bambu Studio GUI readings (section 8).
 - `printerProfile`: `P1S` (default) or `H2D`, case-insensitive; `printer` is
   an accepted alias. Anything else is `400 INVALID_PRINTER_PROFILE`.
 - `layerHeight` keys per printer:
-  - P1S: `0.08`, `0.1`, `0.12`, `0.16`, `0.2`, `0.24`, `0.28`
-  - H2D: `0.08`, `0.1`, `0.12`, `0.16`, `0.2`, `0.24`
-  - `0.1` selects the vendor 0.12 mm process with the layer height overridden
-    to 0.1 mm, exactly as a GUI user would do. Other values return
+  - P1S: `0.08`, `0.1`, `0.12`, `0.16`, `0.2`, `0.24`, `0.28`, `0.3`
+  - H2D: `0.08`, `0.1`, `0.12`, `0.16`, `0.2`, `0.24`, `0.3`
+  - `0.1` selects the vendor 0.12 mm process and `0.3` the coarsest vendor
+    process of the printer (`0.28mm Extra Draft @BBL X1C` on the P1S,
+    `0.24mm Standard @BBL H2D` on the H2D) with the layer height overridden,
+    exactly as a GUI user would do. Other values return
     `400 INVALID_LAYER_HEIGHT` listing the allowed keys.
 - `processProfile` (optional): an exact vendor process name offered for the
   printer, for example `0.20mm Standard @BBL X1C` (P1S) or
@@ -213,7 +215,10 @@ and mass reproduce the Bambu Studio GUI readings (section 8).
   `18 × 28 mm` corner at the origin, so its admissible footprint is L-shaped:
   up to `256 × 228 mm` placed above the corner, or up to `238 × 256 mm` placed
   beside it. The H2D single-filament area is the first extruder's
-  `325 × 320 mm`.
+  `325 × 320 mm`. The published Z ceilings are `249.9 mm` (P1S) and
+  `324.9 mm` (H2D): the strictest value across the offered layer keys, because
+  at 0.3 mm the native slice refuses `250.0` / `325.0` while `249.9` / `324.9`
+  pass (measured 2026-09-10).
 
 ### 3.5 `POST /render`
 

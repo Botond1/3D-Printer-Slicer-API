@@ -668,9 +668,9 @@ function createBambuProperties() {
         ...COMMON_MULTIPART_PROPERTIES,
         layerHeight: {
             type: 'string',
-            enum: ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.28'],
+            enum: ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.28', '0.3'],
             default: '0.2',
-            description: 'Registry layer key for the selected printer. `0.1` selects the vendor 0.12 mm process with layer_height overridden to 0.1 mm, exactly as a GUI user would; `0.28` exists only on the P1S. Any other value returns HTTP 400 `INVALID_LAYER_HEIGHT` listing the allowed keys.'
+            description: 'Registry layer key for the selected printer. `0.1` selects the vendor 0.12 mm process and `0.3` the coarsest vendor process of the printer (0.28 mm Extra Draft on the P1S, 0.24 mm Standard on the H2D) with layer_height overridden, exactly as a GUI user would; `0.28` exists only on the P1S. Any other value returns HTTP 400 `INVALID_LAYER_HEIGHT` listing the allowed keys.'
         },
         material: {
             ...COMMON_MULTIPART_PROPERTIES.material,

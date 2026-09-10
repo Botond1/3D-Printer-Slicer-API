@@ -63,8 +63,8 @@ DECLARED_DIMENSIONS = {
 # primary 256 x 228 footprint; the alternative 238 x 256 footprint is provable
 # only through the slice endpoint (see bambu_envelope_confirmation_runner).
 MEASURED_BAMBU_ENVELOPES = {
-    "P1S": {"x": 256, "y": 228, "z": 250},
-    "H2D": {"x": 325, "y": 320, "z": 325},
+    "P1S": {"x": 256, "y": 228, "z": 249.9},
+    "H2D": {"x": 325, "y": 320, "z": 324.9},
 }
 # The Elegoo Saturn 4 Ultra admission ceiling mirrors its declared metadata and
 # is PROVISIONAL until a dedicated native envelope sweep measures it, unlike

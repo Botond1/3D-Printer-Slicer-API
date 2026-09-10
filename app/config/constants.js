@@ -174,10 +174,15 @@ const SLA_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM = Object.freeze({
  * - H2D (single filament, first extruder area `325 x 320`): `325 x 320 x 10`
  *   at the origin passes, `349` or `350` wide fails (rc 190, filament cannot be
  *   mapped to the extruder); Z `325.0` passes and `325.1` fails.
+ * - The 0.3 mm layer key (2026-09-10, same production CLI, isolated container):
+ *   `20 x 20 x 324.9` passes and `325.0` fails on the H2D, `249.9` passes and
+ *   `250.0` fails on the P1S, while `324.9` still passes at 0.2 mm. Presets of
+ *   one printer must publish one ceiling, so Z is the strictest value across
+ *   the offered layer keys (the same rule the H2D-QUOTE table follows).
  */
 const BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM = Object.freeze({
-    'Bambu Lab P1S 0.4 nozzle': Object.freeze({ x: 256, y: 228, z: 250 }),
-    'Bambu Lab H2D 0.4 nozzle': Object.freeze({ x: 325, y: 320, z: 325 })
+    'Bambu Lab P1S 0.4 nozzle': Object.freeze({ x: 256, y: 228, z: 249.9 }),
+    'Bambu Lab H2D 0.4 nozzle': Object.freeze({ x: 325, y: 320, z: 324.9 })
 });
 
 /**

@@ -400,7 +400,7 @@ test('OpenAPI documents the Bambu Studio slice operation, supports, strict infil
     const bambu = getOperation('POST /bambu/slice');
     const properties = bambu.requestBody.content['multipart/form-data'].schema.properties;
     assert.deepEqual(properties.printerProfile.enum, ['P1S', 'H2D']);
-    assert.deepEqual(properties.layerHeight.enum, ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.28']);
+    assert.deepEqual(properties.layerHeight.enum, ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.28', '0.3']);
     assert.equal(properties.supports.type, 'boolean');
     assert.equal(properties.supports.default, true);
     assert.equal(properties.infill.minimum, 0);

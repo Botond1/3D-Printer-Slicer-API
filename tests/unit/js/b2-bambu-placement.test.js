@@ -151,8 +151,8 @@ function modelTransform(final) {
 
 test('measured Bambu envelope constants replace every provisional value and keep the L-shape representable', () => {
     assert.deepEqual(BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM, {
-        [P1S_MACHINE]: { x: 256, y: 228, z: 250 },
-        [H2D_MACHINE]: { x: 325, y: 320, z: 325 }
+        [P1S_MACHINE]: { x: 256, y: 228, z: 249.9 },
+        [H2D_MACHINE]: { x: 325, y: 320, z: 324.9 }
     });
     assert.deepEqual(BAMBU_P1S_ALTERNATIVE_FOOTPRINT_INCLUSIVE_MM, { x: 238, y: 256 });
     assert.ok(Object.isFrozen(BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM));
@@ -182,7 +182,9 @@ test('bed geometry parsing: P1S excluded corner, H2D first extruder area, and fa
     assert.equal(h2dGeometry.printableHeight, 325);
     assert.equal(h2dGeometry.printable.maxX - h2dGeometry.printable.minX, BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[H2D_MACHINE].x);
     assert.equal(h2dGeometry.printable.maxY - h2dGeometry.printable.minY, BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[H2D_MACHINE].y);
-    assert.equal(h2dGeometry.printableHeight, BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[H2D_MACHINE].z);
+    // The published Z ceiling is the strictest layer key's value (324.9 at 0.3 mm), never above the plate height.
+    assert.ok(BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[H2D_MACHINE].z <= h2dGeometry.printableHeight);
+    assert.equal(BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[H2D_MACHINE].z, 324.9);
 
     // Selection rules: largest height wins; ties go to the 1-based master, else index 0.
     const leftTaller = parseBambuBedGeometry({ ...h2d, extruder_printable_height: ['325', '320'] });
@@ -357,18 +359,18 @@ test('resolved build-volume limits carry bed geometry for Bambu only', async (t)
     t.after(() => fsp.rm(root, { recursive: true, force: true }));
     const p1s = await bambuLimits(root, 'P1S');
     assert.deepEqual(p1s.bedGeometry, P1S_BED);
-    assert.deepEqual(p1s.max, { x: 256, y: 228, z: 250 });
-    assert.deepEqual(p1s.largestPassingDimensionsInclusive, { x: 256, y: 228, z: 250 });
+    assert.deepEqual(p1s.max, { x: 256, y: 228, z: 249.9 });
+    assert.deepEqual(p1s.largestPassingDimensionsInclusive, { x: 256, y: 228, z: 249.9 });
     assert.deepEqual(p1s.declaredMax, { x: 256, y: 256, z: 250 });
     const h2d = await bambuLimits(root, 'H2D');
     assert.deepEqual(h2d.bedGeometry, H2D_BED);
-    assert.deepEqual(h2d.max, { x: 325, y: 320, z: 325 });
+    assert.deepEqual(h2d.max, { x: 325, y: 320, z: 324.9 });
     assert.deepEqual(h2d.declaredMax, { x: 350, y: 320, z: 325 });
     // The real fixtures reproduce the measured admission through placement.
-    assert.equal(validateModelDimensionsAgainstLimits({ x: 238, y: 256, z: 250 }, p1s).isValid, true);
-    assert.equal(validateModelDimensionsAgainstLimits({ x: 256, y: 228, z: 250 }, p1s).isValid, true);
-    assert.equal(validateModelDimensionsAgainstLimits({ x: 256, y: 228.1, z: 250 }, p1s).isValid, false);
-    assert.equal(validateModelDimensionsAgainstLimits({ x: 325, y: 320, z: 325 }, h2d).isValid, true);
+    assert.equal(validateModelDimensionsAgainstLimits({ x: 238, y: 256, z: 249.9 }, p1s).isValid, true);
+    assert.equal(validateModelDimensionsAgainstLimits({ x: 256, y: 228, z: 249.9 }, p1s).isValid, true);
+    assert.equal(validateModelDimensionsAgainstLimits({ x: 256, y: 228.1, z: 249.9 }, p1s).isValid, false);
+    assert.equal(validateModelDimensionsAgainstLimits({ x: 325, y: 320, z: 324.9 }, h2d).isValid, true);
     assert.equal(validateModelDimensionsAgainstLimits({ x: 349, y: 320, z: 10 }, h2d).isValid, false);
 
     const prusa = resolveBuildVolumeLimits('prusa', 'FDM', path.join(PRUSA_DIR, 'FDM_0.2mm.ini'), null);

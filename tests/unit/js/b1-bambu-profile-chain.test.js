@@ -54,14 +54,16 @@ test('the shipped registry loads, freezes, and exposes the owner-approved printe
     assert.equal(registry.printers.P1S.machine, 'Bambu Lab P1S 0.4 nozzle');
     assert.equal(registry.printers.H2D.machine, 'Bambu Lab H2D 0.4 nozzle');
     assert.equal(registry.printers.P1S.bedType, 'Textured PEI Plate');
-    assert.deepEqual(getBambuAllowedLayerKeys('P1S'), ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.28']);
-    assert.deepEqual(getBambuAllowedLayerKeys('H2D'), ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24']);
+    assert.deepEqual(getBambuAllowedLayerKeys('P1S'), ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.28', '0.3']);
+    assert.deepEqual(getBambuAllowedLayerKeys('H2D'), ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.3']);
     assert.deepEqual(getBambuMaterials('P1S'), ['ABS', 'PETG', 'PLA', 'TPU']);
-    // 0.1 maps to the vendor 0.12 process (layer height is overridden at runtime); 0.3 is never offered.
+    // 0.1 maps to the vendor 0.12 process and 0.3 to the coarsest vendor process of each printer
+    // (layer height is overridden at runtime, exactly as a GUI user would).
     assert.equal(resolveBambuProcessName('P1S', '0.1'), '0.12mm Fine @BBL X1C');
     assert.equal(resolveBambuProcessName('P1S', '0.12'), '0.12mm Fine @BBL X1C');
     assert.equal(resolveBambuProcessName('H2D', '0.1'), '0.12mm Fine @BBL H2D');
-    assert.equal(resolveBambuProcessName('P1S', '0.3'), null);
+    assert.equal(resolveBambuProcessName('P1S', '0.3'), '0.28mm Extra Draft @BBL X1C');
+    assert.equal(resolveBambuProcessName('H2D', '0.3'), '0.24mm Standard @BBL H2D');
     assert.equal(resolveBambuProcessName('P1S', '0.2', '0.16mm Optimal @BBL X1C'), '0.16mm Optimal @BBL X1C');
     assert.equal(resolveBambuProcessName('P1S', '0.2', '0.16mm Standard @BBL H2D'), null);
     assert.equal(getBambuProcessNames('P1S').length, 6);
@@ -81,7 +83,9 @@ test('printer ids resolve case-insensitively, default on omission, and reject un
     assert.equal(resolveBambuPrinterId({}), null);
     assert.equal(resolveBambuLayerKey(0.2, 'P1S'), '0.2');
     assert.equal(resolveBambuLayerKey(0.28, 'H2D'), null);
-    assert.equal(resolveBambuLayerKey(0.3, 'P1S'), null);
+    assert.equal(resolveBambuLayerKey(0.3, 'P1S'), '0.3');
+    assert.equal(resolveBambuLayerKey(0.3, 'H2D'), '0.3');
+    assert.equal(resolveBambuLayerKey(0.4, 'P1S'), null);
     assert.equal(resolveBambuLayerKey(Number.NaN, 'P1S'), null);
 });
 

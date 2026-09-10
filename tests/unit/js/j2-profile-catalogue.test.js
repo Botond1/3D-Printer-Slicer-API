@@ -135,12 +135,12 @@ test.after(async () => {
 
 test('server-owned manifest covers P1S, the P1S-physics quote chains, and the Bambu vendor chains', () => {
     const definitions = createPresetDefinitions();
-    assert.equal(definitions.length, 88);
+    assert.equal(definitions.length, 96);
     assert.equal(definitions.filter((item) => item.engine === 'prusa').length, 12);
     assert.equal(definitions.filter((item) => item.engine === 'prusa' && item.technology === 'FDM').length, 6);
     assert.equal(definitions.filter((item) => item.engine === 'prusa' && item.technology === 'SLA').length, 6);
     assert.equal(definitions.filter((item) => item.engine === 'orca').length, 24);
-    assert.equal(definitions.filter((item) => item.engine === 'bambu').length, 52);
+    assert.equal(definitions.filter((item) => item.engine === 'bambu').length, 60);
     assert.deepEqual(
         [...new Set(definitions.map((item) => item.printer.id))].sort(),
         ['H2D', 'H2D-QUOTE', 'P1S', 'SATURN4U']
@@ -166,11 +166,11 @@ test('server-owned manifest covers P1S, the P1S-physics quote chains, and the Ba
     const bambu = definitions.filter((item) => item.engine === 'bambu');
     assert.deepEqual(
         [...new Set(bambu.filter((item) => item.printer.id === 'P1S').map((item) => item.layerKey))],
-        ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.28']
+        ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.28', '0.3']
     );
     assert.deepEqual(
         [...new Set(bambu.filter((item) => item.printer.id === 'H2D').map((item) => item.layerKey))],
-        ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24']
+        ['0.08', '0.1', '0.12', '0.16', '0.2', '0.24', '0.3']
     );
     assert.ok(bambu.every((item) => item.bedType === 'Textured PEI Plate'));
     assert.ok(bambu.every((item) => Number.parseFloat(item.layerKey) === item.layerHeight));
@@ -180,8 +180,8 @@ test('v2 publishes explicit declared metadata and authoritative inclusive ceilin
     assert.equal(snapshot.body.schema, 'r3d-profile-catalogue-v2');
     assert.match(snapshot.body.catalogue_sha256, /^[a-f0-9]{64}$/);
     assert.match(snapshot.etag, /^"[a-f0-9]{64}"$/);
-    assert.equal(snapshot.body.profiles.length, 88);
-    assert.equal(new Set(snapshot.body.profiles.map((entry) => entry.id)).size, 88);
+    assert.equal(snapshot.body.profiles.length, 96);
+    assert.equal(new Set(snapshot.body.profiles.map((entry) => entry.id)).size, 96);
     assert.ok(snapshot.body.profiles.every((entry) => entry.technology === 'FDM' || entry.technology === 'SLA'));
     assertNoPublicMaxProperty(snapshot.body);
 
@@ -352,7 +352,7 @@ test('bambu rows name the official vendor chain, registry selectors, and measure
     assert.deepEqual(p1s.build_volume_limits_mm, {
         declared_build_volume_dimensions_mm: { x: 256, y: 256, z: 250 },
         declared_source_kind: 'profile-explicit',
-        largest_passing_dimensions_inclusive_mm: { x: 256, y: 228, z: 250 },
+        largest_passing_dimensions_inclusive_mm: { x: 256, y: 228, z: 249.9 },
         minimum_dimensions_inclusive_mm: minimum,
         source_profile: 'Bambu Lab P1S 0.4 nozzle'
     });
@@ -369,10 +369,15 @@ test('bambu rows name the official vendor chain, registry selectors, and measure
     );
     assert.deepEqual(
         h2d.build_volume_limits_mm.largest_passing_dimensions_inclusive_mm,
-        { x: 325, y: 320, z: 325 }
+        { x: 325, y: 320, z: 324.9 }
     );
     assert.equal(h2d.filament_density_g_cm3, 1.04);
     assert.equal(findProfile('bambu', 'H2D', 0.28, 'PLA'), undefined);
+    // 0.3 mm rides the coarsest vendor process of each printer with the layer height overridden.
+    assert.equal(findProfile('bambu', 'H2D', 0.3, 'PLA').slice_selector.parameters.at(-1).value, '0.24mm Standard @BBL H2D');
+    assert.equal(findProfile('bambu', 'P1S', 0.3, 'PLA').slice_selector.parameters.at(-1).value, '0.28mm Extra Draft @BBL X1C');
+    // Like 0.1 / 0.12, the 0.3 row shares the vendor process digest of the 0.28 row; the layer height is a request override.
+    assert.equal(findProfile('bambu', 'P1S', 0.3, 'PLA').effective_profile_sha256, findProfile('bambu', 'P1S', 0.28, 'PLA').effective_profile_sha256);
 
     // Same printer, different vendor process (0.1 uses the 0.12 process with an
     // overridden layer height) must never share a digest with the 0.12 row.
@@ -401,7 +406,7 @@ test('machine and fleet resolutions preserve per-engine admission authority', ()
             status: 'resolved',
             reason: null,
             minimum_dimensions_inclusive_mm: minimum,
-            largest_passing_dimensions_inclusive_mm: { x: 325, y: 320, z: 325 }
+            largest_passing_dimensions_inclusive_mm: { x: 325, y: 320, z: 324.9 }
         },
         {
             technology: 'FDM',
@@ -410,7 +415,7 @@ test('machine and fleet resolutions preserve per-engine admission authority', ()
             status: 'resolved',
             reason: null,
             minimum_dimensions_inclusive_mm: minimum,
-            largest_passing_dimensions_inclusive_mm: { x: 256, y: 228, z: 250 }
+            largest_passing_dimensions_inclusive_mm: { x: 256, y: 228, z: 249.9 }
         },
         {
             technology: 'FDM',
@@ -466,7 +471,7 @@ test('machine and fleet resolutions preserve per-engine admission authority', ()
             reason: null,
             printers: [BAMBU_H2D],
             minimum_dimensions_inclusive_mm: minimum,
-            largest_passing_dimensions_inclusive_mm: { x: 325, y: 320, z: 325 },
+            largest_passing_dimensions_inclusive_mm: { x: 325, y: 320, z: 324.9 },
             excluded_printers: []
         },
         {
