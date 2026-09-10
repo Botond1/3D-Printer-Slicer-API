@@ -162,7 +162,7 @@ runs before queue admission, so a `400` never consumes a queue slot.
 
 | Field | Values | Default |
 | --- | --- | --- |
-| `layerHeight` | Prusa `0.025`, `0.05` (SLA), `0.1`, `0.2`, `0.3`; Orca `0.1`, `0.2`, `0.3`; Bambu P1S `0.08`, `0.1`, `0.12`, `0.16`, `0.2`, `0.24`, `0.28`; Bambu H2D `0.08`..`0.24` | `0.2` |
+| `layerHeight` | Prusa `0.025`, `0.05` (SLA), `0.1`, `0.2`, `0.3`; Orca `0.1`, `0.2`, `0.3`; Bambu P1S `0.08`, `0.1`, `0.12`, `0.16`, `0.2`, `0.24`, `0.28`, `0.3`; Bambu H2D `0.08`..`0.24`, `0.3` | `0.2` |
 | `material` | FDM `PLA`, `PETG`, `ABS`, `TPU`; SLA `Standard`, `ABS-Like`, `Flexible` | `PLA` / `Standard` |
 | `infill` | strict integer `0`..`100`, optional trailing `%`, never clamped | `20` |
 | `supports` | `true` / `false` (empty keeps the default) | `true` |

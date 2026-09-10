@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## v3.5.0 (2026-09-10)
+
+### Added
+- **[contract]** `POST /bambu/slice` accepts the `0.3` layer key on both registered printers. It rides the coarsest vendor process of the printer (`0.28mm Extra Draft @BBL X1C` on the P1S, `0.24mm Standard @BBL H2D` on the H2D) with `layer_height` overridden to 0.3 mm, exactly like the existing `0.1` key rides the 0.12 mm process; the native receipt reports `applied.layer_height_mm: 0.3`. `GET /profiles` publishes eight new Bambu rows (two printers × PLA/PETG/ABS/TPU), 96 rows in total. Measured on the production CLI in an isolated container: a 30 mm PLA cube slices in 1404 s at 0.3 mm on the P1S (1801 s at 0.2 mm) and 1373 s on the H2D.
+
+### Changed
+- **[contract]** The Bambu Z ceilings are now `249.9 mm` (P1S) and `324.9 mm` (H2D) instead of `250` / `325`: at 0.3 mm the native slice refuses `250.0` / `325.0` and passes `249.9` / `324.9` (0.2 mm still passes `325.0`), and presets of one printer must publish one ceiling, so Z is the strictest value across the offered layer keys — the rule the H2D-QUOTE tables already followed. X/Y and the P1S alternative footprint are unchanged.
+- The Bambu `measurement_generation` changes with this release (the registry is part of the bundle digest); consumers re-read the catalogue before pinning new requests.
+
 ## v3.4.0 (2026-09-08)
 
 ### Changed

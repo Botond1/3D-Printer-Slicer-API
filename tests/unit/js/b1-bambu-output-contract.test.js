@@ -124,7 +124,7 @@ test('bambu snapshots are flattened vendor JSON written into job scratch', async
     assert.equal(limits.sourceProfile, 'Bambu Lab H2D 0.4 nozzle');
     assert.deepEqual(limits.declaredMax, { x: 350, y: 320, z: 325 });
     // Measured single-filament ceiling: the FIRST extruder area of the flattened machine.
-    assert.deepEqual(limits.max, { x: 325, y: 320, z: 325 });
+    assert.deepEqual(limits.max, { x: 325, y: 320, z: 324.9 });
     assert.deepEqual(limits.explicitMaxAxes, { x: true, y: true, z: true });
     assert.deepEqual(limits.bedGeometry, {
         printable: { minX: 25, minY: 0, maxX: 350, maxY: 320 },
@@ -137,7 +137,7 @@ test('bambu snapshots are flattened vendor JSON written into job scratch', async
     assert.equal(p1sLimits.sourceProfile, 'Bambu Lab P1S 0.4 nozzle');
     assert.deepEqual(p1sLimits.declaredMax, { x: 256, y: 256, z: 250 });
     // Measured wide footprint; the excluded 18 x 28 mm corner is carried as bed geometry.
-    assert.deepEqual(p1sLimits.max, { x: 256, y: 228, z: 250 });
+    assert.deepEqual(p1sLimits.max, { x: 256, y: 228, z: 249.9 });
     assert.deepEqual(p1sLimits.bedGeometry, {
         printable: { minX: 0, minY: 0, maxX: 256, maxY: 256 },
         printableSource: 'printable_area',

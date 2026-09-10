@@ -9,9 +9,12 @@ cuboid within 0.05 mm; the next 0.1 mm must answer HTTP 422
 publishes the same measured triples on the bambu rows.
 
 Measured envelopes (inclusive, exact):
-  P1S  256 x 228 x 250 mm, alternative footprint 238 x 256 mm (L-shaped bed
+  P1S  256 x 228 x 249.9 mm, alternative footprint 238 x 256 mm (L-shaped bed
        because of the 18 x 28 mm exclude corner)
-  H2D  325 x 320 x 325 mm
+  H2D  325 x 320 x 324.9 mm
+The Z ceiling is the strictest value across the offered layer keys: at 0.3 mm
+(2026-09-10) 324.9 / 249.9 pass and 325.0 / 250.0 fail natively, while 0.2 mm
+still passes 325.0 / 250.0; the catalogue publishes one triple per printer.
 """
 
 from __future__ import annotations
@@ -52,8 +55,8 @@ SLEEP_SECONDS = 20
 FINAL_DIMENSION_TOLERANCE_MM = 0.05
 BOUNDS_ERROR_CODE = "MODEL_OUT_OF_PRINTER_BOUNDS"
 MEASURED_ENVELOPES_MM = {
-    "P1S": {"x": 256, "y": 228, "z": 250},
-    "H2D": {"x": 325, "y": 320, "z": 325},
+    "P1S": {"x": 256, "y": 228, "z": 249.9},
+    "H2D": {"x": 325, "y": 320, "z": 324.9},
 }
 P1S_ALTERNATIVE_FOOTPRINT_MM = {"x": 238, "y": 256}
 EDGE_POINTS: tuple[tuple[str, tuple[float, float, float], str, str], ...] = (
@@ -61,13 +64,13 @@ EDGE_POINTS: tuple[tuple[str, tuple[float, float, float], str, str], ...] = (
     ("P1S", (256, 228.1, 10), "fail", "primary footprint Y + 0.1 mm"),
     ("P1S", (238, 256, 10), "pass", "alternative footprint X/Y edge"),
     ("P1S", (238.1, 256, 10), "fail", "alternative footprint X + 0.1 mm"),
-    ("P1S", (20, 20, 250), "pass", "Z edge"),
-    ("P1S", (20, 20, 250.1), "fail", "Z + 0.1 mm"),
+    ("P1S", (20, 20, 249.9), "pass", "Z edge"),
+    ("P1S", (20, 20, 250), "fail", "Z + 0.1 mm"),
     ("P1S", (256, 256, 10), "fail", "full square exceeds both footprints"),
     ("H2D", (325, 320, 10), "pass", "X/Y edge"),
     ("H2D", (325.1, 320, 10), "fail", "X + 0.1 mm"),
-    ("H2D", (20, 20, 325), "pass", "Z edge"),
-    ("H2D", (20, 20, 325.1), "fail", "Z + 0.1 mm"),
+    ("H2D", (20, 20, 324.9), "pass", "Z edge"),
+    ("H2D", (20, 20, 325), "fail", "Z + 0.1 mm"),
 )
 
 

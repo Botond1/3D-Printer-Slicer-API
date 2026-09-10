@@ -45,8 +45,9 @@ several statements: the service has three engines (PrusaSlicer 2.8.1,
 OrcaSlicer 2.3.1, Bambu Studio 02.08.02.61) and four slice-service routes
 (`/prusa/slice`, `/orca/slice`, `/bambu/slice`, `/render`); `GET /profiles`
 publishes 82 rows with three engine-scoped fleets; Bambu placement is
-API-owned with measured inclusive ceilings P1S `256 x 228 x 250` (alternative
-footprint `238 x 256`) and H2D `325 x 320 x 325`; the retained Bambu artifact
+API-owned with measured inclusive ceilings P1S `256 x 228 x 249.9` (alternative
+footprint `238 x 256`) and H2D `325 x 320 x 324.9` (Z is the strictest value
+across the offered layer keys since the 0.3 mm key, 3.5.0); the retained Bambu artifact
 is `.gcode.3mf`; price rounding is integer arithmetic; the keep-alive default
 is 95000 ms. The complete current contract is in `CLAUDE.md` ("Current
 contract"), the consumer view in `docs/integration-guide.md`, and the

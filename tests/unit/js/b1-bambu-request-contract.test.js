@@ -75,8 +75,8 @@ test('bambu printer, process, layer, and material selection is strict and regist
 
     const cases = [
         [{ printerProfile: 'X1C' }, 'INVALID_PRINTER_PROFILE', /P1S, H2D/],
-        [{ printerProfile: 'H2D', layerHeight: '0.28' }, 'INVALID_LAYER_HEIGHT', /0\.08, 0\.1, 0\.12, 0\.16, 0\.2, 0\.24$/],
-        [{ layerHeight: '0.3' }, 'INVALID_LAYER_HEIGHT', /0\.28/],
+        [{ printerProfile: 'H2D', layerHeight: '0.28' }, 'INVALID_LAYER_HEIGHT', /0\.08, 0\.1, 0\.12, 0\.16, 0\.2, 0\.24, 0\.3$/],
+        [{ layerHeight: '0.32' }, 'INVALID_LAYER_HEIGHT', /0\.28, 0\.3/],
         [{ layerHeight: '0.15' }, 'INVALID_LAYER_HEIGHT', /Allowed values/],
         [{ layerHeight: 'thick' }, 'INVALID_LAYER_HEIGHT', /Invalid layerHeight/],
         [{ processProfile: '0.20mm Standard @BBL H2D' }, 'INVALID_PROCESS_PROFILE', /0\.20mm Standard @BBL X1C/],
@@ -110,7 +110,7 @@ test('bambu profile selection resolves vendor names for every registry combinati
     assert.equal(explicit.orcaFilamentConfigFile, 'Generic TPU');
     for (const [args, code] of [
         [['bambu', 'FDM', 0.2, { bambuPrinter: 'X1C' }, 'PLA'], 'INVALID_PRINTER_PROFILE'],
-        [['bambu', 'FDM', 0.3, { bambuPrinter: 'P1S' }, 'PLA'], 'INVALID_LAYER_HEIGHT'],
+        [['bambu', 'FDM', 0.32, { bambuPrinter: 'P1S' }, 'PLA'], 'INVALID_LAYER_HEIGHT'],
         [['bambu', 'FDM', 0.2, { bambuPrinter: 'P1S', bambuProcessProfile: 'nope' }, 'PLA'], 'INVALID_PROCESS_PROFILE'],
         [['bambu', 'FDM', 0.2, { bambuPrinter: 'P1S' }, 'NYLON'], 'MATERIAL_PROFILE_UNAVAILABLE'],
         [['bambu', 'SLA', 0.05, { bambuPrinter: 'P1S' }, 'Standard'], 'INVALID_LAYER_HEIGHT_FOR_TECHNOLOGY']
@@ -242,7 +242,7 @@ test('invalid requests answer 400 before enqueue and never consume a queue slot'
         [{ layerHeight: '0.2', material: 'PLA' }, 'bambu', null, 'NO_FILE_UPLOADED'],
         [{ layerHeight: '0.2', material: 'PLA', infill: '140' }, 'bambu', 'model.stl', 'INVALID_INFILL'],
         [{ layerHeight: '0.2', material: 'PLA', printerProfile: 'X1C' }, 'bambu', 'model.stl', 'INVALID_PRINTER_PROFILE'],
-        [{ layerHeight: '0.3', material: 'PLA' }, 'bambu', 'model.stl', 'INVALID_LAYER_HEIGHT'],
+        [{ layerHeight: '0.32', material: 'PLA' }, 'bambu', 'model.stl', 'INVALID_LAYER_HEIGHT'],
         [{ layerHeight: '0.2', material: 'PLA', supports: 'maybe' }, 'orca', 'model.stl', 'INVALID_SUPPORTS'],
         [{ layerHeight: '0.2', material: 'PLA', printerProfile: 'missing.ini' }, 'prusa', 'model.stl', 'PROFILE_NOT_FOUND'],
         [{ layerHeight: '0.2', material: 'PLA' }, 'prusa', 'model.exe', 'UNSUPPORTED_FILE_FORMAT']
