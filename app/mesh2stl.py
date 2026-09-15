@@ -5,13 +5,25 @@ millimetres. Invalid source geometry is reported through one machine-readable
 marker line, ``INVALID_SOURCE_GEOMETRY|<short reason>``, written to both
 stdout and stderr with exit status 2 so the API can classify it without
 parsing free-form text. No automatic repair is ever applied.
+
+A 3MF is flattened here, exactly as its build declares it (3MF core plus the
+production extension's external model parts): every build item, through
+every component with its transform, down to the mesh objects. Slicer project
+files (Bambu Studio, OrcaSlicer, PrusaSlicer) keep their geometry in such
+parts, and a generic loader can miscount instanced parts - measured on real
+customer files, one loader returned nine copies of a nine-item plate. The
+walk below is the contract.
 """
 
+import io
 import math
 import os
 import sys
+import zipfile
 
+import numpy as np
 import trimesh
+from lxml import etree
 
 
 GEOMETRY_MARKER = "INVALID_SOURCE_GEOMETRY"
@@ -102,6 +114,216 @@ def unit_scale_to_mm(units):
     return UNIT_TO_MM[label]
 
 
+THREE_MF_ROOT_MODEL = "3d/3dmodel.model"
+THREE_MF_PRINTED_TYPES = {"model", "solidsupport", "support"}
+THREE_MF_MAX_PARTS = 512
+THREE_MF_MAX_DEPTH = 16
+THREE_MF_MAX_INSTANCES = 4096
+
+
+class ThreeMfPart:
+    """One parsed ``.model`` part: its unit, objects and (root only) build items."""
+
+    def __init__(self, unit, objects, items):
+        self.unit = unit
+        self.objects = objects
+        self.items = items
+
+
+def _three_mf_key(name):
+    """Canonical archive key: forward slashes, no leading slash, lower case."""
+    return str(name or "").replace("\\", "/").lstrip("/").lower()
+
+
+def _three_mf_matrix(text):
+    """A 3MF ``transform`` (12 numbers, 4 rows x 3 columns) as a 4x4 for row vectors.
+
+    The core specification multiplies ``[x y z 1]`` from the left: the first
+    three rows rotate and scale, the fourth row translates.
+    """
+    if text is None or not str(text).strip():
+        return np.eye(4)
+    try:
+        values = [float(value) for value in str(text).split()]
+    except ValueError as error:
+        raise InvalidSourceGeometry("3mf transform is malformed") from error
+    if len(values) != 12 or not all(math.isfinite(value) for value in values):
+        raise InvalidSourceGeometry("3mf transform is malformed")
+    matrix = np.eye(4)
+    matrix[0, :3] = values[0:3]
+    matrix[1, :3] = values[3:6]
+    matrix[2, :3] = values[6:9]
+    matrix[3, :3] = values[9:12]
+    return matrix
+
+
+def _three_mf_path_attribute(element):
+    for key, value in element.attrib.items():
+        if key.rsplit("}", 1)[-1] == "path":
+            return value
+    return None
+
+
+def _three_mf_local(tag):
+    return str(tag).rsplit("}", 1)[-1]
+
+
+def _parse_three_mf_part(data, with_geometry=True):
+    """Stream one ``.model`` part. Entities are refused; nothing is resolved."""
+    lowered = data.lower()
+    if b"<!doctype" in lowered or b"<!entity" in lowered:
+        raise InvalidSourceGeometry("3mf model part declares entities")
+    unit = None
+    objects = {}
+    items = []
+    current = None
+    vertices = []
+    faces = []
+    try:
+        for event, element in etree.iterparse(io.BytesIO(data), events=("start", "end"), resolve_entities=False,
+                                              no_network=True, remove_comments=True, huge_tree=False):
+            tag = _three_mf_local(element.tag)
+            if event == "start":
+                if tag == "model":
+                    unit = element.get("unit")
+                elif tag == "object":
+                    current = {"id": element.get("id"), "type": element.get("type") or "model", "mesh": None, "components": None}
+                    vertices = []
+                    faces = []
+                elif tag == "components" and current is not None:
+                    current["components"] = []
+                continue
+            if tag == "vertex":
+                if with_geometry:
+                    vertices.append((float(element.get("x")), float(element.get("y")), float(element.get("z"))))
+                element.clear()
+            elif tag == "triangle":
+                if with_geometry:
+                    faces.append((int(element.get("v1")), int(element.get("v2")), int(element.get("v3"))))
+                else:
+                    faces.append(None)
+                element.clear()
+            elif tag == "component" and current is not None and current["components"] is not None:
+                current["components"].append((_three_mf_path_attribute(element), element.get("objectid"),
+                                              _three_mf_matrix(element.get("transform"))))
+            elif tag == "mesh" and current is not None:
+                if with_geometry:
+                    points = np.asarray(vertices, dtype=float).reshape(-1, 3)
+                    triangles = np.asarray(faces, dtype=np.int64).reshape(-1, 3)
+                    if len(triangles) and (triangles.min() < 0 or triangles.max() >= len(points)):
+                        raise InvalidSourceGeometry("3mf triangle index out of range")
+                    if not np.isfinite(points).all():
+                        raise InvalidSourceGeometry("3mf vertex is not finite")
+                    current["mesh"] = (points, triangles)
+                else:
+                    current["mesh"] = (None, len(faces))
+                vertices = []
+                faces = []
+            elif tag == "object" and current is not None:
+                objects[current["id"]] = current
+                current = None
+                element.clear()
+            elif tag == "item":
+                items.append((_three_mf_path_attribute(element), element.get("objectid"), _three_mf_matrix(element.get("transform"))))
+    except (ValueError, TypeError) as error:
+        if isinstance(error, InvalidSourceGeometry):
+            raise
+        raise InvalidSourceGeometry("3mf model part is malformed") from error
+    except etree.XMLSyntaxError as error:
+        raise InvalidSourceGeometry("3mf model part is not well-formed") from error
+    return ThreeMfPart(unit, objects, items)
+
+
+def flatten_three_mf(archive, with_geometry=True):
+    """Walk the build of an open 3MF archive.
+
+    Returns ``(mesh, scope)``: the flattened millimetre mesh (``None`` when
+    ``with_geometry`` is false) and ``{'unit', 'object_count',
+    'instance_count', 'triangle_count'}`` where ``object_count`` counts the
+    distinct mesh objects the build reaches and ``instance_count`` the build
+    items. A reference the archive cannot satisfy, an entity declaration,
+    an unbounded nesting and a build without printable triangles all raise
+    ``InvalidSourceGeometry``; nothing is guessed.
+    """
+    names = {}
+    for name in archive.namelist():
+        names.setdefault(_three_mf_key(name), name)
+    if THREE_MF_ROOT_MODEL not in names:
+        raise InvalidSourceGeometry("3mf has no root model")
+    parts = {}
+
+    def part(key):
+        key = _three_mf_key(key)
+        if key not in parts:
+            if key not in names or not key.endswith(".model"):
+                raise InvalidSourceGeometry("3mf references a missing model part")
+            if len(parts) >= THREE_MF_MAX_PARTS:
+                raise InvalidSourceGeometry("3mf references too many model parts")
+            parts[key] = _parse_three_mf_part(archive.read(names[key]), with_geometry)
+        return parts[key]
+
+    root = part(THREE_MF_ROOT_MODEL)
+    root_factor = unit_scale_to_mm(root.unit)
+    pieces = []
+    reached = set()
+    triangle_total = 0
+
+    def flatten(part_key, object_id, matrix, depth):
+        nonlocal triangle_total
+        if depth > THREE_MF_MAX_DEPTH:
+            raise InvalidSourceGeometry("3mf component nesting is too deep")
+        current_part = part(part_key)
+        target = current_part.objects.get(object_id)
+        if target is None:
+            raise InvalidSourceGeometry("3mf references a missing object")
+        if target["type"] not in THREE_MF_PRINTED_TYPES:
+            return
+        if target["components"] is not None:
+            for path, reference, component_matrix in target["components"]:
+                flatten(path if path else part_key, reference, component_matrix @ matrix, depth + 1)
+            return
+        if target["mesh"] is None:
+            return
+        points, triangles = target["mesh"]
+        count = len(triangles) if with_geometry else triangles
+        if count == 0:
+            return
+        reached.add((_three_mf_key(part_key), object_id))
+        triangle_total += count
+        if with_geometry:
+            factor = unit_scale_to_mm(current_part.unit) / root_factor
+            homogeneous = np.hstack([points * factor, np.ones((len(points), 1))]) @ matrix
+            pieces.append((homogeneous[:, :3], triangles))
+
+    if len(root.items) > THREE_MF_MAX_INSTANCES:
+        raise InvalidSourceGeometry("3mf build has too many items")
+    for path, object_id, item_matrix in root.items:
+        flatten(path if path else THREE_MF_ROOT_MODEL, object_id, item_matrix, 0)
+    scope = {"unit": root.unit or "millimeter", "object_count": len(reached),
+             "instance_count": len(root.items), "triangle_count": int(triangle_total)}
+    if triangle_total == 0:
+        raise InvalidSourceGeometry("3mf build has no printable triangles")
+    if not with_geometry:
+        return None, scope
+    offsets = np.cumsum([0] + [len(points) for points, _ in pieces[:-1]])
+    vertices = np.vstack([points for points, _ in pieces]) * root_factor
+    faces = np.vstack([triangles + offset for (_, triangles), offset in zip(pieces, offsets)])
+    return trimesh.Trimesh(vertices=vertices, faces=faces, process=False), scope
+
+
+def _load_three_mf_as_mesh(input_path):
+    try:
+        archive = zipfile.ZipFile(input_path)
+    except zipfile.BadZipFile as error:
+        raise InvalidSourceGeometry("3mf archive is unreadable") from error
+    with archive:
+        print("[PYTHON] Flattening the 3MF build...")
+        mesh, scope = flatten_three_mf(archive)
+    print(f"[PYTHON] 3MF build: {scope['instance_count']} item(s), {scope['object_count']} mesh object(s), "
+          f"{scope['triangle_count']} triangles, unit {scope['unit']}.")
+    return mesh
+
+
 def _concatenate_scene(scene):
     """Merge every scene geometry into one mesh without deprecated APIs."""
     if not scene.geometry:
@@ -132,6 +354,10 @@ def _assert_usable_mesh(mesh):
 
 def _load_as_mesh(input_path):
     """Load input file and normalize to a single millimetre-scaled mesh."""
+    if str(input_path).lower().endswith(".3mf"):
+        mesh = _load_three_mf_as_mesh(input_path)
+        _assert_usable_mesh(mesh)
+        return mesh
     loaded = trimesh.load(input_path, process=False)
     scene = loaded if isinstance(loaded, trimesh.Scene) else None
     if scene is not None:

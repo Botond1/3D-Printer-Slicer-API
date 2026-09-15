@@ -144,13 +144,16 @@ WooCommerce and LeadPilot principal families:
 
 | Category | Extensions | Notes |
 | --- | --- | --- |
-| Direct 3D | `.stl`, `.obj`, `.3mf` | 3MF `unit` attribute honoured; a multi-object 3MF scene becomes one compound STL |
+| Direct 3D | `.stl`, `.obj`, `.3mf` | 3MF `unit` attribute honoured; the build (items, components, production-extension parts under `3D/Objects/`) is flattened by the API's own walk into one compound STL |
 | NURBS / CAD | `.stp`, `.step`, `.igs`, `.iges`, `.ply` | converted with `cad2stl.py` |
 | Archive | `.zip` | exactly one supported source; `__MACOSX/`, `.DS_Store`, `Thumbs.db`, `desktop.ini`, and directory entries are tolerated; Bambu/Orca project 3MF parts under `Metadata/` and `Auxiliaries/` are admitted |
 
-Geometry is never repaired. Converter rejections print
-`INVALID_SOURCE_GEOMETRY|<reason>` and map to HTTP 400
-`INVALID_SOURCE_GEOMETRY`; a native slicer refusal (empty layer, faulty mesh,
+Geometry is never repaired, and since 3.6.0 it is described rather than
+refused: degenerate or duplicated triangles, open edges and several shells
+are admitted and named in `technical_receipt.geometry` (an open mesh adds the
+`GEOMETRY_NOT_WATERTIGHT` warning). Converter rejections, now only for
+geometry that cannot print, print `INVALID_SOURCE_GEOMETRY|<reason>` and map
+to HTTP 400 `INVALID_SOURCE_GEOMETRY`; a native slicer refusal (empty layer, faulty mesh,
 model load failure) maps to HTTP 422 `UNSLICEABLE_SOURCE_GEOMETRY`.
 
 ---

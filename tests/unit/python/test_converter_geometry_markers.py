@@ -100,9 +100,10 @@ class Mesh2StlTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.input_path = self.root / "model.3mf"
-        self.output_path = self.root / "model.3mf.stl"
-        self.input_path.write_bytes(b"not really a 3mf")
+        # Scene/unit handling is format-agnostic; the 3MF walk is covered by test_three_mf_build.py.
+        self.input_path = self.root / "model.obj"
+        self.output_path = self.root / "model.obj.stl"
+        self.input_path.write_bytes(b"not really an obj")
 
     def convert(self, loaded):
         module = load_module(MESH2STL_PATH, "mesh2stl_under_test", {"trimesh": fake_trimesh(loaded)})

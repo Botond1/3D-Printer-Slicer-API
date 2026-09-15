@@ -5,6 +5,8 @@ const hash = { type: 'string', pattern: '^[a-f0-9]{64}$' };
 const text = { type: 'string', minLength: 1, maxLength: 256 };
 const positive = { type: 'number', minimum: 0, exclusiveMinimum: true };
 const one = { type: 'integer', enum: [1] };
+const count = { type: 'integer', minimum: 0 };
+const atLeastOne = { type: 'integer', minimum: 1 };
 const yes = { type: 'boolean', enum: [true] };
 const literal = (value) => ({ type: 'string', enum: [value] });
 const object = (properties) => ({ type: 'object', additionalProperties: false,
@@ -24,9 +26,15 @@ function technicalReceiptSchema(modelTransform) {
             nozzle_diameter_mm: positive, extruder_mode: literal('single_filament_first_extruder'), bed_type: text }),
         applied: object({ layer_height_mm: positive, infill_percent: { type: 'integer', minimum: 0, maximum: 100 },
             supports: { type: 'boolean' }, material: text, evidence: literal('bambu_gcode_config'), configuration_sha256: hash }),
-        geometry: object({ valid: yes, watertight: yes, winding_consistent: yes, component_count: one,
-            volume_mm3: positive, volume_source: literal('validated_triangle_mesh'), model_transform: modelTransform }),
-        scope: object({ kind: literal('single_part'), object_count: one, instance_count: one,
+        // Since 3.6.0 the geometry block describes the sliced mesh instead of
+        // asserting one closed shell: an open mesh or several shells are
+        // admitted and named here (and an open mesh adds a warning).
+        geometry: object({ valid: yes, watertight: { type: 'boolean' }, winding_consistent: { type: 'boolean' },
+            component_count: atLeastOne, closed_component_count: count, open_edge_count: count,
+            dropped_degenerate_faces: count, dropped_duplicate_faces: count,
+            volume_mm3: positive, volume_source: { type: 'string', enum: ['validated_triangle_mesh', 'signed_volume_estimate'] },
+            model_transform: modelTransform }),
+        scope: object({ kind: literal('single_part'), object_count: atLeastOne, instance_count: atLeastOne,
             plate_count: one, filament_count: one, quantity: one }),
         estimates: object({ print_time_seconds: { type: 'integer', minimum: 1 },
             print_time_source: literal('total_estimated_time'), time_basis: literal('including_start_sequence'),
@@ -36,8 +44,8 @@ function technicalReceiptSchema(modelTransform) {
         artifact: object({ id: text, sha256: hash, size_bytes: { type: 'integer', minimum: 1 },
             media_type: literal('model/3mf'), extension: literal('.gcode.3mf'), gcode_sha256: hash,
             access: literal('artifact_audience'), retention_seconds: positive }),
-        warnings: { type: 'array', maxItems: 2, items: object({
-            code: { type: 'string', enum: ['NATIVE_WARNING_UNCLASSIFIED', 'ORIENTATION_FALLBACK'] },
+        warnings: { type: 'array', maxItems: 3, items: object({
+            code: { type: 'string', enum: ['GEOMETRY_NOT_WATERTIGHT', 'NATIVE_WARNING_UNCLASSIFIED', 'ORIENTATION_FALLBACK'] },
             severity: literal('warning'), source: { type: 'string', enum: ['native', 'geometry', 'orientation'] } }) },
         identity: object({ schema: literal('r3d-slice-identity-v1'), job_sha256: hash,
             processing_schema: literal('r3d-bambu-processing-v1') }), receipt_sha256: hash

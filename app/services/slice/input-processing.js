@@ -14,6 +14,7 @@ const {
 } = require('./command');
 const { resolvePythonHelper } = require('./helper-paths');
 const { inspectThreeMfArchive } = require('./three-mf');
+const { parseThreeMfScope, ambiguousScope } = require('./bambu-source');
 const { resolveSlicerExecutable } = require('./engine');
 const { emitEvent } = require('../observability/events');
 const {
@@ -157,9 +158,16 @@ async function convertInputToStl(processableFile, workspace, signal, options = {
         if (currentExt === '.3mf') {
             await inspectThreeMfArchive(workspace.assertContainedPath(processableFile));
             if (options.strictBambu) {
-                await runCommand(PYTHON_EXECUTABLE,
-                    [resolvePythonHelper('inspect_mesh.py'), '--3mf-scope', processableFile],
-                    { signal, ...HELPER_COMMAND_OPTIONS });
+                let scopeResult;
+                try {
+                    scopeResult = await runCommand(PYTHON_EXECUTABLE,
+                        [resolvePythonHelper('inspect_mesh.py'), '--3mf-scope', processableFile],
+                        { signal, ...HELPER_COMMAND_OPTIONS });
+                } catch (error) {
+                    if (/INVALID_SOURCE_GEOMETRY\|ambiguous_scope/.test(error?.stderr || '')) throw ambiguousScope();
+                    throw error;
+                }
+                if (typeof options.onThreeMfScope === 'function') options.onThreeMfScope(parseThreeMfScope(scopeResult.stdout));
             }
             throwIfAborted(signal);
         }

@@ -19,9 +19,14 @@ def validate_receipt(body, case):
             or applied.get('supports') is not (case.supports == 'true')
             or applied.get('material') != case.material):
         return False, 'applied native configuration differs'
-    if receipt.get('scope') != dict(kind='single_part', object_count=1,
-                                   instance_count=1, plate_count=1, filament_count=1, quantity=1):
+    scope = receipt.get('scope', {})
+    if (scope.get('kind') != 'single_part' or scope.get('plate_count') != 1 or scope.get('filament_count') != 1
+            or scope.get('quantity') != 1 or not isinstance(scope.get('object_count'), int) or scope['object_count'] < 1
+            or not isinstance(scope.get('instance_count'), int) or scope['instance_count'] < 1):
         return False, 'unverified manufacturing scope'
+    ok, reason = validate_geometry_description(receipt, case)
+    if not ok:
+        return False, reason
     estimates = receipt.get('estimates', {})
     stats = body.get('stats', {})
     if (estimates.get('print_time_seconds') != stats.get('print_time_seconds')
@@ -30,6 +35,31 @@ def validate_receipt(body, case):
             or estimates.get('support_material_g') is not None):
         return False, 'estimate provenance mismatch'
     return True, 'native receipt binds exact source, applied config, geometry, scope and estimates'
+
+
+def validate_geometry_description(receipt, case):
+    """3.6.0: the receipt describes the sliced mesh; the synthetic defects must be named, not hidden."""
+    geometry = receipt.get('geometry', {})
+    counts = ('component_count', 'closed_component_count', 'open_edge_count', 'dropped_degenerate_faces', 'dropped_duplicate_faces')
+    if (not isinstance(geometry.get('watertight'), bool) or not isinstance(geometry.get('winding_consistent'), bool)
+            or any(not isinstance(geometry.get(key), int) or geometry[key] < 0 for key in counts)
+            or geometry['component_count'] < 1 or geometry['closed_component_count'] > geometry['component_count']
+            or geometry.get('volume_source') not in ('validated_triangle_mesh', 'signed_volume_estimate')
+            or not (isinstance(geometry.get('volume_mm3'), (int, float)) and geometry['volume_mm3'] > 0)):
+        return False, 'geometry description missing or malformed'
+    warned = any(w.get('code') == 'GEOMETRY_NOT_WATERTIGHT' for w in receipt.get('warnings', []))
+    if geometry['watertight'] is warned or (geometry['watertight'] and geometry['open_edge_count'] != 0):
+        return False, 'open-mesh warning disagrees with the geometry description'
+    expectations = {
+        'open': lambda g: g['watertight'] is False and g['open_edge_count'] > 0,
+        'degenerate': lambda g: g['dropped_degenerate_faces'] >= 1,
+        'compound': lambda g: g['component_count'] == 2 and g['closed_component_count'] == 2 and g['watertight'] is True,
+        'cuboid': lambda g: g['watertight'] is True and g['component_count'] == 1 and g['volume_source'] == 'validated_triangle_mesh',
+    }
+    check = expectations.get(getattr(case, 'fixture_label', None))
+    if check is not None and not check(geometry):
+        return False, f'geometry description does not name the {case.fixture_label} fixture'
+    return True, 'geometry described'
 
 
 def additional_receipt_cases(case_type, fixtures):
@@ -51,16 +81,14 @@ def additional_receipt_cases(case_type, fixtures):
             x = struct.unpack_from('<f', second, offset + vertex)[0]
             struct.pack_into('<f', second, offset + vertex, x + 100)
     compound.write_bytes(data[:80] + struct.pack('<I', 24) + data[84:] + second)
-    cases = []
-    for name, file, status, code in [
-        ('open', opened, 400, 'INVALID_SOURCE_GEOMETRY'),
-        ('empty', empty, 400, 'INVALID_SOURCE_GEOMETRY'),
-        ('degenerate', degenerate, 400, 'INVALID_SOURCE_GEOMETRY'),
-        ('compound', compound, 422, 'AMBIGUOUS_MANUFACTURING_SCOPE'),
-    ]:
-        cases.append(case_type(name=f'{name} source rejected', kind='negative', fixture_path=file,
-            fixture_label=name, printer='P1S', layer_height='0.2', material='PLA', supports='true',
-            expected_status=status, expected_error_codes=(code,)))
+    cases = [case_type(name='empty source rejected', kind='negative', fixture_path=empty,
+        fixture_label='empty', printer='P1S', layer_height='0.2', material='PLA', supports='true',
+        expected_status=400, expected_error_codes=('INVALID_SOURCE_GEOMETRY',))]
+    # 3.6.0: an open box, a box with one degenerate triangle and two separate boxes are
+    # admitted and DESCRIBED (validate_geometry_description pins what each must name).
+    for name, file in [('open', opened), ('degenerate', degenerate), ('compound', compound)]:
+        cases.append(case_type(name=f'{name} source admitted and described', kind='receipt', fixture_path=file,
+            fixture_label=name, printer='P1S', layer_height='0.2', material='PLA', supports='true'))
     for name, fields in [
         ('0.1 mm native layer', {'layer_height': '0.1'}),
         ('30 percent native infill', {'infill': '30'}),

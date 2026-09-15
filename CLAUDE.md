@@ -8,7 +8,7 @@ The Prusa `material-v1` catalogue and native material-specific hash compatibilit
 
 The Slicer implements the Bambu automatic FDM contract and the WordPress ZIP uses it. The separate LeadPilot implementation remains outside this release under the owner stop instruction. `POST /bambu/slice` adds `applied_layer_height_mm` and `technical_receipt` (`r3d-technical-receipt-v1`); source/native build/profile/configuration/geometry/scope/estimate/artifact identities are explicit. The existing profile digest schema and Prusa material-v1/v3 repair remain intact. Bambu catalogue rows add measurement/build/bundle hashes and unavailable optional engines are omitted; default-v2 Bambu rows therefore receive additive fields and a new ETag. Strict catalogue readers must accept these documented fields before rollout.
 
-Startup requires actual Bambu version/build, the frozen resolved vendor bundle, and successful imports of the common Python dependencies. Missing Prusa/Orca is separately visible in protected readiness and cannot trigger a fallback; unavailable selected engines return503 `SLICER_ENGINE_UNAVAILABLE` before workspace allocation. Closed, finite, consistently wound single solids only: no geometry repair, multiple connected components or ambiguous 3MF object/build hierarchies. Native applied config, one plate/filament, positive toolpath totals and retained-project G-code bytes are checked before artifact promotion. Native warning text becomes bounded generic warning codes; unknown subtotals remain null.
+Startup requires actual Bambu version/build, the frozen resolved vendor bundle, and successful imports of the common Python dependencies. Missing Prusa/Orca is separately visible in protected readiness and cannot trigger a fallback; unavailable selected engines return503 `SLICER_ENGINE_UNAVAILABLE` before workspace allocation. Since 3.6.0 the admission describes ordinary real-world meshes instead of refusing them (degenerate/duplicate triangles dropped from the analysis, open meshes and several shells admitted and named in `technical_receipt.geometry`, an open mesh adds `GEOMETRY_NOT_WATERTIGHT`); only unprintable geometry is refused, and a 3MF build the API's own walk cannot satisfy (or one carrying modifier/negative parts) is `AMBIGUOUS_MANUFACTURING_SCOPE`. Nothing is repaired: the submitted geometry is what gets sliced. Native applied config, one plate/filament, positive toolpath totals and retained-project G-code bytes are checked before artifact promotion. Native warning text becomes bounded generic warning codes; unknown subtotals remain null.
 
 Owner-authorized release: signed main `4539c539d15dacb19cde7e246aab690cc11170e7` is deployed as `ghcr.io/botond1/3d-printer-slicer-api@sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9`. Read `docs/codex/handoff-2026-09-07-bambu-deployed.md` for exact CI, native, consumer, deployment and rollback evidence. The WordPress deliverable is a local ZIP; further LeadPilot work is forbidden by the owner. Public routes, allowlists, credentials, pricing and the existing operator packs remain unchanged. Further changes require new task-specific authorization.
 
@@ -91,9 +91,15 @@ under `docs/codex/evidence/`.
   match case-insensitively and Bambu/Orca project parts under `Metadata/` and
   `Auxiliaries/` are admitted. `mesh2stl.py` honours the 3MF `unit` attribute
   and concatenates a multi-object scene into one compound STL (no
-  split-to-objects). Converters print `INVALID_SOURCE_GEOMETRY|<reason>` on
-  stdout and stderr with exit 2, mapped to HTTP 400 `INVALID_SOURCE_GEOMETRY`.
-  Geometry is never repaired.
+  split-to-objects). Since 3.6.0 a 3MF is flattened by the API's own walk of
+  the build (core plus the production extension's `3D/Objects/*.model`
+  parts): items, components and their transforms, the root `unit` applied;
+  a generic loader miscounted instanced parts, so it is not used for 3MF.
+  Converters print `INVALID_SOURCE_GEOMETRY|<reason>` on stdout and stderr
+  with exit 2, mapped to HTTP 400 `INVALID_SOURCE_GEOMETRY`, now only for
+  geometry that cannot print (empty, unreadable, no finite coordinate, every
+  triangle degenerate, zero extent or volume). Geometry is never repaired:
+  the submitted mesh is sliced as-is and described, not fixed.
 - `supports` defaults to `true` on all engines; any other present non-empty
   value than `true`/`false` is HTTP 400 `INVALID_SUPPORTS`. `infill` is a
   strict integer `0..100` with an optional trailing `%`, never clamped,

@@ -178,7 +178,7 @@ function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, g
 
     const receiptErrors = {
         BAMBU_RESULT_UNVERIFIED: [422, 'Bambu native configuration, scope or output could not be verified.'],
-        AMBIGUOUS_MANUFACTURING_SCOPE: [422, 'Automatic Bambu slicing requires one connected solid and one build instance.'],
+        AMBIGUOUS_MANUFACTURING_SCOPE: [422, 'Automatic Bambu slicing needs a 3MF whose build items reference plain mesh objects in one model part; assemblies (components) and external part references are not admitted.'],
         SLICE_IDENTITY_MISMATCH: [409, 'Selected profile or measurement generation is stale.']
     };
     if (Object.hasOwn(receiptErrors, err?.code)) {
@@ -255,7 +255,7 @@ function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, g
     if (isSourceGeometryError(err)) {
         return res.status(400).json({
             success: false,
-            error: 'Uploaded model contains invalid or non-printable source data. Automatic repair is disabled to preserve exact model fidelity. Please upload a corrected model file.',
+            error: 'The uploaded model holds no printable geometry: it is empty, unreadable, has no finite coordinates, or encloses no volume. Please upload a corrected model file.',
             errorCode: 'INVALID_SOURCE_GEOMETRY'
         });
     }

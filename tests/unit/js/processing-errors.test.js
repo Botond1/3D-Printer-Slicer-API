@@ -72,7 +72,7 @@ test('invalid source geometry maps live to INVALID_SOURCE_GEOMETRY (400)', () =>
     assertProcessingMapping(result, 400, 'INVALID_SOURCE_GEOMETRY');
     assert.match(
         result.body.error,
-        /Automatic repair is disabled to preserve exact model fidelity\./
+        /holds no printable geometry/
     );
 });
 
