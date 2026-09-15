@@ -53,10 +53,12 @@ async function prepareProcessableModel(inputFile, technology, orientationMode, w
         processableFile = await extractFirstSupportedFromZip(processableFile, workspace);
         throwIfAborted(signal);
     }
-    processableFile = await convertInputToStl(processableFile, workspace, signal, { strictBambu: engine === 'bambu' });
+    let threeMfScope = null;
+    processableFile = await convertInputToStl(processableFile, workspace, signal,
+        { strictBambu: engine === 'bambu', onThreeMfScope: (scope) => { threeMfScope = scope; } });
     await assertBoundedModelFile(processableFile, workspace);
     throwIfAborted(signal);
-    const sourceEvidence = engine === 'bambu' ? await captureBambuSource(inputFile, processableFile, signal) : null;
+    const sourceEvidence = engine === 'bambu' ? await captureBambuSource(inputFile, processableFile, signal, threeMfScope) : null;
     const measure = engine === 'bambu' ? measureBambuMesh : getModelInfo;
     // The source evidence already inspected this very file; a second helper
     // run on it would only repeat the same trimesh import and answer.

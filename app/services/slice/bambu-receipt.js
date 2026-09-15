@@ -100,8 +100,11 @@ function assertExpectedIdentity(context, effectiveProfileSha256) {
     }
 }
 
-function collectWarnings(result, plate, modelTransform, nativeResult = {}) {
+function collectWarnings(result, plate, modelTransform, nativeResult = {}, geometry = null) {
     const warnings = [];
+    if (geometry && geometry.watertight === false) {
+        warnings.push({ code: 'GEOMETRY_NOT_WATERTIGHT', severity: 'warning', source: 'geometry' });
+    }
     if ((typeof plate.warning_message === 'string' && plate.warning_message.trim())
         || (Array.isArray(result.warnings) && result.warnings.length)
         || /\b(?:warning|warn)\b/i.test(`${nativeResult.stdout || ''}\n${nativeResult.stderr || ''}`)) {
@@ -144,8 +147,16 @@ async function buildBambuReceipt(context, generated, stats, effectiveProfileSha2
         process_sha256: await hashFile(runtimeConfigFile), filament_sha256: await hashFile(context.orcaFilamentConfigFile),
         nozzle_diameter_mm: Number(config.nozzle_diameter.split(',')[0]),
         extruder_mode: 'single_filament_first_extruder', bed_type: printer.bedType };
-    const scope = { kind: 'single_part', object_count: 1, instance_count: 1, plate_count: 1, filament_count: 1, quantity: 1 };
-    const geometry = { valid: true, watertight: true, winding_consistent: true, component_count: 1,
+    // One manufacturing unit: everything the file holds prints together on one
+    // plate with one filament. The source build's own counts and the mesh's
+    // shells are reported, never folded into a business quantity.
+    const sourceScope = context.sourceEvidence?.scope || {};
+    const scope = { kind: 'single_part', object_count: sourceScope.object_count ?? 1,
+        instance_count: sourceScope.instance_count ?? 1, plate_count: 1, filament_count: 1, quantity: 1 };
+    const geometry = { valid: true, watertight: finalGeometry.watertight, winding_consistent: finalGeometry.winding_consistent,
+        component_count: finalGeometry.component_count, closed_component_count: finalGeometry.closed_component_count,
+        open_edge_count: finalGeometry.open_edge_count, dropped_degenerate_faces: finalGeometry.dropped_degenerate_faces,
+        dropped_duplicate_faces: finalGeometry.dropped_duplicate_faces,
         volume_mm3: finalGeometry.volume_mm3, volume_source: finalGeometry.volume_source, model_transform: context.modelTransform };
     const jobIdentity = { engine: generation.engine, profiles, applied, source, geometry, scope };
     const artifactStat = await fs.stat(generated.artifactPath);
@@ -164,7 +175,7 @@ async function buildBambuReceipt(context, generated, stats, effectiveProfileSha2
         artifact: { id: info.artifactId, sha256: await hashFile(generated.artifactPath), size_bytes: artifactStat.size,
             media_type: 'model/3mf', extension: '.gcode.3mf', gcode_sha256: gcodeSha256,
             access: 'artifact_audience', retention_seconds: policy.ARTIFACT_TTL_MS / 1000 },
-        warnings: collectWarnings(result, plate, context.modelTransform, nativeResult),
+        warnings: collectWarnings(result, plate, context.modelTransform, nativeResult, geometry),
         identity: { schema: 'r3d-slice-identity-v1', job_sha256: hashValue(jobIdentity), processing_schema: PROCESSING_SCHEMA } };
     receipt.receipt_sha256 = hashValue(receipt);
     return receipt;

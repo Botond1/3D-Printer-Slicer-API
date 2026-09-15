@@ -10,7 +10,7 @@ const { archiveIdentity, openZipWithRetry } = require('./zip-open');
 const REQUIRED_PARTS = new Set(['[Content_Types].xml', '_rels/.rels', '3D/3dmodel.model']);
 const REQUIRED_PARTS_LOWER = new Set([...REQUIRED_PARTS].map((part) => part.toLowerCase()));
 /** Allowed top-level package directories, compared case-insensitively like duplicate detection. */
-const ALLOWED_ROOTS = new Set(['_rels', '3d', 'metadata', 'auxiliaries', 'textures']);
+const ALLOWED_ROOTS = new Set(['_rels', '3d', 'metadata', 'auxiliaries', 'textures', 'cura']);
 /** Part types accepted under any allowed root (OPC core plus texture/thumbnail parts). */
 const ALLOWED_EXTENSIONS = new Set([
     '.xml', '.rels', '.model', '.config', '.json', '.png', '.jpg', '.jpeg', '.pmap'
@@ -18,13 +18,16 @@ const ALLOWED_EXTENSIONS = new Set([
 /**
  * Additional part types that Bambu Studio / OrcaSlicer project exports place
  * under `Metadata/` and `Auxiliaries/` (plate G-code, checksums, thumbnails,
- * settings, notes). They are inspected for envelope safety and then ignored
- * by the converter; only `3D/3dmodel.model` geometry is used.
+ * settings, notes, the model and profile pictures Bambu Studio stores as
+ * `.webp`, attached `.pdf` sheets) and Cura under `Cura/` (`.cfg`, `.ini`,
+ * `.fdm_material`, `.json`). They are inspected for envelope safety and then ignored
+ * by the converter; the geometry comes from `3D/3dmodel.model` and the
+ * production-extension model parts it references (`3D/Objects/*.model`).
  */
 const PROJECT_METADATA_EXTENSIONS = new Set([
-    '.gcode', '.md5', '.png', '.json', '.config', '.xml', '.txt'
+    '.gcode', '.md5', '.png', '.json', '.config', '.xml', '.txt', '.webp', '.pdf', '.cfg', '.ini', '.fdm_material'
 ]);
-const PROJECT_METADATA_ROOTS = new Set(['metadata', 'auxiliaries']);
+const PROJECT_METADATA_ROOTS = new Set(['metadata', 'auxiliaries', 'cura']);
 
 function canonicalThreeMfPartName(name) {
     const raw = String(name || '');

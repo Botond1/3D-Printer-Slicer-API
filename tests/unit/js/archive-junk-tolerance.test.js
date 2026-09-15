@@ -95,13 +95,16 @@ test('3MF roots match case-insensitively and Bambu/Orca project parts are admitt
         '3d/3dmodel.model', '3D/3DMODEL.MODEL', 'metadata/plate_1.gcode', 'Metadata/plate_1.gcode.md5',
         'Metadata/plate_1.png', 'Metadata/project_settings.config', 'Metadata/model_settings.config',
         'Metadata/slice_info.config', 'Metadata/cut_information.xml', 'Metadata/plate_1.json',
-        'Metadata/note.txt', 'Auxiliaries/readme.txt', 'AUXILIARIES/thumb.png', 'Textures/wood.jpg'
+        'Metadata/note.txt', 'Auxiliaries/readme.txt', 'AUXILIARIES/thumb.png', 'Textures/wood.jpg',
+        // Measured on 228 customer 3MFs (2026-09-15): Bambu Studio model/profile pictures, attached sheets, Cura profiles.
+        'Auxiliaries/Model Pictures/IMG_0497.webp', 'Auxiliaries/Profile Pictures/print.webp', 'Auxiliaries/sheet.pdf',
+        'Cura/Creality Ender-3 Pro.global.cfg', 'Cura/base_global_standard.inst.cfg', 'Cura/material.fdm_material', 'Cura/plugin.json'
     ]) {
         assert.equal(isAllowedThreeMfPart(part), true, part);
     }
     for (const part of [
         '3D/plate_1.gcode', '3D/payload.exe', 'Metadata/payload.exe', 'Metadata/run.sh',
-        'Textures/notes.txt', 'Other/model.model', 'plate_1.gcode'
+        'Textures/notes.txt', 'Other/model.model', 'plate_1.gcode', 'Cura/payload.exe', 'Cura/run.sh', '3D/photo.webp'
     ]) {
         assert.equal(isAllowedThreeMfPart(part), false, part);
     }
