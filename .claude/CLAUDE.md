@@ -4,6 +4,16 @@ Last synchronized: 2026-09-07
 
 The Prusa `material-v1` catalogue and native material-specific hash compatibility are included in this release. The earlier access blocker and Windows-only state in `handoff-2026-09-06-calculator.md` are historical; use the dated deployed handoff below.
 
+## Deployed release 3.6.0 — 2026-09-15
+
+Signed main `bd41b667a38c3792d0e9ff5de6596b4c8a9c3134` runs on the Slicer VPS as
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:9aff946439db5350a2ccb651dce45994a7fb1020c0a48ca5855346404a4c9af3`
+(Bambu `measurement_generation` `0af5bd3e…`). `POST /bambu/slice` admits and
+describes ordinary real-world meshes and flattens 3MF by the API's own build
+walk; see `docs/codex/handoff-2026-09-15-lenient-admission-deployed.md` and the
+CHANGELOG 3.6.0 entry. The paragraphs below describe earlier releases where they
+say so.
+
 ## Bambu receipt and readiness contract — released 2026-09-07
 
 The Slicer implements the Bambu automatic FDM contract and the WordPress ZIP uses it. The separate LeadPilot implementation remains outside this release under the owner stop instruction. `POST /bambu/slice` adds `applied_layer_height_mm` and `technical_receipt` (`r3d-technical-receipt-v1`); source/native build/profile/configuration/geometry/scope/estimate/artifact identities are explicit. The existing profile digest schema and Prusa material-v1/v3 repair remain intact. Bambu catalogue rows add measurement/build/bundle hashes and unavailable optional engines are omitted; default-v2 Bambu rows therefore receive additive fields and a new ETag. Strict catalogue readers must accept these documented fields before rollout.
