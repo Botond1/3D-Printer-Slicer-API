@@ -21,9 +21,11 @@ import os
 import sys
 import zipfile
 
-import numpy as np
 import trimesh
-from lxml import etree
+
+# numpy and lxml are pinned in the image and imported where the 3MF walk needs
+# them, so the converter module still loads (and its marker contract still
+# tests) on a machine without the geometry stack.
 
 
 GEOMETRY_MARKER = "INVALID_SOURCE_GEOMETRY"
@@ -141,6 +143,8 @@ def _three_mf_matrix(text):
     The core specification multiplies ``[x y z 1]`` from the left: the first
     three rows rotate and scale, the fourth row translates.
     """
+    import numpy as np
+
     if text is None or not str(text).strip():
         return np.eye(4)
     try:
@@ -170,6 +174,9 @@ def _three_mf_local(tag):
 
 def _parse_three_mf_part(data, with_geometry=True):
     """Stream one ``.model`` part. Entities are refused; nothing is resolved."""
+    import numpy as np
+    from lxml import etree
+
     lowered = data.lower()
     if b"<!doctype" in lowered or b"<!entity" in lowered:
         raise InvalidSourceGeometry("3mf model part declares entities")
@@ -245,6 +252,8 @@ def flatten_three_mf(archive, with_geometry=True):
     an unbounded nesting and a build without printable triangles all raise
     ``InvalidSourceGeometry``; nothing is guessed.
     """
+    import numpy as np
+
     names = {}
     for name in archive.namelist():
         names.setdefault(_three_mf_key(name), name)
