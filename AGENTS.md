@@ -1,10 +1,14 @@
 # Codex operating guide
 
-Current deployed release: `8bf11c9661c4c6bab7ff2b8343db40a6134f15a0`, image
-`ghcr.io/botond1/3d-printer-slicer-api@sha256:b3b7a616daa34f2635a9df8040d4b26b13a4cdd32c341de7023565a26d3eab99`.
-Read `docs/codex/handoff-2026-09-07-vps-finalized.md` first: exact publication,
-automatic rollback, native production and repeated perimeter proofs are complete.
-The prior continuation/release paragraphs below retain their historical scope.
+Current deployed release: **3.6.0**, signed main
+`bd41b667a38c3792d0e9ff5de6596b4c8a9c3134`, image
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:9aff946439db5350a2ccb651dce45994a7fb1020c0a48ca5855346404a4c9af3`
+(cut over 2026-09-15, registry tree `5794efad…` unchanged). Read
+`docs/codex/handoff-2026-09-15-lenient-admission-deployed.md` first: real-world
+meshes are admitted and described, 3MF is flattened by the API's own build walk,
+`measurement_generation` is `0af5bd3e…`. Earlier deployment handoffs
+(`handoff-2026-09-08-bambu-orient-deployed.md`, `handoff-2026-09-07-vps-finalized.md`)
+retain their historical scope.
 
 Current continuation: `docs/codex/handoff-2026-09-07-vps-finalization.md`
 records the owner-authorized material-receipt correction, protected release
