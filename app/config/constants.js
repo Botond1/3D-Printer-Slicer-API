@@ -196,6 +196,21 @@ const BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM = Object.freeze({
 const BAMBU_P1S_ALTERNATIVE_FOOTPRINT_INCLUSIVE_MM = Object.freeze({ x: 238, y: 256 });
 
 /**
+ * The X/Y footprints each Bambu machine admits beyond its published
+ * largest-passing triple, up to the same Z, keyed like
+ * `BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM`. Since 3.7.0 the opt-in
+ * catalogue v3 publishes them as `alternative_footprints_inclusive_mm`, so a
+ * consumer that checks the triple does not refuse a part the placement
+ * admits (a `179 x 233.8 mm` P1S pose was moved to the H2D by the R3D plugin
+ * on 2026-09-22). Admission itself stays with `bambu-placement.js`; a unit
+ * test binds every entry here to the real placement.
+ */
+const BAMBU_ALTERNATIVE_FOOTPRINTS_INCLUSIVE_MM = Object.freeze({
+    'Bambu Lab P1S 0.4 nozzle': Object.freeze([BAMBU_P1S_ALTERNATIVE_FOOTPRINT_INCLUSIVE_MM]),
+    'Bambu Lab H2D 0.4 nozzle': Object.freeze([])
+});
+
+/**
  * Validation-only fallback derates for non-catalogued FDM profiles. Known
  * server-owned profiles always use one of the explicit tables above.
  */
@@ -250,6 +265,7 @@ module.exports = {
     BAMBU_DEFAULT_PROFILES_ROOT,
     BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     BAMBU_P1S_ALTERNATIVE_FOOTPRINT_INCLUSIVE_MM,
+    BAMBU_ALTERNATIVE_FOOTPRINTS_INCLUSIVE_MM,
     DEFAULT_PRICING,
     MAX_BUILD_VOLUMES,
     P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,

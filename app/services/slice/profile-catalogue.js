@@ -5,6 +5,7 @@
 const crypto = require('node:crypto');
 const path = require('node:path');
 const {
+    BAMBU_ALTERNATIVE_FOOTPRINTS_INCLUSIVE_MM,
     DEFAULTS,
     LAYER_HEIGHTS,
     ORCA_FILAMENT_PROFILE_BY_MATERIAL
@@ -172,6 +173,7 @@ function validateCatalogueEntryIdentity(entry) {
         'build-volume source profile'
     );
     requireExactObjectKeys(entry.build_volume_limits_mm, [
+        'alternative_footprints_inclusive_mm',
         'declared_build_volume_dimensions_mm',
         'declared_source_kind',
         'largest_passing_dimensions_inclusive_mm',
@@ -182,6 +184,7 @@ function validateCatalogueEntryIdentity(entry) {
         throw new Error('Catalogue declared build-volume source kind is invalid.');
     }
     copyEnvelope(entry);
+    copyAlternativeFootprints(entry);
     for (const component of entry.profile_components) {
         requireCatalogueString(component.role, CATALOGUE_STRING_CONTRACTS.profileRole, 'profile role');
         requireCatalogueString(
@@ -480,6 +483,10 @@ async function buildCatalogueEntry(definition, engineVersions, workspace, depend
             largest_passing_dimensions_inclusive_mm: {
                 ...limits.largestPassingDimensionsInclusive
             },
+            // Catalogue v3 only (3.7.0); stripped from v2 by legacyCatalogueRow().
+            alternative_footprints_inclusive_mm: alternativeFootprintsFor(
+                definition.engine, limits.sourceProfile
+            ),
             source_profile: limits.sourceProfile,
             declared_source_kind: 'profile-explicit'
         },
@@ -558,6 +565,63 @@ function copyEnvelope(entry) {
     return envelope;
 }
 
+const MAX_ALTERNATIVE_FOOTPRINTS = 4;
+
+/**
+ * The X/Y footprints a machine admits beyond its largest-passing triple, up to
+ * the same Z (3.7.0). Bambu rows read the measured table keyed by the vendor
+ * machine name; every other engine keeps per-axis admission and publishes none.
+ */
+function alternativeFootprintsFor(engine, sourceProfile) {
+    const table = engine === 'bambu' ? BAMBU_ALTERNATIVE_FOOTPRINTS_INCLUSIVE_MM : null;
+    const footprints = table && Object.hasOwn(table, sourceProfile) ? table[sourceProfile] : [];
+    return footprints.map((footprint) => ({ x: footprint.x, y: footprint.y }));
+}
+
+/**
+ * Validate the published alternative footprints: at most four exact `{x, y}`
+ * pairs, only on an engine whose admission is placement on the real bed
+ * (Bambu; Prusa and Orca compare axis by axis), each inside the declared bed
+ * and above the minimum, and each extending beyond the largest-passing triple
+ * on exactly one of X and Y: a footprint inside the triple says nothing, and
+ * one beyond it on both axes would contradict "largest passing".
+ */
+function copyAlternativeFootprints(entry) {
+    const footprints = entry?.build_volume_limits_mm?.alternative_footprints_inclusive_mm;
+    if (!Array.isArray(footprints) || footprints.length > MAX_ALTERNATIVE_FOOTPRINTS) {
+        throw new Error('Catalogue alternative footprints violate their public contract.');
+    }
+    if (footprints.length > 0 && entry.engine !== 'bambu') {
+        throw new Error('Catalogue alternative footprints are published only for placement-admitting engines.');
+    }
+    const envelope = copyEnvelope(entry);
+    return footprints.map((footprint) => {
+        requireExactObjectKeys(footprint, ['x', 'y'], 'alternative footprint');
+        const copy = { x: footprint.x, y: footprint.y };
+        const inside = ['x', 'y'].every((axis) => (
+            Number.isFinite(copy[axis])
+            && copy[axis] > envelope.minimum[axis]
+            && copy[axis] <= envelope.declared[axis]
+        ));
+        const beyondX = copy.x > envelope.largestPassing.x;
+        const beyondY = copy.y > envelope.largestPassing.y;
+        if (!inside || beyondX === beyondY) {
+            throw new Error('Catalogue alternative footprint is outside the machine envelope or does not extend exactly one axis of it.');
+        }
+        return copy;
+    });
+}
+
+/**
+ * Catalogue v2 rows are the v3 rows without the opt-in fields: the Prusa
+ * `material_profiles` and, since 3.7.0, `alternative_footprints_inclusive_mm`.
+ * The v2 body and its `catalogue_sha256` therefore stay byte-identical.
+ */
+function legacyCatalogueRow({ material_profiles, ...row }) {
+    const { alternative_footprints_inclusive_mm, ...limits } = row.build_volume_limits_mm;
+    return { ...row, build_volume_limits_mm: limits };
+}
+
 function envelopeIdentity(envelope) {
     return JSON.stringify(canonicalizeJsonValue(envelope));
 }
@@ -629,6 +693,17 @@ function deriveMachineAndFleetResolutions(profiles) {
             );
         }
         machine.envelope ||= envelope;
+        // 3.7.0: the presets of one machine publish one bed shape. v2 rows (no
+        // field) count as no alternative footprints.
+        const footprints = JSON.stringify(canonicalizeJsonValue(
+            profile?.build_volume_limits_mm?.alternative_footprints_inclusive_mm ?? []
+        ));
+        if (machine.footprints !== undefined && machine.footprints !== footprints) {
+            throw new Error(
+                `Catalogue ${technology} printer ${printerId} engine ${engine} has inconsistent preset footprints.`
+            );
+        }
+        machine.footprints ??= footprints;
     }
 
     const machineResolutions = [...machines.values()]
@@ -810,7 +885,7 @@ async function buildProfileCatalogue(options = {}) {
     const content = {
         schema: PROFILE_CATALOGUE_SCHEMA,
         semantics: CATALOGUE_SEMANTICS,
-        profiles: entries.map(({ material_profiles, ...legacy }) => legacy),
+        profiles: entries.map(legacyCatalogueRow),
         machine_resolutions: machineResolutions,
         fleet_resolutions: fleetResolutions
     };

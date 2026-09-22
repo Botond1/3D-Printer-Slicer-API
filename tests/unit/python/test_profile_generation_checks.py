@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "testing-scripts"))
-from common.profile_generation_checks import BAMBU_FIELDS, generation_shape, material_parity_digest
+from common.profile_generation_checks import BAMBU_FIELDS, generation_shape, material_parity_digest, v2_projection
 
 
 class ProfileGenerationChecksTests(unittest.TestCase):
@@ -40,6 +40,18 @@ class ProfileGenerationChecksTests(unittest.TestCase):
         for candidate in [{**body, "schema": "r3d-profile-catalogue-v2"}, {**body, "profiles": body["profiles"] * 2}]:
             self.assertIsNone(material_parity_digest(candidate, generic, "PLA"))
         body["profiles"][0]["effective_profile_sha256"] = "c" * 64
+        self.assertIsNone(material_parity_digest(body, generic, "PLA"))
+
+    def test_v3_only_build_volume_field_is_not_part_of_the_v2_row(self):
+        # 3.7.0: every v3 row carries alternative_footprints_inclusive_mm; v2 omits it.
+        generic, body = self.fixture()
+        limits = {"largest_passing_dimensions_inclusive_mm": {"x": 256, "y": 256, "z": 249.9}, "source_profile": "FDM_0.2mm.ini"}
+        generic["build_volume_limits_mm"] = dict(limits)
+        body["profiles"][0]["build_volume_limits_mm"] = {**limits, "alternative_footprints_inclusive_mm": []}
+        self.assertEqual(material_parity_digest(body, generic, "PLA"), "b" * 64)
+        self.assertEqual(v2_projection(body["profiles"][0]), generic)
+        # Any other difference in the limits still breaks the binding.
+        body["profiles"][0]["build_volume_limits_mm"]["source_profile"] = "other.ini"
         self.assertIsNone(material_parity_digest(body, generic, "PLA"))
 
     def test_invalid_material_variants_fail_closed(self):

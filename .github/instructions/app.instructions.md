@@ -123,7 +123,8 @@ Last synchronized: 2026-09-06
   `machine_resolutions`/`fleet_resolutions`, no cross-engine merge, no manual
   maximum, never the generic SLA fallback or a guessed Elegoo envelope.
 - Keep the measured ceilings: Bambu P1S `256 x 228 x 250` (alternative
-  `238 x 256`, L-shaped through real placement), Bambu H2D `325 x 320 x 325`,
+  `238 x 256`, L-shaped through real placement, published in catalogue v3 as
+  `alternative_footprints_inclusive_mm` since 3.7.0), Bambu H2D `325 x 320 x 325`,
   Prusa P1S `256 x 256 x 249.9`, Orca P1S `253.9 x 253.9 x 249.9`, Prusa
   H2D-QUOTE `350 x 320 x 324.9`, Orca H2D-QUOTE `347.9 x 317.9 x 324.9`.
   H2D-QUOTE is quote-only P1S physics; real H2D output comes from Bambu.

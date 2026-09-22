@@ -33,6 +33,7 @@ test.after(() => {
 });
 
 const {
+    BAMBU_ALTERNATIVE_FOOTPRINTS_INCLUSIVE_MM,
     BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM,
     BAMBU_P1S_ALTERNATIVE_FOOTPRINT_INCLUSIVE_MM
 } = require('../../../app/config/constants');
@@ -352,6 +353,33 @@ test('placement-aware validation admits the L-shaped P1S footprint and keeps the
         isValid: true, dimensions: { x: 100, y: 100, z: 20 }
     });
     assert.deepEqual(describePlacementRejection({ reason: 'unknown' }, { x: 1, y: 1 }, P1S_BED), ['Model footprint must be finite and positive.']);
+});
+
+test('every published alternative footprint is admitted by the real placement and 0.1 mm more is not (3.7.0)', async (t) => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'b2-bambu-footprints-'));
+    t.after(() => fsp.rm(root, { recursive: true, force: true }));
+    assert.deepEqual(
+        Object.keys(BAMBU_ALTERNATIVE_FOOTPRINTS_INCLUSIVE_MM).sort(),
+        Object.keys(BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM).sort()
+    );
+    assert.deepEqual(BAMBU_ALTERNATIVE_FOOTPRINTS_INCLUSIVE_MM['Bambu Lab P1S 0.4 nozzle'], [BAMBU_P1S_ALTERNATIVE_FOOTPRINT_INCLUSIVE_MM]);
+    assert.deepEqual(BAMBU_ALTERNATIVE_FOOTPRINTS_INCLUSIVE_MM['Bambu Lab H2D 0.4 nozzle'], []);
+    for (const printerId of ['P1S', 'H2D']) {
+        const limits = await bambuLimits(root, printerId);
+        const triple = BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM[limits.sourceProfile];
+        assert.ok(triple, limits.sourceProfile);
+        assert.equal(validateModelDimensionsAgainstLimits(triple, limits).isValid, true);
+        for (const footprint of BAMBU_ALTERNATIVE_FOOTPRINTS_INCLUSIVE_MM[limits.sourceProfile]) {
+            const z = triple.z;
+            assert.equal(validateModelDimensionsAgainstLimits({ x: footprint.x, y: footprint.y, z }, limits).isValid, true);
+            assert.equal(validateModelDimensionsAgainstLimits({ x: footprint.x + 0.1, y: footprint.y, z }, limits).isValid, false);
+            assert.equal(validateModelDimensionsAgainstLimits({ x: footprint.x, y: footprint.y + 0.1, z }, limits).isValid, false);
+            assert.ok(footprint.x > triple.x || footprint.y > triple.y, 'a footprint must add to the triple');
+        }
+    }
+    // The pose the R3D plugin refused on 2026-09-22 fits the published footprint.
+    const p1s = await bambuLimits(root, 'P1S');
+    assert.equal(validateModelDimensionsAgainstLimits({ x: 179, y: 233.8, z: 84.5 }, p1s).isValid, true);
 });
 
 test('resolved build-volume limits carry bed geometry for Bambu only', async (t) => {
