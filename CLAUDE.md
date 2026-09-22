@@ -4,7 +4,7 @@ Last synchronized: 2026-09-07
 
 The Prusa `material-v1` catalogue and native material-specific hash compatibility are included in this release. The earlier access blocker and Windows-only state in `handoff-2026-09-06-calculator.md` are historical; use the dated deployed handoff below.
 
-## Release 3.7.0 — the P1S alternative footprint in catalogue v3 (2026-09-22)
+## Deployed release 3.7.0 — 2026-09-22 (the P1S alternative footprint in catalogue v3)
 
 The opt-in catalogue v3 (`GET /profiles?contract=material-v1`) carries
 `build_volume_limits_mm.alternative_footprints_inclusive_mm` on every row: the
@@ -15,6 +15,11 @@ admission, placement, slice responses and the Bambu `measurement_generation` are
 unchanged. Keep `BAMBU_ALTERNATIVE_FOOTPRINTS_INCLUSIVE_MM` in
 `app/config/constants.js` bound to the placement (unit test in
 `b2-bambu-placement.test.js`). See CHANGELOG 3.7.0.
+
+Signed main `a7f167f95753f5f1e47adedeb4a07643024a7489` runs on the Slicer VPS as
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:59a44481731f36910c1b398cf4b607212e098b9e670ceb487ab04ac8b9a49681`
+since ~21:10 UTC; catalogue v2 `bb07e0c3…` and the Bambu `measurement_generation`
+`0af5bd3e…` are unchanged. See `docs/codex/handoff-2026-09-22-p1s-footprint-deployed.md`.
 
 ## Deployed release 3.6.0 — 2026-09-15
 
