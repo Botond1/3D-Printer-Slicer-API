@@ -330,7 +330,7 @@ function catalogueEntrySchema() {
                     alternative_footprints_inclusive_mm: {
                         type: 'array',
                         maxItems: 4,
-                        description: 'Opt-in catalogue v3 only (3.7.0), present on every v3 row and absent from catalogue v2: X/Y footprints the slice endpoint admits in addition to largest_passing_dimensions_inclusive_mm, up to the same Z, through real placement on the machine bed. The Bambu P1S bed excludes an 18 x 28 mm corner, so it admits 256 x 228 above the corner or 238 x 256 beside it and publishes [{x: 238, y: 256}]; every other row publishes an empty list. Each footprint lies inside the declared bed and extends beyond the triple on X or Y.',
+                        description: 'Opt-in catalogue v3 only (3.7.0), present on every v3 row and absent from catalogue v2: X/Y footprints the slice endpoint admits in addition to largest_passing_dimensions_inclusive_mm, up to the same Z, through real placement on the machine bed. The Bambu P1S bed excludes an 18 x 28 mm corner, so it admits 256 x 228 above the corner or 238 x 256 beside it and publishes [{x: 238, y: 256}]; every other row publishes an empty list. Each footprint lies inside the declared bed and extends beyond the triple on exactly one of X and Y; only placement-admitting (Bambu) rows publish any, and all presets of one machine publish the same list.',
                         items: {
                             type: 'object',
                             required: ['x', 'y'],
