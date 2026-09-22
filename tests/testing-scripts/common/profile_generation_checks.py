@@ -16,6 +16,19 @@ def generation_shape(profile, base_fields):
     )
 
 
+def v2_projection(row):
+    """Catalogue v2 rows are the v3 rows without the opt-in fields:
+    ``material_profiles`` and, since 3.7.0,
+    ``build_volume_limits_mm.alternative_footprints_inclusive_mm``."""
+    projected = {key: value for key, value in row.items() if key != "material_profiles"}
+    limits = projected.get("build_volume_limits_mm")
+    if isinstance(limits, dict) and "alternative_footprints_inclusive_mm" in limits:
+        projected["build_volume_limits_mm"] = {
+            key: value for key, value in limits.items() if key != "alternative_footprints_inclusive_mm"
+        }
+    return projected
+
+
 def material_parity_digest(body, generic, material):
     """Never compare a material slice with a generic request-independent digest."""
     if not isinstance(body, dict) or body.get("schema") != "r3d-profile-catalogue-v3":
@@ -27,7 +40,7 @@ def material_parity_digest(body, generic, material):
     if len(matches) != 1:
         return None
     row = matches[0]
-    if {key: value for key, value in row.items() if key != "material_profiles"} != generic:
+    if v2_projection(row) != generic:
         return None
     variants = row.get("material_profiles")
     if not isinstance(variants, dict) or set(variants) != {"schema", "profiles"} or variants.get("schema") != "r3d-prusa-material-profiles-v1":

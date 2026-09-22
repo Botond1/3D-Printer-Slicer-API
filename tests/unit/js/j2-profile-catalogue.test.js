@@ -637,6 +637,7 @@ test('the v3 alternative footprint validator fails closed (3.7.0)', () => {
     for (const invalid of [
         [{ x: 238, y: 256.1 }],
         [{ x: 200, y: 200 }],
+        [{ x: 256, y: 228 }],
         [{ x: 238 }],
         [{ x: 238, y: 256, z: 249.9 }],
         [{ x: '238', y: 256 }],
@@ -656,6 +657,27 @@ test('the v3 alternative footprint validator fails closed (3.7.0)', () => {
         () => validateCatalogueEntryIdentity(legacyShape),
         /build-volume limits violates its exact object contract/
     );
+    // Beyond the triple on both axes contradicts "largest passing".
+    const wide = withFootprints([{ x: 260, y: 240 }]);
+    wide.build_volume_limits_mm.declared_build_volume_dimensions_mm = { x: 300, y: 300, z: 250 };
+    assert.throws(() => validateCatalogueEntryIdentity(wide), /does not extend exactly one axis/);
+    // Per-axis engines never publish one.
+    const prusaIndex = snapshot.body.profiles.findIndex((row) => row.engine === 'prusa' && row.technology === 'FDM');
+    assert.ok(prusaIndex >= 0);
+    const prusa = internalEntry(prusaIndex);
+    prusa.build_volume_limits_mm.alternative_footprints_inclusive_mm = [{ x: 1, y: 1 }];
+    assert.throws(() => validateCatalogueEntryIdentity(prusa), /only for placement-admitting engines/);
+});
+
+test('presets of one machine must publish one bed shape (3.7.0)', () => {
+    const rows = snapshot.materialSnapshot.body.profiles
+        .filter((row) => row.engine === 'bambu' && row.printer.id === 'P1S')
+        .slice(0, 2)
+        .map((row) => structuredClone(row));
+    assert.equal(rows.length, 2);
+    assert.doesNotThrow(() => deriveMachineAndFleetResolutions(rows));
+    rows[1].build_volume_limits_mm.alternative_footprints_inclusive_mm = [];
+    assert.throws(() => deriveMachineAndFleetResolutions(rows), /inconsistent preset footprints/);
 });
 
 test('entry validation rejects ambiguous fields and non-explicit declared provenance', () => {
