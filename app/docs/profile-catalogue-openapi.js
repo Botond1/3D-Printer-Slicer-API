@@ -327,6 +327,20 @@ function catalogueEntrySchema() {
                         ...dimensionSchema({ strictlyPositive: true }),
                         description: 'Authoritative configured validation ceiling for this native engine. An exact boundary value is accepted; candidate-image measurement evidence is recorded separately.'
                     },
+                    alternative_footprints_inclusive_mm: {
+                        type: 'array',
+                        maxItems: 4,
+                        description: 'Opt-in catalogue v3 only (3.7.0), present on every v3 row and absent from catalogue v2: X/Y footprints the slice endpoint admits in addition to largest_passing_dimensions_inclusive_mm, up to the same Z, through real placement on the machine bed. The Bambu P1S bed excludes an 18 x 28 mm corner, so it admits 256 x 228 above the corner or 238 x 256 beside it and publishes [{x: 238, y: 256}]; every other row publishes an empty list. Each footprint lies inside the declared bed and extends beyond the triple on X or Y.',
+                        items: {
+                            type: 'object',
+                            required: ['x', 'y'],
+                            additionalProperties: false,
+                            properties: {
+                                x: { type: 'number', minimum: 0, exclusiveMinimum: true },
+                                y: { type: 'number', minimum: 0, exclusiveMinimum: true }
+                            }
+                        }
+                    },
                     source_profile: basenameSchema(),
                     declared_source_kind: {
                         type: 'string',

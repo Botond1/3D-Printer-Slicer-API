@@ -590,22 +590,90 @@ test('catalogue still refuses fallback-only and partial explicit machine metadat
     }
 });
 
+/**
+ * The validator guards the internal entry, which carries the v3-only
+ * `alternative_footprints_inclusive_mm` (3.7.0); catalogue v2 rows are that
+ * entry without it.
+ */
+function internalEntry(index = 0) {
+    const row = structuredClone(snapshot.body.profiles[index]);
+    row.build_volume_limits_mm.alternative_footprints_inclusive_mm = structuredClone(
+        snapshot.materialSnapshot.body.profiles[index].build_volume_limits_mm.alternative_footprints_inclusive_mm
+    );
+    return row;
+}
+
+test('opt-in v3 publishes the machine alternative footprints; v2 rows are the v3 rows without them (3.7.0)', () => {
+    const legacyById = new Map(snapshot.body.profiles.map((row) => [row.id, row]));
+    const rows = snapshot.materialSnapshot.body.profiles;
+    assert.equal(rows.length, legacyById.size);
+    assert.ok(rows.some((row) => row.engine === 'bambu' && row.printer.id === 'P1S'));
+    assert.ok(rows.some((row) => row.engine === 'bambu' && row.printer.id === 'H2D'));
+    for (const row of rows) {
+        const expected = row.engine === 'bambu' && row.printer.id === 'P1S' ? [{ x: 238, y: 256 }] : [];
+        assert.deepEqual(row.build_volume_limits_mm.alternative_footprints_inclusive_mm, expected, row.id);
+        const legacy = legacyById.get(row.id);
+        assert.ok(legacy, row.id);
+        assert.equal(Object.hasOwn(legacy.build_volume_limits_mm, 'alternative_footprints_inclusive_mm'), false, row.id);
+        const { material_profiles, ...withoutMaterial } = row;
+        const { alternative_footprints_inclusive_mm, ...limits } = row.build_volume_limits_mm;
+        assert.deepEqual(legacy, { ...withoutMaterial, build_volume_limits_mm: limits }, row.id);
+    }
+    // Machine and fleet resolutions keep the triple on both contracts.
+    assert.deepEqual(snapshot.materialSnapshot.body.machine_resolutions, snapshot.body.machine_resolutions);
+    assert.deepEqual(snapshot.materialSnapshot.body.fleet_resolutions, snapshot.body.fleet_resolutions);
+});
+
+test('the v3 alternative footprint validator fails closed (3.7.0)', () => {
+    const index = snapshot.body.profiles.findIndex((row) => row.engine === 'bambu' && row.printer.id === 'P1S');
+    assert.ok(index >= 0);
+    const withFootprints = (footprints) => {
+        const entry = internalEntry(index);
+        entry.build_volume_limits_mm.alternative_footprints_inclusive_mm = footprints;
+        return entry;
+    };
+    assert.doesNotThrow(() => validateCatalogueEntryIdentity(withFootprints([{ x: 238, y: 256 }])));
+    assert.doesNotThrow(() => validateCatalogueEntryIdentity(withFootprints([])));
+    for (const invalid of [
+        [{ x: 238, y: 256.1 }],
+        [{ x: 200, y: 200 }],
+        [{ x: 238 }],
+        [{ x: 238, y: 256, z: 249.9 }],
+        [{ x: '238', y: 256 }],
+        [{ x: 0, y: 256 }],
+        'none',
+        null,
+        Array.from({ length: 5 }, () => ({ x: 238, y: 256 }))
+    ]) {
+        assert.throws(
+            () => validateCatalogueEntryIdentity(withFootprints(invalid)),
+            /alternative footprint/i,
+            JSON.stringify(invalid)
+        );
+    }
+    const legacyShape = structuredClone(snapshot.body.profiles[index]);
+    assert.throws(
+        () => validateCatalogueEntryIdentity(legacyShape),
+        /build-volume limits violates its exact object contract/
+    );
+});
+
 test('entry validation rejects ambiguous fields and non-explicit declared provenance', () => {
-    const entry = structuredClone(snapshot.body.profiles[0]);
+    const entry = internalEntry();
     entry.build_volume_limits_mm.max = { x: 1, y: 1, z: 1 };
     assert.throws(
         () => validateCatalogueEntryIdentity(entry),
         /build-volume limits violates its exact object contract/
     );
 
-    const wrongProvenance = structuredClone(snapshot.body.profiles[0]);
+    const wrongProvenance = internalEntry();
     wrongProvenance.build_volume_limits_mm.declared_source_kind = 'fallback';
     assert.throws(
         () => validateCatalogueEntryIdentity(wrongProvenance),
         /declared build-volume source kind is invalid/
     );
 
-    const nonPrintableVersion = structuredClone(snapshot.body.profiles[0]);
+    const nonPrintableVersion = internalEntry();
     nonPrintableVersion.engine_version = 'version\nprivate';
     assert.throws(
         () => validateCatalogueEntryIdentity(nonPrintableVersion),
@@ -650,7 +718,7 @@ test('selector and public identity contracts reject ambiguity and paths', () => 
         ),
         /duplicate selector parameter/
     );
-    const pathEntry = structuredClone(snapshot.body.profiles[0]);
+    const pathEntry = internalEntry();
     pathEntry.build_volume_limits_mm.source_profile = '../private.ini';
     assert.throws(
         () => validateCatalogueEntryIdentity(pathEntry),

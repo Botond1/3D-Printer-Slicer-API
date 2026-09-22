@@ -175,6 +175,15 @@ test('profile catalogue v2 stays generic for a future real SLA machine and names
         'source_profile', 'declared_source_kind'
     ]);
     assert.equal(Object.hasOwn(buildVolume.properties, 'max'), false);
+    // 3.7.0: the v3-only alternative footprints are documented but never required
+    // (catalogue v2 rows do not carry them).
+    const footprints = buildVolume.properties.alternative_footprints_inclusive_mm;
+    assert.equal(buildVolume.required.includes('alternative_footprints_inclusive_mm'), false);
+    assert.equal(footprints.type, 'array');
+    assert.equal(footprints.maxItems, 4);
+    assert.deepEqual(footprints.items.required, ['x', 'y']);
+    assert.equal(footprints.items.additionalProperties, false);
+    assert.match(footprints.description, /catalogue v3 only/i);
     assert.deepEqual(buildVolume.properties.declared_source_kind.enum, ['profile-explicit']);
     assert.match(
         buildVolume.properties.declared_build_volume_dimensions_mm.description,

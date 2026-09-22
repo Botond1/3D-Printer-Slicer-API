@@ -296,7 +296,11 @@ row carries `engine`, `printer`, `engine_version`, ordered
 `build_volume_limits_mm` with `minimum_dimensions_inclusive_mm` (generic 1 mm
 floor), `declared_build_volume_dimensions_mm` (`declared_source_kind:
 profile-explicit`, metadata only), and the admission authority
-`largest_passing_dimensions_inclusive_mm`. `machine_resolutions` and
+`largest_passing_dimensions_inclusive_mm`. The opt-in catalogue v3
+(`?contract=material-v1`) also carries `alternative_footprints_inclusive_mm` on
+every row (3.7.0): the X/Y footprints the endpoint admits beyond that triple, up
+to its Z (`[{x: 238, y: 256}]` on the Bambu P1S rows, `[]` elsewhere); v2 omits
+it and stays byte-identical. `machine_resolutions` and
 `fleet_resolutions` are engine-scoped (fleets: bambu -> H2D, orca and prusa
 -> `H2D-QUOTE`) and never merged across engines. Strong `ETag` + `If-None-Match`
 -> `304`; `catalogue_sha256` in the body; construction failure -> `503
