@@ -1,6 +1,7 @@
 'use strict';
 
 const { technicalReceiptSchema } = require('./technical-receipt-openapi');
+const { PREFER_HEADER, createAcceptedResponse, createSliceJobPaths } = require('./slice-async-openapi');
 
 const SLICE_SERVICE_HEADER = Object.freeze({
     name: 'x-slicer-api-key',
@@ -552,6 +553,7 @@ function createSliceResponses(bambu = false) {
                     technical_receipt: technicalReceiptSchema(MODEL_TRANSFORM_SCHEMA) }
             } : SUCCESS_SCHEMA } }
         },
+        ...(bambu ? { 202: createAcceptedResponse() } : {}),
         400: errorCodeResponse(
             'Invalid request, geometry, or source archive. Option and profile validation runs before queue admission, so these responses never consume a queue slot.',
             [...REQUEST_VALIDATION_CODES]
@@ -591,8 +593,10 @@ function createSliceResponses(bambu = false) {
         ),
         422: validationErrorResponse(),
         429: errorCodeResponse(
-            'Per-client-IP rate limit (`RATE_LIMIT_EXCEEDED`; the limiter runs before authentication, so it keys only on the client IP) or per-client queue fairness cap (`SLICE_QUEUE_CLIENT_LIMIT`; keyed per WooCommerce/LeadPilot principal, or per client IP for shared-key callers) reached. Responses carry Retry-After and retryAfterSeconds.',
-            ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT']
+            `Per-client-IP rate limit (\`RATE_LIMIT_EXCEEDED\`; the limiter runs before authentication, so it keys only on the client IP) or per-client queue fairness cap (\`SLICE_QUEUE_CLIENT_LIMIT\`; keyed per WooCommerce/LeadPilot principal, or per client IP for shared-key callers) reached.${bambu ? ' With `Prefer: respond-async`, `SLICE_ASYNC_JOBS_FULL` means every retained asynchronous job (ASYNC_SLICE_MAX_JOBS) is still queued or running; no job was created.' : ''} Responses carry Retry-After and retryAfterSeconds.`,
+            bambu
+                ? ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT', 'SLICE_ASYNC_JOBS_FULL']
+                : ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT']
         ),
         500: errorCodeResponse('Server Error. `NATIVE_OUTPUT_OVERFLOW` means a native process exceeded its bounded stdout/stderr budget and was stopped; no estimate is returned.', [
             'SLICE_OUTPUT_UNPARSED',
@@ -693,14 +697,14 @@ function createBambuProperties() {
     };
 }
 
-function createSliceOperation({ summary, description, properties }) {
+function createSliceOperation({ summary, description, properties, async = false }) {
     return {
         post: {
             tags: ['Slicing'],
             summary,
             description,
             security: [{ SliceServiceApiKey: [] }],
-            parameters: [{ ...SLICE_SERVICE_HEADER }],
+            parameters: async ? [{ ...SLICE_SERVICE_HEADER }, { ...PREFER_HEADER }] : [{ ...SLICE_SERVICE_HEADER }],
             consumes: ['multipart/form-data'],
             requestBody: {
                 required: true,
@@ -733,9 +737,11 @@ function createSlicePaths() {
         }),
         '/bambu/slice': createSliceOperation({
             summary: 'Bambu Studio endpoint (FDM-only, official vendor profiles).',
-            description: 'Requires x-slicer-api-key service authentication. Uses the Bambu Studio headless CLI with the official vendor machine/process/filament chain flattened from the bundled BBL resources, so time and mass reproduce the Bambu Studio GUI readings. Always FDM. The retained artifact is the printer-ready `.gcode.3mf` project; statistics come from the sliced plate G-code. Supports optional size/scale/rotation preprocessing. Native arrangement is disabled (`--arrange 0`, never `--allow-rotations`): the API places the final model on the real bed shape (printable area, excluded corner, first extruder area on the H2D) and reports it in `placement_mm`. Build-volume admission uses the measured inclusive ceilings and placement feasibility, so a P1S part of `238 x 256 mm` is admitted beside the excluded corner although the published triple is `256 x 228 mm`.',
-            properties: createBambuProperties()
-        })
+            description: 'Requires x-slicer-api-key service authentication. Uses the Bambu Studio headless CLI with the official vendor machine/process/filament chain flattened from the bundled BBL resources, so time and mass reproduce the Bambu Studio GUI readings. Always FDM. The retained artifact is the printer-ready `.gcode.3mf` project; statistics come from the sliced plate G-code. Supports optional size/scale/rotation preprocessing. Native arrangement is disabled (`--arrange 0`, never `--allow-rotations`): the API places the final model on the real bed shape (printable area, excluded corner, first extruder area on the H2D) and reports it in `placement_mm`. Build-volume admission uses the measured inclusive ceilings and placement feasibility, so a P1S part of `238 x 256 mm` is admitted beside the excluded corner although the published triple is `256 x 228 mm`. With `Prefer: respond-async` (async contract v1) an admitted request answers 202 and runs as a job in the same queue and pipeline (deadline ASYNC_SLICE_DEADLINE_MS instead of MAX_SLICE_QUEUE_WAIT_MS); `GET /bambu/slice/jobs/{job_id}` then returns the exact synchronous status and body as `result_status` and `result`.',
+            properties: createBambuProperties(),
+            async: true
+        }),
+        ...createSliceJobPaths()
     };
 }
 

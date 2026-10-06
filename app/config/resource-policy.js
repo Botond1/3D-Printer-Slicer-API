@@ -52,7 +52,15 @@ const RESOURCE_DEFINITIONS = Object.freeze({
         default: DEFAULTS.MAX_CONCURRENT_SLICES,
         min: MAX_CONCURRENT_SLICES_RANGE.min,
         max: MAX_CONCURRENT_SLICES_RANGE.max
-    }
+    },
+    // Asynchronous slice jobs (`Prefer: respond-async`, async contract v1).
+    // The deadline runs from admission and covers the queue wait plus every
+    // native step; MAX_SLICE_QUEUE_WAIT_MS does not apply to an async job.
+    ASYNC_SLICE_DEADLINE_MS: { default: 600_000, min: 60_000, max: 1_800_000 },
+    // Retention of a finished job's result after completion.
+    ASYNC_SLICE_RESULT_TTL_MS: { default: 1_800_000, min: 60_000, max: DAY_MS },
+    // Retained jobs (live + finished) held in process memory at once.
+    ASYNC_SLICE_MAX_JOBS: { default: 200, min: 1, max: 2_000 }
 });
 
 function parseCanonicalPositiveInteger(name, value, definition) {

@@ -132,6 +132,9 @@ this file maps them to modules.
 - app/routes/render.routes.js
   - `POST /render`: sliceRateLimiter -> requireSliceService -> upload
     lifecycle -> render handler on the shared slice queue.
+- app/routes/slice-jobs.routes.js (3.8.0)
+  - `GET`/`DELETE /bambu/slice/jobs/:job_id`: sliceJobRateLimiter (own per-IP
+    bucket) -> requireSliceService -> status/cancel on the async job store.
 - app/routes/pricing.routes.js + pricing-request.js
   - Public GET /pricing; pricing-scoped mutations with adminRateLimiter and
     stable `errorCode` values (`INVALID_TECHNOLOGY`, `INVALID_MATERIAL`,
@@ -254,7 +257,20 @@ this file maps them to modules.
   engine-scoped machine/fleet resolutions (82 FDM rows plus 6 Elegoo Saturn
   4 Ultra SLA quoting rows on `prusa`).
 - queue.js, queue-scheduler.js: bounded FIFO with per-key fairness,
-  timeouts, quarantine drain, `SLICE_QUEUE_SHUTDOWN`.
+  timeouts, quarantine drain, `SLICE_QUEUE_SHUTDOWN`; an async job is
+  admitted with `ignoreQueueWait` (no `MAX_SLICE_QUEUE_WAIT_MS`) and an
+  `onAdmitted` observer that reads its state and queue position; when a slot
+  frees, waiting synchronous jobs start before waiting async jobs (FIFO within
+  each class).
+- async-jobs.js, async-job-views.js, async-job-http.js, async-slice.js
+  (3.8.0): `Prefer: respond-async` on
+  `/bambu/slice`. The store owns `sj_` ids, principal binding, the
+  `ASYNC_SLICE_DEADLINE_MS` deadline (aborts the queue signal like a
+  disconnect), result retention, oldest-finished eviction and the `async.*`
+  events; the submission answers every pre-pipeline failure synchronously,
+  sends 202 after queue admission, runs the unchanged pipeline into a captured
+  response and stores its status/body. The route lifecycle never answers on a
+  socket after the 202 (keep-alive reuse).
 - response.js: success payload (engine version, digest, schema-2 transform,
   inclusive limits, Bambu `placement_mm` and `bed_type`, SLA `sla_printer`/
   `resin_density_g_cm3`/`sla_time_model`), integer quarter-hour price rounding

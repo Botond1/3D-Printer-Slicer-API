@@ -190,9 +190,19 @@ function createQueueScheduler(config) {
     }
 
     function expireJobAtDequeue(job) {
+        if (job.ignoreQueueWait) return false;
         if (config.now() - job.enqueuedAt < config.maxWaitMs) return false;
         job.controller.abort(config.createTimeoutError());
         return true;
+    }
+
+    /**
+     * Synchronous waiters start before waiting asynchronous jobs (FIFO within
+     * each class): a synchronous client is bounded by MAX_SLICE_QUEUE_WAIT_MS,
+     * an asynchronous job only by its own, longer deadline.
+     */
+    function nextQueuedJob() {
+        return queuedJobs.find((job) => !job.ignoreQueueWait) || queuedJobs[0];
     }
 
     function runNextSliceJob() {
@@ -201,14 +211,17 @@ function createQueueScheduler(config) {
             return;
         }
         while (!shuttingDown && activeJobs.size < config.maxConcurrent && queuedJobs.length > 0) {
-            const job = queuedJobs[0];
+            const job = nextQueuedJob();
             if (expireJobAtDequeue(job)) continue;
-            queuedJobs.shift();
+            queuedJobs.splice(queuedJobs.indexOf(job), 1);
             activateJob(job);
         }
     }
 
     function startDeadline(job) {
+        // An asynchronous job owns its own deadline (ASYNC_SLICE_DEADLINE_MS),
+        // enforced by aborting its external signal; the queue wait does not cut it.
+        if (job.ignoreQueueWait) return;
         job.deadlineTimer = config.setTimeout(() => {
             if (job.state === 'queued') job.controller.abort(config.createTimeoutError());
         }, config.maxWaitMs);
@@ -227,13 +240,39 @@ function createQueueScheduler(config) {
         return job;
     }
 
-    function acceptJob(task, queueKey, signal, resolve, reject) {
+    /** 1-based start order under the dequeue priority; null unless queued. */
+    function queuePosition(job) {
+        if (job.state !== 'queued' || !queuedJobs.includes(job)) return null;
+        let ahead = 0;
+        for (const other of queuedJobs) {
+            if (other === job) break;
+            if (other.ignoreQueueWait === job.ignoreQueueWait) ahead += 1;
+        }
+        if (job.ignoreQueueWait) ahead += queuedJobs.filter((other) => !other.ignoreQueueWait).length;
+        return ahead + 1;
+    }
+
+    function notifyAdmitted(job, onAdmitted) {
+        if (typeof onAdmitted !== 'function') return;
+        try {
+            onAdmitted(Object.freeze({
+                getState: () => job.state,
+                getQueuePosition: () => queuePosition(job)
+            }));
+        } catch {
+            // An admission observer cannot alter queue ownership or settlement.
+        }
+    }
+
+    function acceptJob(task, queueKey, signal, resolve, reject, admission = {}) {
         const job = createJob(task, queueKey, signal, resolve, reject);
+        job.ignoreQueueWait = admission.ignoreQueueWait === true;
         signal?.addEventListener('abort', job.onExternalAbort, { once: true });
         job.controller.signal.addEventListener('abort', job.onEffectiveAbort, { once: true });
         queuedJobs.push(job);
         increment(queuedByKey, queueKey);
         startDeadline(job);
+        notifyAdmitted(job, admission.onAdmitted);
         emitQueueEvent('queue.admitted', {
             outcome: 'accepted',
             extra: { queue_state: 'queued' }
@@ -258,7 +297,11 @@ function createQueueScheduler(config) {
         if (totalForKey(queueKey) >= config.maxQueuePerClient) {
             return rejectAdmission(config.createClientLimitError(), correlation);
         }
-        return new Promise((resolve, reject) => acceptJob(task, queueKey, signal, resolve, reject));
+        const admission = {
+            ignoreQueueWait: options.ignoreQueueWait === true,
+            onAdmitted: options.onAdmitted
+        };
+        return new Promise((resolve, reject) => acceptJob(task, queueKey, signal, resolve, reject, admission));
     }
 
     function beginSliceQueueShutdown() {

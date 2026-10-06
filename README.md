@@ -82,7 +82,7 @@ Production-envelope smoke of the current image, 40 mm PLA cube at 0.2 mm,
 | Audience | Header | Routes |
 | --- | --- | --- |
 | Public | none | `GET /health`, `GET /ready`, `GET /pricing`, `GET /profiles`, `GET /openapi.json`, `GET /docs`, `GET /` |
-| Slice service | `x-slicer-api-key` | `POST /prusa/slice`, `POST /orca/slice`, `POST /bambu/slice`, `POST /render` |
+| Slice service | `x-slicer-api-key` | `POST /prusa/slice`, `POST /orca/slice`, `POST /bambu/slice`, `POST /render`, `GET`/`DELETE /bambu/slice/jobs/:job_id` |
 | Pricing | `x-api-key` (`PRICING_API_KEY`) | `POST /pricing/FDM`, `POST /pricing/SLA`, `PATCH /pricing/:technology/:material`, `DELETE /pricing/:technology/:material` |
 | Artifact | `x-api-key` (`ARTIFACT_API_KEY`) | `GET /admin/output-files`, `GET /admin/download/:fileName` (`ALL` streams a ZIP) |
 | Operations | `x-api-key` (`OPERATIONS_API_KEY`) | `GET /health/detailed`, `GET /operations/readiness`, `GET /operations/metrics` |
@@ -221,6 +221,30 @@ Engine notes:
   `--allow-rotations`. The root-owned `/usr/local/bin/bambu-studio` wrapper
   starts a private Xvfb only for `--export-3mf`.
 
+### Asynchronous Bambu slices (`Prefer: respond-async`, 3.8.0)
+
+`POST /bambu/slice` with the RFC 7240 header `Prefer: respond-async` answers
+`202 Accepted` (`Location`, `Preference-Applied: respond-async`, `Retry-After`,
+`Cache-Control: no-store`, body `{success, async_contract: 1, job_id, status:
+"queued", status_url, poll_after_ms, deadline_at, deadline_ms}`) once every
+pre-pipeline check passed and the slice queue admitted the job. Everything that
+fails earlier (401, 400/413/415, 429, 503) answers synchronously exactly as
+without the header; without the header the endpoint is unchanged. The job runs
+in the same queue and pipeline as a synchronous slice, counts toward
+`MAX_SLICE_QUEUE_LENGTH` / `MAX_SLICE_QUEUE_PER_IP` while queued or running,
+ignores `MAX_SLICE_QUEUE_WAIT_MS` (a waiting synchronous request starts first
+when a slot frees), and ends at `ASYNC_SLICE_DEADLINE_MS` (result
+504 `SLICE_DEADLINE_EXCEEDED`, native process tree terminated). A client
+disconnect after the 202 never aborts it. `GET /bambu/slice/jobs/:job_id`
+answers `queued`/`running` (with `queue_position`, `elapsed_ms`, `deadline_at`,
+`poll_after_ms`, `Retry-After`) or `completed` with `result_status` and `result`,
+the exact status and JSON body the synchronous request would have answered
+(plus `result_retry_after_seconds` when that answer carried `Retry-After`).
+`DELETE` cancels (204). Jobs are bound to the submitting principal and live in
+process memory only: unknown, expired, cancelled, evicted, restarted-away,
+foreign, or malformed ids answer 404 `SLICE_JOB_NOT_FOUND`. The full contract is
+`docs/integration-guide.md` section 3.6.
+
 ### `POST /render`
 
 Slice-authenticated, rate-limited, queue-serialized. Returns a deterministic
@@ -272,7 +296,8 @@ Every non-2xx body is `{ "success": false, "error", "errorCode" }`. Branch on
 | 408 | `UPLOAD_TOTAL_TIMEOUT` (600 s upload lifetime) |
 | 413 | `UPLOAD_RESOURCE_LIMIT_EXCEEDED`, `SLICE_RESOURCE_LIMIT_EXCEEDED`, `BULK_DOWNLOAD_LIMIT_EXCEEDED` |
 | 422 | `MODEL_OUT_OF_PRINTER_BOUNDS` (with `model_dimensions_mm`, `build_volume_limits_mm`, full `model_transform`), `MODEL_DIMENSIONS_UNAVAILABLE`, `UNSLICEABLE_SOURCE_GEOMETRY`, `ORCA_PROFILE_INCOMPATIBLE`, `FILE_PROCESSING_TIMEOUT`, `INVALID_SLICE_OUTPUT`, `INVALID_SLICE_STATS` |
-| 429 | `RATE_LIMIT_EXCEEDED`, `ADMIN_RATE_LIMIT_EXCEEDED`, `SLICE_QUEUE_CLIENT_LIMIT` (all with `Retry-After` and `retryAfterSeconds`) |
+| 404 | `SLICE_JOB_NOT_FOUND` (async job unknown, expired, cancelled, evicted, lost to a restart, another principal's, or malformed) |
+| 429 | `RATE_LIMIT_EXCEEDED`, `ADMIN_RATE_LIMIT_EXCEEDED`, `SLICE_QUEUE_CLIENT_LIMIT`, `SLICE_ASYNC_JOBS_FULL` (all with `Retry-After` and `retryAfterSeconds`) |
 | 500 | `SLICE_OUTPUT_UNPARSED`, `NATIVE_OUTPUT_OVERFLOW`, `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, `INTERNAL_SERVER_ERROR` |
 | 503 | `SLICE_QUEUE_FULL`, `SLICE_QUEUE_TIMEOUT`, `SLICE_QUEUE_SHUTDOWN`, `PROFILE_CATALOGUE_UNAVAILABLE` |
 
@@ -391,7 +416,9 @@ Candidate provenance evidence uses schema `i7-s3a-candidate-provenance-v2`.
 | `SLICE_RATE_LIMIT_MAX_REQUESTS` / `_WINDOW_MS` / `_BURST_CAPACITY` | `3` / `60000` / `5` | token bucket per principal (IP fallback); adaptive cooldown up to 30 s |
 | `ADMIN_RATE_LIMIT_MAX_REQUESTS` / `_WINDOW_MS` | `30` / `60000` | per IP on `x-api-key` routes |
 | `MAX_CONCURRENT_SLICES` | `1` | canonical decimal `1..3`; N=2/3 unqualified |
-| `MAX_SLICE_QUEUE_LENGTH` / `MAX_SLICE_QUEUE_PER_IP` / `MAX_SLICE_QUEUE_WAIT_MS` | `100` / `5` / `300000` | `SLICE_QUEUE_FULL` 503, `SLICE_QUEUE_CLIENT_LIMIT` 429 (`Retry-After: 5`), `SLICE_QUEUE_TIMEOUT` 503 |
+| `MAX_SLICE_QUEUE_LENGTH` / `MAX_SLICE_QUEUE_PER_IP` / `MAX_SLICE_QUEUE_WAIT_MS` | `100` / `5` / `300000` | `SLICE_QUEUE_FULL` 503, `SLICE_QUEUE_CLIENT_LIMIT` 429 (`Retry-After: 5`), `SLICE_QUEUE_TIMEOUT` 503; async jobs count toward the first two while queued or running, the wait applies to synchronous requests only |
+| `ASYNC_SLICE_DEADLINE_MS` / `ASYNC_SLICE_RESULT_TTL_MS` / `ASYNC_SLICE_MAX_JOBS` | `600000` / `1800000` / `200` | `60000..1800000` / `60000..86400000` / `1..2000`; async job deadline from admission (504 `SLICE_DEADLINE_EXCEEDED` result, native tree terminated), result retention, retained jobs (`SLICE_ASYNC_JOBS_FULL` 429 when all are live) |
+| `SLICE_JOB_RATE_LIMIT_MAX_REQUESTS` / `_WINDOW_MS` / `_BURST_CAPACITY` | `1200` / `60000` / `60` | per-IP token bucket on `GET`/`DELETE /bambu/slice/jobs/:job_id`, separate from submissions |
 | `SLICE_COMMAND_TIMEOUT_MS` | `600000` | `1000..3600000`; Python helpers get 120 s each, clamped to the native budget; the renderer 60 s |
 | `UPLOAD_TOTAL_TIMEOUT_MS` / `MAX_UPLOAD_BYTES` | `600000` / `500 MB` | `1000..600000` / up to 500 MB |
 | `HTTP_HEADERS_TIMEOUT_MS` | `60000` | `1000..60000`, capped at request timeout |

@@ -252,6 +252,18 @@ const ADMIN_RATE_LIMIT_MAX_REQUESTS = parsePositiveInt(
     process.env.ADMIN_RATE_LIMIT_MAX_REQUESTS,
     DEFAULTS.ADMIN_RATE_LIMIT_MAX_REQUESTS
 );
+const SLICE_JOB_RATE_LIMIT_WINDOW_MS = parsePositiveInt(
+    process.env.SLICE_JOB_RATE_LIMIT_WINDOW_MS,
+    DEFAULTS.SLICE_JOB_RATE_LIMIT_WINDOW_MS
+);
+const SLICE_JOB_RATE_LIMIT_MAX_REQUESTS = parsePositiveInt(
+    process.env.SLICE_JOB_RATE_LIMIT_MAX_REQUESTS,
+    DEFAULTS.SLICE_JOB_RATE_LIMIT_MAX_REQUESTS
+);
+const SLICE_JOB_RATE_LIMIT_BURST_CAPACITY = parsePositiveInt(
+    process.env.SLICE_JOB_RATE_LIMIT_BURST_CAPACITY,
+    DEFAULTS.SLICE_JOB_RATE_LIMIT_BURST_CAPACITY
+);
 
 /**
  * Token-bucket limiter used on slicing endpoints.
@@ -262,6 +274,20 @@ const sliceRateLimiter = createLimiterMiddleware({
         windowMs: SLICE_RATE_LIMIT_WINDOW_MS,
         maxRequests: SLICE_RATE_LIMIT_MAX_REQUESTS,
         burstCapacity: SLICE_RATE_LIMIT_BURST_CAPACITY
+    }),
+    resolveKey: resolveSliceClientKey
+});
+
+/**
+ * Per-client-IP token bucket in front of the async slice job status/cancel
+ * routes. It runs before authentication like the slice limiter, but has its
+ * own bucket so status polls never consume slice submissions.
+ */
+const sliceJobRateLimiter = createLimiterMiddleware({
+    limiter: new TokenBucketRateLimiter({
+        windowMs: SLICE_JOB_RATE_LIMIT_WINDOW_MS,
+        maxRequests: SLICE_JOB_RATE_LIMIT_MAX_REQUESTS,
+        burstCapacity: SLICE_JOB_RATE_LIMIT_BURST_CAPACITY
     }),
     resolveKey: resolveSliceClientKey
 });
@@ -280,7 +306,9 @@ const adminRateLimiter = createLimiterMiddleware({
 
 module.exports = {
     sliceRateLimiter,
+    sliceJobRateLimiter,
     adminRateLimiter,
+    TokenBucketRateLimiter,
     createLimiterMiddleware,
     resolveSliceClientKey,
     sendRateLimitResponse

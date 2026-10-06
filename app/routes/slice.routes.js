@@ -18,6 +18,7 @@ const {
     detachWorkspaceFromRequest
 } = require('../services/slice/workspace');
 const { setCorrelationIds } = require('../services/observability/context');
+const { isAsyncAccepted } = require('../services/slice/async-slice');
 const { emitEvent } = require('../services/observability/events');
 
 const ALLOWED_UPLOAD_EXTENSIONS = new Set([...EXTENSIONS.direct, ...EXTENSIONS.cad, ...EXTENSIONS.archive]);
@@ -309,6 +310,9 @@ function createSliceRouter(options = {}) {
                 });
             }
 
+            // After a 202 the socket may already carry the client's next request
+            // (keep-alive); a late cleanup failure is reported, never answered.
+            if (isAsyncAccepted(req)) return undefined;
             if (originalError) return next(originalError);
             if (cleanupError) {
                 const error = new Error('Upload workspace cleanup failed.');

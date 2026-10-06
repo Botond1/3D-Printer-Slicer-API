@@ -4,6 +4,26 @@ Last synchronized: 2026-09-07
 
 The Prusa `material-v1` catalogue and native material-specific hash compatibility are included in this release. The earlier access blocker and Windows-only state in `handoff-2026-09-06-calculator.md` are historical; use the dated deployed handoff below.
 
+## Release 3.8.0 — 2026-10-05 (asynchronous Bambu slice jobs; NOT deployed)
+
+`POST /bambu/slice` with `Prefer: respond-async` answers 202 once the request
+passed every pre-pipeline check and the slice queue admitted it; the job runs
+in the same queue and pipeline into a captured response, and
+`GET /bambu/slice/jobs/:job_id` returns the exact synchronous status/body as
+`result_status`/`result`; `DELETE` cancels. Without the header every route is
+byte-identical to 3.7.0. Deadline `ASYNC_SLICE_DEADLINE_MS` (600000,
+60000..1800000; 504 `SLICE_DEADLINE_EXCEEDED`, native tree terminated) replaces
+`MAX_SLICE_QUEUE_WAIT_MS` for async jobs; retention `ASYNC_SLICE_RESULT_TTL_MS`
+(1800000, 60000..86400000); `ASYNC_SLICE_MAX_JOBS` (200, 1..2000; 429
+`SLICE_ASYNC_JOBS_FULL` when all are live). Jobs are in-memory and bound to
+the submitting rotation family (404 `SLICE_JOB_NOT_FOUND` otherwise). Modules:
+`app/services/slice/async-jobs.js` (store), `async-job-views.js` (bodies),
+`async-slice.js` (submission, capture), `async-job-http.js` (status/cancel),
+`app/routes/slice-jobs.routes.js` (own per-IP limiter `SLICE_JOB_RATE_LIMIT_*`).
+Waiting synchronous requests dequeue before waiting async jobs. The container entrypoint admits
+`EXPECTED_MEMORY_BYTES` up to 12 GiB. See CHANGELOG 3.8.0 and
+`docs/integration-guide.md` section 3.6.
+
 ## Deployed release 3.7.0 — 2026-09-22 (the P1S alternative footprint in catalogue v3)
 
 The opt-in catalogue v3 (`GET /profiles?contract=material-v1`) carries
@@ -291,6 +311,7 @@ Slice-service-protected endpoints (x-slicer-api-key required):
 - POST /orca/slice
 - POST /bambu/slice
 - POST /render
+- GET /bambu/slice/jobs/:job_id, DELETE /bambu/slice/jobs/:job_id (async jobs, 3.8.0)
 
 Pricing-protected endpoints (x-api-key with pricing audience):
 - POST /pricing/FDM
@@ -383,7 +404,7 @@ Defaults:
   decimal 1..3. N=2/N=3 remain unqualified and undeployed.
 - Max queue length: 100
 - Max queued+active slice jobs per principal/IP: 5
-- Max queue wait: 300000 ms
+- Max queue wait: 300000 ms (synchronous requests; async jobs use ASYNC_SLICE_DEADLINE_MS 600000)
 - Slice command timeout: 600000 ms, bounded 1000..3600000
 - Python helper timeout: 120000 ms each; render timeout: 60000 ms
 - HTTP headers timeout: 60000 ms, bounded 1000..60000

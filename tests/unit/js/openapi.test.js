@@ -16,6 +16,7 @@ const EXPECTED_METHODS = {
     '/prusa/slice': ['post'],
     '/orca/slice': ['post'],
     '/bambu/slice': ['post'],
+    '/bambu/slice/jobs/{job_id}': ['delete', 'get'],
     '/render': ['post'],
     '/admin/output-files': ['get'],
     '/admin/download/{fileName}': ['get'],
@@ -38,6 +39,8 @@ const EXPECTED_RESPONSE_KEYS = {
     'POST /prusa/slice': ['200', '400', '401', '408', '413', '422', '429', '500', '503'],
     'POST /orca/slice': ['200', '400', '401', '408', '413', '422', '429', '500', '503'],
     'POST /bambu/slice': ['200', '400', '401', '408', '413', '422', '429', '500', '503'],
+    'GET /bambu/slice/jobs/{job_id}': ['200', '401', '404', '429'],
+    'DELETE /bambu/slice/jobs/{job_id}': ['204', '401', '404', '429'],
     'POST /render': ['200', '400', '401', '408', '413', '422', '429', '500', '503'],
     'GET /admin/output-files': ['200', '401', '500', '503'],
     'GET /admin/download/{fileName}': ['200', '400', '401', '404', '413', '500', '503'],
@@ -425,7 +428,9 @@ test('OpenAPI documents the Bambu Studio slice operation, supports, strict infil
         assert.deepEqual(success.properties.slicer_engine.enum, ['prusa', 'orca', 'bambu'], operationKey);
         const codes = (status) => operation.responses[status].content['application/json'].schema
             .properties.errorCode.enum;
-        assert.deepEqual(codes(429), ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT'], operationKey);
+        assert.deepEqual(codes(429), operationKey === 'POST /bambu/slice'
+            ? ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT', 'SLICE_ASYNC_JOBS_FULL']
+            : ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT'], operationKey);
         assert.deepEqual(codes(503), ['SLICE_QUEUE_FULL', 'SLICE_QUEUE_TIMEOUT', 'SLICE_QUEUE_SHUTDOWN', 'SLICER_ENGINE_UNAVAILABLE'], operationKey);
         assert.deepEqual(codes(408), ['UPLOAD_TOTAL_TIMEOUT'], operationKey);
         assert.ok(codes(413).includes('UPLOAD_RESOURCE_LIMIT_EXCEEDED'), operationKey);
@@ -509,6 +514,6 @@ test('OpenAPI slice operations retain multipart choosenFile contracts', () => {
 test('OpenAPI operations retain their documented response-status keys', () => {
     for (const [operationKey, expectedKeys] of Object.entries(EXPECTED_RESPONSE_KEYS)) {
         const actualKeys = Object.keys(getOperation(operationKey).responses).sort();
-        assert.deepEqual(actualKeys, [...expectedKeys, ...(operationKey === 'POST /bambu/slice' ? ['409'] : [])].sort(), operationKey);
+        assert.deepEqual(actualKeys, [...expectedKeys, ...(operationKey === 'POST /bambu/slice' ? ['202', '409'] : [])].sort(), operationKey);
     }
 });
