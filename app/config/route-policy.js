@@ -21,6 +21,10 @@ function classifyRoute(methodValue, pathValue) {
     if (method === 'POST' && /^(?:\/prusa\/slice|\/orca\/slice|\/bambu\/slice|\/render)$/.test(requestPath)) {
         return ROUTE_AUDIENCES.SLICE;
     }
+    // Async slice job status and cancellation (async contract v1).
+    if (['GET', 'DELETE'].includes(method) && /^\/bambu\/slice\/jobs\/[^/]+$/.test(requestPath)) {
+        return ROUTE_AUDIENCES.SLICE;
+    }
     if (
         ['POST', 'PATCH', 'DELETE'].includes(method)
         && /^\/pricing\/(?:FDM|SLA)(?:\/[^/]+)?$/i.test(requestPath)

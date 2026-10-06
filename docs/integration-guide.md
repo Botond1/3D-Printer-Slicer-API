@@ -242,6 +242,79 @@ Returns a deterministic PNG of the exact pose the slice pipeline would slice.
   (`350 × 320 × 325 mm`), not a printer profile. Rendering has a 60 s budget;
   exceeding it returns `422 FILE_PROCESSING_TIMEOUT`.
 
+### 3.6 Asynchronous Bambu slices (async contract v1, 3.8.0)
+
+`POST /bambu/slice` with the unchanged multipart body and authentication plus
+the RFC 7240 request header `Prefer: respond-async` may answer asynchronously.
+Without the header the endpoint is byte-identical to 3.7.0. A server without
+async support ignores the header, so a client must handle both a `202` and a
+synchronous answer to the same request.
+
+Submission. Every check that runs before the native pipeline (rate limit,
+authentication, upload, option/profile validation, queue admission) answers
+synchronously exactly as without the header, and no job exists: `401`, `400`,
+`408`, `413`, `429 RATE_LIMIT_EXCEEDED` / `SLICE_QUEUE_CLIENT_LIMIT`,
+`503 SLICE_QUEUE_FULL` / `SLICE_QUEUE_SHUTDOWN` / `SLICER_ENGINE_UNAVAILABLE`.
+`429 SLICE_ASYNC_JOBS_FULL` (`Retry-After: 5`) means every retained async job
+(`ASYNC_SLICE_MAX_JOBS`) is still queued or running. Once the queue admitted
+the job:
+
+```
+202 Accepted
+Location: /bambu/slice/jobs/<job_id>
+Preference-Applied: respond-async
+Retry-After: 2
+Cache-Control: no-store
+{"success": true, "async_contract": 1, "job_id": "sj_<32 hex>", "status": "queued",
+ "status_url": "/bambu/slice/jobs/<job_id>", "poll_after_ms": 2000,
+ "deadline_at": "<ISO-8601 UTC>", "deadline_ms": 600000}
+```
+
+`job_id` is `sj_` plus 128 random bits (32 lowercase hex characters).
+
+Status. `GET /bambu/slice/jobs/<job_id>` with the same `x-slicer-api-key`
+(always `Cache-Control: no-store`):
+
+- pending: `200 {"success": true, "async_contract": 1, "job_id", "status":
+  "queued" | "running", "queue_position": <int >= 1> | null, "elapsed_ms",
+  "deadline_at", "poll_after_ms"}` with `Retry-After`. `queue_position` 1 is the
+  next job to start; it is `null` while running.
+- finished: `200 {"success": true, "async_contract": 1, "job_id", "status":
+  "completed", "elapsed_ms", "result_status", "result"}`. `result_status` is
+  the HTTP status the synchronous request would have answered and `result` is
+  its exact JSON body (the success body with `technical_receipt`, or the error
+  body with `errorCode`); `result_retry_after_seconds` is added when that
+  answer would have carried `Retry-After`. Artifacts follow the same lease and
+  retention rules as a synchronous slice.
+- deadline: a job still queued or running `ASYNC_SLICE_DEADLINE_MS` after
+  admission completes with `result_status: 504` and `result: {"success":
+  false, "error": "...", "errorCode": "SLICE_DEADLINE_EXCEEDED"}`; a queued job
+  leaves the queue and a running job's native process tree is terminated.
+- not found: an unknown, expired (past `ASYNC_SLICE_RESULT_TTL_MS`), cancelled,
+  evicted, another principal's, or malformed id answers
+  `404 {"success": false, "error": "Slice job not found.", "errorCode":
+  "SLICE_JOB_NOT_FOUND"}`; the cases are indistinguishable. Jobs live in process
+  memory: a restart loses them, and a client that gets 404 for a job it
+  submitted treats it as lost and may resubmit.
+
+Cancel. `DELETE /bambu/slice/jobs/<job_id>` answers `204` when the job was
+cancelled (a queued job leaves the queue, a running job's native tree is
+terminated) or its finished result was discarded, and `404` as above.
+
+Semantics. An async job runs in the same queue and pipeline as a synchronous
+slice, counts toward `MAX_SLICE_QUEUE_LENGTH` and `MAX_SLICE_QUEUE_PER_IP` (the
+same caller key as today) while queued or running, and is not cut by
+`MAX_SLICE_QUEUE_WAIT_MS`. A client disconnect after the `202` never aborts it.
+A job is visible only to the authenticated rotation family that submitted it
+(`shared`, `woocommerce`, `leadpilot`), so a key rotation inside the family
+keeps access. Finished results are retained `ASYNC_SLICE_RESULT_TTL_MS` after
+completion; at most `ASYNC_SLICE_MAX_JOBS` jobs are retained and finished
+results are evicted oldest first. Status polls have their own per-IP token
+bucket (`SLICE_JOB_RATE_LIMIT_*`, default 600 per 60 s, burst 60) and never
+consume slice submissions. Structured events `async.accepted`,
+`async.completed`, `async.expired`, `async.cancelled` and `async.evicted` carry
+the `job_id` and the submission's `request_id`.
+
 ## 4. Success response
 
 All three slice endpoints return the same shape. Engine-specific parts are the
@@ -484,6 +557,7 @@ succeed later without changes.
 | 400 | `INVALID_PRINTER_PROFILE`, `INVALID_PROCESS_PROFILE` | no | Bambu registry id / vendor process name unknown |
 | 400 | `INVALID_PROFILE_NAME`, `PROFILE_NOT_FOUND` | no | Prusa/Orca profile override unsafe or absent |
 | 401 | `SLICE_SERVICE_AUTH_REQUIRED` | no | key missing, wrong, or retired |
+| 404 | `SLICE_JOB_NOT_FOUND` | no | async job unknown, expired, cancelled, evicted, lost to a restart, another principal's, or malformed (section 3.6); resubmit if it was yours |
 | 408 | `UPLOAD_TOTAL_TIMEOUT` | yes | the multipart upload took longer than 600 s; the connection is closed |
 | 413 | `UPLOAD_RESOURCE_LIMIT_EXCEEDED`, `SLICE_RESOURCE_LIMIT_EXCEEDED` | no | upload, archive expansion, model, or output exceeded a size limit |
 | 422 | `MODEL_OUT_OF_PRINTER_BOUNDS` | no | does not fit; body also carries `model_dimensions_mm`, `build_volume_limits_mm`, and the full `model_transform` |
@@ -494,6 +568,8 @@ succeed later without changes.
 | 422 | `INVALID_SLICE_OUTPUT`, `INVALID_SLICE_STATS` | yes | generated artifact or statistics failed validation |
 | 429 | `RATE_LIMIT_EXCEEDED` | yes, after `Retry-After` | per-caller token bucket exhausted; `retryAfterSeconds` in body |
 | 429 | `SLICE_QUEUE_CLIENT_LIMIT` | yes, after `Retry-After` | more than 5 queued+active jobs for this caller; `Retry-After: 5` |
+| 429 | `SLICE_ASYNC_JOBS_FULL` | yes, after `Retry-After` | `Prefer: respond-async` only: every retained async job is still queued or running; `Retry-After: 5` |
+| 504 (`result_status` only) | `SLICE_DEADLINE_EXCEEDED` | maybe | async job passed `ASYNC_SLICE_DEADLINE_MS`; appears inside a finished job's `result`, never as a direct HTTP answer |
 | 500 | `SLICE_OUTPUT_UNPARSED` | yes | required time/length/mass marker missing or drifted; no estimate is invented |
 | 500 | `NATIVE_OUTPUT_OVERFLOW` | maybe | native process exceeded its output buffer and was stopped |
 | 500 | `INTERNAL_PROCESSING_ERROR`, `QUEUE_INTERNAL_ERROR`, `UPLOAD_STORAGE_ERROR`, `INTERNAL_SERVER_ERROR` | yes | internal failure, logged server-side |
@@ -538,7 +614,9 @@ with a request that sends `supports=false`, and vice versa. The default is
 | Concurrent native slices | 1 (requests are serialised in arrival order) |
 | Queue length | 100 |
 | Queued + active jobs per caller | 5 |
-| Maximum queue wait | 300 s → `503 SLICE_QUEUE_TIMEOUT` |
+| Maximum queue wait | 300 s → `503 SLICE_QUEUE_TIMEOUT` (synchronous requests only) |
+| Async job deadline / result retention / retained jobs | 600 s → result `504 SLICE_DEADLINE_EXCEEDED` / 1800 s / 200 (section 3.6) |
+| Async job status polls | 600 per 60 s, burst 60, per caller IP |
 | Upload lifetime | 600 s → `408 UPLOAD_TOTAL_TIMEOUT` |
 | Native slice budget | 600 s → `422 FILE_PROCESSING_TIMEOUT` |
 | Python helper budget (conversion, orientation, sizing) | 120 s each → `422 FILE_PROCESSING_TIMEOUT` |

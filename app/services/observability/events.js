@@ -15,6 +15,11 @@ const EVENT_NAMES = Object.freeze([
     'artifact.lease_acquired',
     'artifact.lease_released',
     'artifact.promoted',
+    'async.accepted',
+    'async.cancelled',
+    'async.completed',
+    'async.evicted',
+    'async.expired',
     'auth.rejected',
     'native.completed',
     'native.quarantined',
@@ -36,7 +41,8 @@ const EVENT_NAMES = Object.freeze([
     'shutdown.started',
     'startup.completed'
 ]);
-const JOB_ID = /^job-[a-f0-9]{32}$/;
+// A request workspace (`job-<hex>`) or a public async slice job (`sj_<hex>`).
+const JOB_ID = /^(?:job-[a-f0-9]{32}|sj_[a-f0-9]{32})$/;
 const ARTIFACT_ID = /^artifact-[a-f0-9]{32}$/;
 const SAFE_LABEL = /^[A-Za-z0-9_.:-]+$/;
 const REDACTED_KEY = /(?:authorization|cookie|credential|key|password|secret|token)/i;

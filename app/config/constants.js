@@ -30,6 +30,12 @@ const DEFAULTS = {
     SLICE_RATE_LIMIT_BURST_CAPACITY: 5,
     ADMIN_RATE_LIMIT_WINDOW_MS: 60_000,
     ADMIN_RATE_LIMIT_MAX_REQUESTS: 30,
+    // Async slice job status/cancel polls (GET/DELETE /bambu/slice/jobs/:id):
+    // cheap in-memory lookups, so the per-IP budget is generous enough for a
+    // shop whose customers all poll through one server address.
+    SLICE_JOB_RATE_LIMIT_WINDOW_MS: 60_000,
+    SLICE_JOB_RATE_LIMIT_MAX_REQUESTS: 600,
+    SLICE_JOB_RATE_LIMIT_BURST_CAPACITY: 60,
     MAX_SLICE_QUEUE_LENGTH: 100,
     MAX_SLICE_QUEUE_PER_IP: 5,
     MAX_SLICE_QUEUE_WAIT_MS: 300000,

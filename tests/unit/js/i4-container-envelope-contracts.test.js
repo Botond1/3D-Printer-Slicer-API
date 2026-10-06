@@ -118,7 +118,7 @@ function entrypointContract(source) {
         /\[ "\$actual_uid" != "\$expected_uid" \] \|\| \[ "\$actual_gid" != "\$expected_gid" \]/);
     assert.match(source, /\[ "\$pids_limit" -lt 64 \] \|\| \[ "\$pids_limit" -gt 512 \]/);
     assert.match(source,
-        /\[ "\$memory_bytes" -lt 1073741824 \] \|\| \[ "\$memory_bytes" -gt 8589934592 \]/);
+        /\[ "\$memory_bytes" -lt 1073741824 \] \|\| \[ "\$memory_bytes" -gt 12884901888 \]/);
     assert.match(source, /\[ "\$log_max_files" -lt 1 \] \|\| \[ "\$log_max_files" -gt 5 \]/);
     assert.match(source, /0\.5\|1\.0\|1\.5\|2\.0\|2\.5\|3\.0\|3\.5\|4\.0\)/);
     assert.match(source, /5m\|10m\|20m\|50m\)/);
@@ -217,7 +217,7 @@ test('service-identity startup guard weakening mutations fail closed', async (t)
             'if [ "$actual_uid" != "$expected_uid" ] || [ "$actual_gid" != "$expected_gid" ]; then',
             'if false; then'],
         ['PID upper bound removed', '[ "$pids_limit" -gt 512 ]', 'false'],
-        ['memory upper bound removed', '[ "$memory_bytes" -gt 8589934592 ]', 'false'],
+        ['memory upper bound removed', '[ "$memory_bytes" -gt 12884901888 ]', 'false'],
         ['log-file upper bound removed', '[ "$log_max_files" -gt 5 ]', 'false'],
         ['CPU allowlist widened', '0.5|1.0|1.5|2.0|2.5|3.0|3.5|4.0)',
             '0.5|1.0|1.5|2.0|2.5|3.0|3.5|4.0|40.0)'],
@@ -249,5 +249,37 @@ test('service-identity startup guard weakening mutations fail closed', async (t)
             assert.ok(ENTRYPOINT.includes(from), `missing mutation anchor: ${from}`);
             assert.throws(() => entrypointContract(ENTRYPOINT.replace(from, to)));
         });
+    }
+});
+
+test('the entrypoint admits a memory envelope up to 12 GiB and refuses anything above it', (t) => {
+    const { spawnSync } = require('node:child_process');
+    const start = ENTRYPOINT.indexOf('pids_limit="${EXPECTED_PIDS_LIMIT-}"');
+    const graceCase = ENTRYPOINT.indexOf('case "${EXPECTED_STOP_GRACE_PERIOD-}" in');
+    const end = ENTRYPOINT.indexOf('esac', graceCase) + 'esac'.length;
+    assert.ok(start > 0 && graceCase > start && end > graceCase, 'resource validation block not found');
+    const script = `set -eu\n${ENTRYPOINT.slice(start, end)}\nexit 0\n`;
+    const probe = spawnSync('sh', ['-c', 'exit 0'], { windowsHide: true });
+    if (probe.error) {
+        t.skip('POSIX sh is unavailable on this host');
+        return;
+    }
+    const run = (memoryBytes) => spawnSync('sh', ['-c', script], {
+        windowsHide: true,
+        env: {
+            PATH: process.env.PATH,
+            EXPECTED_PIDS_LIMIT: '512',
+            EXPECTED_MEMORY_BYTES: memoryBytes,
+            EXPECTED_LOG_MAX_FILES: '5',
+            EXPECTED_CPU_LIMIT: '4.0',
+            EXPECTED_LOG_MAX_SIZE: '20m',
+            EXPECTED_STOP_GRACE_PERIOD: '30s'
+        }
+    }).status;
+    for (const accepted of ['1073741824', '4294967296', '8589934592', '12884901888']) {
+        assert.equal(run(accepted), 0, accepted);
+    }
+    for (const refused of ['1073741823', '12884901889', '17179869184', '012884901888', '']) {
+        assert.equal(run(refused), 78, refused);
     }
 });

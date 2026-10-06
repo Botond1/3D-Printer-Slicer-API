@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## v3.8.0 (2026-10-05, not deployed)
+
+### Added
+- **[contract]** Asynchronous Bambu slice jobs (async contract v1). `POST /bambu/slice` with `Prefer: respond-async` answers `202 Accepted` (`Location`, `Preference-Applied: respond-async`, `Retry-After`, `Cache-Control: no-store`; body `success`, `async_contract: 1`, `job_id` = `sj_` + 32 lowercase hex from a CSPRNG, `status: "queued"`, `status_url`, `poll_after_ms`, `deadline_at`, `deadline_ms`) once every pre-pipeline check passed and the slice queue admitted the job; everything that fails earlier answers synchronously exactly as before and creates no job. The job runs through the same queue and pipeline as a synchronous slice into a captured response, so `GET /bambu/slice/jobs/:job_id` returns the exact synchronous status and JSON body as `result_status` and `result` (plus `result_retry_after_seconds` when that answer carried `Retry-After`); pending reads report `queued`/`running`, `queue_position`, `elapsed_ms`, `deadline_at`, `poll_after_ms` and `Retry-After`. `DELETE /bambu/slice/jobs/:job_id` cancels (204): a queued job leaves the queue, a running job's native process tree is terminated through the same abort path a synchronous disconnect uses. Jobs are bound to the authenticated rotation family that submitted them; unknown, expired, cancelled, evicted, foreign or malformed ids answer 404 `SLICE_JOB_NOT_FOUND`. A client disconnect after the 202 never aborts a job; jobs live in process memory and a restart loses them.
+- **[ops]** `ASYNC_SLICE_DEADLINE_MS` (600000, `60000..1800000`; from admission, covering the queue wait and every native step; result 504 `SLICE_DEADLINE_EXCEEDED`), `ASYNC_SLICE_RESULT_TTL_MS` (1800000, `60000..86400000`) and `ASYNC_SLICE_MAX_JOBS` (200, `1..2000`; finished results evicted oldest first, 429 `SLICE_ASYNC_JOBS_FULL` with `Retry-After: 5` when every retained job is live) join the canonical resource policy: invalid values refuse startup. `MAX_SLICE_QUEUE_WAIT_MS` no longer applies to async jobs (the scheduler admits a job with `ignoreQueueWait`); async jobs count toward `MAX_SLICE_QUEUE_LENGTH` and `MAX_SLICE_QUEUE_PER_IP` while queued or running.
+- **[ops]** The job routes have their own per-IP token bucket before authentication (`SLICE_JOB_RATE_LIMIT_MAX_REQUESTS` 600 / `_WINDOW_MS` 60000 / `_BURST_CAPACITY` 60), so polls never consume slice submissions; `GET`/`DELETE /bambu/slice/jobs/:job_id` are slice-audience routes for CORS.
+- **[ops]** Structured events `async.accepted`, `async.completed`, `async.expired`, `async.cancelled` and `async.evicted` carry the `sj_` job id and the submission `request_id`; the event `job_id` field accepts the `sj_` shape beside the workspace `job-` shape.
+- **[ops]** The container entrypoint admits `EXPECTED_MEMORY_BYTES` up to `12884901888` (12 GiB, was 8 GiB) so a 16 GB host can run `MAX_CONCURRENT_SLICES=2`; the Compose default stays `4294967296`.
+
+### Unchanged
+- Without `Prefer: respond-async` (and on `/prusa/slice`, `/orca/slice`, `/render`) every route answers exactly as in 3.7.0; the async store is never touched on that path (regression tests). Route order, authentication, validation-before-enqueue, the queue's sync wait, pricing, profiles, the catalogue and the Bambu `measurement_generation` are unchanged.
+
 ## v3.7.0 (2026-09-22)
 
 ### Added

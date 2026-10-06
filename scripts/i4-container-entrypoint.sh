@@ -26,7 +26,7 @@ for bounded_integer in "$pids_limit" "$memory_bytes" "$log_max_files"; do
     esac
 done
 if [ "$pids_limit" -lt 64 ] || [ "$pids_limit" -gt 512 ] \
-    || [ "$memory_bytes" -lt 1073741824 ] || [ "$memory_bytes" -gt 8589934592 ] \
+    || [ "$memory_bytes" -lt 1073741824 ] || [ "$memory_bytes" -gt 12884901888 ] \
     || [ "$log_max_files" -lt 1 ] || [ "$log_max_files" -gt 5 ]; then
     exit 78
 fi

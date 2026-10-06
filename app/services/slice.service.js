@@ -11,6 +11,8 @@ const {
 const { resolveProfileSelection } = require('./slice/profiles');
 const { getRequestWorkspace } = require('./slice/workspace');
 const { bindRequestAbort, isResponseWritable } = require('./slice/request-abort');
+const { getDefaultAsyncSliceJobStore } = require('./slice/async-jobs');
+const { prefersRespondAsync, submitAsyncSlice } = require('./slice/async-slice');
 const {
     resolveSliceOutputTargets,
     assertValidContainedArtifact
@@ -108,8 +110,29 @@ function createSliceHandlers(options = {}) {
     // A caller that replaces the pipeline owns its own validation contract.
     const preValidate = options.validateSliceRequestImpl
         || (options.processSliceImpl ? () => null : preValidateSliceRequest);
+    // `null` disables the asynchronous mode; the default store is created on
+    // the first asynchronous submission from the validated resource policy.
+    const resolveAsyncStore = () => (options.asyncJobStore === undefined
+        ? getDefaultAsyncSliceJobStore()
+        : options.asyncJobStore);
+
+    function submitAsync(req, res, forcedTechnology, engine, store) {
+        return submitAsyncSlice(req, res, {
+            store, forcedTechnology, engine, preValidate, enqueue, process, bindAbort,
+            setAbortSignal,
+            queueKey: resolveQueueKey(req, resolveClientIp),
+            createQueueErrorResponse,
+            awaitResponseSettlement
+        });
+    }
 
     async function handle(req, res, forcedTechnology, engine) {
+        // Async contract v1 is offered on /bambu/slice only; without the
+        // header (or on another engine) the synchronous path below is unchanged.
+        if (engine === 'bambu' && prefersRespondAsync(req)) {
+            const store = resolveAsyncStore();
+            if (store) return submitAsync(req, res, forcedTechnology, engine, store);
+        }
         const binding = bindAbort(req, res);
         let result;
         let queueError;
