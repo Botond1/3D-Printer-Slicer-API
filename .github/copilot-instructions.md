@@ -4,7 +4,7 @@ Last synchronized: 2026-09-07
 
 The Prusa `material-v1` catalogue and native material-specific hash compatibility are included in this release. The earlier access blocker and Windows-only state in `handoff-2026-09-06-calculator.md` are historical; use the dated deployed handoff below.
 
-## Release 3.8.0 — 2026-10-05 (asynchronous Bambu slice jobs; NOT deployed)
+## Deployed release 3.8.0 — 2026-10-06 (asynchronous Bambu slice jobs)
 
 `POST /bambu/slice` with `Prefer: respond-async` answers 202 once the request
 passed every pre-pipeline check and the slice queue admitted it; the job runs
@@ -23,6 +23,13 @@ the submitting rotation family (404 `SLICE_JOB_NOT_FOUND` otherwise). Modules:
 Waiting synchronous requests dequeue before waiting async jobs. The container entrypoint admits
 `EXPECTED_MEMORY_BYTES` up to 12 GiB. See CHANGELOG 3.8.0 and
 `docs/integration-guide.md` section 3.6.
+
+Signed main `4fb4c0d2beb0a560c6f7f5aca9ce0c21a9805c74` runs on the Slicer VPS as
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:4fb4def7d2e09e0e12f59b146e4aefc41fc5c7c110071ce39866662b52cf398f`
+since ~08:28 UTC with `MAX_CONCURRENT_SLICES=2`, `SLICER_MEMORY_BYTES=12884901888`,
+`MAX_SLICE_QUEUE_LENGTH=24`, `MAX_SLICE_QUEUE_PER_IP=20`; catalogue v2 `bb07e0c3…`,
+v3 `08afef2f…` and the Bambu `measurement_generation` `0af5bd3e…` are unchanged.
+See `docs/codex/handoff-2026-10-06-async-jobs-deployed.md`.
 
 ## Deployed release 3.7.0 — 2026-09-22 (the P1S alternative footprint in catalogue v3)
 
