@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented in this file.
 
+## v3.8.1 (2026-10-06, not deployed)
+
+### Fixed
+- **[runtime]** Native process trees are terminated again. The command runner started every native and Python helper through `child_process.execFile`, which forwards only `cwd`/`env`/`gid`/`shell`/`signal`/`uid`/`windowsHide`/`windowsVerbatimArguments` to `spawn` and silently drops `detached`; on POSIX the native therefore never led its own process group, the tree terminator's `kill(-pid, ...)` reached no group (ESRCH), `native.termination_settled` reported success in about 1 ms and nothing was killed, while the abort had already cleared the command timeout. Live on 3.8.0 an async job past `ASYNC_SLICE_DEADLINE_MS` left `bambu-studio` (243 % CPU, 4 GiB), its wrapper and Xvfb running until a manual SIGTERM; a `DELETE` of a running job and a synchronous client disconnect had the same defect (the synchronous `native.completed aborted` appeared only once the native finished on its own). `app/services/slice/spawn-file.js` keeps execFile's exact contract (utf8 buffers, `maxBuffer` cut, `Command failed` error with `code`/`killed`/`signal`/`cmd`, one callback) over `spawn` with `detached` honoured, so the deadline, a cancellation and a disconnect now end in SIGTERM, SIGKILL after the 1 s grace, `native.completed` `aborted`, and the queue slot is released only after the whole tree is gone. Windows (`taskkill /T`) was not affected. Tests drive the real runner and terminator with a real parent + grandchild tree that ignores SIGTERM through the async deadline, a `DELETE` and a synchronous disconnect.
+
 ## v3.8.0 (2026-10-05, not deployed)
 
 ### Added

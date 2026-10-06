@@ -124,7 +124,7 @@ test('OpenAPI documents the async submission, status and cancellation contract',
         ['success', 'async_contract', 'job_id', 'status', 'elapsed_ms', 'result_status', 'result']);
     assert.match(completed.properties.result.description, /SLICE_DEADLINE_EXCEEDED/);
     assert.ok(jobs.delete.responses[204]);
-    assert.equal(document.info.version, '3.8.0');
+    assert.equal(document.info.version, '3.8.1');
 });
 
 test('through the real pipeline an async result equals the synchronous answer byte for byte', async (t) => {
