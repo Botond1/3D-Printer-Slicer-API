@@ -117,10 +117,11 @@ function createAsyncSliceJobStore(options = {}) {
         for (const job of [...jobs.values()]) if (isExpired(job)) expireRetention(job);
     }
 
-    function oldestFinished() {
+    function oldestFinished(principal = null) {
         let oldest = null;
         for (const job of jobs.values()) {
-            if (job.state === 'completed' && (!oldest || job.completedAt < oldest.completedAt)) oldest = job;
+            if (job.state !== 'completed' || (principal !== null && job.principal !== principal)) continue;
+            if (!oldest || job.completedAt < oldest.completedAt) oldest = job;
         }
         return oldest;
     }
@@ -130,9 +131,13 @@ function createAsyncSliceJobStore(options = {}) {
         return jobs.size < limits.maxJobs || oldestFinished() !== null;
     }
 
-    function evictForAdmission() {
+    /**
+     * Make room for a new job: the submitting principal's own oldest finished
+     * result goes first, so another key family cannot evict unpolled results.
+     */
+    function evictForAdmission(principal) {
         if (jobs.size < limits.maxJobs) return true;
-        const victim = oldestFinished();
+        const victim = oldestFinished(principal) || oldestFinished();
         if (!victim) return false;
         remove(victim);
         emit('async.evicted', victim, { outcome: 'evicted', extra: { queue_state: 'completed' } });
@@ -154,12 +159,12 @@ function createAsyncSliceJobStore(options = {}) {
      */
     function admit({ principal, requestId, controller, admission }) {
         sweepExpired();
-        if (!evictForAdmission()) return null;
+        if (!evictForAdmission(principal)) return null;
         const acceptedAt = now();
         const job = {
             id: uniqueId(), principal, requestId, controller, admission,
             state: 'queued', acceptedAt, deadlineAt: acceptedAt + limits.deadlineMs,
-            completedAt: null, result: null, deadlineTimer: undefined, retentionTimer: undefined
+            captured: false, completedAt: null, result: null, deadlineTimer: undefined, retentionTimer: undefined
         };
         jobs.set(job.id, job);
         startTimer(job, 'deadlineTimer', limits.deadlineMs, () => expireDeadline(job));
@@ -169,6 +174,11 @@ function createAsyncSliceJobStore(options = {}) {
 
     function markRunning(job) {
         if (isLive(job) && job.state === 'queued') job.state = 'running';
+    }
+
+    /** The pipeline wrote its answer; the deadline no longer overrides it. */
+    function markCaptured(job) {
+        if (isLive(job)) job.captured = true;
     }
 
     /**
@@ -197,7 +207,8 @@ function createAsyncSliceJobStore(options = {}) {
     }
 
     function expireDeadline(job) {
-        if (!isLive(job)) return;
+        // A captured answer (its artifact may be in promotion) completes as itself.
+        if (!isLive(job) || job.captured) return;
         // Aborting the queue signal removes a queued job or terminates the
         // native process tree of a running one, exactly as a disconnect does
         // on the synchronous path; the slot is released when the task settles.
@@ -254,6 +265,7 @@ function createAsyncSliceJobStore(options = {}) {
         hasCapacity,
         admit,
         markRunning,
+        markCaptured,
         complete,
         isLive,
         lookup,

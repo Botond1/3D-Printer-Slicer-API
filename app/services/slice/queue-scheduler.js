@@ -196,15 +196,24 @@ function createQueueScheduler(config) {
         return true;
     }
 
+    /**
+     * Synchronous waiters start before waiting asynchronous jobs (FIFO within
+     * each class): a synchronous client is bounded by MAX_SLICE_QUEUE_WAIT_MS,
+     * an asynchronous job only by its own, longer deadline.
+     */
+    function nextQueuedJob() {
+        return queuedJobs.find((job) => !job.ignoreQueueWait) || queuedJobs[0];
+    }
+
     function runNextSliceJob() {
         if (!runtimeAvailable()) {
             void beginSliceQueueShutdown();
             return;
         }
         while (!shuttingDown && activeJobs.size < config.maxConcurrent && queuedJobs.length > 0) {
-            const job = queuedJobs[0];
+            const job = nextQueuedJob();
             if (expireJobAtDequeue(job)) continue;
-            queuedJobs.shift();
+            queuedJobs.splice(queuedJobs.indexOf(job), 1);
             activateJob(job);
         }
     }
@@ -231,10 +240,16 @@ function createQueueScheduler(config) {
         return job;
     }
 
+    /** 1-based start order under the dequeue priority; null unless queued. */
     function queuePosition(job) {
-        if (job.state !== 'queued') return null;
-        const index = queuedJobs.indexOf(job);
-        return index < 0 ? null : index + 1;
+        if (job.state !== 'queued' || !queuedJobs.includes(job)) return null;
+        let ahead = 0;
+        for (const other of queuedJobs) {
+            if (other === job) break;
+            if (other.ignoreQueueWait === job.ignoreQueueWait) ahead += 1;
+        }
+        if (job.ignoreQueueWait) ahead += queuedJobs.filter((other) => !other.ignoreQueueWait).length;
+        return ahead + 1;
     }
 
     function notifyAdmitted(job, onAdmitted) {

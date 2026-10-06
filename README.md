@@ -232,7 +232,8 @@ fails earlier (401, 400/413/415, 429, 503) answers synchronously exactly as
 without the header; without the header the endpoint is unchanged. The job runs
 in the same queue and pipeline as a synchronous slice, counts toward
 `MAX_SLICE_QUEUE_LENGTH` / `MAX_SLICE_QUEUE_PER_IP` while queued or running,
-ignores `MAX_SLICE_QUEUE_WAIT_MS`, and ends at `ASYNC_SLICE_DEADLINE_MS` (result
+ignores `MAX_SLICE_QUEUE_WAIT_MS` (a waiting synchronous request starts first
+when a slot frees), and ends at `ASYNC_SLICE_DEADLINE_MS` (result
 504 `SLICE_DEADLINE_EXCEEDED`, native process tree terminated). A client
 disconnect after the 202 never aborts it. `GET /bambu/slice/jobs/:job_id`
 answers `queued`/`running` (with `queue_position`, `elapsed_ms`, `deadline_at`,
@@ -417,7 +418,7 @@ Candidate provenance evidence uses schema `i7-s3a-candidate-provenance-v2`.
 | `MAX_CONCURRENT_SLICES` | `1` | canonical decimal `1..3`; N=2/3 unqualified |
 | `MAX_SLICE_QUEUE_LENGTH` / `MAX_SLICE_QUEUE_PER_IP` / `MAX_SLICE_QUEUE_WAIT_MS` | `100` / `5` / `300000` | `SLICE_QUEUE_FULL` 503, `SLICE_QUEUE_CLIENT_LIMIT` 429 (`Retry-After: 5`), `SLICE_QUEUE_TIMEOUT` 503; async jobs count toward the first two while queued or running, the wait applies to synchronous requests only |
 | `ASYNC_SLICE_DEADLINE_MS` / `ASYNC_SLICE_RESULT_TTL_MS` / `ASYNC_SLICE_MAX_JOBS` | `600000` / `1800000` / `200` | `60000..1800000` / `60000..86400000` / `1..2000`; async job deadline from admission (504 `SLICE_DEADLINE_EXCEEDED` result, native tree terminated), result retention, retained jobs (`SLICE_ASYNC_JOBS_FULL` 429 when all are live) |
-| `SLICE_JOB_RATE_LIMIT_MAX_REQUESTS` / `_WINDOW_MS` / `_BURST_CAPACITY` | `600` / `60000` / `60` | per-IP token bucket on `GET`/`DELETE /bambu/slice/jobs/:job_id`, separate from submissions |
+| `SLICE_JOB_RATE_LIMIT_MAX_REQUESTS` / `_WINDOW_MS` / `_BURST_CAPACITY` | `1200` / `60000` / `60` | per-IP token bucket on `GET`/`DELETE /bambu/slice/jobs/:job_id`, separate from submissions |
 | `SLICE_COMMAND_TIMEOUT_MS` | `600000` | `1000..3600000`; Python helpers get 120 s each, clamped to the native budget; the renderer 60 s |
 | `UPLOAD_TOTAL_TIMEOUT_MS` / `MAX_UPLOAD_BYTES` | `600000` / `500 MB` | `1000..600000` / up to 500 MB |
 | `HTTP_HEADERS_TIMEOUT_MS` | `60000` | `1000..60000`, capped at request timeout |

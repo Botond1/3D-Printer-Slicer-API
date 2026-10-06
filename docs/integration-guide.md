@@ -304,13 +304,19 @@ terminated) or its finished result was discarded, and `404` as above.
 Semantics. An async job runs in the same queue and pipeline as a synchronous
 slice, counts toward `MAX_SLICE_QUEUE_LENGTH` and `MAX_SLICE_QUEUE_PER_IP` (the
 same caller key as today) while queued or running, and is not cut by
-`MAX_SLICE_QUEUE_WAIT_MS`. A client disconnect after the `202` never aborts it.
+`MAX_SLICE_QUEUE_WAIT_MS`. When a slot frees, the oldest waiting synchronous
+request starts before any waiting async job (FIFO within each class), so a
+`queue_position` can grow while synchronous requests arrive. A client
+disconnect after the `202` never aborts it. Once the pipeline has written its
+answer, the deadline no longer overrides it.
 A job is visible only to the authenticated rotation family that submitted it
 (`shared`, `woocommerce`, `leadpilot`), so a key rotation inside the family
 keeps access. Finished results are retained `ASYNC_SLICE_RESULT_TTL_MS` after
 completion; at most `ASYNC_SLICE_MAX_JOBS` jobs are retained and finished
-results are evicted oldest first. Status polls have their own per-IP token
-bucket (`SLICE_JOB_RATE_LIMIT_*`, default 600 per 60 s, burst 60) and never
+results are evicted oldest first, the submitting family's own results before
+another family's. Every job-route answer, including a 401 or 429, carries
+`Cache-Control: no-store`, and a status read carries no ETag. Status polls have their own per-IP token
+bucket (`SLICE_JOB_RATE_LIMIT_*`, default 1200 per 60 s, burst 60) and never
 consume slice submissions. Structured events `async.accepted`,
 `async.completed`, `async.expired`, `async.cancelled` and `async.evicted` carry
 the `job_id` and the submission's `request_id`.
@@ -616,7 +622,7 @@ with a request that sends `supports=false`, and vice versa. The default is
 | Queued + active jobs per caller | 5 |
 | Maximum queue wait | 300 s → `503 SLICE_QUEUE_TIMEOUT` (synchronous requests only) |
 | Async job deadline / result retention / retained jobs | 600 s → result `504 SLICE_DEADLINE_EXCEEDED` / 1800 s / 200 (section 3.6) |
-| Async job status polls | 600 per 60 s, burst 60, per caller IP |
+| Async job status polls | 1200 per 60 s, burst 60, per caller IP |
 | Upload lifetime | 600 s → `408 UPLOAD_TOTAL_TIMEOUT` |
 | Native slice budget | 600 s → `422 FILE_PROCESSING_TIMEOUT` |
 | Python helper budget (conversion, orientation, sizing) | 120 s each → `422 FILE_PROCESSING_TIMEOUT` |

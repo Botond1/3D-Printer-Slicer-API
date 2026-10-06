@@ -16,7 +16,8 @@ Last synchronized: 2026-09-06
   render.routes.js declares /render; upload-lifecycle.js is the shared
   workspace/multer/deadline/cleanup lifecycle for both;
   slice-jobs.routes.js declares GET/DELETE /bambu/slice/jobs/:job_id for the
-  3.8.0 asynchronous jobs (services/slice/async-jobs.js, async-slice.js).
+  3.8.0 asynchronous jobs (services/slice/async-jobs.js, async-slice.js,
+  async-job-http.js, async-job-views.js).
 - app/routes/system.routes.js delegates admin output listing/download
   validation to app/services/admin-output.service.js.
 - app/services/pricing.service.js remains the facade API; persistence and

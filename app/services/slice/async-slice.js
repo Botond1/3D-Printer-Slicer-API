@@ -58,9 +58,9 @@ function isAsyncAccepted(req) {
 /**
  * A response stand-in for the pipeline. It honours the subset of the Express
  * response the slice pipeline uses and keeps the JSON exactly as `res.json`
- * would serialize it.
+ * would serialize it. `onWrite` runs once the answer is captured.
  */
-function createCapturedResponse() {
+function createCapturedResponse(onWrite = () => {}) {
     const headers = new Map();
     return {
         statusCode: 200,
@@ -91,6 +91,7 @@ function createCapturedResponse() {
             this.headersSent = true;
             this.writableEnded = true;
             this.writableFinished = true;
+            onWrite();
             return this;
         }
     };
@@ -109,6 +110,17 @@ function captureResult(capture, taskError, mapQueueError) {
     if (taskError && !capture.headersSent) mapQueueError(taskError, capture);
     if (!capture.headersSent) capture.status(500).json({ ...INTERNAL_SERVER_ERROR });
     return { status: capture.statusCode, body: capture.body, retryAfterSeconds: capturedRetryAfter(capture) };
+}
+
+function isResponseDisconnected(res) {
+    return Boolean(res?.destroyed || res?.closed || res?.writableEnded);
+}
+
+/** Answer a failure before admission exactly as the synchronous handler does. */
+function answerLikeSync(error, res, binding, ctx) {
+    if (isResponseWritable(res) && !binding.signal.aborted) return ctx.createQueueErrorResponse(error, res);
+    if (!binding.signal.aborted && !isResponseDisconnected(res)) throw error;
+    return undefined;
 }
 
 function sendCapacityResponse(res) {
@@ -131,10 +143,10 @@ function sendAccepted(res, store, job) {
 }
 
 /** Await the task and its response settlement, then store the result. */
-async function runToCompletion(job, settled, capture, req, ctx) {
+async function runToCompletion(admitted, req, ctx) {
     let taskError = null;
     try {
-        await settled;
+        await admitted.settled;
     } catch (error) {
         taskError = error;
     }
@@ -145,28 +157,63 @@ async function runToCompletion(job, settled, capture, req, ctx) {
         // The synchronous client had already received this body when a
         // release failure surfaced; the stored result mirrors that answer.
     }
-    if (!ctx.store.isLive(job)) return;
-    ctx.store.complete(job, captureResult(capture, taskError, ctx.createQueueErrorResponse));
+    if (!ctx.store.isLive(admitted.job)) return;
+    ctx.store.complete(admitted.job, captureResult(admitted.capture, taskError, ctx.createQueueErrorResponse));
 }
 
-function enqueueAsyncJob(req, ctx, capture, controller, admitted) {
-    const { store, forcedTechnology, engine } = ctx;
-    const principal = resolveJobPrincipal(req);
-    return ctx.enqueue((effectiveSignal) => {
+function admitIntoStore(admitted, req, ctx, controller, admission) {
+    admitted.handle = admission;
+    try {
+        admitted.job = ctx.store.admit({
+            principal: resolveJobPrincipal(req), requestId: req.requestId, controller, admission
+        });
+    } catch (error) {
+        admitted.job = null;
+        admitted.admitError = error;
+    }
+    // An ownerless job never runs: the abort removes it from the queue.
+    if (!admitted.job) controller.abort(admitted.admitError || new Error('Asynchronous slice job capacity is exhausted.'));
+}
+
+function enqueueAsyncJob(req, ctx) {
+    const controller = new AbortController();
+    const admitted = { handle: null, job: null, admitError: null, settled: null, capture: null };
+    admitted.capture = createCapturedResponse(() => ctx.store.markCaptured(admitted.job));
+    admitted.settled = ctx.enqueue((effectiveSignal) => {
         const signal = effectiveSignal || controller.signal;
-        ctx.setAbortSignal(capture, signal);
-        store.markRunning(admitted.job);
-        return ctx.process(req, capture, { forcedTechnology, engine, signal });
+        ctx.setAbortSignal(admitted.capture, signal);
+        ctx.store.markRunning(admitted.job);
+        return ctx.process(req, admitted.capture, { forcedTechnology: ctx.forcedTechnology, engine: ctx.engine, signal });
     }, {
         queueKey: ctx.queueKey,
         signal: controller.signal,
         ignoreQueueWait: true,
-        onAdmitted(admission) {
-            admitted.handle = admission;
-            admitted.job = store.admit({ principal, requestId: req.requestId, controller, admission });
-            if (!admitted.job) controller.abort(new Error('Asynchronous slice job capacity is exhausted.'));
-        }
+        onAdmitted: (admission) => admitIntoStore(admitted, req, ctx, controller, admission)
     });
+    // Every path below awaits it; this only keeps a late rejection from ever being unhandled.
+    admitted.settled.catch(() => {});
+    return admitted;
+}
+
+/** Answer an admission that produced no job, exactly as the synchronous path would. */
+async function answerUnadmitted(admitted, res, binding, ctx) {
+    try {
+        await admitted.settled;
+    } catch (error) {
+        if (admitted.handle && !admitted.admitError) {
+            return isResponseWritable(res) && !binding.signal.aborted ? sendCapacityResponse(res) : undefined;
+        }
+        return answerLikeSync(admitted.admitError || error, res, binding, ctx);
+    }
+    return undefined;
+}
+
+function cancelQuietly(store, job, reason) {
+    try {
+        store.cancel(job.id, job.principal, reason);
+    } catch {
+        // Cancellation is best effort on an already failing path.
+    }
 }
 
 /**
@@ -179,71 +226,44 @@ function enqueueAsyncJob(req, ctx, capture, controller, admitted) {
  */
 async function submitAsyncSlice(req, res, ctx) {
     const binding = ctx.bindAbort(req, res);
-    let admitted;
-    let settled;
-    let capture;
+    let admitted = null;
     try {
-        const earlyResponse = ctx.preValidate(req, res, { forcedTechnology: ctx.forcedTechnology, engine: ctx.engine });
+        let earlyResponse;
+        try {
+            earlyResponse = ctx.preValidate(req, res, { forcedTechnology: ctx.forcedTechnology, engine: ctx.engine });
+        } catch (error) {
+            return answerLikeSync(error, res, binding, ctx);
+        }
         if (earlyResponse) return earlyResponse;
         // A request that disconnected before admission never becomes a job.
         if (binding.signal.aborted) return undefined;
         if (!ctx.store.hasCapacity()) return sendCapacityResponse(res);
-        const controller = new AbortController();
-        capture = createCapturedResponse();
-        admitted = { handle: null, job: null };
-        settled = enqueueAsyncJob(req, ctx, capture, controller, admitted);
-        if (!admitted.job) {
-            try {
-                await settled;
-            } catch (error) {
-                if (!isResponseWritable(res) || binding.signal.aborted) return undefined;
-                return admitted.handle ? sendCapacityResponse(res) : ctx.createQueueErrorResponse(error, res);
-            }
-            return undefined;
-        }
+        admitted = enqueueAsyncJob(req, ctx);
+        if (!admitted.job) return await answerUnadmitted(admitted, res, binding, ctx);
         if (!isResponseWritable(res) || binding.signal.aborted) {
-            ctx.store.cancel(admitted.job.id, admitted.job.principal, 'client_gone');
+            cancelQuietly(ctx.store, admitted.job, 'client_gone');
         } else {
             sendAccepted(res, ctx.store, admitted.job);
             markAsyncAccepted(req);
         }
+    } catch (error) {
+        if (!admitted?.job) throw error;
+        // The job must not outlive its request workspace: cancel it and wait
+        // for the task to settle before the route cleans the workspace.
+        binding.dispose();
+        cancelQuietly(ctx.store, admitted.job, 'submission_failed');
+        await runToCompletion(admitted, req, ctx);
+        throw error;
     } finally {
         binding.dispose();
     }
-    await runToCompletion(admitted.job, settled, capture, req, ctx);
+    await runToCompletion(admitted, req, ctx);
     return res;
-}
-
-function sendJobNotFound(res) {
-    return res.status(404).json({
-        success: false,
-        error: 'Slice job not found.',
-        errorCode: 'SLICE_JOB_NOT_FOUND'
-    });
-}
-
-/** `GET /bambu/slice/jobs/:job_id` */
-function handleJobStatus(req, res, store) {
-    res.setHeader('Cache-Control', 'no-store');
-    const job = store.lookup(req.params?.job_id, resolveJobPrincipal(req));
-    if (!job) return sendJobNotFound(res);
-    const body = store.view(job);
-    if (body.status !== 'completed') res.setHeader('Retry-After', String(retryAfterSeconds(body.poll_after_ms)));
-    return res.status(200).json(body);
-}
-
-/** `DELETE /bambu/slice/jobs/:job_id` */
-function handleJobCancel(req, res, store) {
-    res.setHeader('Cache-Control', 'no-store');
-    if (!store.cancel(req.params?.job_id, resolveJobPrincipal(req))) return sendJobNotFound(res);
-    return res.status(204).end();
 }
 
 module.exports = {
     createCapturedResponse,
     captureResult,
-    handleJobCancel,
-    handleJobStatus,
     isAsyncAccepted,
     prefersRespondAsync,
     resolveJobPrincipal,

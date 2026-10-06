@@ -83,9 +83,9 @@ function send(port, { method = 'GET', path: target, headers = {}, parts = null, 
 
 /** A fake pipeline that answers exactly like the real one: write, then settle the artifact release. */
 function createFakePipeline() {
-    const state = { runs: [], released: 0, gate: null, answer: null };
+    const state = { runs: [], released: 0, gate: null, answer: null, releaseGate: null };
     async function processSlice(req, res, options) {
-        const run = { signal: options.signal, engine: options.engine, started: Date.now() };
+        const run = { signal: options.signal, engine: options.engine, started: Date.now(), prefer: req.get?.('prefer') || '' };
         state.runs.push(run);
         if (state.gate) {
             await Promise.race([
@@ -96,7 +96,9 @@ function createFakePipeline() {
         const answer = state.answer || { status: 200, body: { success: true, engine: options.engine } };
         for (const [name, value] of Object.entries(answer.headers || {})) res.setHeader(name, value);
         if (answer.status !== 200) return res.status(answer.status).json(answer.body);
-        setResponseSettlement(req, writeJsonAndWaitForFinish(res, answer.body).then(() => { state.released += 1; }));
+        setResponseSettlement(req, writeJsonAndWaitForFinish(res, answer.body)
+            .then(() => state.releaseGate?.promise)
+            .then(() => { state.released += 1; }));
         return res;
     }
     return { state, processSlice };
@@ -146,7 +148,7 @@ async function createAsyncHarness(t, options = {}) {
         handlePrusa: handlers.handleSlicePrusa,
         onLifecycleSettled() { settledCount += 1; }
     }));
-    app.use(createSliceJobsRouter({ rateLimiter: pass, authenticate: principalAuthentication, store }));
+    app.use(createSliceJobsRouter({ rateLimiter: options.jobRateLimiter || pass, authenticate: principalAuthentication, store }));
     app.use(errorHandler);
     const server = app.listen(0, '127.0.0.1');
     await new Promise((resolve) => server.once('listening', resolve));

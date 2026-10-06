@@ -17,9 +17,10 @@ byte-identical to 3.7.0. Deadline `ASYNC_SLICE_DEADLINE_MS` (600000,
 (1800000, 60000..86400000); `ASYNC_SLICE_MAX_JOBS` (200, 1..2000; 429
 `SLICE_ASYNC_JOBS_FULL` when all are live). Jobs are in-memory and bound to
 the submitting rotation family (404 `SLICE_JOB_NOT_FOUND` otherwise). Modules:
-`app/services/slice/async-jobs.js` (store), `async-slice.js` (submission,
-capture, status/cancel), `app/routes/slice-jobs.routes.js` (own per-IP limiter
-`SLICE_JOB_RATE_LIMIT_*`). The container entrypoint admits
+`app/services/slice/async-jobs.js` (store), `async-job-views.js` (bodies),
+`async-slice.js` (submission, capture), `async-job-http.js` (status/cancel),
+`app/routes/slice-jobs.routes.js` (own per-IP limiter `SLICE_JOB_RATE_LIMIT_*`).
+Waiting synchronous requests dequeue before waiting async jobs. The container entrypoint admits
 `EXPECTED_MEMORY_BYTES` up to 12 GiB. See CHANGELOG 3.8.0 and
 `docs/integration-guide.md` section 3.6.
 

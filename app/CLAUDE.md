@@ -259,8 +259,11 @@ this file maps them to modules.
 - queue.js, queue-scheduler.js: bounded FIFO with per-key fairness,
   timeouts, quarantine drain, `SLICE_QUEUE_SHUTDOWN`; an async job is
   admitted with `ignoreQueueWait` (no `MAX_SLICE_QUEUE_WAIT_MS`) and an
-  `onAdmitted` observer that reads its state and queue position.
-- async-jobs.js, async-slice.js (3.8.0): `Prefer: respond-async` on
+  `onAdmitted` observer that reads its state and queue position; when a slot
+  frees, waiting synchronous jobs start before waiting async jobs (FIFO within
+  each class).
+- async-jobs.js, async-job-views.js, async-job-http.js, async-slice.js
+  (3.8.0): `Prefer: respond-async` on
   `/bambu/slice`. The store owns `sj_` ids, principal binding, the
   `ASYNC_SLICE_DEADLINE_MS` deadline (aborts the queue signal like a
   disconnect), result retention, oldest-finished eviction and the `async.*`
