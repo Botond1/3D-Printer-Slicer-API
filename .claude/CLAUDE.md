@@ -4,6 +4,16 @@ Last synchronized: 2026-09-07
 
 The Prusa `material-v1` catalogue and native material-specific hash compatibility are included in this release. The earlier access blocker and Windows-only state in `handoff-2026-09-06-calculator.md` are historical; use the dated deployed handoff below.
 
+## Deployed release 3.8.1 — 2026-10-06 (the native process tree is really terminated)
+
+The command runner spawns natives through `app/services/slice/spawn-file.js` (execFile's contract over `spawn`,
+honouring `detached`): `execFile` silently dropped `detached`, so on Linux a native never led its own process
+group and every abort (async deadline, DELETE, synchronous disconnect) killed nothing while the tree ran on.
+Signed main `46259457093aa5e998a7f28cacf3c784570b1964` runs on the Slicer VPS as
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:96a8c7f9b01c368785cd26d16c61b7124352d3f6d7cfdbad0ee345b57d44f2d1`
+since ~12:10 UTC with the 3.8.0 operator values; a live DELETE of a running heavy job left no native process
+1 s later (`native.completed` aborted). See `docs/codex/handoff-2026-10-06-async-jobs-deployed.md`.
+
 ## Deployed release 3.8.0 — 2026-10-06 (asynchronous Bambu slice jobs)
 
 `POST /bambu/slice` with `Prefer: respond-async` answers 202 once the request
