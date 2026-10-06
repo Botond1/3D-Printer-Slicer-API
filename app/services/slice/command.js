@@ -1,6 +1,8 @@
 /** Child process execution with bounded tree cancellation and minimal environment. */
 
-const { execFile } = require('node:child_process');
+// Not child_process.execFile: it drops `detached`, so a native never led its
+// own process group and the tree terminator killed nothing (3.8.1).
+const { spawnFile } = require('./spawn-file');
 const { DEFAULTS } = require('../../config/constants');
 const { parseBoundedPositiveInt } = require('./number-utils');
 const { createChildEnvironment } = require('./child-environment');
@@ -260,7 +262,7 @@ function createCommandRunner(overrides = {}) {
     }
     const dependencies = {
         telemetry,
-        execute: overrides.execFile || execFile,
+        execute: overrides.execFile || spawnFile,
         setTimer: overrides.setTimeout || setTimeout,
         clearTimer: overrides.clearTimeout || clearTimeout,
         platform: overrides.platform || process.platform,
