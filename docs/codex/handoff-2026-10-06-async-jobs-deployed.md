@@ -30,3 +30,16 @@ restores both env files and the 3.7.0 image `sha256:59a44481…` (retained as `l
 ## Client contract
 
 R3DPlugin V2 `docs/plans/async-slice-contract-v1.md` (with the implemented deviations section). The plugin side is D132.
+
+## 3.8.1 — the native tree is really terminated (same day)
+
+- Found live after 3.8.0: a heavy async job hit its 600 s deadline, the store logged `SLICE_DEADLINE_EXCEEDED` and
+  `native.termination_settled` in 1 ms, but `/bin/sh bambu-studio` + `Xvfb` + `bambu-studio` (243 % CPU, 4 GiB) kept
+  running 10+ minutes until killed by hand. Cause: `execFile` drops `detached`, so the group kill hit no group.
+  The synchronous disconnect had the same no-op before 3.8.0.
+- PR #39 (`spawn-file.js`; real process-tree tests for the async deadline, DELETE and the sync disconnect, passing on
+  the Ubuntu CI), signed main `46259457…`, digest `sha256:96a8c7f9…f2d1`, SLSA + SPDX verified.
+- Cutover ~12:10 UTC by `/root/r3d-async-control-20261006/deploy-async381.sh` (backups
+  `/root/r3d-backup-20261006-async381/`; rollback: the same script with `rollback` → 3.8.0 `sha256:4fb4def7…`).
+- Live control: pillars-40.stl async, 3 natives running at 25 s (bambu-studio 372 % CPU), DELETE → 204, 0 natives
+  1 s later, events `async.cancelled` → `native.termination_settled` (48 ms) → `native.completed` aborted.
