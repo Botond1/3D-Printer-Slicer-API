@@ -25,6 +25,6 @@ http:
         healthCheck:
           path: /ready
           interval: 10s
-          timeout: 3s
+          timeout: 8s
         servers:
           - url: "http://3d-psa-backend-server:3000"

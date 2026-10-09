@@ -254,7 +254,7 @@ test('router mutations cannot become a generic proxy or drift from the exact API
             router,
             /^        servers:$/m,
             '        healthCheck:\n          path: /health\n          interval: 10s\n'
-                + '          timeout: 3s\n        servers:'
+                + '          timeout: 8s\n        servers:'
         )],
         ['extra backend', replaceRequired(router, /^          - url:.*$/m, '$&\n          - url: "http://other:3000"')],
         ['multiline extra backend item', replaceRequired(
