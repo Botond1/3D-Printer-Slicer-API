@@ -387,14 +387,14 @@ function validateRouterSource(source, expectedHost = DISABLED_HOST, disabled = t
         '      entryPoints:\n        - websecure', '      service: slicer-api',
         `      middlewares:\n        - ${ALLOWLIST_MIDDLEWARE}`,
         '      tls:\n        certResolver: letsencrypt', '        passHostHeader: true',
-        '        healthCheck:\n          path: /ready\n          interval: 10s\n          timeout: 3s'
+        '        healthCheck:\n          path: /ready\n          interval: 10s\n          timeout: 8s'
     ]) {
         if (!active.includes(fragment)) return 'traefik_router_contract_mismatch';
     }
     if (exactLineCount(loadBalancer, '        passHostHeader: true') !== 1
         || exactLineCount(healthCheck, '          path: /ready') !== 1
         || exactLineCount(healthCheck, '          interval: 10s') !== 1
-        || exactLineCount(healthCheck, '          timeout: 3s') !== 1
+        || exactLineCount(healthCheck, '          timeout: 8s') !== 1
         || canonicalServers !== expectedServers
         || exactLineCount(servers, `          - url: "${BACKEND_URL}"`) !== 1) {
         return 'traefik_router_service_mismatch';
