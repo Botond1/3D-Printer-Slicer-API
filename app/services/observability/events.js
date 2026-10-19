@@ -20,8 +20,10 @@ const EVENT_NAMES = Object.freeze([
     'async.completed',
     'async.evicted',
     'async.expired',
+    'async.retry_alone',
     'auth.rejected',
     'native.completed',
+    'native.failure_detail',
     'native.quarantined',
     'native.started',
     'native.termination_settled',
@@ -48,8 +50,14 @@ const SAFE_LABEL = /^[A-Za-z0-9_.:-]+$/;
 const REDACTED_KEY = /(?:authorization|cookie|credential|key|password|secret|token)/i;
 const SUSPICIOUS_VALUE = /(?:bearer\s+|basic\s+|api[_-]?key\s*[=:]|eyJ[A-Za-z0-9_-]{12,}\.|sk-[A-Za-z0-9_-]{12,})/i;
 const EXTRA_KEYS = Object.freeze([
-    'action', 'bytes', 'count', 'native_kind', 'queue_state', 'reason', 'technology'
+    'action', 'bytes', 'count', 'native_kind', 'queue_state', 'reason', 'technology',
+    // Native failure diagnostics (3.8.2): bounded and printable on emission.
+    'bambu_error', 'bambu_return_code', 'exit_code', 'killed_by_runner', 'signal', 'stderr_tail'
 ]);
+/** Diagnostic keys whose absence is itself a fact and is kept as JSON null. */
+const NULLABLE_EXTRA_KEYS = Object.freeze(['bambu_error', 'bambu_return_code', 'exit_code', 'signal']);
+/** Text budget per key; every other string value keeps the 128-character cap. */
+const EXTRA_TEXT_LIMITS = Object.freeze({ bambu_error: 400, stderr_tail: 400 });
 let eventWriter = (entry) => console.info(JSON.stringify(entry));
 
 function boundedToken(value, maximum = 64) {
@@ -73,7 +81,7 @@ function redactValue(key, value) {
     if (REDACTED_KEY.test(key)) return '[REDACTED]';
     if (typeof value === 'string') {
         if (SUSPICIOUS_VALUE.test(value)) return '[REDACTED]';
-        return value.replace(/[^\x20-\x7e]/g, '?').slice(0, 128);
+        return value.replace(/[^\x20-\x7e]/g, '?').slice(0, EXTRA_TEXT_LIMITS[key] || 128);
     }
     if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
     if (typeof value === 'boolean') return value;
@@ -86,6 +94,10 @@ function sanitizeExtra(extra) {
     for (const [key, value] of Object.entries(extra).slice(0, 8)) {
         const safeKey = boundedToken(key, 32);
         if (!safeKey || !EXTRA_KEYS.includes(safeKey)) continue;
+        if (value === null && NULLABLE_EXTRA_KEYS.includes(safeKey)) {
+            safe[safeKey] = null;
+            continue;
+        }
         const redacted = redactValue(safeKey, value);
         if (redacted !== undefined) safe[safeKey] = redacted;
     }

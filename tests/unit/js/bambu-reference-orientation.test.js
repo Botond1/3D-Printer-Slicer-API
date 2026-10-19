@@ -117,7 +117,8 @@ function referenceDirectoryOf(model) {
 
 test('the reference fallback is part of the fixed, bounded event vocabulary', () => {
     assert.ok(EVENT_NAMES.includes('orientation.reference_fallback'));
-    assert.ok(EVENT_NAMES.length <= 32);
+    // 3.8.2 added async.retry_alone and native.failure_detail; still a fixed, bounded vocabulary.
+    assert.ok(EVENT_NAMES.length <= 34);
     const emitted = [];
     const emit = createEventEmitter({ writer: (entry) => emitted.push(entry) });
     assert.equal(emit('orientation.reference_fallback', {

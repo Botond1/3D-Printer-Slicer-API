@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## v3.8.2 (2026-10-19, not deployed)
+
+### Fixed
+- **[runtime]** A native killed by the system is run once more, alone. Live on 2026-10-18 the container ran `MAX_CONCURRENT_SLICES=2` under its 12 GiB cgroup; two Bambu slices of one customer's 3MF ran at once, `bambustu_main` reached 7.8 GB RSS beside a 4.6 GB sibling and the kernel OOM-killed one (`Memory cgroup out of memory: Killed process ... (bambustu_main)`). The service answered `native.completed` `NATIVE_PROCESSING_FAILED`, then `async.completed` `INTERNAL_PROCESSING_ERROR` (500) after 344 s, and nothing retried. Now an asynchronous job whose generic 500 carries `native.killed_by_system` (SIGKILL, or the Bambu wrapper's exit status 137 for a SIGKILLed child, without the runner's own termination) emits `async.retry_alone`, waits until it is the only active slice (no queued job starts meanwhile), and runs the pipeline once more inside the same `ASYNC_SLICE_DEADLINE_MS`; the stored result is the second run, and a second kill stores the 500 with `retried_alone: true`. The upload is re-pointed at the first run's renamed file (`X<ext>`), so the second run renames it to `X<ext><ext>` and every intermediate path is new. A first answer that may still be retried no longer marks the job captured, so the deadline can end the second run (504). A plain failure, a success, a runner timeout/abort and the synchronous path never retry.
+- **[ops]** A failed native or helper is logged. On 2026-10-18 another model failed 7 times in 8 minutes on a helper step after about 180 ms and the log carried no exit code, signal or stderr; the 500 said "The error has been logged for review" while nothing was. `native.completed` with `outcome: failure` now carries `extra` `exit_code`, `signal`, `killed_by_runner` and `stderr_tail` (the last 400 characters, printable ASCII, whitespace collapsed), and the generic 500 path emits one `native.failure_detail` (`error_code` `NATIVE_PROCESS_KILLED` or `NATIVE_PROCESSING_FAILED`) that adds `bambu_return_code` and `bambu_error` from Bambu's `result.json`.
+
+### Added
+- **[contract]** The `INTERNAL_PROCESSING_ERROR` 500 of a failed native carries a bounded `native` object: `exit_code`, `signal`, `killed_by_system`. Stderr and paths stay in the log; `errorCode` is unchanged.
+- **[ops]** The queue admission handle gains `awaitSolo(signal)`; `getQueueStatus()` gains a non-enumerable `soloHold` (the serialized status is unchanged). A second job asking to run alone while another holds the queue is refused (`SLICE_SOLO_UNAVAILABLE`, no retry) instead of deadlocking.
+- **[ops]** Event vocabulary: `async.retry_alone`, `native.failure_detail`; event `extra` admits the diagnostic keys above (`stderr_tail`/`bambu_error` up to 400 characters, the absent ones as `null`).
+- **[docs]** The Hostinger runbook explains the single-origin shop and the slice rate limiter (`SLICE_RATE_LIMIT_MAX_REQUESTS=30`, `SLICE_RATE_LIMIT_BURST_CAPACITY=20` in production) and `RATE_LIMIT_EXCEEDED` versus `SLICE_QUEUE_CLIENT_LIMIT`.
+
+### Unchanged
+- The Bambu `measurement_generation` inputs, the catalogue, `spawn-file.js` and every pipeline/receipt file are byte-identical to 3.8.1, so no open quote goes stale.
+
 ## v3.8.1 (2026-10-06, not deployed)
 
 ### Fixed

@@ -58,7 +58,8 @@ test('structured events enforce schema, correlation identifiers, bounds, and fix
         extra: { action: 'completed', count: 2 }
     });
     assert.equal(Object.isFrozen(entries[0]), true);
-    assert.ok(EVENT_NAMES.length <= 32);
+    // 3.8.2 added async.retry_alone and native.failure_detail; still a fixed, bounded vocabulary.
+    assert.ok(EVENT_NAMES.length <= 34);
     assert.equal(new Set(EVENT_NAMES).size, EVENT_NAMES.length);
 });
 
