@@ -1228,3 +1228,19 @@ The later owner-controlled permanent activation is recorded separately in
 That record does not retroactively turn this mandatory-dark rehearsal into an
 active terminal state or prove its still-open firewall, renewal, or public
 router-rollback boundaries.
+
+## 6. Single-origin shop and the slice rate limiter
+
+`POST /bambu/slice` is limited per client IP by a token bucket that runs
+before authentication (`SLICE_RATE_LIMIT_MAX_REQUESTS` 3 per minute,
+`SLICE_RATE_LIMIT_BURST_CAPACITY` 5 by default). A WooCommerce shop submits
+every customer's slice from ONE egress IP, and its fleet walk (P1S, then H2D on
+the slicer's own out-of-bounds rejection) doubles some submissions, so a few
+concurrent customers exhaust the default bucket. Production therefore sets
+`SLICE_RATE_LIMIT_MAX_REQUESTS=30` and `SLICE_RATE_LIMIT_BURST_CAPACITY=20` in
+the operator env file (`service-n1.env`); the perimeter allowlist, not this
+bucket, keeps strangers out. Tell the two 429s apart before tuning anything:
+`RATE_LIMIT_EXCEEDED` is this bucket, `SLICE_QUEUE_CLIENT_LIMIT` is the
+per-client queue fairness cap (`MAX_SLICE_QUEUE_PER_IP`, keyed per principal).
+The 429s observed on 2026-10-18 were the limiter's `RATE_LIMIT_EXCEEDED`
+(122-123-byte bodies), not the queue cap.

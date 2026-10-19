@@ -4,6 +4,60 @@
 
 const { GcodeMetricsError } = require('./gcode-metrics');
 const { buildNativeBoundsResponse } = require('./native-bounds');
+const { nativeExitFacts, printableStderrTail } = require('./command');
+const { emitEvent } = require('../observability/events');
+
+/** Exit status a POSIX shell reports for a child that died of SIGKILL (128 + 9). */
+const SHELL_SIGKILL_EXIT_STATUS = 137;
+
+/**
+ * Whether an error is a failed native or helper command as the command
+ * runner rejects it (spawn-file's `cmd`/`signal`/`stderr` shape).
+ * @param {unknown} err Processing error.
+ * @returns {boolean} True for a native command failure.
+ */
+function isNativeCommandFailure(err) {
+    return Boolean(err) && (typeof err.cmd === 'string' || Boolean(err.signal) || typeof err.stderr === 'string');
+}
+
+/**
+ * Whether the system, not this service, killed the native: SIGKILL (or a
+ * wrapper shell's 137 for a SIGKILLed child, as the Bambu wrapper reports
+ * it) without the runner's own termination. The runner's abort, deadline and
+ * timeout paths settle with their own reason and never reach this shape, and
+ * an output overflow is classified before it; in practice this is the
+ * cgroup OOM killer.
+ * @param {{signal?: unknown, code?: unknown, killed?: unknown}} err Command error.
+ * @returns {boolean} True when the native was killed from outside.
+ */
+function isNativeKilledBySystem(err) {
+    if (!err || err.killed === true) return false;
+    return err.signal === 'SIGKILL' || err.code === SHELL_SIGKILL_EXIT_STATUS;
+}
+
+/**
+ * Log the facts of a native failure that ends in the generic 500 and return
+ * the bounded, path-free summary that goes into the HTTP body.
+ * @param {Error & {stderr?: string, signal?: string, killed?: boolean, bambuResult?: {returnCode: number|null, errorString: string}}} err Command error.
+ * @returns {{exit_code: number|string|null, signal: string|null, killed_by_system: boolean}} Public summary.
+ */
+function reportNativeFailure(err) {
+    const facts = nativeExitFacts(err);
+    const killedBySystem = isNativeKilledBySystem(err);
+    const bambu = err.bambuResult && typeof err.bambuResult === 'object' ? err.bambuResult : null;
+    emitEvent('native.failure_detail', {
+        audience: 'slice',
+        outcome: 'failure',
+        error_code: killedBySystem ? 'NATIVE_PROCESS_KILLED' : 'NATIVE_PROCESSING_FAILED',
+        extra: {
+            ...facts,
+            bambu_return_code: Number.isInteger(bambu?.returnCode) ? bambu.returnCode : null,
+            bambu_error: typeof bambu?.errorString === 'string' && bambu.errorString ? bambu.errorString : null,
+            stderr_tail: printableStderrTail(err.stderr)
+        }
+    });
+    return { exit_code: facts.exit_code, signal: facts.signal, killed_by_system: killedBySystem };
+}
 
 /**
  * Lowercased message, stderr, and stdout of a failed command. Both streams are
@@ -284,10 +338,14 @@ function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, g
         });
     }
 
+    // Stderr and paths stay in the structured log; the body carries only
+    // the bounded exit facts a caller may act on (retry alone on an OOM kill).
+    const native = isNativeCommandFailure(err) ? reportNativeFailure(err) : null;
     return res.status(500).json({
         success: false,
         error: 'Slicing failed. The error has been logged for review.',
-        errorCode: 'INTERNAL_PROCESSING_ERROR'
+        errorCode: 'INTERNAL_PROCESSING_ERROR',
+        ...(native ? { native } : {})
     });
 }
 
@@ -297,6 +355,8 @@ module.exports = {
     classifyUnsliceableSourceGeometry,
     handleProcessingError,
     hasSourceGeometryMarker,
+    isNativeCommandFailure,
+    isNativeKilledBySystem,
     isNativeOutputOverflowError,
     isProcessingTimeoutError,
     isSourceGeometryError

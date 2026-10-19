@@ -9,9 +9,16 @@
  * client receives 202 and the job runs through the SAME queue and pipeline,
  * writing into a captured response instead of the socket. The captured status
  * and JSON body are the job's `result_status` and `result`.
+ *
+ * A native killed by the system (the cgroup OOM killer beside a sibling
+ * slice) is run once more, alone: the job holds the queue until every other
+ * active slice settled, and its stored answer is the second run's (3.8.2).
  */
 
+const fs = require('node:fs/promises');
+const path = require('node:path');
 const { isResponseWritable } = require('./request-abort');
+const { emitEvent } = require('../observability/events');
 const { CAPACITY_RETRY_AFTER_SECONDS, POLL_AFTER_MS, retryAfterSeconds } = require('./async-jobs');
 
 const ASYNC_ACCEPTED = Symbol('asyncSliceAccepted');
@@ -175,16 +182,87 @@ function admitIntoStore(admitted, req, ctx, controller, admission) {
     if (!admitted.job) controller.abort(admitted.admitError || new Error('Asynchronous slice job capacity is exhausted.'));
 }
 
+/** True when the pipeline answered the generic 500 for a native the system killed. */
+function wasKilledBySystem(capture) {
+    return capture?.statusCode === 500 && capture.body?.native?.killed_by_system === true;
+}
+
+/**
+ * Point the request back at the upload so the pipeline can run again. The
+ * first run renamed `X` to `X<ext>` (`appendOriginalExtensionToUpload`);
+ * with `req.file.path = X<ext>` the second rename is `X<ext>` to
+ * `X<ext><ext>` inside the same workspace, and every converted, oriented,
+ * scaled and output path derives from that new name or is freshly drawn.
+ * @returns {Promise<boolean>} Whether the upload is in place for a second run.
+ */
+async function prepareUploadForRetry(req) {
+    const file = req?.file;
+    if (!file || typeof file.path !== 'string' || typeof file.originalname !== 'string') return false;
+    const originalExt = path.extname(file.originalname).toLowerCase();
+    for (const candidate of [`${file.path}${originalExt}`, file.path]) {
+        try {
+            const stats = await fs.lstat(candidate);
+            if (!stats.isFile() || stats.isSymbolicLink()) continue;
+            file.path = candidate;
+            return true;
+        } catch {
+            // Not this name; try the next.
+        }
+    }
+    return false;
+}
+
+/**
+ * Run the pipeline once more, alone, after the system killed the native.
+ * Returns null (keeping the first answer) when the retry cannot start.
+ */
+async function retryAlone(admitted, req, ctx, signal, options) {
+    const emit = ctx.emitEvent || emitEvent;
+    emit('async.retry_alone', {
+        audience: 'slice', outcome: 'retrying', job_id: admitted.job?.id,
+        extra: { queue_state: 'running', reason: 'native_killed' }
+    });
+    try {
+        await admitted.handle.awaitSolo(signal);
+    } catch (error) {
+        if (signal.aborted) throw error;
+        return null;
+    }
+    if (signal.aborted || !(await prepareUploadForRetry(req))) return null;
+    const capture = createCapturedResponse(() => ctx.store.markCaptured(admitted.job));
+    ctx.setAbortSignal(capture, signal);
+    admitted.capture = capture;
+    const result = await ctx.process(req, capture, options);
+    if (wasKilledBySystem(capture)) capture.body = { ...capture.body, retried_alone: true };
+    return { result };
+}
+
+async function runAsyncTask(admitted, req, ctx, signal) {
+    ctx.setAbortSignal(admitted.capture, signal);
+    ctx.store.markRunning(admitted.job);
+    const options = { forcedTechnology: ctx.forcedTechnology, engine: ctx.engine, signal };
+    const first = await ctx.process(req, admitted.capture, options);
+    if (!wasKilledBySystem(admitted.capture)) return first;
+    if (!signal.aborted && typeof admitted.handle?.awaitSolo === 'function') {
+        const retried = await retryAlone(admitted, req, ctx, signal, options);
+        if (retried) return retried.result;
+    }
+    // No second run: the first answer stands and the deadline no longer overrides it.
+    ctx.store.markCaptured(admitted.job);
+    return first;
+}
+
 function enqueueAsyncJob(req, ctx) {
     const controller = new AbortController();
     const admitted = { handle: null, job: null, admitError: null, settled: null, capture: null };
-    admitted.capture = createCapturedResponse(() => ctx.store.markCaptured(admitted.job));
-    admitted.settled = ctx.enqueue((effectiveSignal) => {
-        const signal = effectiveSignal || controller.signal;
-        ctx.setAbortSignal(admitted.capture, signal);
-        ctx.store.markRunning(admitted.job);
-        return ctx.process(req, admitted.capture, { forcedTechnology: ctx.forcedTechnology, engine: ctx.engine, signal });
-    }, {
+    // A system-killed native's 500 is not final yet: it may be retried alone,
+    // and the deadline must still be able to end that second run.
+    admitted.capture = createCapturedResponse(() => {
+        if (!wasKilledBySystem(admitted.capture)) ctx.store.markCaptured(admitted.job);
+    });
+    admitted.settled = ctx.enqueue((effectiveSignal) => (
+        runAsyncTask(admitted, req, ctx, effectiveSignal || controller.signal)
+    ), {
         queueKey: ctx.queueKey,
         signal: controller.signal,
         ignoreQueueWait: true,

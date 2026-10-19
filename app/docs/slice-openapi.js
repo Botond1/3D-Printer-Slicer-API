@@ -447,7 +447,7 @@ const SUCCESS_SCHEMA = Object.freeze({
     }
 });
 
-function errorCodeResponse(description, errorCodes) {
+function errorCodeResponse(description, errorCodes, extraProperties = {}) {
     return {
         description,
         content: {
@@ -455,13 +455,28 @@ function errorCodeResponse(description, errorCodes) {
                 schema: {
                     type: 'object',
                     properties: {
-                        errorCode: { type: 'string', enum: errorCodes }
+                        errorCode: { type: 'string', enum: errorCodes },
+                        ...extraProperties
                     }
                 }
             }
         }
     };
 }
+
+/** Bounded exit facts of a failed native/helper process on the generic 500 (3.8.2). */
+const NATIVE_FAILURE_SCHEMA = Object.freeze({
+    type: 'object',
+    description: 'Present on `INTERNAL_PROCESSING_ERROR` when a native or helper process failed. Stderr and paths are never included; they are in the structured log (`native.failure_detail`).',
+    properties: {
+        exit_code: { oneOf: [{ type: 'integer' }, { type: 'string' }], nullable: true },
+        signal: { type: 'string', nullable: true, example: 'SIGKILL' },
+        killed_by_system: {
+            type: 'boolean',
+            description: 'True when the process was SIGKILLed (or its wrapper exited 137) without this service terminating it, in practice the cgroup OOM killer.'
+        }
+    }
+});
 
 function validationErrorResponse() {
     const otherValidationCodes = [
@@ -598,14 +613,14 @@ function createSliceResponses(bambu = false) {
                 ? ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT', 'SLICE_ASYNC_JOBS_FULL']
                 : ['RATE_LIMIT_EXCEEDED', 'SLICE_QUEUE_CLIENT_LIMIT']
         ),
-        500: errorCodeResponse('Server Error. `NATIVE_OUTPUT_OVERFLOW` means a native process exceeded its bounded stdout/stderr budget and was stopped; no estimate is returned.', [
+        500: errorCodeResponse('Server Error. `NATIVE_OUTPUT_OVERFLOW` means a native process exceeded its bounded stdout/stderr budget and was stopped; no estimate is returned. `INTERNAL_PROCESSING_ERROR` from a failed native process carries `native`.', [
             'SLICE_OUTPUT_UNPARSED',
             'INTERNAL_PROCESSING_ERROR',
             'NATIVE_OUTPUT_OVERFLOW',
             'QUEUE_INTERNAL_ERROR',
             'UPLOAD_STORAGE_ERROR',
             'INTERNAL_SERVER_ERROR'
-        ]),
+        ], { native: NATIVE_FAILURE_SCHEMA }),
         503: errorCodeResponse(
             'The slice queue is full, the queued request waited past its deadline, or the service is shutting down.',
             ['SLICE_QUEUE_FULL', 'SLICE_QUEUE_TIMEOUT', 'SLICE_QUEUE_SHUTDOWN', 'SLICER_ENGINE_UNAVAILABLE']

@@ -238,7 +238,8 @@ test('the event vocabulary registers the async events and keeps sj_ identifiers'
     for (const name of ['async.accepted', 'async.completed', 'async.expired', 'async.cancelled', 'async.evicted']) {
         assert.ok(EVENT_NAMES.includes(name), name);
     }
-    assert.ok(EVENT_NAMES.length <= 32);
+    // 3.8.2 added async.retry_alone and native.failure_detail; still a fixed, bounded vocabulary.
+    assert.ok(EVENT_NAMES.length <= 34);
     const entries = [];
     const emit = createEventEmitter({ writer: (entry) => entries.push(entry), readContext: () => ({}) });
     const jobId = `sj_${'c'.repeat(32)}`;

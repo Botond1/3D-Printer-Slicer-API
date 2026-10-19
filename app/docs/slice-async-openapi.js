@@ -77,7 +77,7 @@ const COMPLETED_SCHEMA = Object.freeze({
         result: {
             type: 'object',
             additionalProperties: true,
-            description: 'The exact JSON body the synchronous `POST /bambu/slice` would have answered: the success body with `technical_receipt`, or the error body with `errorCode`. A job past ASYNC_SLICE_DEADLINE_MS completes with result_status 504 and `{"success": false, "error": "...", "errorCode": "SLICE_DEADLINE_EXCEEDED"}`; its native process tree is terminated.'
+            description: 'The exact JSON body the synchronous `POST /bambu/slice` would have answered: the success body with `technical_receipt`, or the error body with `errorCode`. A job past ASYNC_SLICE_DEADLINE_MS completes with result_status 504 and `{"success": false, "error": "...", "errorCode": "SLICE_DEADLINE_EXCEEDED"}`; its native process tree is terminated. A job whose native was killed by the system (`native.killed_by_system`, the OOM killer beside a concurrent slice) runs once more alone, with no other slice beside it, inside the same deadline; the stored result is that second run, and a second kill completes with result_status 500 and `retried_alone: true`.'
         }
     }
 });

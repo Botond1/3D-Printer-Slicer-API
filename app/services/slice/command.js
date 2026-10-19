@@ -108,6 +108,35 @@ function elapsedMilliseconds(started) {
     return Number(process.hrtime.bigint() - started) / 1e6;
 }
 
+/** Characters of a failed native's stderr kept in its structured failure event. */
+const STDERR_TAIL_CHARS = 400;
+
+/**
+ * Last `STDERR_TAIL_CHARS` characters of a native's stderr, reduced to
+ * printable ASCII with whitespace collapsed, so one log line carries it.
+ * @param {unknown} stderr Raw stderr text.
+ * @returns {string} Bounded printable tail ('' when there was none).
+ */
+function printableStderrTail(stderr) {
+    const text = typeof stderr === 'string' ? stderr : '';
+    return text.slice(-STDERR_TAIL_CHARS).replace(/[^\x20-\x7e]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Exit facts of a failed native command: how it ended and whether this
+ * runner (rather than the system, e.g. the cgroup OOM killer) killed it.
+ * @param {{code?: unknown, signal?: unknown, killed?: unknown}} error Command error.
+ * @returns {{exit_code: number|string|null, signal: string|null, killed_by_runner: boolean}} Exit facts.
+ */
+function nativeExitFacts(error) {
+    const code = error?.code;
+    return {
+        exit_code: (typeof code === 'number' && Number.isFinite(code)) || typeof code === 'string' ? code : null,
+        signal: typeof error?.signal === 'string' ? error.signal : null,
+        killed_by_runner: Boolean(error?.killed)
+    };
+}
+
 function nativeErrorCode(outcome, error) {
     if (outcome === 'timeout') return 'NATIVE_TIMEOUT';
     if (outcome === 'aborted') return 'NATIVE_ABORTED';
@@ -301,7 +330,10 @@ function createCommandRunner(overrides = {}) {
                     audience: 'slice',
                     outcome,
                     error_code: nativeErrorCode(outcome, error),
-                    duration_ms: duration
+                    duration_ms: duration,
+                    ...(outcome === 'failure'
+                        ? { extra: { ...nativeExitFacts(error), stderr_tail: printableStderrTail(error?.stderr) } }
+                        : {})
                 });
                 throw error;
             }
@@ -326,6 +358,9 @@ function createPythonHelperRunner(overrides = {}) {
 const runCommand = createCommandRunner();
 
 module.exports = {
+    STDERR_TAIL_CHARS,
+    nativeExitFacts,
+    printableStderrTail,
     PYTHON_HELPER_TIMEOUT_MIN_MS,
     PYTHON_HELPER_TIMEOUT_MS,
     SLICE_COMMAND_TIMEOUT_RANGE_MS,

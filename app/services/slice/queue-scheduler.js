@@ -8,6 +8,14 @@ function abortReason(signal) {
     return error;
 }
 
+/** Rejection of a solo request that cannot be held (another holder, not active). */
+function soloUnavailable(message) {
+    const error = new Error(message);
+    error.name = 'SliceSoloUnavailableError';
+    error.code = 'SLICE_SOLO_UNAVAILABLE';
+    return error;
+}
+
 function increment(map, key) {
     map.set(key, (map.get(key) || 0) + 1);
 }
@@ -33,6 +41,12 @@ function createQueueScheduler(config) {
     let resolveShutdown;
     let unsubscribeRuntimeQuarantine;
     let runtimeSubscriptionClosed = false;
+    /**
+     * The one active job that asked to run alone (3.8.2): while it is set, no
+     * queued job starts. `granted` once every other active job has settled;
+     * the hold ends when the holder settles, aborts or the queue shuts down.
+     */
+    let solo = null;
 
     function closeRuntimeSubscription() {
         if (runtimeSubscriptionClosed) return;
@@ -155,12 +169,60 @@ function createQueueScheduler(config) {
         resolve();
     }
 
+    function releaseSolo(error) {
+        if (!solo) return;
+        const current = solo;
+        solo = null;
+        current.signal?.removeEventListener('abort', current.onAbort);
+        if (!current.granted) current.reject(error);
+    }
+
+    /** Grant the pending solo request once its job is the only active one. */
+    function grantSoloIfReady() {
+        if (!solo || solo.granted) return;
+        if (solo.job.state !== 'active') {
+            releaseSolo(soloUnavailable('Slice job is no longer active.'));
+            return;
+        }
+        if (activeJobs.size !== 1 || !activeJobs.has(solo.job)) return;
+        solo.granted = true;
+        solo.signal?.removeEventListener('abort', solo.onAbort);
+        solo.resolve();
+    }
+
+    /**
+     * Resolve once `job` is the only active job; meanwhile no queued job
+     * starts. A second holder is refused instead of waiting (two active jobs
+     * each waiting for the other would never run).
+     */
+    function awaitSolo(job, signal) {
+        if (signal?.aborted) return Promise.reject(abortReason(signal));
+        if (shuttingDown) return Promise.reject(config.createShutdownError());
+        if (job.state !== 'active') return Promise.reject(soloUnavailable('Slice job is not active.'));
+        if (solo && solo.job !== job) return Promise.reject(soloUnavailable('Another slice job already holds the queue alone.'));
+        if (solo) return solo.promise;
+        let settle;
+        const promise = new Promise((resolve, reject) => { settle = { resolve, reject }; });
+        solo = { job, signal, promise, granted: false, resolve: settle.resolve, reject: settle.reject };
+        const holder = solo;
+        holder.onAbort = () => {
+            if (solo !== holder || holder.granted) return;
+            releaseSolo(abortReason(signal));
+            if (!shuttingDown) runNextSliceJob();
+        };
+        signal?.addEventListener('abort', holder.onAbort, { once: true });
+        grantSoloIfReady();
+        return promise;
+    }
+
     function settleActiveJob(job, outcome, value) {
         if (job.state !== 'active') return;
         job.state = 'settled';
         activeJobs.delete(job);
         decrement(activeByKey, job.queueKey);
         cleanJobResources(job);
+        if (solo?.job === job) releaseSolo(soloUnavailable('Slice job settled before it ran alone.'));
+        else grantSoloIfReady();
         if (job.controller.signal.aborted) job.reject(abortReason(job.controller.signal));
         else if (outcome === 'resolve') job.resolve(value);
         else job.reject(value);
@@ -210,7 +272,8 @@ function createQueueScheduler(config) {
             void beginSliceQueueShutdown();
             return;
         }
-        while (!shuttingDown && activeJobs.size < config.maxConcurrent && queuedJobs.length > 0) {
+        // A pending or running solo hold (3.8.2) starts nothing until it ends.
+        while (!shuttingDown && activeJobs.size < config.maxConcurrent && !solo && queuedJobs.length > 0) {
             const job = nextQueuedJob();
             if (expireJobAtDequeue(job)) continue;
             queuedJobs.splice(queuedJobs.indexOf(job), 1);
@@ -257,7 +320,8 @@ function createQueueScheduler(config) {
         try {
             onAdmitted(Object.freeze({
                 getState: () => job.state,
-                getQueuePosition: () => queuePosition(job)
+                getQueuePosition: () => queuePosition(job),
+                awaitSolo: (signal) => awaitSolo(job, signal)
             }));
         } catch {
             // An admission observer cannot alter queue ownership or settlement.
@@ -313,6 +377,7 @@ function createQueueScheduler(config) {
             extra: { queue_state: 'draining' }
         }, config.captureContext?.() || {});
         shutdownPromise = new Promise((resolve) => { resolveShutdown = resolve; });
+        releaseSolo(config.createShutdownError());
         for (const job of [...queuedJobs, ...activeJobs]) {
             if (!job.controller.signal.aborted) job.controller.abort(config.createShutdownError());
         }
@@ -333,6 +398,8 @@ function createQueueScheduler(config) {
             value: !shuttingDown && available,
             enumerable: false
         });
+        // Non-enumerable like acceptingJobs: the serialized status is unchanged.
+        Object.defineProperty(status, 'soloHold', { value: solo !== null, enumerable: false });
         return status;
     }
 
