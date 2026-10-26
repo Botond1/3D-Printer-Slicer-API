@@ -200,7 +200,9 @@ this file maps them to modules.
   placement; admits the L-shaped P1S footprint through real placement.
 - command.js: execFile runner with minimal child environment, bounded
   `SLICE_COMMAND_TIMEOUT_MS` (1000..3600000), 120 s Python helper budget
-  clamped to the native budget, maxBuffer overflow as `NATIVE_OUTPUT_OVERFLOW`,
+  clamped to the native budget, `orient.py` alone capped at
+  `ORIENTATION_HELPER_TIMEOUT_MS` (60 s, never above the helper budget; 3.8.3),
+  maxBuffer overflow as `NATIVE_OUTPUT_OVERFLOW`,
   bounded stdout/stderr retained separately on failure.
 - process-tree.js: TERM-to-KILL group termination; post-SIGKILL settle polls
   up to 10 s and re-kills once.
@@ -240,7 +242,7 @@ this file maps them to modules.
   exposure constants; a tilt-release printer has a fixed per-layer motion
   time independent of Z height.
 - native-bounds.js: explicit placement/print-volume diagnostics (including
-  Bambu rc 192/190) -> full schema-2 K2 422 payload.
+  Bambu rc 192/190 and return code -102) -> full schema-2 K2 422 payload.
 - options.js: strict `layerHeight`, `material`, `infill` (integer 0..100,
   optional `%`), `supports` (default true), `orientationMode`, sizing,
   rotation, Bambu `printerProfile`/`processProfile` against the registry.

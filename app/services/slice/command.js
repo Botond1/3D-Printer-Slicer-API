@@ -7,6 +7,7 @@ const { DEFAULTS } = require('../../config/constants');
 const { parseBoundedPositiveInt } = require('./number-utils');
 const { createChildEnvironment } = require('./child-environment');
 const { createProcessTreeTerminator } = require('./process-tree');
+const { resolvePythonHelper } = require('./helper-paths');
 const { quarantineNativeRuntime } = require('./native-runtime-status');
 const { nativeFinished, nativeStarted, recordNativeQuarantine } = require('../observability/metrics');
 const { emitEvent } = require('../observability/events');
@@ -41,7 +42,8 @@ function resolveCommandTimeoutMs(env = process.env) {
  * before any native slicer and never need the full native slice budget, so
  * the accepted range is `10 s .. SLICE_COMMAND_TIMEOUT_MS`. The default is
  * `DEFAULTS.PYTHON_HELPER_TIMEOUT_MS` capped at the native budget; invalid,
- * non-canonical, or out-of-range values fall back to that default.
+ * non-canonical, or out-of-range values fall back to that default. A run of
+ * `orient.py` is further capped at `ORIENTATION_HELPER_TIMEOUT_MS`.
  * @param {NodeJS.ProcessEnv | Record<string, unknown>} [env=process.env] Environment source.
  * @returns {number} Helper timeout in milliseconds.
  */
@@ -55,9 +57,55 @@ function resolvePythonHelperTimeoutMs(env = process.env) {
     );
 }
 
+/**
+ * Resolve the orientation helper's own budget from
+ * `ORIENTATION_HELPER_TIMEOUT_MS`. `orient.py` ran under the shared helper
+ * budget; its stable-pose heuristic most likely loops without end on a mesh
+ * whose centre of mass is not strictly inside its convex hull, and live each
+ * of the eight runs that did not finish held a slice slot for the whole 300 s
+ * helper budget, while every heuristic run that finished took at most 27 s
+ * (VPS, 2026-10-19..26). The
+ * accepted range is `10 s .. PYTHON_HELPER_TIMEOUT_MS`. The default is
+ * `DEFAULTS.ORIENTATION_HELPER_TIMEOUT_MS` capped at the helper budget;
+ * invalid, non-canonical, or out-of-range values (a value above the helper
+ * budget included) fall back to that default. Setting it equal to
+ * `PYTHON_HELPER_TIMEOUT_MS` restores the 3.8.2 behaviour.
+ * @param {NodeJS.ProcessEnv | Record<string, unknown>} [env=process.env] Environment source.
+ * @returns {number} Orientation helper timeout in milliseconds.
+ */
+function resolveOrientationHelperTimeoutMs(env = process.env) {
+    const helperTimeoutMs = resolvePythonHelperTimeoutMs(env);
+    const fallback = Math.min(DEFAULTS.ORIENTATION_HELPER_TIMEOUT_MS, helperTimeoutMs);
+    return parseBoundedPositiveInt(
+        env.ORIENTATION_HELPER_TIMEOUT_MS,
+        fallback,
+        { min: PYTHON_HELPER_TIMEOUT_MIN_MS, max: helperTimeoutMs }
+    );
+}
+
 const COMMAND_TIMEOUT_MS = resolveCommandTimeoutMs(process.env);
 /** Process-wide Python helper budget resolved once at load, like the native budget. */
 const PYTHON_HELPER_TIMEOUT_MS = resolvePythonHelperTimeoutMs(process.env);
+/** Process-wide orientation helper budget resolved once at load (never above the helper budget). */
+const ORIENTATION_HELPER_TIMEOUT_MS = resolveOrientationHelperTimeoutMs(process.env);
+
+/**
+ * Absolute path of `orient.py` exactly as the input pipeline passes it as the
+ * first argument (`resolvePythonHelper('orient.py')`). The orientation budget
+ * applies only to a command whose first argument is this path; every other
+ * helper, the Bambu reference-pose export and every native slice keep their
+ * own budgets.
+ */
+const ORIENTATION_HELPER_PATH = resolvePythonHelper('orient.py');
+
+/**
+ * Whether a command runs the orientation helper.
+ * @param {unknown} args Command arguments.
+ * @returns {boolean} True when the first argument is the orientation helper's path.
+ */
+function isOrientationHelperCommand(args) {
+    return Array.isArray(args) && args[0] === ORIENTATION_HELPER_PATH;
+}
 
 function abortReason(signal) {
     if (signal?.reason instanceof Error) return signal.reason;
@@ -281,6 +329,8 @@ class CommandExecution {
 
 /**
  * Build a command runner with injectable spawn, timer, platform, and termination seams.
+ * A run of the orientation helper is additionally capped at the orientation
+ * budget (`overrides.orientationTimeoutMs`, default `ORIENTATION_HELPER_TIMEOUT_MS`).
  * @param {object} [overrides] Test dependencies.
  * @returns {(executable: string, args?: string[], options?: {signal?: AbortSignal}) => Promise<{stdout: string, stderr: string}>}
  */
@@ -296,6 +346,7 @@ function createCommandRunner(overrides = {}) {
         clearTimer: overrides.clearTimeout || clearTimeout,
         platform: overrides.platform || process.platform,
         timeoutMs: overrides.timeoutMs || COMMAND_TIMEOUT_MS,
+        orientationTimeoutMs: overrides.orientationTimeoutMs || ORIENTATION_HELPER_TIMEOUT_MS,
         maxBuffer: overrides.maxBuffer || DEFAULT_MAX_BUFFER_BYTES,
         environmentFactory: overrides.createChildEnvironment || createChildEnvironment,
         terminatorFactory: overrides.createProcessTreeTerminator
@@ -308,7 +359,10 @@ function createCommandRunner(overrides = {}) {
             nativeStarted();
             emitEvent('native.started', { audience: 'slice', outcome: 'started' });
         }
-        const timeoutMs = effectiveTimeoutMs(dependencies.timeoutMs, options.timeoutMs);
+        const runnerTimeoutMs = isOrientationHelperCommand(args)
+            ? Math.min(dependencies.timeoutMs, dependencies.orientationTimeoutMs)
+            : dependencies.timeoutMs;
+        const timeoutMs = effectiveTimeoutMs(runnerTimeoutMs, options.timeoutMs);
         return new CommandExecution(dependencies, executable, args, options.signal, timeoutMs).run().then(
             (value) => {
                 if (telemetry === 'none') return value;
@@ -361,6 +415,8 @@ module.exports = {
     STDERR_TAIL_CHARS,
     nativeExitFacts,
     printableStderrTail,
+    ORIENTATION_HELPER_PATH,
+    ORIENTATION_HELPER_TIMEOUT_MS,
     PYTHON_HELPER_TIMEOUT_MIN_MS,
     PYTHON_HELPER_TIMEOUT_MS,
     SLICE_COMMAND_TIMEOUT_RANGE_MS,
@@ -368,7 +424,9 @@ module.exports = {
     createCommandRunner,
     createPythonHelperRunner,
     createStartupProbeRunner,
+    isOrientationHelperCommand,
     resolveCommandTimeoutMs,
+    resolveOrientationHelperTimeoutMs,
     resolvePythonHelperTimeoutMs,
     abortReason,
     throwIfAborted,

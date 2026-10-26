@@ -1244,3 +1244,28 @@ bucket, keeps strangers out. Tell the two 429s apart before tuning anything:
 per-client queue fairness cap (`MAX_SLICE_QUEUE_PER_IP`, keyed per principal).
 The 429s observed on 2026-10-18 were the limiter's `RATE_LIMIT_EXCEEDED`
 (122-123-byte bodies), not the queue cap.
+
+## 7. Python helper and orientation budgets
+
+Every Python helper (`mesh2stl.py`, `cad2stl.py`, `inspect_mesh.py`,
+`scale_model.py`) and the Bambu reference-pose export run under
+`PYTHON_HELPER_TIMEOUT_MS` (default `120000`). Production runs `300000` (operator
+env) since 2026-10-12, after a first preprocessing step needed more than 120 s
+and four jobs failed; do not lower it again, a helper timeout there fails the
+job. Since 3.8.3 `orient.py` alone runs under
+`ORIENTATION_HELPER_TIMEOUT_MS` (default `60000`, accepted
+`10000..PYTHON_HELPER_TIMEOUT_MS`; an invalid or out-of-range value falls back
+to the default, which is itself capped at the helper budget). Its stable-pose
+heuristic could loop without end on some open meshes: on 3.8.2 eight such runs
+held a slice slot for the full 300 s (jobs of 309-403 s), while every heuristic
+run that finished took at most 27 s. An orientation timeout is never a failed
+job: it emits `native.completed` `timeout` and `orientation.fallback`
+`ORIENTATION_HELPER_TIMEOUT`, and the slice continues with the submitted pose
+(`orientation_outcome: fallback_unmodified`). The 3.8.3 default applies
+without an env change; to pin it, add `ORIENTATION_HELPER_TIMEOUT_MS=60000` to
+`service-n1.env`. To restore the 3.8.2 behaviour without a rollback, set it
+equal to the helper budget (`ORIENTATION_HELPER_TIMEOUT_MS=300000`); removing
+the key gives the 60 s default, not 300 s. The change does not touch the Bambu
+`measurement_generation`; check that with
+`node scripts/check-generation-inputs.js <deployed-sha>` before cutover and by
+reading the catalogue's `measurement_generation` after it.

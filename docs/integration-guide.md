@@ -566,7 +566,7 @@ succeed later without changes.
 | 404 | `SLICE_JOB_NOT_FOUND` | no | async job unknown, expired, cancelled, evicted, lost to a restart, another principal's, or malformed (section 3.6); resubmit if it was yours |
 | 408 | `UPLOAD_TOTAL_TIMEOUT` | yes | the multipart upload took longer than 600 s; the connection is closed |
 | 413 | `UPLOAD_RESOURCE_LIMIT_EXCEEDED`, `SLICE_RESOURCE_LIMIT_EXCEEDED` | no | upload, archive expansion, model, or output exceeded a size limit |
-| 422 | `MODEL_OUT_OF_PRINTER_BOUNDS` | no | does not fit; body also carries `model_dimensions_mm`, `build_volume_limits_mm`, and the full `model_transform` |
+| 422 | `MODEL_OUT_OF_PRINTER_BOUNDS` | no | does not fit; body also carries `model_dimensions_mm`, `build_volume_limits_mm`, and the full `model_transform`. On `POST /bambu/slice` this includes the native refusals rc 192 (bed exclude area), rc 190 and, since 3.8.3, return code -102 (H2D: after slicing, the toolpath, brim, skirt or support left the mapped extruder's area); for the last two the part's box can be inside the published envelope |
 | 422 | `MODEL_DIMENSIONS_UNAVAILABLE` | no | the model could not be measured after conversion |
 | 422 | `UNSLICEABLE_SOURCE_GEOMETRY` | no | the native slicer refused the mesh (empty layer, faulty mesh, load failure); `detail` explains, path-free |
 | 422 | `ORCA_PROFILE_INCOMPATIBLE` | no | Orca machine/process pair rejected |
@@ -625,7 +625,8 @@ with a request that sends `supports=false`, and vice versa. The default is
 | Async job status polls | 1200 per 60 s, burst 60, per caller IP |
 | Upload lifetime | 600 s → `408 UPLOAD_TOTAL_TIMEOUT` |
 | Native slice budget | 600 s → `422 FILE_PROCESSING_TIMEOUT` |
-| Python helper budget (conversion, orientation, sizing) | 120 s each → `422 FILE_PROCESSING_TIMEOUT` |
+| Python helper budget (conversion, sizing, inspection, Bambu reference-pose export) | 120 s each (`PYTHON_HELPER_TIMEOUT_MS`) → `422 FILE_PROCESSING_TIMEOUT` |
+| Orientation helper budget (`orient.py`, 3.8.3) | 60 s per run (`ORIENTATION_HELPER_TIMEOUT_MS`, never above the helper budget) → never an error: the slice continues with the submitted pose, `orientation_outcome: fallback_unmodified` and the `ORIENTATION_FALLBACK` receipt warning |
 | Render budget | 60 s → `422 FILE_PROCESSING_TIMEOUT` |
 | Keep-alive idle timeout | 95 s |
 

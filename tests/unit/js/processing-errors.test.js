@@ -8,6 +8,7 @@ const PROCESSING_ERRORS_PATH = path.join(REPO_ROOT, 'app/services/slice/errors.j
 const { handleProcessingError } = require(PROCESSING_ERRORS_PATH);
 const {
     BAMBU_PLACEMENT_DIAGNOSTICS,
+    BAMBU_PLACEMENT_RETURN_CODES,
     isNativePlacementRejection,
     wrapNativePlacementRejection
 } = require('../../../app/services/slice/native-bounds');
@@ -312,8 +313,10 @@ test('bounded native output overflow maps to HTTP 500 NATIVE_OUTPUT_OVERFLOW ahe
 test('Bambu Studio rc 192/190 placement refusals map to the full K2 bounds contract', () => {
     assert.deepEqual(BAMBU_PLACEMENT_DIAGNOSTICS, [
         'object conflicts were detected',
-        'some filaments cannot be mapped to correct extruders'
+        'some filaments cannot be mapped to correct extruders',
+        'found g-code in unprintable area of multi-extruder printers'
     ]);
+    assert.deepEqual(BAMBU_PLACEMENT_RETURN_CODES, [-102]);
     for (const [stream, text] of [
         ['stdout', 'Object conflicts were detected. Please verify the slicing of all plates in Bambu Studio before uploading.'],
         ['stderr', 'Some filaments cannot be mapped to correct extruders for multi-extruder Printer.']
@@ -343,6 +346,103 @@ test('Bambu Studio rc 192/190 placement refusals map to the full K2 bounds contr
     }
     assert.equal(isNativePlacementRejection({ stderr: 'Object conflicts resolved automatically' }), false);
     assert.equal(isNativePlacementRejection({ stderr: 'filaments mapped to extruders successfully' }), false);
+});
+
+const H2D_PLACEMENT_CONTEXT = Object.freeze({
+    modelTransform: schemaTwoModelTransform({ x: 300, y: 290, z: 120 }),
+    buildVolumeLimits: {
+        min: { x: 1, y: 1, z: 1 },
+        max: { x: 325, y: 320, z: 324.9 },
+        sourceProfile: 'Bambu Lab H2D 0.4 nozzle'
+    }
+});
+const BAMBU_UNPRINTABLE_AREA_SENTENCE = 'Found G-code in unprintable area of multi-extruder printers after slicing. '
+    + 'Please make sure the 3mf file can be successfully sliced in the latest Bambu Studio.';
+
+/** The native failure exactly as the H2D gave it on 2026-10-24 (exit status 154, result.json appended). */
+function liveUnprintableAreaFailure() {
+    return Object.assign(new Error('Command failed: bambu-studio --load-settings ...'), {
+        code: 154,
+        killed: false,
+        signal: null,
+        stdout: 'main found error, return -102, exit...\n',
+        stderr: '[error] plate 1: found gcode unprintable! gcode_result->gcode_check_result.error_code = 1\n'
+            + `[bambu result.json] return_code=-102 error_string=${BAMBU_UNPRINTABLE_AREA_SENTENCE}`,
+        bambuResult: Object.freeze({ returnCode: -102, errorString: BAMBU_UNPRINTABLE_AREA_SENTENCE })
+    });
+}
+
+test('Bambu Studio -102 (G-code in the unprintable area of the H2D) is the same K2 placement verdict as rc 190', () => {
+    const live = liveUnprintableAreaFailure();
+    assert.equal(isNativePlacementRejection(live), true);
+    const wrapped = wrapNativePlacementRejection(live, H2D_PLACEMENT_CONTEXT);
+    assert.equal(wrapped.code, 'NATIVE_MODEL_OUT_OF_PRINTER_BOUNDS');
+    assert.equal(wrapped.killed, false);
+    assert.equal(wrapped.cause, live);
+    const result = invokeProcessingError(wrapped);
+    assertProcessingMapping(result, 422, 'MODEL_OUT_OF_PRINTER_BOUNDS');
+
+    // Byte for byte the body the rc 190 diagnostic produces for the same part.
+    const rc190 = Object.assign(new Error('Native command failed with exit status 190.'), {
+        code: 190,
+        stdout: '',
+        stderr: 'Some filaments cannot be mapped to correct extruders for multi-extruder Printer.'
+    });
+    const rc190Result = invokeProcessingError(wrapNativePlacementRejection(rc190, H2D_PLACEMENT_CONTEXT));
+    assert.equal(rc190Result.statusCode, 422);
+    assert.deepEqual(result.body, rc190Result.body);
+    assert.deepEqual(Object.keys(result.body).sort(), [
+        'build_volume_limits_mm', 'error', 'errorCode', 'model_dimensions_mm', 'model_transform', 'success'
+    ]);
+    assert.deepEqual(result.body.model_dimensions_mm, { x: 300, y: 290, z: 120 });
+    assert.equal(result.body.build_volume_limits_mm.source_profile, 'Bambu Lab H2D 0.4 nozzle');
+    // No native text, exit status or path reaches the body.
+    assert.doesNotMatch(JSON.stringify(result.body), /unprintable|multi-extruder|-102|154|result\.json|bambu-studio/i);
+    // Without a complete schema-2 context it stays the generic 500, exactly like rc 190.
+    assertProcessingMapping(
+        invokeProcessingError(wrapNativePlacementRejection(liveUnprintableAreaFailure(), { modelTransform: null, buildVolumeLimits: null })),
+        500,
+        'INTERNAL_PROCESSING_ERROR'
+    );
+});
+
+test('each -102 signal alone is a placement verdict; neighbouring Bambu failures are not', () => {
+    for (const [label, error] of [
+        ['the result.json sentence', { message: 'Command failed', stderr: `[bambu result.json] return_code=null error_string=${BAMBU_UNPRINTABLE_AREA_SENTENCE}` }],
+        ['the sentence in any case on stdout', { stdout: BAMBU_UNPRINTABLE_AREA_SENTENCE.toUpperCase() }],
+        ['the structured result.json return code', { message: 'Command failed', bambuResult: { returnCode: -102, errorString: '' } }],
+        ['the appended return-code marker', { stderr: '[bambu result.json] return_code=-102 error_string=' }],
+        ['the native exit line', { stdout: 'main found error, return -102, exit...' }]
+    ]) {
+        assert.equal(isNativePlacementRejection(error), true, label);
+    }
+
+    for (const [label, error] of [
+        ['the exit status alone', { message: 'Command failed: bambu-studio', code: 154 }],
+        ['another return code', {
+            stderr: '[bambu result.json] return_code=-100 error_string=Failed slicing the model.',
+            bambuResult: { returnCode: -100, errorString: 'Failed slicing the model.' }
+        }],
+        ['a longer return code in the appended marker', { stderr: '[bambu result.json] return_code=-1020 error_string=' }],
+        ['a longer return code in the native exit line', { stdout: 'main found error, return -1020, exit...' }],
+        ['a positive return code', { stdout: 'main found error, return 102, exit...' }],
+        ['a non-integer structured return code', { bambuResult: { returnCode: '-102', errorString: '' } }],
+        ['the generic G-code check log line', { stderr: 'plate 1: found gcode unprintable! gcode_result->gcode_check_result.error_code = 4' }],
+        ['G-code in the wrapping detect area', { stderr: 'Found G-code in the wrapping detect area. Please make sure the 3mf file can be successfully sliced.' }],
+        // CLI_GCODE_PATH_OUTSIDE (support, wipe tower, brim or skirt) was never observed live; it stays a 500.
+        ['G-code outside of the printable area', { stderr: 'Found G-code outside of the printable area. The issue may be caused by support, wipe tower, brim, or skirt.' }]
+    ]) {
+        assert.equal(isNativePlacementRejection(error), false, label);
+    }
+
+    const otherFailure = Object.assign(new Error('Command failed: bambu-studio'), {
+        code: 156,
+        stdout: 'main found error, return -100, exit...',
+        stderr: '[bambu result.json] return_code=-100 error_string=Failed slicing the model. Please verify the slicing of all plates on Bambu Studio before uploading.',
+        bambuResult: { returnCode: -100, errorString: 'Failed slicing the model.' }
+    });
+    const mapped = invokeProcessingError(wrapNativePlacementRejection(otherFailure, H2D_PLACEMENT_CONTEXT));
+    assertProcessingMapping(mapped, 500, 'INTERNAL_PROCESSING_ERROR');
 });
 
 test('unclassified processing failure maps live to INTERNAL_PROCESSING_ERROR (500)', () => {

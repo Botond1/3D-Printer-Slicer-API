@@ -136,8 +136,9 @@ under `docs/codex/evidence/`.
   `256 x 228 x 250` with the alternative footprint `238 x 256` (the bed
   excludes an `18 x 28 mm` corner at the origin, so admission is L-shaped);
   H2D `325 x 320 x 325` (single-filament first-extruder area). Z `250.0` /
-  `325.0` pass; `+0.1 mm` on any axis fails. Native rc 192/190 refusals map to
-  the K2 `MODEL_OUT_OF_PRINTER_BOUNDS` payload.
+  `325.0` pass; `+0.1 mm` on any axis fails. Native rc 192/190 refusals and
+  (3.8.3) the H2D's return code -102 (after slicing, the toolpath left the
+  mapped extruder's area) map to the K2 `MODEL_OUT_OF_PRINTER_BOUNDS` payload.
 - Retained artifacts: Prusa `.gcode` / `.sl1`, Orca `.gcode`, Bambu
   printer-ready `.gcode.3mf`; all three extensions are valid for naming,
   listing, and download.
