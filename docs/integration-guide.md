@@ -625,7 +625,7 @@ with a request that sends `supports=false`, and vice versa. The default is
 | Async job status polls | 1200 per 60 s, burst 60, per caller IP |
 | Upload lifetime | 600 s → `408 UPLOAD_TOTAL_TIMEOUT` |
 | Native slice budget | 600 s → `422 FILE_PROCESSING_TIMEOUT` |
-| Python helper budget (conversion, sizing, inspection, Bambu reference-pose export) | 120 s each (`PYTHON_HELPER_TIMEOUT_MS`) → `422 FILE_PROCESSING_TIMEOUT` |
+| Python helper budget (conversion, sizing, inspection) | 120 s each (`PYTHON_HELPER_TIMEOUT_MS`) → `422 FILE_PROCESSING_TIMEOUT`; the Bambu reference-pose export runs under the same budget, but its timeout only falls back to the stable-pose heuristic |
 | Orientation helper budget (`orient.py`, 3.8.3) | 60 s per run (`ORIENTATION_HELPER_TIMEOUT_MS`, never above the helper budget) → never an error: the slice continues with the submitted pose, `orientation_outcome: fallback_unmodified` and the `ORIENTATION_FALLBACK` receipt warning |
 | Render budget | 60 s → `422 FILE_PROCESSING_TIMEOUT` |
 | Keep-alive idle timeout | 95 s |
