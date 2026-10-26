@@ -182,7 +182,7 @@ under `docs/codex/evidence/`.
   native processing.
 - `POST /render` (slice auth, shared limiter and queue) returns a deterministic
   1024 x 768 `image/png` (`Cache-Control: no-store`) of the final pose via
-  `app/render_preview.py` (numpy + Pillow 12.3.0) with a 60 s budget; bounds
+  `app/render_preview.py` (numpy + Pillow 13.0.0) with a 60 s budget; bounds
   use the largest FDM envelope `350 x 320 x 325 mm`; timeouts map to 422
   `FILE_PROCESSING_TIMEOUT`.
 
@@ -289,7 +289,7 @@ under `docs/codex/evidence/`.
 - Backend: Node.js + Express
 - Processing: Python 3.12 helper scripts (`cad2stl.py`, `mesh2stl.py`,
   `orient.py`, `scale_model.py`, `render_preview.py`); pins gmsh 4.15.2,
-  lxml 6.1.2, networkx 3.6.1, numpy 2.5.2, Pillow 12.3.0, scipy 1.18.1,
+  lxml 6.1.2, networkx 3.6.1, numpy 2.5.2, Pillow 13.0.0, scipy 1.18.1,
   trimesh 5.1.0
 - Engines: PrusaSlicer 2.8.1 (FDM and SLA), OrcaSlicer 2.3.1 (FDM only),
   Bambu Studio 02.08.02.61 (FDM only)

@@ -77,7 +77,7 @@ test('renderer helper ships beside the other Python helpers and Pillow is pinned
     assert.match(helper, /BACKGROUND_RGB = \(245, 245, 245\)/);
     assert.match(helper, /O_EXCL/);
     const requirements = read('requirements.txt').split(/\r?\n/).filter(Boolean);
-    assert.ok(requirements.includes('Pillow==12.3.0'), requirements.join(','));
+    assert.ok(requirements.includes('Pillow==13.0.0'), requirements.join(','));
     assert.ok(requirements.includes('trimesh==5.1.0'));
     assert.ok(requirements.includes('numpy==2.5.2'));
 });

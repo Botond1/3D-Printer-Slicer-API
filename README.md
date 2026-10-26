@@ -254,7 +254,7 @@ caption. Accepts `choosenFile`, `orientationMode`, sizing, rotation, and
 optionally `layerHeight` / `material` (validated like `/prusa/slice`; they do
 not change the image). Identical input bytes and options give byte-identical
 PNGs. Bounds use the largest supported FDM envelope `350 x 320 x 325 mm`; the
-renderer (`app/render_preview.py`, Pillow 12.3.0) has a 60 s budget.
+renderer (`app/render_preview.py`, Pillow 13.0.0) has a 60 s budget.
 
 ### Success response
 
@@ -404,7 +404,7 @@ AppImages, extracts them to `/opt/prusaslicer`, `/opt/orcaslicer`, and
 `libgstreamer-plugins-base1.0-0` for Bambu Studio. Both Compose manifests run
 the service with `init: true` so detached native process groups are reaped.
 Python dependencies are pinned in `requirements.txt` (gmsh 4.15.2, lxml 6.1.2,
-networkx 3.6.1, numpy 2.5.2, Pillow 12.3.0, scipy 1.18.1, trimesh 5.1.0).
+networkx 3.6.1, numpy 2.5.2, Pillow 13.0.0, scipy 1.18.1, trimesh 5.1.0).
 Candidate provenance evidence uses schema `i7-s3a-candidate-provenance-v2`.
 
 ---

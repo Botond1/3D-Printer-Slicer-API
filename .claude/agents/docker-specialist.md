@@ -23,7 +23,7 @@ You own all container infrastructure files:
 ## Architecture Context
 - **Base image:** Ubuntu 24.04
 - **Dockerfile stages:**
-  1. `builder` — Node.js + Python venv (pinned `requirements.txt`: gmsh 4.15.2, lxml 6.1.2, networkx 3.6.1, numpy 2.5.2, Pillow 12.3.0, scipy 1.18.1, trimesh 5.1.0) + npm dependencies
+  1. `builder` — Node.js + Python venv (pinned `requirements.txt`: gmsh 4.15.2, lxml 6.1.2, networkx 3.6.1, numpy 2.5.2, Pillow 13.0.0, scipy 1.18.1, trimesh 5.1.0) + npm dependencies
   2. `slicer-base` — Downloads, SHA-256-verifies, and extracts the PrusaSlicer 2.8.1, OrcaSlicer 2.3.1, and Bambu Studio 02.08.02.61 AppImages
   3. `swiper-browser-check` — deterministic Swiper vendor verification
   4. Final runtime — Combines everything, runs as unprivileged `slicer` user
