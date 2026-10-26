@@ -39,22 +39,51 @@ function combinedNativeOutput(err) {
  *   `bed_exclude_area` corner;
  * - rc 190 `Some filaments cannot be mapped to correct extruders for
  *   multi-extruder Printer.` when the object leaves the first extruder's
- *   printable area on the H2D.
+ *   printable area on the H2D;
+ * - return code -102 (exit status 154) `Found G-code in unprintable area of
+ *   multi-extruder printers after slicing.` (`CLI_GCODE_PATH_IN_UNPRINTABLE_AREA`)
+ *   when, after slicing, the toolpath (the part, its brim, skirt or support)
+ *   leaves the mapped extruder's printable area on the H2D although the
+ *   part's box is inside the published envelope (live 2026-10-24, 272 s).
+ *   Bambu writes this sentence only to `result.json`, which the Bambu path
+ *   appends to stderr before the placement check.
  */
 const BAMBU_PLACEMENT_DIAGNOSTICS = Object.freeze([
     'object conflicts were detected',
-    'some filaments cannot be mapped to correct extruders'
+    'some filaments cannot be mapped to correct extruders',
+    'found g-code in unprintable area of multi-extruder printers'
 ]);
+
+/**
+ * Bambu CLI return codes that are placement verdicts even when the sentence
+ * itself is missing: -102 `CLI_GCODE_PATH_IN_UNPRINTABLE_AREA`. Recognised
+ * from the structured `result.json` summary (`err.bambuResult.returnCode`)
+ * or from the two return-code markers in the native output:
+ * `[bambu result.json] return_code=<rc>` (appended to stderr by the Bambu
+ * path) and Bambu Studio's own `found error, return <rc>, exit`.
+ */
+const BAMBU_PLACEMENT_RETURN_CODES = Object.freeze([-102]);
+const BAMBU_RETURN_CODE_MARKER = /(?:\[bambu result\.json\] return_code=|found error, return )(-?\d+)/g;
+
+function hasBambuPlacementReturnCode(err, combined) {
+    const structured = err?.bambuResult?.returnCode;
+    if (Number.isInteger(structured) && BAMBU_PLACEMENT_RETURN_CODES.includes(structured)) return true;
+    for (const match of combined.matchAll(BAMBU_RETURN_CODE_MARKER)) {
+        if (BAMBU_PLACEMENT_RETURN_CODES.includes(Number(match[1]))) return true;
+    }
+    return false;
+}
 
 /**
  * Match only native diagnostics that explicitly reject placement in the print volume.
  * Generic slicer failures must remain internal processing errors.
  *
- * @param {{message?: string, stderr?: string, stdout?: string}} err Native command failure.
+ * @param {{message?: string, stderr?: string, stdout?: string, bambuResult?: {returnCode?: number|null}}} err Native command failure.
  * @returns {boolean} Whether the native output is an explicit placement rejection.
  */
 function isNativePlacementRejection(err) {
     const combined = combinedNativeOutput(err);
+    if (hasBambuPlacementReturnCode(err, combined)) return true;
     const lastLayerExceedsBuildHeight = (
         combined.includes('itself fits the build volume')
         && combined.includes('last layer exceeds the maximum build volume height')
@@ -163,6 +192,7 @@ function buildNativeBoundsResponse(err) {
 
 module.exports = {
     BAMBU_PLACEMENT_DIAGNOSTICS,
+    BAMBU_PLACEMENT_RETURN_CODES,
     NATIVE_BOUNDS_ERROR_CODE,
     isNativePlacementRejection,
     wrapNativePlacementRejection,

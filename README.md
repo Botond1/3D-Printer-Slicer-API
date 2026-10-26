@@ -254,7 +254,7 @@ caption. Accepts `choosenFile`, `orientationMode`, sizing, rotation, and
 optionally `layerHeight` / `material` (validated like `/prusa/slice`; they do
 not change the image). Identical input bytes and options give byte-identical
 PNGs. Bounds use the largest supported FDM envelope `350 x 320 x 325 mm`; the
-renderer (`app/render_preview.py`, Pillow 12.3.0) has a 60 s budget.
+renderer (`app/render_preview.py`, Pillow 13.0.0) has a 60 s budget.
 
 ### Success response
 
@@ -404,7 +404,7 @@ AppImages, extracts them to `/opt/prusaslicer`, `/opt/orcaslicer`, and
 `libgstreamer-plugins-base1.0-0` for Bambu Studio. Both Compose manifests run
 the service with `init: true` so detached native process groups are reaped.
 Python dependencies are pinned in `requirements.txt` (gmsh 4.15.2, lxml 6.1.2,
-networkx 3.6.1, numpy 2.5.2, Pillow 12.3.0, scipy 1.18.1, trimesh 5.1.0).
+networkx 3.6.1, numpy 2.5.2, Pillow 13.0.0, scipy 1.18.1, trimesh 5.1.0).
 Candidate provenance evidence uses schema `i7-s3a-candidate-provenance-v2`.
 
 ---
@@ -420,6 +420,8 @@ Candidate provenance evidence uses schema `i7-s3a-candidate-provenance-v2`.
 | `ASYNC_SLICE_DEADLINE_MS` / `ASYNC_SLICE_RESULT_TTL_MS` / `ASYNC_SLICE_MAX_JOBS` | `600000` / `1800000` / `200` | `60000..1800000` / `60000..86400000` / `1..2000`; async job deadline from admission (504 `SLICE_DEADLINE_EXCEEDED` result, native tree terminated), result retention, retained jobs (`SLICE_ASYNC_JOBS_FULL` 429 when all are live) |
 | `SLICE_JOB_RATE_LIMIT_MAX_REQUESTS` / `_WINDOW_MS` / `_BURST_CAPACITY` | `1200` / `60000` / `60` | per-IP token bucket on `GET`/`DELETE /bambu/slice/jobs/:job_id`, separate from submissions |
 | `SLICE_COMMAND_TIMEOUT_MS` | `600000` | `1000..3600000`; Python helpers get 120 s each, clamped to the native budget; the renderer 60 s |
+| `PYTHON_HELPER_TIMEOUT_MS` | `120000` | `10000..SLICE_COMMAND_TIMEOUT_MS`; each Python helper (conversion, orientation, sizing, inspection) and the Bambu reference-pose export; invalid values fall back to the default |
+| `ORIENTATION_HELPER_TIMEOUT_MS` | `60000` | `10000..PYTHON_HELPER_TIMEOUT_MS`, default capped at the helper budget; `orient.py` alone; a run past it continues unrotated (`fallback_unmodified`), never an error; invalid or out-of-range values fall back to the default |
 | `UPLOAD_TOTAL_TIMEOUT_MS` / `MAX_UPLOAD_BYTES` | `600000` / `500 MB` | `1000..600000` / up to 500 MB |
 | `HTTP_HEADERS_TIMEOUT_MS` | `60000` | `1000..60000`, capped at request timeout |
 | `HTTP_REQUEST_TIMEOUT_MS` | `600000` | `60000..600000` |

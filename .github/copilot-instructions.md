@@ -136,8 +136,9 @@ under `docs/codex/evidence/`.
   `256 x 228 x 250` with the alternative footprint `238 x 256` (the bed
   excludes an `18 x 28 mm` corner at the origin, so admission is L-shaped);
   H2D `325 x 320 x 325` (single-filament first-extruder area). Z `250.0` /
-  `325.0` pass; `+0.1 mm` on any axis fails. Native rc 192/190 refusals map to
-  the K2 `MODEL_OUT_OF_PRINTER_BOUNDS` payload.
+  `325.0` pass; `+0.1 mm` on any axis fails. Native rc 192/190 refusals and
+  (3.8.3) the H2D's return code -102 (after slicing, the toolpath left the
+  mapped extruder's area) map to the K2 `MODEL_OUT_OF_PRINTER_BOUNDS` payload.
 - Retained artifacts: Prusa `.gcode` / `.sl1`, Orca `.gcode`, Bambu
   printer-ready `.gcode.3mf`; all three extensions are valid for naming,
   listing, and download.
@@ -181,7 +182,7 @@ under `docs/codex/evidence/`.
   native processing.
 - `POST /render` (slice auth, shared limiter and queue) returns a deterministic
   1024 x 768 `image/png` (`Cache-Control: no-store`) of the final pose via
-  `app/render_preview.py` (numpy + Pillow 12.3.0) with a 60 s budget; bounds
+  `app/render_preview.py` (numpy + Pillow 13.0.0) with a 60 s budget; bounds
   use the largest FDM envelope `350 x 320 x 325 mm`; timeouts map to 422
   `FILE_PROCESSING_TIMEOUT`.
 
@@ -288,7 +289,7 @@ under `docs/codex/evidence/`.
 - Backend: Node.js + Express
 - Processing: Python 3.12 helper scripts (`cad2stl.py`, `mesh2stl.py`,
   `orient.py`, `scale_model.py`, `render_preview.py`); pins gmsh 4.15.2,
-  lxml 6.1.2, networkx 3.6.1, numpy 2.5.2, Pillow 12.3.0, scipy 1.18.1,
+  lxml 6.1.2, networkx 3.6.1, numpy 2.5.2, Pillow 13.0.0, scipy 1.18.1,
   trimesh 5.1.0
 - Engines: PrusaSlicer 2.8.1 (FDM and SLA), OrcaSlicer 2.3.1 (FDM only),
   Bambu Studio 02.08.02.61 (FDM only)

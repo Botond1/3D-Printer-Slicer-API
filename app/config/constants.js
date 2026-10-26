@@ -24,6 +24,9 @@ const DEFAULTS = {
     // Python preprocessing helpers (mesh2stl, cad2stl, orient, scale_model)
     // run before any native slicer and never need the full native budget.
     PYTHON_HELPER_TIMEOUT_MS: 120_000,
+    // orient.py alone, capped at the helper budget: a finished stable-pose
+    // heuristic took at most 27 s live, a non-terminating one the whole budget.
+    ORIENTATION_HELPER_TIMEOUT_MS: 60_000,
     SLICE_TIMEOUT_MINUTES: 10,
     SLICE_RATE_LIMIT_WINDOW_MS: 60_000,
     SLICE_RATE_LIMIT_MAX_REQUESTS: 3,

@@ -674,3 +674,79 @@ test('bambu output targets stage an isolated directory and a .gcode.3mf export n
         await fsp.rm(root, { recursive: true, force: true });
     }
 });
+
+test('a Bambu -102 known only from result.json reaches the caller as the K2 placement verdict', async (t) => {
+    const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'b1-bambu-unprintable-'));
+    t.after(() => fsp.rm(root, { recursive: true, force: true }));
+    const snapshots = await bambuSnapshots(root, 'H2D', '0.20mm Standard @BBL H2D', 'Generic PLA @BBL H2D');
+    const sentence = 'Found G-code in unprintable area of multi-extruder printers after slicing. '
+        + 'Please make sure the 3mf file can be successfully sliced in the latest Bambu Studio.';
+    let result = { return_code: -102, error_string: sentence };
+    const { lifecycle, restore } = installOutputLifecycleMocks({
+        async runCommand(executable, args) {
+            const outputDir = args[args.indexOf('--outputdir') + 1];
+            await fsp.mkdir(outputDir, { recursive: true });
+            await fsp.writeFile(path.join(outputDir, 'result.json'), JSON.stringify(result));
+            // Exit status 154 = -102; nothing on either stream names the cause.
+            throw Object.assign(new Error('Command failed: bambu-studio'), { code: 154, killed: false, signal: null, stdout: '', stderr: '' });
+        },
+        async parseOutputDetailed() { throw new Error('must not parse'); },
+        async cleanupManagedArtifacts() { return { quotaSatisfied: true }; }
+    });
+    t.after(restore);
+    const engineOutputDir = path.join(root, 'engine-output');
+    const context = {
+        engine: 'bambu', technology: 'FDM', layerHeight: 0.2, infillPercentage: '20%', material: 'PLA', supports: true,
+        profileOverrides: { bambuPrinter: 'H2D', bambuProcessProfile: null },
+        baseConfigFile: snapshots.baseConfigFile,
+        orcaMachineConfigFile: snapshots.orcaMachineConfigFile,
+        orcaFilamentConfigFile: snapshots.orcaFilamentConfigFile,
+        slicerOutputPath: path.join(engineOutputDir, 'result.gcode.3mf'),
+        engineOutputDir,
+        outputCandidate: 'candidate',
+        processableFile: 'model.stl',
+        effectiveModelInfo: { height_mm: 120 },
+        modelTransform: modelTransform({ x: 300, y: 290, z: 120 }),
+        buildVolumeLimits: { min: { x: 1, y: 1, z: 1 }, max: { x: 325, y: 320, z: 324.9 }, sourceProfile: 'Bambu Lab H2D 0.4 nozzle' },
+        workspace: {
+            id: 'job-0123456789abcdef0123456789abcdef',
+            ...scratchWorkspace(root),
+            assertContainedPath(candidate) { return candidate; },
+            async promoteOutputCandidate() { throw new Error('must not promote'); }
+        },
+        signal: new AbortController().signal
+    };
+    const invoke = (error) => {
+        const observed = { status: null, payload: null };
+        const res = {
+            status(value) { observed.status = value; return this; },
+            json(value) { observed.payload = value; return this; }
+        };
+        handleProcessingError(error, res, null, null, () => '.stl');
+        return observed;
+    };
+
+    const placement = await lifecycle.runSlicerAndParseStats(context).then(() => assert.fail('the slice must fail'), (error) => error);
+    assert.equal(placement.code, 'NATIVE_MODEL_OUT_OF_PRINTER_BOUNDS');
+    assert.deepEqual(placement.cause.bambuResult, { returnCode: -102, errorString: sentence });
+    const verdict = invoke(placement);
+    assert.equal(verdict.status, 422);
+    assert.equal(verdict.payload.errorCode, 'MODEL_OUT_OF_PRINTER_BOUNDS');
+    assert.deepEqual(verdict.payload.model_dimensions_mm, { x: 300, y: 290, z: 120 });
+    assert.deepEqual(verdict.payload.build_volume_limits_mm, {
+        min: { x: 1, y: 1, z: 1 }, max: { x: 325, y: 320, z: 324.9 }, source_profile: 'Bambu Lab H2D 0.4 nozzle'
+    });
+    assert.equal(verdict.payload.model_transform.transform_schema, 2);
+    assert.doesNotMatch(JSON.stringify(verdict.payload), /unprintable|multi-extruder|result\.json/i);
+
+    // Any other Bambu failure keeps the generic 500 with its bounded exit facts.
+    await fsp.rm(engineOutputDir, { recursive: true, force: true });
+    result = { return_code: -100, error_string: 'Failed slicing the model. Please verify the slicing of all plates on Bambu Studio before uploading.' };
+    const other = await lifecycle.runSlicerAndParseStats(context).then(() => assert.fail('the slice must fail'), (error) => error);
+    assert.equal(other.code, 154);
+    assert.equal(other.bambuResult.returnCode, -100);
+    const generic = invoke(other);
+    assert.equal(generic.status, 500);
+    assert.equal(generic.payload.errorCode, 'INTERNAL_PROCESSING_ERROR');
+    assert.deepEqual(generic.payload.native, { exit_code: 154, signal: null, killed_by_system: false });
+});
