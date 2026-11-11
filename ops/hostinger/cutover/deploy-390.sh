@@ -334,9 +334,10 @@ function queueIdle() {
 }
 
 // slice-compare <before-run1> <before-run2> <after> <aa-spread>
-const IDENTITY_PATHS = ['technical_receipt.measurement_generation', 'technical_receipt.effective_profile_sha256',
-  'technical_receipt.engine.build_sha256', 'technical_receipt.profiles.bundle_sha256', 'technical_receipt.source',
-  'technical_receipt.configuration_sha256', 'technical_receipt.model_transform'];
+// Paths of the real 3.8.3 answer (captured on the live service on 2026-11-11).
+const IDENTITY_PATHS = ['technical_receipt.measurement_generation', 'technical_receipt.source',
+  'technical_receipt.engine', 'technical_receipt.profiles', 'technical_receipt.applied',
+  'technical_receipt.geometry', 'technical_receipt.scope', 'technical_receipt.identity', 'model_transform'];
 function dig(object, dotted) { return dotted.split('.').reduce((value, key) => (value == null ? undefined : value[key]), object); }
 function sliceCompare(a, b, after, spreadArg) {
   const runs = [a, b, after].map((file) => JSON.parse(fs.readFileSync(file, 'utf8')));
@@ -484,6 +485,8 @@ assert_capture_present() { # before anything is written: the step-2 capture this
     [ -s "$CONTROL_DIR/$file" ] || die "the step-2 capture in $CONTROL_DIR is incomplete ($file missing)"
   done
   for model in cube block; do
+    # post_checks slices these after the restart; a missing model would only show then.
+    [ -s "$CONTROL_DIR/models/$model.stl" ] || die "the step-2 capture in $CONTROL_DIR lacks models/$model.stl"
     for run in 1 2; do
       [ -s "$CONTROL_DIR/control-$model-before-$run.json" ] || die "the step-2 capture in $CONTROL_DIR lacks control-$model-before-$run.json"
     done
@@ -556,9 +559,9 @@ verify_runtime() { # verify_runtime <ref> <sha>
 
 verify_tuning_runtime() { # the container's tuning values equal the service env file (hash compare)
   docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$NAME" \
-    | grep -E '^(MAX_CONCURRENT_SLICES|MAX_SLICE_QUEUE_LENGTH|MAX_SLICE_QUEUE_PER_IP|MAX_SLICE_QUEUE_WAIT_MS|ASYNC_SLICE_DEADLINE_MS|PYTHON_HELPER_TIMEOUT_MS|ORIENTATION_HELPER_TIMEOUT_MS|SLICE_RATE_LIMIT_MAX_REQUESTS|SLICE_RATE_LIMIT_BURST_CAPACITY|NODE_ENV|PORT|TRUST_PROXY)=' \
+    | grep -E '^(MAX_CONCURRENT_SLICES|MAX_SLICE_QUEUE_LENGTH|MAX_SLICE_QUEUE_PER_IP|MAX_SLICE_QUEUE_WAIT_MS|ASYNC_SLICE_DEADLINE_MS|PYTHON_HELPER_TIMEOUT_MS|ORIENTATION_HELPER_TIMEOUT_MS|SLICE_RATE_LIMIT_MAX_REQUESTS|SLICE_RATE_LIMIT_BURST_CAPACITY|PORT|TRUST_PROXY)=' \
     | sort | sha256sum | cut -c1-64 > "$TOOLDIR/tuning-runtime"
-  grep -E '^(MAX_CONCURRENT_SLICES|MAX_SLICE_QUEUE_LENGTH|MAX_SLICE_QUEUE_PER_IP|MAX_SLICE_QUEUE_WAIT_MS|ASYNC_SLICE_DEADLINE_MS|PYTHON_HELPER_TIMEOUT_MS|ORIENTATION_HELPER_TIMEOUT_MS|SLICE_RATE_LIMIT_MAX_REQUESTS|SLICE_RATE_LIMIT_BURST_CAPACITY|NODE_ENV|PORT|TRUST_PROXY)=' "$SERVICE_ENV" \
+  grep -E '^(MAX_CONCURRENT_SLICES|MAX_SLICE_QUEUE_LENGTH|MAX_SLICE_QUEUE_PER_IP|MAX_SLICE_QUEUE_WAIT_MS|ASYNC_SLICE_DEADLINE_MS|PYTHON_HELPER_TIMEOUT_MS|ORIENTATION_HELPER_TIMEOUT_MS|SLICE_RATE_LIMIT_MAX_REQUESTS|SLICE_RATE_LIMIT_BURST_CAPACITY|PORT|TRUST_PROXY)=' "$SERVICE_ENV" \
     | sort | sha256sum | cut -c1-64 > "$TOOLDIR/tuning-file"
   cmp -s "$TOOLDIR/tuning-runtime" "$TOOLDIR/tuning-file" || { echo "tuning allowlist differs in the container" >&2; return 1; }
   echo "tuning allowlist identical in the container"
@@ -586,7 +589,10 @@ post_checks() { # post_checks <ref> <sha> <aa-spread>
   ready="$(docker exec -i "$NAME" node -e "$IN_READY_POLL" 60)" || { echo "/ready not 200 during the poll" >&2; return 1; }
   echo "$ready"
   node -e 'const m=process.argv[1].match(/p99_ms=([0-9.]+)/);process.exit(m&&Number(m[1])<100?0:1)' "$ready" || { echo "/ready p99 >= 100 ms" >&2; return 1; }
-  docker logs --since 10m "$NAME" 2>&1 | grep -q '"event":"auth.slot_summary"' || { echo "no auth.slot_summary line" >&2; return 1; }
+  # Read the log to a file first: `docker logs | grep -q` under pipefail fails when grep
+  # stops at the first match and docker logs then dies of SIGPIPE (a false "no line").
+  docker logs --since 10m "$NAME" > "$TOOLDIR/backend-10m.log" 2>&1 || { echo "docker logs of the new container failed" >&2; return 1; }
+  grep -q '"event":"auth.slot_summary"' "$TOOLDIR/backend-10m.log" || { echo "no auth.slot_summary line" >&2; return 1; }
   echo "auth.slot_summary present"
 }
 
@@ -915,7 +921,10 @@ cmd_traefik() {
     echo "a shop 403/404 in the 30-minute watch: restore with $0 --execute traefik-watch --orig $orig --seconds 0" >&2
     exit 1
   fi
-  docker logs --since "$since" "$TRAEFIK_NAME" 2>&1 | grep -c 'Health check failed' | sed 's/^/traefik health-check failures: /'
+  # grep -c exits 1 on a count of 0; under pipefail that ended a clean run before PASS.
+  local health_failures
+  health_failures="$(docker logs --since "$since" "$TRAEFIK_NAME" 2>&1 | grep -c 'Health check failed' || true)"
+  echo "traefik health-check failures: ${health_failures:-0}"
   echo "traefik PASS. Rollback at any time: the same atomic restore of $orig"
 }
 

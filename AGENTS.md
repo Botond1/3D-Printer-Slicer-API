@@ -21,7 +21,22 @@ schema. The new candidate passed automatic rollback and live promotion gates.
 
 Owner-authorized release: signed main `4539c539d15dacb19cde7e246aab690cc11170e7` is deployed as `ghcr.io/botond1/3d-printer-slicer-api@sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9`. Read `docs/codex/handoff-2026-09-07-bambu-deployed.md` for exact CI, native, consumer, deployment and rollback evidence. The WordPress deliverable is a local ZIP; further LeadPilot work is forbidden by the owner. Public routes, allowlists, credentials, pricing and the existing operator packs remain unchanged. Further changes require new task-specific authorization.
 
-## Release 3.9.0 — integrated 2026-11-11, NOT deployed (live stays 3.8.3)
+## Release 3.9.0 — DEPLOYED 2026-11-11 17:37 UTC (live)
+
+Live on the Slicer VPS since 2026-11-11 17:37 UTC: `ghcr.io/botond1/3d-printer-slicer-api@sha256:f4aafd5c14f3e149f71e8f7736aedb05451477dde31cbd54895576372e94c50b`,
+source `abe899791d69618ba29e75dfb32501d4b8d2c776`, Bambu generation `0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27`
+(unchanged), key ring in `principals` mode with the former shared key as `SLICE_SERVICE_WOOCOMMERCE_API_KEY_PREVIOUS`,
+live env `ARTIFACT_TTL_MS=3600000`, `MAX_UPLOAD_BYTES=125829120`, `EXPORT_ROUTE_ENABLED=true`. Control dir
+`/root/r3d-390-control-20261111`, release tree `/opt/rocket3d/slicer-api-abe899791d69618ba29e75dfb32501d4b8d2c776`.
+Rollback: `bash <release tree>/ops/hostinger/cutover/deploy-390.sh --execute rollback <3.9.0 ref> abe899791d69618ba29e75dfb32501d4b8d2c776 --backup /root/r3d-390-control-20261111/env-backup-<ts>`.
+The Traefik public path allowlist (§8 step 5) was applied on 2026-11-11 18:04 UTC (T-TRF 40 cases x 3 source addresses, 0 failures; 60 s watch clean with 4 shop requests; restore = `deploy-390.sh --execute traefik-watch --orig /root/r3d-390-control-20261111/traefik/slicer-api.yml.<ts>.orig --seconds 0`). Rehearse every
+post-check against real answers from the private container first (`ops/hostinger/cutover/rehearse-checks.sh`,
+`ops/hostinger/RUNBOOK.md` §8.6): the first cutover attempt rolled back on two false failures (`NODE_ENV` in the
+tuning list, receipt paths no answer carries) that the fabricated-answer dry-run tests could not see. CI lessons:
+the image build gets the Ubuntu package hosts explicitly (hosted runners could not resolve `*.ubuntu.com`); the
+publication switches the runner to the classic Docker image store (the containerd store broke the identity checks);
+recovery mode needs `candidate_sha` = the current `main` HEAD. Pending: host hardening (prepared, not run), the
+staging key, the apt grype ignore entries expire 2026-12-31 (base refresh before), the required checks of `main`.
 
 Specification and acceptance: `docs/release/3.9.0-specification.md` (start at §2 for the plugin contract, §4 for the
 internal design, §9 for file ownership). Read it before touching any of: `app/config/release-policy.js` (every 3.9.0

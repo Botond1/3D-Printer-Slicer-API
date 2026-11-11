@@ -1363,3 +1363,62 @@ ranges, and a control or backup path inside the watched dynamic dir.
   the diagnostic key files' mode, the keep-list and the reads.
 - `ops/hostinger/keyring/provision-staging-key.sh` (owner decision 4): the
   hash-prefix check, a generated root-only key file and its env line.
+
+### 8.6 3.9.0 as run (2026-11-11)
+
+Live since 17:37 UTC: `ghcr.io/botond1/3d-printer-slicer-api@sha256:f4aafd5c14f3e149f71e8f7736aedb05451477dde31cbd54895576372e94c50b`
+(source `abe899791d69618ba29e75dfb32501d4b8d2c776`, generation unchanged). The
+Traefik step (§8 step 5) was not run at the time of writing.
+
+- Control dir: `/root/r3d-390-control-20261111` (the step-2 capture, the env
+  backups `env-backup-<ts>/`, the router copy). Release tree (scripts and docs
+  only): `/opt/rocket3d/slicer-api-abe899791d69618ba29e75dfb32501d4b8d2c776`.
+  A later run on another UTC date passes `R3D_CONTROL_DIR=/root/r3d-390-control-20261111`.
+- Rollback: `bash <release tree>/ops/hostinger/cutover/deploy-390.sh --execute rollback <3.9.0 ref> abe899791d69618ba29e75dfb32501d4b8d2c776 --backup /root/r3d-390-control-20261111/env-backup-<ts>`.
+- The first cutover attempt rolled itself back on two false failures of the
+  post-checks: `NODE_ENV` in the tuning list (it comes from the image's `ENV`,
+  not the service env file) and receipt paths no answer carries. The dry-run
+  tests had passed because they compared hand-written answers.
+
+Private A/B recipe (`ops/hostinger/private-ab/README-ab.md`, the drivers
+`ab-side-a.sh` / `ab-side-b.sh`) and its three traps:
+
+1. The private container needs every `EXPECTED_*` envelope variable
+   (`compose.private.yml`: memory, CPU, UID/GID, pids, log size/files, stop
+   grace) equal to its real limits. A missing or different one makes the
+   entrypoint exit 78 before Node starts: `docker logs` is empty, read
+   `docker inspect -f '{{.State.ExitCode}}' r3d-s390-private`.
+2. The client pack mounted at `/client` must be readable by uid 999 (the client
+   runs `--user 999:999`). `deploy-390.sh capture` ends with
+   `chmod -R go-rwx` on the control dir, so a pack kept under it stops being
+   readable after the capture: copy it out (`install -d -o 999 -g 999`) or
+   re-own it before the next run.
+3. Start a driver detached from the SSH session:
+   `setsid nohup bash ab-side-b.sh B <ref> > /srv/r3d-s390-ab/out/side-B.log 2>&1 < /dev/null &`,
+   so the run survives a dropped SSH connection.
+
+**Rehearse every post-check against real answers before a cutover.** A check
+that compares a name, a path or a log line must have been run once against
+what the live container and the private container really answer; a dry-run
+against fabricated answers proves nothing about that.
+`ops/hostinger/cutover/rehearse-checks.sh` sources deploy-390.sh's own helpers
+(so `IDENTITY_PATHS`, the tuning list and the comparison code are the cutover's)
+and runs, with the private 3.9.0 container up (`run-private-ab.sh --execute up B <ref>`)
+and the step-2 capture done:
+
+```sh
+R3D_CONTROL_DIR=/root/r3d-390-control-<date> \
+  bash <release tree>/ops/hostinger/cutover/rehearse-checks.sh --private r3d-s390-private
+```
+
+1. the tuning comparison on the LIVE container (`docker inspect` and a file
+   read only; the live container gets no request);
+2. the two control slices on the PRIVATE container, compared with the
+   capture's two 3.8.3 runs by `envtool slice-compare`;
+3. the catalogue bodies, 60 `/ready` polls and the `auth.slot_summary` line,
+   all on the private container.
+
+It has no `--execute`: it writes only into a new 0700 rehearsal dir
+(`/root/r3d-390-rehearsal-<ts>` or `--out`). Every check prints PASS or FAIL;
+exit 1 means the cutover would roll back on real answers, so fix the script,
+not the comparison, before the window.
