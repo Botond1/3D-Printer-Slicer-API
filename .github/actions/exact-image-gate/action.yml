@@ -95,6 +95,13 @@ runs:
           version: v0.35.0
           cache-binary: false
           cleanup: true
+          # RUN steps share the BuildKit container's network namespace. On the default
+          # bridge that container resolves names through Docker's fallback resolvers,
+          # which stopped answering on hosted runners on 2026-11-11 (apt could not
+          # resolve archive.ubuntu.com in thirteen consecutive runs). The host network
+          # uses the runner's own resolver.
+          driver-opts: |
+            network=host
 
       - name: Build the exact candidate image once and load it locally
         id: build
