@@ -96,6 +96,20 @@ class SliceQueueShutdownError extends SliceQueueError {
     }
 }
 
+/** Retry hint of the export class's capacity refusal (3.9.0 §2.2). */
+const EXPORT_QUEUE_RETRY_AFTER_SECONDS = 10;
+
+/**
+ * Export class capacity error: `EXPORT_MAX_JOBS` exports are already queued
+ * or running service-wide (3.9.0). Never raised by a slice admission.
+ */
+class ExportQueueFullError extends SliceQueueError {
+    constructor() {
+        super('Too many production model exports are queued or running. Please retry later.', 429, 'EXPORT_QUEUE_FULL');
+        this.retryAfterSeconds = EXPORT_QUEUE_RETRY_AFTER_SECONDS;
+    }
+}
+
 const LEGACY_QUEUE_ERROR_PREFIXES = Object.freeze({
     'QUEUE_FULL|': { status: 503, errorCode: 'SLICE_QUEUE_FULL' },
     'QUEUE_TIMEOUT|': { status: 503, errorCode: 'SLICE_QUEUE_TIMEOUT' },
@@ -193,6 +207,11 @@ function finiteLimit(value, fallback) {
     return Number.isSafeInteger(value) && value > 0 ? value : fallback;
 }
 
+/** `EXPORT_MAX_JOBS` from the 3.9.0 release policy, read lazily. */
+function resolveExportMaxJobs() {
+    return require('../../config/release-policy').export.EXPORT_MAX_JOBS;
+}
+
 /** Resolve a factory concurrency value inside the application safety range. */
 function finiteConcurrency(value, fallback) {
     return Number.isSafeInteger(value)
@@ -216,6 +235,10 @@ function createSliceQueue(options = {}) {
         maxQueueLength: finiteLimit(options.maxQueueLength, MAX_SLICE_QUEUE_LENGTH),
         maxQueuePerClient: finiteLimit(options.maxQueuePerClient, MAX_SLICE_QUEUE_PER_IP),
         maxWaitMs: finiteLimit(options.maxWaitMs, MAX_SLICE_QUEUE_WAIT_MS),
+        // Resolved on the first export only: the release policy is never read
+        // by a queue that admits no export (its slice limits stay 3.8.3's).
+        maxExportJobs: () => finiteLimit(options.maxExportJobs, resolveExportMaxJobs()),
+        createExportFullError: () => new ExportQueueFullError(),
         now: options.now || Date.now,
         setTimeout: options.setTimeout || setTimeout,
         clearTimeout: options.clearTimeout || clearTimeout,
@@ -237,13 +260,16 @@ const defaultQueue = createSliceQueue({
     subscribeToRuntimeQuarantine: subscribeToNativeRuntimeQuarantine
 });
 const enqueueSliceJob = defaultQueue.enqueueSliceJob;
+const enqueueExportJob = defaultQueue.enqueueExportJob;
 const getQueueStatus = defaultQueue.getQueueStatus;
 const beginSliceQueueShutdown = defaultQueue.beginSliceQueueShutdown;
 const shutdownSliceQueue = defaultQueue.shutdownSliceQueue;
 
 module.exports = {
     CLIENT_LIMIT_RETRY_AFTER_SECONDS,
+    EXPORT_QUEUE_RETRY_AFTER_SECONDS,
     enqueueSliceJob,
+    enqueueExportJob,
     getQueueStatus,
     beginSliceQueueShutdown,
     shutdownSliceQueue,
@@ -254,5 +280,6 @@ module.exports = {
     SliceQueueFullError,
     SliceQueueTimeoutError,
     SliceQueueClientLimitError,
-    SliceQueueShutdownError
+    SliceQueueShutdownError,
+    ExportQueueFullError
 };

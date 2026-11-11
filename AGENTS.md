@@ -21,6 +21,22 @@ schema. The new candidate passed automatic rollback and live promotion gates.
 
 Owner-authorized release: signed main `4539c539d15dacb19cde7e246aab690cc11170e7` is deployed as `ghcr.io/botond1/3d-printer-slicer-api@sha256:1c784b627fc5783b633b9a0b7c2b086588fbe149c00770d7f0cac5594860efb9`. Read `docs/codex/handoff-2026-09-07-bambu-deployed.md` for exact CI, native, consumer, deployment and rollback evidence. The WordPress deliverable is a local ZIP; further LeadPilot work is forbidden by the owner. Public routes, allowlists, credentials, pricing and the existing operator packs remain unchanged. Further changes require new task-specific authorization.
 
+## Release 3.9.0 — integrated 2026-11-11, NOT deployed (live stays 3.8.3)
+
+Specification and acceptance: `docs/release/3.9.0-specification.md` (start at §2 for the plugin contract, §4 for the
+internal design, §9 for file ownership). Read it before touching any of: `app/config/release-policy.js` (every 3.9.0
+setting; `constants.js` and `resource-policy.js` are frozen measurement configuration), the native identity monitor
+(`native-identity-monitor.js`, the allowed hunks of `bambu-generation.js`), retention (`artifact-sweeper.js`,
+`retention-adapter.js`, the pending-delete set), the archive preflight and 3MF expansion limits, auth order
+(`sliceAdmission.js`: authentication before every limiter; a request carrying `x-slicer-api-key` always gets the 401,
+never a 429), the export routes (`app/routes/export.routes.js`, `app/services/export/`), `GET /capabilities`
+(`app/routes/capabilities.routes.js`), the children's OOM wrapper (`command.js`) and the public router allowlist
+(`ops/hostinger/public-routes.json`). No generation change: `node scripts/check-generation-inputs.js dbc539e` must
+end with `OK` and list only `bambu-generation.js CHANGED (allowed hunks only)`; one byte in a hashed processing file,
+the Dockerfile, `configs/`, `constants.js`, `resource-policy.js` or `paths.js` stales every open quote of the live shop.
+The live-plugin contract replay suite is `node --test tests/contract/live-plugin-29a4a1c7/*.test.js` (not part of
+`npm test`). Linux-only proofs still open: choom, T-TRF, T-EXP on real Bambu, T-RET-4, the image goldens.
+
 ## Mission and scope
 
 Maintain this standalone 3D Printer Slicer API as a security-sensitive Node.js,

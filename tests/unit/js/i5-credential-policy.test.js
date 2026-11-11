@@ -116,7 +116,6 @@ function assertMigrationRequestBoundary(migration, ring) {
 function assertInvalidMigrationConfigurationsRejected(migration) {
     const mutations = [
         (env) => { delete env.SLICE_SERVICE_LEGACY_MIGRATION_UNTIL; },
-        (env) => { env.SLICE_SERVICE_LEGACY_MIGRATION_UNTIL = new Date(NOW).toISOString(); },
         (env) => {
             env.SLICE_SERVICE_LEGACY_MIGRATION_UNTIL = new Date(
                 NOW + (91 * 24 * 60 * 60 * 1000)
@@ -140,12 +139,25 @@ function assertInvalidMigrationConfigurationsRejected(migration) {
             new RegExp(SERVICE_AUTH_CONFIGURATION_ERROR)
         );
     }
-    assert.throws(
-        () => resolveServiceKeyRing(migration, {
-            now: Date.parse(migration.SLICE_SERVICE_LEGACY_MIGRATION_UNTIL)
-        }),
-        new RegExp(SERVICE_AUTH_CONFIGURATION_ERROR)
-    );
+    // 3.9.0 §4.5(a): an expired migration no longer refuses startup (which
+    // crash-looped the container at the cliff); it starts and refuses the
+    // legacy slot on every request, while the principals keep working.
+    const expiresAt = Date.parse(migration.SLICE_SERVICE_LEGACY_MIGRATION_UNTIL);
+    const expired = resolveServiceKeyRing(migration, { now: expiresAt });
+    assert.deepEqual(expired.sliceCredentialMode, {
+        mode: 'migration',
+        legacyAccepted: false,
+        expired: true,
+        expiresAt: migration.SLICE_SERVICE_LEGACY_MIGRATION_UNTIL
+    });
+    const observer = createMigrationObserver(expired);
+    for (const requestTime of [expiresAt, expiresAt + 1, expiresAt + (365 * 24 * 60 * 60 * 1000)]) {
+        observer.setRequestTime(requestTime);
+        assert.equal(observer.observe(migration.SLICE_SERVICE_API_KEY).status, 401);
+        assert.equal(observer.observe(migration.SLICE_SERVICE_API_KEY_PREVIOUS).status, 401);
+        assert.equal(observer.observe(migration.SLICE_SERVICE_WOOCOMMERCE_API_KEY).nextCalls, 1);
+        assert.equal(observer.observe(migration.SLICE_SERVICE_LEADPILOT_API_KEY).nextCalls, 1);
+    }
 }
 
 test('scoped key ring is immutable and exposes one active plus optional previous slot', () => {

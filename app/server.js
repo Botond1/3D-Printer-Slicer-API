@@ -17,6 +17,17 @@ try {
     process.exit(1);
 }
 
+// 3.9.0 settings (app/config/release-policy.js) resolve on first require; an
+// invalid value refuses startup here, before any module that reads them.
+let releasePolicy;
+try {
+    releasePolicy = require('./config/release-policy');
+} catch {
+    console.error('[SECURITY] Release policy configuration is invalid. Refusing to start server.');
+    process.exit(1);
+}
+
+const { monitorEventLoopDelay } = require('node:perf_hooks');
 const createSwaggerDocument = require('./docs/swagger-docs');
 const { createPricingRouter } = require('./routes/pricing.routes');
 const { createProfileCatalogueRouter } = require('./routes/profile-catalogue.routes');
@@ -24,25 +35,37 @@ const { createSliceRouter } = require('./routes/slice.routes');
 const { createSliceJobsRouter } = require('./routes/slice-jobs.routes');
 const { createRenderRouter } = require('./routes/render.routes');
 const { createSystemRouter } = require('./routes/system.routes');
+const { createExportRouter } = require('./routes/export.routes');
+const { createCapabilitiesRouter } = require('./routes/capabilities.routes');
 const errorHandler = require('./middleware/errorHandler');
 const { createCorsOptionsResolver, parseAllowedOrigins } = require('./middleware/corsPolicy');
 const { createRequireSliceService } = require('./middleware/requireSliceService');
 const { createRequireAdminAudience } = require('./middleware/requireAdmin');
+const { createAuthLogAggregator } = require('./middleware/auth-log-aggregator');
+const { resolveKeyRingReadinessReasons } = require('./config/service-auth');
 const { createRequestIdMiddleware } = require('./middleware/requestId');
 const { createRequestObservabilityMiddleware } = require('./middleware/requestObservability');
 const { PORT } = require('./config/constants');
-const { ensureRequiredDirectories, JOB_SCRATCH_DIR } = require('./config/paths');
+const { ensureRequiredDirectories, JOB_SCRATCH_DIR, JOB_WORKSPACES_DIR } = require('./config/paths');
 const { resolveTrustProxySetting } = require('./config/trust-proxy');
 const { resolveResourcePolicy } = require('./config/resource-policy');
 const { loadPricingFromDisk, getPricing } = require('./services/pricing.service');
 const { createBoundedHttpServer } = require('./services/http-server');
 const { auditStaleWorkspaces, auditWorkspacesThenListen } = require('./services/slice/workspace');
 const { cleanupManagedArtifacts } = require('./services/artifact-store');
+const { createRetentionRuntime } = require('./services/retention-adapter');
+const { purgeExportResults } = require('./services/export/export-files');
+const { closeDefaultArchivePreflight } = require('./services/slice/archive-preflight');
+const { getChildOomWrapperStatus, verifyChildOomWrapper } = require('./services/slice/command');
 const { beginSliceQueueShutdown } = require('./services/slice/queue');
 const { initializeSlicerEngineVersions } = require('./services/slice/engine-version');
 const { getBambuPrinterRegistry } = require('./services/slice/bambu-printer-registry');
 const { verifyBambuRegistryChains } = require('./services/slice/bambu-profile-chain');
-const { initializeBambuGeneration } = require('./services/slice/bambu-generation');
+const {
+    getNativeIdentityStatus,
+    initializeBambuGeneration,
+    startNativeIdentityMonitor
+} = require('./services/slice/bambu-generation');
 const { createBambuReadiness } = require('./services/slice/bambu-readiness');
 const { getSlaPrinterRegistry } = require('./services/slice/sla-printer-registry');
 const { configureRetentionObserver } = require('./services/slice/output-lifecycle');
@@ -52,7 +75,8 @@ const { createReadinessService } = require('./services/readiness.service');
 const { emitEvent, setEventWriter } = require('./services/observability/events');
 const {
     recordArtifactCleanup,
-    setArtifactStatus
+    setArtifactStatus,
+    setEventLoopDelay
 } = require('./services/observability/metrics');
 
 setEventWriter((entry) => console.info(JSON.stringify(entry)));
@@ -82,36 +106,106 @@ const bambuReadiness = createBambuReadiness();
 const readinessService = createReadinessService({
     getSlicerRuntimeStatus: bambuReadiness.getStatus,
     isShuttingDown: () => runtimeLifecycle?.isShuttingDown() === true,
-    legacyMigration: serviceKeyRing.legacyMigration
+    legacyMigration: serviceKeyRing.legacyMigration,
+    // /operations/readiness only; none of these reaches /ready (3.9.0 §4.1, §4.5, §4.6).
+    getNativeIdentityStatus,
+    getKeyRingReasons: () => resolveKeyRingReadinessReasons(serviceKeyRing, Date.now()),
+    getChildOomWrapperStatus
 });
+// Retention: the post-slice miss schedules a sweep instead of latching (§4.2).
+const retentionRuntime = createRetentionRuntime({
+    readinessService,
+    sweeper: { cleanupOptions: { resourcePolicy } }
+});
+// One aggregated auth log for every audience (§4.5): auth.rejected and auth.slot_summary.
+const authAggregator = createAuthLogAggregator();
+const authLogger = authAggregator.logger;
+let identityMonitor = null;
+let eventLoopMonitor = null;
 runtimeLifecycle = createRuntimeLifecycle({
     beginQueueShutdown: beginSliceQueueShutdown,
     onShutdownStart() {
         readinessService.closeAdmission('shutdown');
         emitEvent('shutdown.started', { outcome: 'started' });
+        stopBackgroundWork();
     }
 });
-const authLogger = Object.freeze({
-    warn(message, metadata = {}) {
-        void message;
-        emitEvent('auth.rejected', {
-            request_id: metadata.requestId,
-            audience: metadata.audience,
-            outcome: 'rejected',
-            error_code: 'AUTH_REQUIRED'
-        });
+
+/**
+ * Stop the 3.9.0 background timers and the preflight worker. Each is
+ * unref'd, so this is tidiness; a failing stop never blocks shutdown.
+ */
+function stopBackgroundWork() {
+    for (const stop of [
+        () => retentionRuntime.sweeper.stop(),
+        () => identityMonitor?.stop?.(),
+        () => eventLoopMonitor?.stop(),
+        () => authAggregator.stop(),
+        () => closeDefaultArchivePreflight()
+    ]) {
+        try {
+            const pending = stop();
+            if (pending && typeof pending.catch === 'function') pending.catch(() => {});
+        } catch {
+            // Shutdown proceeds.
+        }
     }
-});
+}
+
+const EVENT_LOOP_WINDOW_MS = 60_000;
+const EVENT_LOOP_STALL_SECONDS = 1;
+
+/**
+ * `slicer_event_loop_delay_seconds{stat}` over a 60 s window, reset each
+ * window; one `runtime.event_loop_stall` per window whose max passes 1 s (§4.9).
+ * @returns {{stop(): void}} Monitor handle.
+ */
+function startEventLoopMonitor() {
+    const histogram = monitorEventLoopDelay({ resolution: 20 });
+    histogram.enable();
+    const seconds = (nanoseconds) => (Number.isFinite(nanoseconds) && nanoseconds > 0 ? nanoseconds / 1e9 : 0);
+    const timer = setInterval(() => {
+        const max = seconds(histogram.max);
+        setEventLoopDelay({ p50: seconds(histogram.percentile(50)), p99: seconds(histogram.percentile(99)), max });
+        if (max > EVENT_LOOP_STALL_SECONDS) {
+            emitEvent('runtime.event_loop_stall', {
+                outcome: 'stalled',
+                duration_ms: Math.round(max * 1000),
+                extra: { reason: 'event_loop', count: 1 }
+            });
+        }
+        histogram.reset();
+    }, EVENT_LOOP_WINDOW_MS);
+    timer.unref?.();
+    return Object.freeze({
+        stop() {
+            clearInterval(timer);
+            histogram.disable();
+        }
+    });
+}
+
 const sliceRoutes = createSliceRouter({
     isEngineAvailable: bambuReadiness.isEngineAvailable,
-    authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger }),
+    authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger, onAccepted: authAggregator.onAccepted }),
     resourcePolicy
 });
 const sliceJobRoutes = createSliceJobsRouter({
-    authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger })
+    authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger, onAccepted: authAggregator.onAccepted })
 });
 const renderRoutes = createRenderRouter({
-    authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger }),
+    authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger, onAccepted: authAggregator.onAccepted }),
+    resourcePolicy
+});
+// Empty unless EXPORT_ROUTE_ENABLED=true: every export path is then today's 404.
+const exportRoutes = createExportRouter({
+    enabled: releasePolicy.export.EXPORT_ROUTE_ENABLED === true,
+    authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger, onAccepted: authAggregator.onAccepted }),
+    isEngineAvailable: bambuReadiness.isEngineAvailable,
+    resourcePolicy
+});
+const capabilitiesRoutes = createCapabilitiesRouter({
+    authenticate: createRequireSliceService({ keyRing: serviceKeyRing, logger: authLogger, onAccepted: authAggregator.onAccepted }),
     resourcePolicy
 });
 const pricingRoutes = createPricingRouter({
@@ -181,8 +275,8 @@ app.use((req, res, next) => {
 
 app.use(cors(resolveCorsOptions));
 
-app.use(express.json({ limit: resourcePolicy.JSON_BODY_LIMIT }));
-app.use(express.urlencoded({ extended: false, limit: resourcePolicy.FORM_BODY_LIMIT }));
+// No app-level JSON or form parser (3.9.0 §4.5, H8): pricing.routes.js parses
+// its bodies itself after authenticatePricing; slice options are multipart only.
 
 // Swagger UI setup
 const swaggerUiOptions = {
@@ -229,6 +323,8 @@ app.use(profileCatalogueRoutes);
 app.use(sliceRoutes);
 app.use(sliceJobRoutes);
 app.use(renderRoutes);
+app.use(exportRoutes);
+app.use(capabilitiesRoutes);
 app.use(systemRoutes);
 
 // Catch-all for unknown routes
@@ -257,12 +353,17 @@ async function startServer() {
     // non-critical and merely re-exercises the same chains.
     verifyBambuRegistryChains({ registry: getBambuPrinterRegistry(), freeze: true });
     initializeBambuGeneration(engineVersions.bambu);
+    // One awaited streamed verification of the native files, then a background
+    // re-hash; a failure leaves the 3.8.3 synchronous check in force (§4.1).
+    identityMonitor = await startNativeIdentityMonitor();
     await bambuReadiness.initialize(engineVersions);
     // The SLA printer registry has no external chain to flatten (Prusa reads
     // its own bundled SLA profiles directly), so loading it once and
     // validating it strictly is the complete startup gate.
     getSlaPrinterRegistry();
-    configureRetentionObserver(readinessService);
+    // Child OOM score wrapper self-test before any slice (§4.6); never rejects.
+    await verifyChildOomWrapper();
+    configureRetentionObserver(retentionRuntime.adapter);
     await profileCatalogueService.initialize({ engineVersions, allowUnavailableEngines: true });
     const scratchCleanup = await auditStaleWorkspaces({
         jobsRoot: JOB_SCRATCH_DIR,
@@ -298,6 +399,24 @@ async function startServer() {
             bytes: artifactCleanup.removedBytes || 0
         }
     });
+    // Startup purge (§4.3): every MARKED job workspace left by a Node death or
+    // a power-off is deleted; one container owns the bind and before listen no
+    // job exists. Unmarked directories are left alone. No export result
+    // survives a restart either.
+    const orphanPurge = await auditStaleWorkspaces({
+        jobsRoot: JOB_WORKSPACES_DIR,
+        delete: true,
+        deleteMarkedRegardlessAge: true,
+        verifyExclusiveLease: async () => true,
+        resourcePolicy
+    });
+    await purgeExportResults();
+    emitEvent('artifact.cleanup', {
+        outcome: orphanPurge.failed ? 'failure' : 'success',
+        extra: { count: orphanPurge.removed || 0 }
+    });
+    authAggregator.start();
+    eventLoopMonitor = startEventLoopMonitor();
     return auditWorkspacesThenListen({
         auditOptions: {
             staleAgeMs: process.env.JOB_WORKSPACE_STALE_AGE_MS
@@ -313,6 +432,8 @@ async function startServer() {
             httpServer.listen(PORT, process.env.HTTP_BIND_HOST, () => {
                 emitEvent('startup.completed', { outcome: 'success' });
             });
+            // Periodic artifact sweep (§4.2); the sweeper alone selects the sweep budget.
+            retentionRuntime.sweeper.start();
             return httpServer;
         }
     });

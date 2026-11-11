@@ -102,13 +102,13 @@ function ruleMatches(rule, request) {
     assert.equal(tokens.join(''), rule.replace(/\s+/g, ''), 'unexpected rule syntax');
     let index = 0;
     function primary() {
-        const token = tokens[index++];
-        if (token === '(') {
+        const lexeme = tokens[index++];
+        if (lexeme === '(') {
             const value = or();
             assert.equal(tokens[index++], ')');
             return value;
         }
-        const [, name, arg] = token.match(/^(\w+)\(`([^`]*)`\)$/);
+        const [, name, arg] = lexeme.match(/^(\w+)\(`([^`]*)`\)$/);
         if (name === 'Host') return request.host === arg;
         if (name === 'Method') return request.method === arg;
         if (name === 'Path') return request.path === arg;

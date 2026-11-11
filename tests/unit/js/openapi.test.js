@@ -17,6 +17,10 @@ const EXPECTED_METHODS = {
     '/orca/slice': ['post'],
     '/bambu/slice': ['post'],
     '/bambu/slice/jobs/{job_id}': ['delete', 'get'],
+    '/bambu/export': ['post'],
+    '/bambu/export/jobs/{job_id}': ['delete', 'get'],
+    '/bambu/export/jobs/{job_id}/file': ['get'],
+    '/capabilities': ['get'],
     '/render': ['post'],
     '/admin/output-files': ['get'],
     '/admin/download/{fileName}': ['get'],
@@ -41,6 +45,11 @@ const EXPECTED_RESPONSE_KEYS = {
     'POST /bambu/slice': ['200', '400', '401', '408', '413', '422', '429', '500', '503'],
     'GET /bambu/slice/jobs/{job_id}': ['200', '401', '404', '429'],
     'DELETE /bambu/slice/jobs/{job_id}': ['204', '401', '404', '429'],
+    'POST /bambu/export': ['200', '202', '400', '401', '404', '409', '413', '422', '429', '500', '503', '504'],
+    'GET /bambu/export/jobs/{job_id}': ['200', '401', '404', '429'],
+    'DELETE /bambu/export/jobs/{job_id}': ['204', '401', '404', '429'],
+    'GET /bambu/export/jobs/{job_id}/file': ['200', '401', '404', '409', '429'],
+    'GET /capabilities': ['200', '401', '429'],
     'POST /render': ['200', '400', '401', '408', '413', '422', '429', '500', '503'],
     'GET /admin/output-files': ['200', '401', '500', '503'],
     'GET /admin/download/{fileName}': ['200', '400', '401', '404', '413', '500', '503'],
@@ -516,4 +525,41 @@ test('OpenAPI operations retain their documented response-status keys', () => {
         const actualKeys = Object.keys(getOperation(operationKey).responses).sort();
         assert.deepEqual(actualKeys, [...expectedKeys, ...(operationKey === 'POST /bambu/slice' ? ['202', '409'] : [])].sort(), operationKey);
     }
+});
+
+test('OpenAPI documents the 3.9.0 export and capabilities routes behind the slice key', () => {
+    assert.equal(document.info.version, '3.9.0');
+    for (const operationKey of [
+        'POST /bambu/export',
+        'GET /bambu/export/jobs/{job_id}',
+        'DELETE /bambu/export/jobs/{job_id}',
+        'GET /bambu/export/jobs/{job_id}/file',
+        'GET /capabilities'
+    ]) {
+        const operation = getOperation(operationKey);
+        assert.deepEqual(operation.security, [{ SliceServiceApiKey: [] }], operationKey);
+        assert.ok(operation.parameters.some((parameter) => (
+            parameter.name === 'x-slicer-api-key' && parameter.in === 'header' && parameter.required === true
+        )), operationKey);
+        assert.deepEqual(operation.responses[401].content['application/json'].schema.properties.errorCode.enum,
+            ['SLICE_SERVICE_AUTH_REQUIRED'], operationKey);
+    }
+    const post = getOperation('POST /bambu/export');
+    const body = post.requestBody.content['multipart/form-data'].schema;
+    assert.deepEqual(body.required, ['choosenFile', 'expectedSourceSha256', 'expectedMeasurementGeneration']);
+    assert.deepEqual(body.properties.exportFormat.enum, ['stl', '3mf']);
+    assert.equal(body.properties.exportLabel.pattern, '^Q-[0-9]{7}$');
+    assert.deepEqual(Object.keys(post.responses[200].content).sort(), ['model/3mf', 'model/stl']);
+    for (const header of [
+        'X-R3D-Export-Contract', 'X-R3D-Export-Fidelity', 'X-R3D-Export-Sha256', 'X-R3D-Sliced-Geometry-Sha256',
+        'X-R3D-Measurement-Generation', 'X-R3D-Final-Dimensions-Mm', 'X-R3D-Placement-Mm',
+        'X-R3D-Orientation-Outcome', 'X-R3D-Rotation-Matrix', 'X-R3D-Oriented-Dimensions-Mm', 'X-R3D-Volume-Mm3'
+    ]) {
+        assert.ok(post.responses[200].headers[header], header);
+    }
+    assert.equal(post.responses[202].headers.Location.schema.pattern, '^/bambu/export/jobs/ex_[a-f0-9]{32}$');
+    assert.ok(post.responses[409].content['application/json'].schema.properties.errorCode.enum.includes('EXPORT_GEOMETRY_MISMATCH'));
+    assert.deepEqual(post.responses[504].content['application/json'].schema.properties.errorCode.enum, ['EXPORT_DEADLINE_EXCEEDED']);
+    const capabilities = getOperation('GET /capabilities').responses[200].content['application/json'].schema;
+    assert.deepEqual(capabilities.properties.schema.enum, ['r3d-slicer-capabilities-v1']);
 });

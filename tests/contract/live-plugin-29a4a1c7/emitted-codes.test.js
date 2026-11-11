@@ -25,6 +25,26 @@ const ENVIRONMENT_KEYS = Object.freeze(['ARTIFACT_SWEEP_INTERVAL_MS', 'ARTIFACT_
     'MAX_3MF_EXPANDED_INSTANCES', 'MAX_3MF_MODEL_OBJECTS', 'AUTH_FAILURE_RATE_LIMIT_WINDOW_MS', 'AUTH_FAILURE_RATE_LIMIT_MAX_REQUESTS',
     'AUTH_FAILURE_RATE_LIMIT_BURST_CAPACITY', 'CHILD_OOM_SCORE_ADJ', 'SLICE_SERVICE_STAGING_API_KEY',
     'SLICE_SERVICE_STAGING_API_KEY_PREVIOUS']);
+/**
+ * 3.9.0 names that never reach an answer body (added by the integrator, each
+ * checked at its use): log event codes, readiness reasons, export names and
+ * pre-existing config keys newly named in comments.
+ */
+const NON_ANSWER_NAMES = Object.freeze([
+    // retention-adapter.js: `artifact.cleanup` event error_code only (§4.2).
+    'ARTIFACT_SCAN_INCOMPLETE',
+    // service-auth.js / requireAudience.js: /operations/readiness reason and the
+    // `auth.legacy_migration_expired` event; the refused request keeps today's 401 body (§4.5).
+    'LEGACY_SLICE_SLOT_EXPIRED',
+    // spawn-file.js comment: choom's own exit statuses, translated back to Node's ENOENT/EACCES (§4.6).
+    'EX_EXEC_ENOENT', 'EX_EXEC_FAILED',
+    // metrics.js / bambu-generation.js: export names of the reason enums (§4.1, §4.9).
+    'IDENTITY_FAILURE_METRIC_REASONS', 'IDENTITY_FAILURE_REASONS',
+    // Pre-existing resource-policy / constants keys, named in pricing.routes.js and archive-preflight.js comments and reads.
+    'JSON_BODY_LIMIT', 'FORM_BODY_LIMIT', 'MAX_SLICE_QUEUE_LENGTH',
+    // three-mf-expansion.js comment: the mesh2stl.py depth constant it mirrors (§4.4).
+    'THREE_MF_MAX_DEPTH'
+]);
 
 test('the 3.8.3 code vocabulary was recorded at dbc539e and holds the live plugin\'s codes', () => {
     assert.match(PINNED.recorded_from, /dbc539e/);
@@ -38,7 +58,8 @@ test('no code literal outside the 3.8.3 vocabulary and the named 3.9.0 surfaces'
     const known = new Set(PINNED.literals);
     const unexpected = [...workingTreeLiterals()].filter((literal) => !known.has(literal)
         && !NEW_SURFACE_PREFIXES.some((prefix) => literal.startsWith(prefix))
-        && !ENVIRONMENT_KEYS.includes(literal)).sort();
+        && !ENVIRONMENT_KEYS.includes(literal)
+        && !NON_ANSWER_NAMES.includes(literal)).sort();
     assert.deepEqual(unexpected, [], `new code-like literals reach app/: ${unexpected.join(', ')} — a new errorCode on /bambu/slice or its jobs is read as SlicerDown by the live plugin (R2)`);
 });
 

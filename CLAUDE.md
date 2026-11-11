@@ -4,6 +4,22 @@ Last synchronized: 2026-09-07
 
 The Prusa `material-v1` catalogue and native material-specific hash compatibility are included in this release. The earlier access blocker and Windows-only state in `handoff-2026-09-06-calculator.md` are historical; use the dated deployed handoff below.
 
+## Release 3.9.0 — integrated 2026-11-11, NOT deployed (live stays 3.8.3)
+
+Specification and acceptance: `docs/release/3.9.0-specification.md` (start at §2 for the plugin contract, §4 for the
+internal design, §9 for file ownership). Read it before touching any of: `app/config/release-policy.js` (every 3.9.0
+setting; `constants.js` and `resource-policy.js` are frozen measurement configuration), the native identity monitor
+(`native-identity-monitor.js`, the allowed hunks of `bambu-generation.js`), retention (`artifact-sweeper.js`,
+`retention-adapter.js`, the pending-delete set), the archive preflight and 3MF expansion limits, auth order
+(`sliceAdmission.js`: authentication before every limiter; a request carrying `x-slicer-api-key` always gets the 401,
+never a 429), the export routes (`app/routes/export.routes.js`, `app/services/export/`), `GET /capabilities`
+(`app/routes/capabilities.routes.js`), the children's OOM wrapper (`command.js`) and the public router allowlist
+(`ops/hostinger/public-routes.json`). No generation change: `node scripts/check-generation-inputs.js dbc539e` must
+end with `OK` and list only `bambu-generation.js CHANGED (allowed hunks only)`; one byte in a hashed processing file,
+the Dockerfile, `configs/`, `constants.js`, `resource-policy.js` or `paths.js` stales every open quote of the live shop.
+The live-plugin contract replay suite is `node --test tests/contract/live-plugin-29a4a1c7/*.test.js` (not part of
+`npm test`). Linux-only proofs still open: choom, T-TRF, T-EXP on real Bambu, T-RET-4, the image goldens.
+
 ## Deployed release 3.8.1 — 2026-10-06 (the native process tree is really terminated)
 
 The command runner spawns natives through `app/services/slice/spawn-file.js` (execFile's contract over `spawn`,

@@ -19,7 +19,9 @@ const EXPECTED_DEFAULTS = Object.freeze({
     },
     retention: { ARTIFACT_SWEEP_INTERVAL_MS: 300_000, ARTIFACT_SWEEP_MAX_MS: 10_000 },
     archive: {
-        MAX_3MF_EXPANDED_TRIANGLES: 25_000_000,
+        // Raised from the spec's 25 000 000 by the T-ARC-2 rule (default ≥ 4 × the
+        // corpus maximum 10 403 988 = 41 615 952).
+        MAX_3MF_EXPANDED_TRIANGLES: 50_000_000,
         MAX_3MF_EXPANDED_INSTANCES: 100_000,
         MAX_3MF_MODEL_OBJECTS: 100_000
     },

@@ -51,7 +51,7 @@ const RELEASE_POLICY_DEFINITIONS = Object.freeze({
     }),
     archive: Object.freeze({
         MAX_3MF_EXPANDED_TRIANGLES: Object.freeze({
-            type: 'integer', default: 25_000_000, min: 1_000_000, max: 500_000_000
+            type: 'integer', default: 50_000_000, min: 1_000_000, max: 500_000_000
         }),
         MAX_3MF_EXPANDED_INSTANCES: Object.freeze({
             type: 'integer', default: 100_000, min: 4_096, max: 10_000_000
