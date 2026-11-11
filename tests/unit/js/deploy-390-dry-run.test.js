@@ -289,3 +289,242 @@ test('rollback dry-run restores from the backup and re-applies only the key-ring
         assert.match(result.stdout, /rollback dry-run PASS/);
     } finally { fs.rmSync(tree.root, { recursive: true, force: true }); }
 });
+
+// ---------------------------------------------------------------------------
+// --execute paths against a fake `docker` on PATH (no real container is touched).
+// ---------------------------------------------------------------------------
+const FAKE_DOCKER = [
+    '#!/usr/bin/env bash',
+    'state="${FAKE_STATE:?}"',
+    'echo "$*" >> "$state/calls"',
+    'args="$*"',
+    // After the FIRST up, FAKE_RUNNING describes the new container; a container that is
+    // not "true false" (restarting, exited) cannot be exec-ed into, as with real docker.
+    'ups=$(cat "$state/ups" 2>/dev/null || echo 0)',
+    'running="true false"; if [ "$ups" -eq 1 ]; then running="${FAKE_RUNNING:-true false}"; fi',
+    'case "$1" in',
+    '  exec)',
+    '    [ "$running" = "true false" ] || { echo "Error response from daemon: container is restarting" >&2; exit 1; }',
+    '    case "$args" in',
+    '      *"cat /sys/fs/cgroup/memory.max"*) echo 12884901888; exit 0 ;;',
+    '      *"cat /sys/fs/cgroup/cpu.max"*) echo "400000 100000"; exit 0 ;;',
+    '      *"cat /sys/fs/cgroup/pids.max"*) echo 512; exit 0 ;;',
+    '      *"/operations/metrics"*)',
+    '        n=$(( $(cat "$state/queue-reads" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$state/queue-reads"',
+    '        if [ "$n" -gt "${FAKE_QUEUE_BUSY_AFTER:-99}" ]; then active=1; else active=0; fi',
+    '        printf "slicer_queue_active_jobs %s\\nslicer_queue_queued_jobs 0\\n" "$active"; exit 0 ;;',
+    '    esac',
+    '    exit 0 ;;',
+    '  pull) echo "pulled"; exit 0 ;;',
+    '  image)',
+    '    case "$2" in',
+    '      inspect) case "$args" in *local/*) exit 1 ;; esac; echo "sha256:fakeimage"; exit 0 ;;',
+    '      *) exit 0 ;;',
+    '    esac ;;',
+    '  compose)',
+    '    case "$args" in',
+    '      *" config "*|*" config") echo \'{"services":{"slicer-api":{"mem_limit":"12884901888","memswap_limit":"12884901888","cpus":4,"pids_limit":512,"environment":{}}}}\'; exit 0 ;;',
+    '      *" up "*) touch "$state/up"; echo $((ups + 1)) > "$state/ups"; exit 0 ;;',
+    '    esac',
+    '    exit 0 ;;',
+    '  inspect)',
+    '    case "$args" in',
+    '      *org.opencontainers.image.revision*"${FAKE_OLD_REF:?}"*) echo "dbc539e98fb5105b522578dffcb2d93a77fff8b9"; exit 0 ;;',
+    '      *org.opencontainers.image.revision*) echo "${FAKE_NEW_SHA:?}"; exit 0 ;;',
+    '      *"{{.Config.Image}} {{.Image}}"*) echo "${FAKE_OLD_REF} sha256:fakeimage running true 0 false"; exit 0 ;;',
+    '      *State.Health.Status*) echo healthy; exit 0 ;;',
+    '      *"{{.State.Running}} {{.State.Restarting}}"*) echo "$running"; exit 0 ;;',
+    '      *) echo "not-the-expected-identity"; exit 0 ;;',
+    '    esac ;;',
+    '  logs) exit 0 ;;',
+    'esac',
+    'exit 0',
+    ''
+].join('\n');
+
+const PATH_KEY = Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH';
+
+function executeTree(t) {
+    const tree = makeTree();
+    t.after(() => fs.rmSync(tree.root, { recursive: true, force: true }));
+    const bin = path.join(tree.root, 'bin');
+    const state = path.join(tree.root, 'state');
+    fs.mkdirSync(bin); fs.mkdirSync(state);
+    fs.writeFileSync(path.join(bin, 'docker'), FAKE_DOCKER, { mode: 0o755 });
+    if (process.platform === 'win32') {
+        // Git Bash cannot chmod a new directory on NTFS; the mode is the Linux host's concern.
+        fs.writeFileSync(path.join(bin, 'mkdir'), [
+            '#!/usr/bin/env bash',
+            'args=()',
+            'while [ "$#" -gt 0 ]; do case "$1" in -m) shift 2 ;; *) args+=("$1"); shift ;; esac; done',
+            'exec /usr/bin/mkdir "${args[@]}"',
+            ''
+        ].join('\n'), { mode: 0o755 });
+    }
+    // A complete step-2 capture whose limits equal what the fake compose config prints.
+    fs.writeFileSync(path.join(tree.control, 'compose-limits.json'), `${JSON.stringify({
+        mem_limit: '12884901888', memswap_limit: '12884901888', cpus: '4', pids_limit: '512', expected: {}
+    }, null, 2)}\n`);
+    for (const name of ['capture-complete', 'profiles-v2-before.json', 'profiles-v3-before.json',
+        'control-cube-before-1.json', 'control-cube-before-2.json', 'control-block-before-1.json', 'control-block-before-2.json']) {
+        fs.writeFileSync(path.join(tree.control, name), '{}\n');
+    }
+    const digest = NEW_REF.split('@sha256:')[1];
+    const evidence = path.join(tree.root, 'attestations.json');
+    fs.writeFileSync(evidence, JSON.stringify([
+        { verificationResult: { statement: { predicateType: 'https://slsa.dev/provenance/v1', subject: [{ digest: { sha256: digest } }] } } },
+        { verificationResult: { statement: { predicateType: 'https://spdx.dev/Document/v2.3', subject: [{ digest: { sha256: digest } }] } } }
+    ]));
+    const env = {
+        [PATH_KEY]: `${bin}${path.delimiter}${process.env[PATH_KEY]}`,
+        FAKE_STATE: bashPath(state), FAKE_NEW_SHA: NEW_SHA, FAKE_OLD_REF: OLD_REF,
+        R3D_PROJECT: 'r3d-rehearsal', R3D_CONTAINER: 'r3d-rehearsal-backend'
+    };
+    const snapshot = () => [fs.readFileSync(tree.composeFile, 'utf8'), fs.readFileSync(tree.serviceFile, 'utf8')];
+    return { tree, state, evidence, env, snapshot };
+}
+
+const deployArgs = (evidence) => ['--execute', 'deploy', NEW_REF, NEW_SHA, '--export-route', 'false', '--attested', bashPath(evidence)];
+
+test('OPS-2: an incomplete step-2 capture is refused before either env file is written', { skip }, (t) => {
+    const ctx = executeTree(t);
+    fs.rmSync(path.join(ctx.tree.control, 'control-block-before-2.json'));
+    const before = ctx.snapshot();
+    const result = runScript(ctx.tree, deployArgs(ctx.evidence), ctx.env);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /lacks control-block-before-2\.json/);
+    assert.deepEqual(ctx.snapshot(), before);
+    assert.equal(fs.existsSync(path.join(ctx.state, 'calls')), false, 'no docker call before the capture check');
+    // A control dir of another date (no capture at all) names the override.
+    const missing = runScript(ctx.tree, ['deploy', NEW_REF, NEW_SHA, '--export-route', 'false'],
+        { ...ctx.env, R3D_CONTROL_DIR: bashPath(path.join(ctx.tree.root, 'control-other-date')) });
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /pass R3D_CONTROL_DIR=<that dir>/);
+});
+
+test('OPS-4: an overridden pack with the live project or container is refused before any docker call', { skip }, (t) => {
+    const ctx = executeTree(t);
+    const before = ctx.snapshot();
+    for (const unset of ['R3D_PROJECT', 'R3D_CONTAINER']) {
+        const env = { ...ctx.env, [unset]: '' };
+        const result = runScript(ctx.tree, deployArgs(ctx.evidence), env);
+        assert.notEqual(result.status, 0, unset);
+        assert.match(result.stderr, /set R3D_PROJECT and R3D_CONTAINER/);
+    }
+    assert.deepEqual(ctx.snapshot(), before);
+    assert.equal(fs.existsSync(path.join(ctx.state, 'calls')), false);
+});
+
+test('OPS-8: attestation evidence for another digest stops the deploy before the env files', { skip }, (t) => {
+    const ctx = executeTree(t);
+    fs.writeFileSync(ctx.evidence, JSON.stringify([
+        { verificationResult: { statement: { predicateType: 'https://slsa.dev/provenance/v1', subject: [{ digest: { sha256: 'd'.repeat(64) } }] } } }
+    ]));
+    const before = ctx.snapshot();
+    const result = runScript(ctx.tree, deployArgs(ctx.evidence), ctx.env);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /does not name this digest/);
+    assert.deepEqual(ctx.snapshot(), before);
+    assert.equal(fs.existsSync(path.join(ctx.state, 'up')), false);
+});
+
+test('OPS-6: a job admitted after the pull keeps the old container; both env files are restored', { skip }, (t) => {
+    const ctx = executeTree(t);
+    const before = ctx.snapshot();
+    const result = runScript(ctx.tree, deployArgs(ctx.evidence), { ...ctx.env, FAKE_QUEUE_BUSY_AFTER: '1' });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /the live queue is no longer idle/);
+    assert.match(result.stderr, /both env files restored/);
+    assert.deepEqual(ctx.snapshot(), before, 'the live env files are back byte for byte');
+    assert.equal(fs.existsSync(path.join(ctx.state, 'up')), false, 'nothing was restarted');
+});
+
+test('OPS-1: a failed check with the new container not running rolls back at once (no HOLD)', { skip }, (t) => {
+    const ctx = executeTree(t);
+    const result = runScript(ctx.tree, deployArgs(ctx.evidence), { ...ctx.env, FAKE_RUNNING: 'false true' });
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /new container is not running \(false true\): automatic rollback/);
+    assert.doesNotMatch(result.stderr, /HOLD/);
+    assert.match(result.stdout, /§8 step 6 rollback from/);
+    assert.match(result.stdout, /rollback PASS/);
+});
+
+test('OPS-3: deploy accepts an env the key-ring move already ran on, and only that', { skip }, () => {
+    const migrated = makeTree({ service: {
+        SLICE_SERVICE_API_KEY: null, SLICE_SERVICE_API_KEY_PREVIOUS: null, SLICE_SERVICE_LEGACY_MIGRATION_UNTIL: null,
+        SLICE_SERVICE_AUTH_MODE: 'principals', SLICE_SERVICE_WOOCOMMERCE_API_KEY_PREVIOUS: 'FAKE-legacy-key-value-7f3a9c'
+    } });
+    try {
+        for (const args of [['check-env'], ['deploy', NEW_REF, NEW_SHA, '--export-route', 'true']]) {
+            const result = runScript(migrated, args);
+            assert.equal(result.status, 0, `${args[0]}: ${result.stderr}`);
+            assert.match(result.stdout, /the key-ring move already ran/);
+        }
+        const deploy = runScript(migrated, ['deploy', NEW_REF, NEW_SHA, '--export-route', 'true']);
+        assert.match(deploy.stdout, /service env: changed \(none\); added ARTIFACT_TTL_MS, EXPORT_ROUTE_ENABLED, MAX_UPLOAD_BYTES; removed \(none\)/);
+        const keyring = runScript(migrated, ['keyring-only']);
+        assert.notEqual(keyring.status, 0, 'a second key-ring move is still refused');
+    } finally { fs.rmSync(migrated.root, { recursive: true, force: true }); }
+    // The half state (the move ran but a legacy key is back) is refused.
+    const half = makeTree({ service: { SLICE_SERVICE_AUTH_MODE: 'principals',
+        SLICE_SERVICE_WOOCOMMERCE_API_KEY_PREVIOUS: 'FAKE-legacy-key-value-7f3a9c' } });
+    try {
+        const result = runScript(half, ['deploy', NEW_REF, NEW_SHA, '--export-route', 'false']);
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /already non-empty/);
+    } finally { fs.rmSync(half.root, { recursive: true, force: true }); }
+});
+
+test('OPS-5: the watch fails closed on a scanner failure and on a log with no access line; shop_requests=0 is UNPROVEN', { skip }, () => {
+    const empty = watchTree([{ level: 'info', msg: 'Configuration loaded' }]);
+    try {
+        const result = runScript(empty.tree, ['--execute', 'traefik-watch', '--orig', bashPath(empty.orig), '--seconds', '1'],
+            { R3D_ACCESS_LOG_FILE: bashPath(empty.log) });
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /UNPROVEN: no access-log line at all/);
+        assert.match(result.stdout, /RESTORED/);
+    } finally { fs.rmSync(empty.tree.root, { recursive: true, force: true }); }
+    const broken = watchTree([{ ClientHost: '45.84.204.13', DownstreamStatus: 202, RouterName: 'slicer-api@file' }]);
+    try {
+        fs.writeFileSync(broken.orig, '# not a router\n');
+        const result = runScript(broken.tree, ['--execute', 'traefik-watch', '--orig', bashPath(broken.orig), '--seconds', '1'],
+            { R3D_ACCESS_LOG_FILE: bashPath(broken.log) });
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr, /the access-log read or scan failed/);
+    } finally { fs.rmSync(broken.tree.root, { recursive: true, force: true }); }
+    const quiet = watchTree([{ ClientHost: '198.51.100.9', DownstreamStatus: 200, RouterName: 'slicer-api@file' }]);
+    try {
+        const result = runScript(quiet.tree, ['--execute', 'traefik-watch', '--orig', bashPath(quiet.orig), '--seconds', '1'],
+            { R3D_ACCESS_LOG_FILE: bashPath(quiet.log) });
+        assert.equal(result.status, 0, result.stderr);
+        assert.match(result.stdout, /UNPROVEN for the shop \(shop_requests=0\)/);
+        assert.doesNotMatch(result.stdout, /RESTORED/);
+    } finally { fs.rmSync(quiet.tree.root, { recursive: true, force: true }); }
+});
+
+test('OPS-10: the private A/B teardown removes its data dir although compose down already removed the network', { skip }, (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'r3d-s390-down-'));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const bin = path.join(root, 'bin');
+    fs.mkdirSync(bin);
+    const calls = path.join(root, 'calls');
+    fs.writeFileSync(path.join(bin, 'docker'), [
+        '#!/usr/bin/env bash',
+        'echo "docker $*" >> "$FAKE_CALLS"',
+        // compose down removes the project-defined network, so it is gone afterwards.
+        'case "$1 $2" in "network inspect"|"network rm") echo "network r3d-s390-internal not found" >&2; exit 1 ;; esac',
+        'exit 0',
+        ''
+    ].join('\n'), { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'rm'), ['#!/usr/bin/env bash', 'echo "rm $*" >> "$FAKE_CALLS"', 'exit 0', ''].join('\n'), { mode: 0o755 });
+    const script = path.join(ROOT, 'ops', 'hostinger', 'private-ab', 'run-private-ab.sh');
+    const result = spawnSync(BASH, [bashPath(script), '--execute', 'down'], {
+        encoding: 'utf8', timeout: 60000,
+        env: { ...process.env, [PATH_KEY]: `${bin}${path.delimiter}${process.env[PATH_KEY]}`, FAKE_CALLS: bashPath(calls) }
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const log = fs.readFileSync(calls, 'utf8');
+    assert.match(log, /docker compose -p r3d-s390 .* down/);
+    assert.doesNotMatch(log, /docker network rm/, 'no removal of a network that is already gone');
+    assert.match(log, /rm -r -- \/srv\/r3d-s390-private/, 'the data dir is removed');
+});

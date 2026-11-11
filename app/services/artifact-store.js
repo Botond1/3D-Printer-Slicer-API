@@ -7,6 +7,7 @@ const { OUTPUT_DIR } = require('../config/paths');
 const {
     isArtifactLeased,
     beginArtifactDeletion,
+    beginArtifactDeletionOverLease,
     endArtifactDeletion
 } = require('./artifact-leases');
 const { selectEvictions } = require('./artifact-retention-policy');
@@ -28,16 +29,28 @@ const {
 const SWEEP_PHASE = 'sweep';
 /** How often a leased pending deletion re-checks its lease (3.9.0). */
 const PENDING_DELETE_POLL_MS = 100;
+/**
+ * Age of a pending mark after which the periodic sweep treats a lease that
+ * still holds it as lost and removes the artifact anyway (spec §2.4/§4.3).
+ * Longer than any real operator download, far below the 1 h live TTL.
+ */
+const LOST_LEASE_MS = 30 * 60 * 1000;
+/**
+ * Failed removals of one released mark the 100 ms watcher retries before it
+ * leaves the mark to the periodic sweep (and the TTL).
+ */
+const PENDING_WATCH_MAX_FAILURES = 5;
 
 let cleanupTail = Promise.resolve();
 /**
  * Artifacts a completed job's `DELETE` asked to remove while a lease held
  * them (3.9.0, spec §4.3). Process memory only: a restart loses the set and
  * the artifact TTL then bounds the artifact's life.
- * @type {Map<string, {outputRoot: string, realPath: string|null}>}
+ * @type {Map<string, {outputRoot: string, realPath: string|null, markedAt: number, failures: number, seams: object}>}
  */
 const pendingDeletes = new Map();
 let pendingTimer = null;
+let pendingInFlight = false;
 let pendingPollMs = PENDING_DELETE_POLL_MS;
 
 function emitArtifactLifecycle(eventName, record, outcome, errorCode, reason) {
@@ -119,10 +132,16 @@ async function removeOwnedRecord(record, summary, options, eventName, reason, ov
         emitArtifactLifecycle(eventName, record, 'skipped', 'ARTIFACT_LEASE_ACTIVE', reason);
         return false;
     }
-    if (!leased && !record.missing && !beginArtifactDeletion(record.realPath)) {
-        summary.active++;
-        emitArtifactLifecycle(eventName, record, 'skipped', 'ARTIFACT_DELETION_BUSY', reason);
-        return false;
+    // A deletion over a lost lease is still a deletion: the path is marked
+    // deleting, so no new lease starts while the file is unlinked.
+    let begun = false;
+    if (!record.missing) {
+        begun = leased ? beginArtifactDeletionOverLease(record.realPath) : beginArtifactDeletion(record.realPath);
+        if (!begun) {
+            summary.active++;
+            emitArtifactLifecycle(eventName, record, 'skipped', 'ARTIFACT_DELETION_BUSY', reason);
+            return false;
+        }
     }
     try {
         if (!record.missing) {
@@ -162,7 +181,7 @@ async function removeOwnedRecord(record, summary, options, eventName, reason, ov
         );
         return false;
     } finally {
-        if (!leased && !record.missing) endArtifactDeletion(record.realPath);
+        if (begun) endArtifactDeletion(record.realPath);
     }
 }
 
@@ -201,13 +220,18 @@ function ensurePendingWatcher() {
             stopPendingWatcher();
             return;
         }
+        // One pass at a time: a slow or failing removal never stacks a task
+        // per tick on the cleanup chain.
+        if (pendingInFlight) return;
         const released = [...pendingDeletes.entries()]
-            .filter(([, entry]) => !entry.realPath || !isArtifactLeased(entry.realPath));
+            .filter(([, entry]) => entry.failures < PENDING_WATCH_MAX_FAILURES
+                && (!entry.realPath || !isArtifactLeased(entry.realPath)));
         if (released.length === 0) return;
         const roots = new Set(released.map(([, entry]) => entry.outputRoot));
-        for (const outputRoot of roots) {
-            serialize(() => processPendingDeletes(outputRoot, {})).catch(() => {});
-        }
+        pendingInFlight = true;
+        Promise.allSettled([...roots].map((outputRoot) =>
+            serialize(() => processPendingDeletes(outputRoot, { watch: true }))))
+            .finally(() => { pendingInFlight = false; });
     }, pendingPollMs);
     pendingTimer.unref?.();
 }
@@ -228,13 +252,18 @@ async function processPendingDeletes(outputRoot, options, policy = null) {
     const outcome = { deleted: 0, deletedBytes: 0, pending: 0 };
     if (pendingDeletes.size === 0) return outcome;
     const resolvedPolicy = policy || options.resourcePolicy || resolveResourcePolicy(options.env || process.env);
+    const now = (options.clock || Date.now)();
     for (const [artifactId, entry] of [...pendingDeletes.entries()]) {
         if (!samePath(entry.outputRoot, outputRoot)) continue;
+        // The watcher leaves a mark that keeps failing to the periodic sweep.
+        if (options.watch && entry.failures >= PENDING_WATCH_MAX_FAILURES) continue;
+        const entryOptions = { ...entry.seams, ...options };
         const local = emptySummary();
         let record;
         try {
             record = await inspectArtifactById(outputRoot, artifactId, resolvedPolicy);
         } catch {
+            entry.failures++;
             outcome.pending++;
             continue;
         }
@@ -243,15 +272,17 @@ async function processPendingDeletes(outputRoot, options, policy = null) {
             pendingDeletes.delete(artifactId);
             continue;
         }
-        // The periodic sweep honours the mark even over a lease whose release
-        // was lost; every other sweep waits for the release.
-        const overrideLease = options.phase === SWEEP_PHASE;
-        if (await removeOwnedRecord(record, local, options, 'artifact.cleanup', 'deleted', overrideLease)) {
+        // The periodic sweep honours the mark over a lease only once the mark
+        // is older than any real download (the release was lost); every other
+        // sweep, and the sweep before that age, waits for the release.
+        const overrideLease = options.phase === SWEEP_PHASE && now - entry.markedAt >= entryOptions.lostLeaseMs;
+        if (await removeOwnedRecord(record, local, entryOptions, 'artifact.cleanup', 'deleted', overrideLease)) {
             pendingDeletes.delete(artifactId);
             outcome.deleted++;
             outcome.deletedBytes += local.removedBytes;
         } else {
             if (record.realPath) entry.realPath = record.realPath;
+            if (local.failed > 0 || local.skipped > 0) entry.failures++;
             outcome.pending++;
         }
     }
@@ -333,7 +364,19 @@ async function runDeleteArtifact(artifactId, options) {
     }
     if (local.failed > 0 || local.skipped > 0) return { state: 'failed' };
     // Leased (an operator download) or mid-deletion: delete when released.
-    pendingDeletes.set(artifactId, { outputRoot: root, realPath: record.realPath || null });
+    pendingDeletes.set(artifactId, {
+        outputRoot: root,
+        realPath: record.realPath || null,
+        markedAt: (options.clock || Date.now)(),
+        failures: 0,
+        // The deleting call's seams serve the watcher's later attempts too.
+        seams: {
+            lostLeaseMs: Number.isSafeInteger(options.lostLeaseMs) && options.lostLeaseMs >= 0
+                ? options.lostLeaseMs
+                : LOST_LEASE_MS,
+            ...(options.removeFile ? { removeFile: options.removeFile } : {})
+        }
+    });
     ensurePendingWatcher();
     return { state: 'pending' };
 }
@@ -364,13 +407,16 @@ function listPendingArtifactDeletions() {
 function resetPendingArtifactDeletionsForTests(pollMs = PENDING_DELETE_POLL_MS) {
     pendingDeletes.clear();
     stopPendingWatcher();
+    pendingInFlight = false;
     pendingPollMs = pollMs;
 }
 
 module.exports = {
     METADATA_VERSION,
     ARTIFACT_ID_PATTERN,
+    LOST_LEASE_MS,
     PENDING_DELETE_POLL_MS,
+    PENDING_WATCH_MAX_FAILURES,
     SWEEP_PHASE,
     createPartialArtifactMetadata,
     finalizeArtifactMetadata,

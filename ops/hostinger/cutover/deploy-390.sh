@@ -16,8 +16,11 @@
 #   capture                           §8 step 2: control dir, both env files, limits, catalogue,
 #                                     live router copy, two control slices run twice, retention tag
 #   slot-prefixes                     optional C5 check: first 12 hex of sha256 per key slot
-#   deploy <ref> <sha> --export-route true|false [--aa-spread <fraction>]
+#   deploy <ref> <sha> --export-route true|false [--aa-spread <fraction>] [--attested <gh-json>]
 #                                     §8 step 4 (cutover); automatic rollback only on an idle queue
+#                                     (or at once when the new container is not running);
+#                                     signature + attestations verified with gh, or from the
+#                                     `gh attestation verify --format json` output of both predicates
 #   rollback <ref> <sha> [--backup <env-backup-dir>]
 #                                     §8 step 6: both env files back, key-ring move re-applied
 #   keyring-only                      §10.1 fallback on 3.8.3: the key-ring move alone
@@ -28,6 +31,12 @@
 # Paths default to the live layout; R3D_* variables override them (fixtures only):
 #   R3D_COMPOSE_ENV, R3D_PACK, R3D_DYNAMIC_DIR, R3D_CONTROL_DIR, R3D_RELEASE_TREE,
 #   R3D_ACCESS_LOG_FILE (read instead of `docker logs 3d-psa-traefik`), R3D_WATCH_SECONDS.
+# A private rehearsal (§8 step 1, B -> A -> B) names its OWN project and container:
+#   R3D_PROJECT, R3D_CONTAINER, R3D_COMPOSE_FILE, R3D_SERVICE. With R3D_PACK or
+#   R3D_COMPOSE_ENV overridden and the project or container still the live one, every
+#   compose call is refused (it would recreate the live service).
+# The control dir is the step-2 capture's: when the capture ran on another UTC date,
+#   pass R3D_CONTROL_DIR=<that dir>; deploy refuses before writing anything otherwise.
 set -euo pipefail
 
 EXECUTE=0
@@ -42,7 +51,12 @@ DYNAMIC_DIR="${R3D_DYNAMIC_DIR:-/opt/rocket3d/slicer-api-9e9621a3f6110192aeb77a5
 CONTROL_DIR="${R3D_CONTROL_DIR:-/root/r3d-390-control-$(date -u +%Y%m%d)}"
 RELEASE_TREE="${R3D_RELEASE_TREE:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 WATCH_SECONDS="${R3D_WATCH_SECONDS:-60}"
-NAME="3d-psa-backend-server"
+LIVE_PROJECT="slicer-api"
+LIVE_NAME="3d-psa-backend-server"
+PROJECT="${R3D_PROJECT:-$LIVE_PROJECT}"
+NAME="${R3D_CONTAINER:-$LIVE_NAME}"
+COMPOSE_FILE="${R3D_COMPOSE_FILE:-docker-compose.production.yml}"
+SERVICE="${R3D_SERVICE:-slicer-api}"
 TRAEFIK_NAME="3d-psa-traefik"
 HOST="api.rocket3d.hu"
 ALLOWLIST_PHASE="production-two-range"
@@ -54,7 +68,7 @@ die() { echo "STOP $*" >&2; exit 1; }
 say() { echo "== $*"; }
 # run: executes with --execute, prints the command otherwise.
 run() { if [ "$EXECUTE" -eq 1 ]; then "$@"; else echo "DRY-RUN would run: $*"; fi; }
-usage() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; }
 
 TOOLDIR="$(mktemp -d "${TMPDIR:-/tmp}/r3d-390.XXXXXX")"
 chmod 700 "$TOOLDIR"
@@ -145,6 +159,14 @@ function checkCompose(file) {
   if (!IMAGE_REF.test(env.entries.get('SLICER_API_IMAGE').value)) fail('SLICER_API_IMAGE is not a digest-pinned slicer ref');
   return env;
 }
+// Migrated = the key-ring move already ran (keyring-only fallback, or a rollback):
+// WOOCOMMERCE_PREVIOUS set, the three legacy names gone, principals mode.
+function isMigrated(env) {
+  const value = (name) => (env.entries.has(name) ? env.entries.get(name).value : undefined);
+  return Boolean(value(WOO_PREVIOUS)) && !env.entries.has(LEGACY) && !env.entries.has(LEGACY_PREVIOUS)
+    && !env.entries.has(LEGACY_UNTIL) && value('SLICE_SERVICE_AUTH_MODE') === 'principals';
+}
+// mode: keyring (the move must still be due) | deploy (due, or already done) | none
 function checkService(file, mode) {
   const env = parseEnv(file);
   const missing = [...Object.keys(SERVICE_PINS), ...SERVICE_PRESENT].filter((name) => !env.entries.has(name));
@@ -152,6 +174,13 @@ function checkService(file, mode) {
   const drift = Object.keys(SERVICE_PINS).filter((name) => sha(env.entries.get(name).value) !== sha(SERVICE_PINS[name]));
   if (drift.length) fail(`service env tuning value differs from the live value: ${drift.join(', ')}`);
   if (env.entries.get('TRUST_PROXY_CIDRS').value === '') fail('TRUST_PROXY_CIDRS is empty');
+  if (mode === 'deploy' && isMigrated(env)) {
+    if (!env.entries.has('SLICE_SERVICE_WOOCOMMERCE_API_KEY') || env.entries.get('SLICE_SERVICE_WOOCOMMERCE_API_KEY').value === '') {
+      fail('SLICE_SERVICE_WOOCOMMERCE_API_KEY is absent or empty');
+    }
+    env.migrated = true;
+    return env;
+  }
   if (mode !== 'none') {
     if (env.entries.has(WOO_PREVIOUS) && env.entries.get(WOO_PREVIOUS).value !== '') {
       fail(`${WOO_PREVIOUS} is already non-empty (the key-ring move ran before; refusing a second move)`);
@@ -168,7 +197,10 @@ function checkService(file, mode) {
 // mode: deploy | keyring-only | rollback-keyring
 function rewrite(mode, composeIn, serviceIn, outDir, image, exportRoute) {
   const compose = checkCompose(composeIn);
-  const service = checkService(serviceIn, 'keyring');
+  // deploy and the rollback's re-applied move accept an env the move already ran on
+  // (they skip the move); keyring-only needs the move still due.
+  const service = checkService(serviceIn, mode === 'keyring-only' ? 'keyring' : 'deploy');
+  const moveDue = !service.migrated;
   const composeBefore = parseEnv(composeIn);
   const serviceBefore = parseEnv(serviceIn);
   if (mode === 'deploy') {
@@ -180,9 +212,13 @@ function rewrite(mode, composeIn, serviceIn, outDir, image, exportRoute) {
     fail('unknown rewrite mode');
   }
   // §6 key-ring move, by NAME: WOOCOMMERCE_PREVIOUS := legacy value; three names removed; principals.
-  setValue(service, WOO_PREVIOUS, service.entries.get(LEGACY).value);
-  removeName(service, LEGACY); removeName(service, LEGACY_PREVIOUS); removeName(service, LEGACY_UNTIL);
-  setValue(service, 'SLICE_SERVICE_AUTH_MODE', 'principals');
+  if (moveDue) {
+    setValue(service, WOO_PREVIOUS, service.entries.get(LEGACY).value);
+    removeName(service, LEGACY); removeName(service, LEGACY_PREVIOUS); removeName(service, LEGACY_UNTIL);
+    setValue(service, 'SLICE_SERVICE_AUTH_MODE', 'principals');
+  } else {
+    console.log('service env: the key-ring move already ran (principals mode); it is not repeated');
+  }
   if (mode === 'deploy') {
     for (const [name, value] of Object.entries(RELEASE_VALUES)) setValue(service, name, value);
     setValue(service, 'EXPORT_ROUTE_ENABLED', exportRoute);
@@ -199,8 +235,8 @@ function rewrite(mode, composeIn, serviceIn, outDir, image, exportRoute) {
     fail('compose image changed outside deploy');
   }
   // Must-survive: every service name survives with its value, except the moved and the changed ones.
-  const removed = [LEGACY, LEGACY_PREVIOUS, LEGACY_UNTIL];
-  const changedAllowed = new Set([WOO_PREVIOUS, 'SLICE_SERVICE_AUTH_MODE',
+  const removed = moveDue ? [LEGACY, LEGACY_PREVIOUS, LEGACY_UNTIL] : [];
+  const changedAllowed = new Set([...(moveDue ? [WOO_PREVIOUS, 'SLICE_SERVICE_AUTH_MODE'] : []),
     ...(mode === 'deploy' ? [...Object.keys(RELEASE_VALUES), 'EXPORT_ROUTE_ENABLED'] : [])]);
   const changed = []; const added = []; const gone = [];
   for (const [name, entry] of serviceBefore.entries) {
@@ -210,7 +246,7 @@ function rewrite(mode, composeIn, serviceIn, outDir, image, exportRoute) {
   for (const name of serviceAfter.entries.keys()) if (!serviceBefore.entries.has(name)) added.push(name);
   if (gone.some((name) => !removed.includes(name))) fail(`service rewrite removed ${gone.filter((n) => !removed.includes(n)).join(', ')}`);
   if ([...changed, ...added].some((name) => !changedAllowed.has(name))) fail('service rewrite changed a name outside the 3.9.0 list');
-  if (sha(serviceAfter.entries.get(WOO_PREVIOUS).value) !== sha(serviceBefore.entries.get(LEGACY).value)) fail('moved key bytes differ');
+  if (moveDue && sha(serviceAfter.entries.get(WOO_PREVIOUS).value) !== sha(serviceBefore.entries.get(LEGACY).value)) fail('moved key bytes differ');
   // A second check of the pins on the result.
   for (const [name, value] of Object.entries(SERVICE_PINS)) if (sha(serviceAfter.entries.get(name).value) !== sha(value)) fail(`${name} drifted`);
   for (const [name, value] of Object.entries(COMPOSE_PINS)) if (sha(composeAfter.entries.get(name).value) !== sha(value)) fail(`${name} drifted`);
@@ -269,18 +305,19 @@ function accessLogScan(orig) {
   const ranges = routerRanges(orig);
   if (ranges.length !== 2) fail('the original router does not carry two ranges');
   const shop = ranges[1]; // shop-position address (2nd)
-  let shopRequests = 0; let bad = 0; let other403 = 0;
+  let shopRequests = 0; let bad = 0; let other403 = 0; let accessLines = 0;
   for (const line of fs.readFileSync(0, 'utf8').split('\n')) {
     const start = line.indexOf('{'); if (start < 0) continue;
     let entry; try { entry = JSON.parse(line.slice(start)); } catch { continue; }
     if (!entry || typeof entry.ClientHost !== 'string') continue;
+    accessLines += 1;
     const status = Number(entry.DownstreamStatus);
     if (entry.ClientHost === shop) {
       shopRequests += 1;
       if (status === 403 || status === 404 || !entry.RouterName) bad += 1;
     } else if (status === 403) { other403 += 1; }
   }
-  console.log(`${bad > 0 ? 'restore' : 'clean'} shop_requests=${shopRequests} shop_403_404_or_unrouted=${bad} other_403=${other403}`);
+  console.log(`${bad > 0 ? 'restore' : 'clean'} shop_requests=${shopRequests} shop_403_404_or_unrouted=${bad} other_403=${other403} access_lines=${accessLines}`);
 }
 
 function queueIdle() {
@@ -314,6 +351,24 @@ function sliceCompare(a, b, after, spreadArg) {
   console.log(`control slice: ${IDENTITY_PATHS.length} identity fields byte-equal; time and grams inside the widened range (${spread})`);
 }
 
+// attested <gh-json-file> <digest>: `gh attestation verify --format json` output (an
+// array of results; both predicates appended into one array) must verify this digest
+// for the SLSA provenance AND the SPDX document.
+function attested(file, digest) {
+  let doc; try { doc = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { fail('attestation evidence is not JSON'); }
+  if (!Array.isArray(doc) || doc.length === 0) fail('attestation evidence holds no verification result');
+  const types = new Set();
+  for (const result of doc) {
+    const statement = result?.verificationResult?.statement;
+    const subjects = Array.isArray(statement?.subject) ? statement.subject : [];
+    if (!subjects.some((subject) => subject?.digest?.sha256 === digest)) fail('an attestation result does not name this digest');
+    if (typeof statement?.predicateType === 'string') types.add(statement.predicateType);
+  }
+  if (![...types].some((type) => type.startsWith('https://slsa.dev/provenance/'))) fail('no verified SLSA provenance for this digest');
+  if (![...types].some((type) => type.startsWith('https://spdx.dev/Document'))) fail('no verified SPDX document for this digest');
+  console.log('attestations: SLSA provenance and SPDX document verified for the digest');
+}
+
 function slotPrefixes(file) {
   const env = parseEnv(file);
   for (const [name, entry] of env.entries) {
@@ -338,6 +393,7 @@ switch (op) {
   case 'queue-idle': queueIdle(); break;
   case 'slice-compare': sliceCompare(...args); break;
   case 'slot-prefixes': slotPrefixes(args[0]); break;
+  case 'attested': attested(args[0], args[1]); break;
   default: fail('unknown envtool operation');
 }
 NODE
@@ -366,8 +422,15 @@ control_slice() { # control_slice <model-file> <comma-separated fields> <out>
 }
 queue_state() { in_get /operations/metrics OPERATIONS_API_KEY x-api-key | envtool queue-idle; }
 
-compose() { # compose <args...> against the live pack with the compose env
-  (cd "$PACK" && docker compose -p slicer-api --env-file "$COMPOSE_ENV" -f docker-compose.production.yml "$@")
+guard_target() { # an overridden pack or env must not drive the live project or container
+  if { [ -n "${R3D_PACK:-}" ] || [ -n "${R3D_COMPOSE_ENV:-}" ]; } \
+      && { [ "$PROJECT" = "$LIVE_PROJECT" ] || [ "$NAME" = "$LIVE_NAME" ]; }; then
+    die "R3D_PACK/R3D_COMPOSE_ENV point at another pack but the project ($PROJECT) or container ($NAME) is the live one: set R3D_PROJECT and R3D_CONTAINER"
+  fi
+}
+compose() { # compose <args...> against the pack with the compose env
+  guard_target
+  (cd "$PACK" && docker compose -p "$PROJECT" --env-file "$COMPOSE_ENV" -f "$COMPOSE_FILE" "$@")
 }
 
 resolve_service_env() {
@@ -405,6 +468,54 @@ install_rewrite() { # atomic: compose first, then service; a failed second write
     fi
   else
     echo "DRY-RUN would install both rewritten files (temp + fsync + rename, 0600); the real files are unchanged"
+  fi
+}
+
+assert_capture_present() { # before anything is written: the step-2 capture this deploy compares with
+  [ -f "$CONTROL_DIR/compose-limits.json" ] || die "no step-2 capture of compose limits ($CONTROL_DIR/compose-limits.json); if the capture ran on another UTC date, pass R3D_CONTROL_DIR=<that dir>"
+  [ "$EXECUTE" -eq 1 ] || return 0
+  local file model run
+  for file in capture-complete profiles-v2-before.json profiles-v3-before.json; do
+    [ -s "$CONTROL_DIR/$file" ] || die "the step-2 capture in $CONTROL_DIR is incomplete ($file missing)"
+  done
+  for model in cube block; do
+    for run in 1 2; do
+      [ -s "$CONTROL_DIR/control-$model-before-$run.json" ] || die "the step-2 capture in $CONTROL_DIR lacks control-$model-before-$run.json"
+    done
+  done
+  echo "step-2 capture present in $CONTROL_DIR"
+}
+
+restore_env_backup() { # both env files back from BACKUP_DIR (nothing was restarted yet)
+  envtool install "$BACKUP_DIR/compose-n1-exact-configs.env" "$COMPOSE_ENV" || true
+  envtool install "$BACKUP_DIR/service-n1.env" "$SERVICE_ENV" || true
+  cmp -s "$COMPOSE_ENV" "$BACKUP_DIR/compose-n1-exact-configs.env" && cmp -s "$SERVICE_ENV" "$BACKUP_DIR/service-n1.env" \
+    && echo "both env files restored from $BACKUP_DIR; nothing was restarted" >&2 \
+    || echo "RESTORE INCOMPLETE: put $BACKUP_DIR back by hand before any compose up" >&2
+}
+
+pre_up_checks() { # after the rewrite, before up; every failure is returned, never ignored
+  envtool compose-check "$COMPOSE_ENV" || return 1
+  envtool service-check "$SERVICE_ENV" none || return 1
+  [ -f "$CONTROL_DIR/compose-limits.json" ] || { echo "no step-2 capture of compose limits" >&2; return 1; }
+  compose config --format json | envtool compose-limits "$CONTROL_DIR/compose-limits.json" || return 1
+  # The queue again, right before the recreate: a job admitted during the pull is not killed.
+  local state; state="$(queue_state || echo unknown)"
+  [ "$state" = "idle" ] || { echo "the live queue is no longer idle ($state)" >&2; return 1; }
+}
+
+verify_attestations() { # verify_attestations <ref> [gh-json-evidence]
+  local digest="${1##*@sha256:}"
+  if [ -n "${2:-}" ]; then
+    [ -f "$2" ] || die "attestation evidence $2 missing"
+    envtool attested "$2" "$digest"
+  elif command -v gh >/dev/null 2>&1; then
+    gh attestation verify "oci://$1" --owner Botond1 >/dev/null || die "SLSA provenance did not verify for $1"
+    gh attestation verify "oci://$1" --owner Botond1 --predicate-type https://spdx.dev/Document/v2.3 >/dev/null \
+      || die "SPDX attestation did not verify for $1"
+    echo "attestations: SLSA provenance and SPDX document verified with gh"
+  else
+    die "cannot verify the signature and attestations: gh is not installed; pass --attested <file> with the gh attestation verify --format json output of both predicates"
   fi
 }
 
@@ -475,7 +586,16 @@ post_checks() { # post_checks <ref> <sha> <aa-spread>
 }
 
 automatic_rollback() { # only on an idle queue; jobs in flight -> hold and page
-  local state
+  local state running
+  # A container that is not running (crash loop, refused env) has no job in flight:
+  # roll back at once instead of reading a queue that cannot answer.
+  running="$(docker inspect -f '{{.State.Running}} {{.State.Restarting}}' "$NAME" 2>/dev/null || echo 'missing')"
+  if [ "$running" != "true false" ]; then
+    echo "a check failed and the new container is not running ($running): automatic rollback" >&2
+    "$0" --execute rollback "$NEW_REF" "$NEW_SHA" --backup "$BACKUP_DIR" \
+      || { echo "AUTOMATIC ROLLBACK FAILED: page the operator; the env backup is $BACKUP_DIR" >&2; exit 5; }
+    exit 2
+  fi
   state="$(queue_state || echo unknown)"
   if [ "$state" != "idle" ]; then
     echo "HOLD: a check failed but the queue is not idle ($state). The new container stays; page the operator." >&2
@@ -483,7 +603,8 @@ automatic_rollback() { # only on an idle queue; jobs in flight -> hold and page
     exit 3
   fi
   echo "a check failed and the queue is idle: automatic rollback" >&2
-  "$0" --execute rollback "$NEW_REF" "$NEW_SHA" --backup "$BACKUP_DIR"
+  "$0" --execute rollback "$NEW_REF" "$NEW_SHA" --backup "$BACKUP_DIR" \
+    || { echo "AUTOMATIC ROLLBACK FAILED: page the operator; the env backup is $BACKUP_DIR" >&2; exit 5; }
   exit 2
 }
 
@@ -503,7 +624,7 @@ cmd_check_env() {
   say "check-env (read-only; the rewrite is proved in a private temp dir)"
   envtool compose-check "$COMPOSE_ENV"
   resolve_service_env
-  envtool service-check "$SERVICE_ENV" keyring
+  envtool service-check "$SERVICE_ENV" deploy
   prove_rewrite deploy "$REPO@sha256:$(printf '0%.0s' $(seq 1 64))" false
   echo "check-env PASS (no file written)"
 }
@@ -518,7 +639,7 @@ cmd_capture() {
   say "§8 step 2 capture into $CONTROL_DIR"
   envtool compose-check "$COMPOSE_ENV"
   resolve_service_env
-  envtool service-check "$SERVICE_ENV" keyring
+  envtool service-check "$SERVICE_ENV" deploy
   envtool outside "$CONTROL_DIR" "$DYNAMIC_DIR" "control dir"
   [ -f "$CONTROL_DIR/models/cube.stl" ] && [ -f "$CONTROL_DIR/models/block.stl" ] \
     || die "control models missing: $CONTROL_DIR/models/cube.stl (40 mm cube) and block.stl (9,5 x 9,5 x 14,3 mm)"
@@ -554,17 +675,19 @@ cmd_capture() {
     done
   done
   docker image tag "$cur_ref" "local/slicer-api:retained-dbc539e9"
+  date -u +%Y-%m-%dT%H:%M:%SZ > "$CONTROL_DIR/capture-complete"
   chmod -R go-rwx "$CONTROL_DIR"
   echo "capture complete"
 }
 
 cmd_deploy() {
   NEW_REF="${1:-}"; NEW_SHA="${2:-}"; shift 2 || die "usage: deploy <ref> <sha> --export-route true|false"
-  local export_route="" aa_spread="0.01"
+  local export_route="" aa_spread="0.01" attested=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --export-route) export_route="${2:-}"; shift 2 ;;
       --aa-spread) aa_spread="${2:-}"; shift 2 ;;
+      --attested) attested="${2:-}"; shift 2 ;;
       *) die "unknown deploy argument" ;;
     esac
   done
@@ -575,26 +698,32 @@ cmd_deploy() {
   say "§8 step 4 deploy (execute=$EXECUTE)"
   envtool compose-check "$COMPOSE_ENV"
   resolve_service_env
-  envtool service-check "$SERVICE_ENV" keyring
+  envtool service-check "$SERVICE_ENV" deploy
   envtool outside "$CONTROL_DIR" "$DYNAMIC_DIR" "control dir"
+  # Everything this deploy compares with must exist BEFORE either env file is written.
+  assert_capture_present
   prove_rewrite deploy "$NEW_REF" "$export_route"
   if [ "$EXECUTE" -eq 1 ]; then
+    guard_target
     [ "$(queue_state)" = "idle" ] || die "the live queue is not idle"
     docker pull "$NEW_REF" | tail -2
     [ "$(docker inspect "$NEW_REF" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$NEW_SHA" ] || die "revision label mismatch"
-    echo "signature and attestations: verify with gh attestation verify (SLSA + SPDX) before this step; see RUNBOOK §8"
+    verify_attestations "$NEW_REF" "$attested"
     retain "$OLD_SHA" "$(envtool compose-get "$COMPOSE_ENV" SLICER_API_IMAGE)"
     retain "$NEW_SHA" "$NEW_REF"
   else
-    echo "DRY-RUN would: require an idle queue, docker pull $NEW_REF, check its revision label, retain both images"
+    echo "DRY-RUN would: require an idle queue, docker pull $NEW_REF, check its revision label, verify its signature and attestations (SLSA + SPDX), retain both images"
   fi
   backup_env
   install_rewrite
   if [ "$EXECUTE" -eq 1 ]; then
-    envtool compose-check "$COMPOSE_ENV"
-    envtool service-check "$SERVICE_ENV" none
+    # Any failure from here to `up` puts both env files back: nothing was restarted,
+    # and no later compose up or reboot may start the new image unchecked.
+    pre_up_checks || { restore_env_backup; die "a check before up failed; both env files restored"; }
+  else
+    assert_compose_config
+    echo "DRY-RUN would re-read the queue right before up and restore both env files on any failure before up"
   fi
-  assert_compose_config
   if [ "$EXECUTE" -ne 1 ]; then
     echo "DRY-RUN would: compose up -d; check digest, label, cgroup limits, tuning, /health, /ready, catalogue bodies,"
     echo "  two control slices (identity byte-equal, time and grams inside the widened range), 60 /ready polls p99 < 100 ms,"
@@ -638,6 +767,7 @@ cmd_rollback() {
   mkdir -p -m 700 "$CONTROL_DIR"; mkdir -m 700 "$before"
   install -m 600 "$COMPOSE_ENV" "$before/compose-n1-exact-configs.env"
   install -m 600 "$SERVICE_ENV" "$before/service-n1.env"
+  guard_target
   envtool install "$TOOLDIR/rewrite/compose.env" "$COMPOSE_ENV"
   envtool install "$TOOLDIR/rewrite/service.env" "$SERVICE_ENV"
   envtool compose-check "$COMPOSE_ENV"; envtool service-check "$SERVICE_ENV" none
@@ -680,16 +810,22 @@ restore_router() { # restore_router <orig>
   fi
 }
 
-watch_log() { # watch_log <orig> <seconds> <auto_restore 0|1> <since>
-  local orig="$1" seconds="$2" auto="$3" since="$4" end verdict
+watch_log() { # watch_log <orig> <seconds> <auto_restore 0|1> <since> [require_shop 0|1]
+  # Fail closed: a log or scanner failure, or a window with no access-log line at
+  # all, is never "clean". Returns 1 (restore case) or 2 (unproven: no shop request).
+  local orig="$1" seconds="$2" auto="$3" since="$4" require_shop="${5:-0}" end verdict
   end=$(( $(date +%s) + seconds ))
   while :; do
     if [ -n "${R3D_ACCESS_LOG_FILE:-}" ]; then
-      verdict="$(envtool access-log-scan "$orig" < "$R3D_ACCESS_LOG_FILE")"
+      verdict="$(envtool access-log-scan "$orig" < "$R3D_ACCESS_LOG_FILE")" || verdict="scan-failed"
     else
-      verdict="$(docker logs --since "$since" "$TRAEFIK_NAME" 2>&1 | envtool access-log-scan "$orig")"
+      verdict="$(docker logs --since "$since" "$TRAEFIK_NAME" 2>&1 | envtool access-log-scan "$orig")" || verdict="scan-failed"
     fi
     case "$verdict" in
+      scan-failed)
+        echo "the access-log read or scan failed: the watch sees nothing" >&2
+        if [ "$auto" -eq 1 ]; then restore_router "$orig"; fi
+        return 1 ;;
       restore*)
         echo "shop-position address got 403/404/unrouted: $verdict" >&2
         if [ "$auto" -eq 1 ]; then restore_router "$orig"; fi
@@ -698,6 +834,21 @@ watch_log() { # watch_log <orig> <seconds> <auto_restore 0|1> <since>
     [ "$(date +%s)" -lt "$end" ] || break
     sleep 1
   done
+  case "$verdict" in
+    *" access_lines=0")
+      echo "UNPROVEN: no access-log line at all in ${seconds}s (is the access log on stdout?): $verdict" >&2
+      if [ "$auto" -eq 1 ]; then restore_router "$orig"; fi
+      return 1 ;;
+  esac
+  case "$verdict" in
+    *" shop_requests=0 "*)
+      if [ "$require_shop" -eq 1 ]; then
+        echo "UNPROVEN: no request from the shop-position address in ${seconds}s: $verdict" >&2
+        return 2
+      fi
+      echo "watch clean for ${seconds}s but UNPROVEN for the shop (shop_requests=0): $verdict"
+      return 0 ;;
+  esac
   echo "watch clean for ${seconds}s: $verdict"
 }
 
@@ -750,7 +901,15 @@ cmd_traefik() {
   echo "swapped (atomic rename); watching ${WATCH_SECONDS}s"
   watch_log "$orig" "$WATCH_SECONDS" 1 "$since" || die "automatic restore after the swap"
   echo "60 s clean. 30-minute watch (report only):"
-  watch_log "$orig" 1800 0 "$since" || { echo "a shop 403/404 in the 30-minute watch: restore with $0 --execute traefik-watch --orig $orig --seconds 0" >&2; exit 1; }
+  local rc=0
+  watch_log "$orig" 1800 0 "$since" 1 || rc=$?
+  if [ "$rc" -eq 2 ]; then
+    echo "traefik UNPROVEN: no shop request in the 30-minute watch; prove a shop call (e.g. a calculator bootstrap) before calling it PASS" >&2
+    exit 4
+  elif [ "$rc" -ne 0 ]; then
+    echo "a shop 403/404 in the 30-minute watch: restore with $0 --execute traefik-watch --orig $orig --seconds 0" >&2
+    exit 1
+  fi
   docker logs --since "$since" "$TRAEFIK_NAME" 2>&1 | grep -c 'Health check failed' | sed 's/^/traefik health-check failures: /'
   echo "traefik PASS. Rollback at any time: the same atomic restore of $orig"
 }

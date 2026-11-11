@@ -37,6 +37,7 @@ const { runCommand, isAbortError, PYTHON_HELPER_TIMEOUT_MS } = require('../slice
 const { APPLICATION_ROOT } = require('../slice/helper-paths');
 const { enqueueExportJob, toQueueErrorResponse, ExportQueueFullError } = require('../slice/queue');
 const { preflightArchive, sendPreflightRefusal } = require('../slice/archive-preflight');
+const { consumeExpansionVerdict, registerExpansionVerdict } = require('../slice/three-mf-expansion');
 const { bindRequestAbort, isResponseWritable } = require('../slice/request-abort');
 const { emitEvent } = require('../observability/events');
 const { incrementExportJob } = require('../observability/metrics');
@@ -287,6 +288,38 @@ function rethrowAbort(error, signal) {
 }
 
 /**
+ * Move the preflight's verdict from the upload to the run's private copy
+ * (same bytes, new inode), so the job consumes it and does not tokenize the
+ * archive a second time on the main thread. Best effort: without it the job
+ * simply runs the scan itself, as it does for any file without a verdict.
+ * @param {string} uploadPath The upload the preflight inspected.
+ * @param {string} copyPath The run's copy of it.
+ * @returns {Promise<boolean>} Whether a verdict was carried.
+ */
+async function carryExpansionVerdict(uploadPath, copyPath) {
+    try {
+        const [uploadReal, uploadStats] = await Promise.all([
+            fsp.realpath(uploadPath), fsp.lstat(uploadPath, { bigint: true })
+        ]);
+        const counts = consumeExpansionVerdict(uploadReal, uploadStats);
+        if (!counts) return false;
+        const [copyReal, copyStats] = await Promise.all([fsp.realpath(copyPath), fsp.lstat(copyPath, { bigint: true })]);
+        if (copyStats.size !== uploadStats.size) return false;
+        registerExpansionVerdict({
+            realpath: copyReal,
+            dev: copyStats.dev,
+            ino: copyStats.ino,
+            size: copyStats.size,
+            mtimeNs: copyStats.mtimeNs,
+            counts
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Build the export runner. One run = a fresh job workspace holding a copy of
  * the upload, the unchanged hashed preparation, the hash comparison and the
  * format writer. A run may be repeated (pre-emption); the upload itself is
@@ -322,6 +355,7 @@ function createExportRunner(deps = {}) {
     async function prepareModel(input, workspace, signal) {
         const copy = workspace.resolvePath(`${Date.now()}-${crypto.randomUUID()}`);
         await fsp.copyFile(input.upload.path, copy, fs.constants.COPYFILE_EXCL);
+        await carryExpansionVerdict(input.upload.path, copy);
         if (signal?.aborted) rethrowAbort(new Error('aborted'), signal);
         const runRequest = {
             file: {

@@ -520,10 +520,20 @@ runs:
             const severity = String(match?.vulnerability?.severity || '').toLowerCase();
             if (Object.hasOwn(counts, severity)) counts[severity] += 1;
           }
+          // only-fixed moves advisories without a fixed version to ignoredMatches:
+          // they do not block, but the summary names them.
+          const unfixed = { high: 0, critical: 0 };
+          for (const match of Array.isArray(report.ignoredMatches) ? report.ignoredMatches : []) {
+            const severity = String(match?.vulnerability?.severity || '').toLowerCase();
+            const byFixState = (Array.isArray(match?.appliedIgnoreRules) ? match.appliedIgnoreRules : [])
+              .some((rule) => typeof rule?.['fix-state'] === 'string' && rule['fix-state'].length > 0);
+            if (byFixState && Object.hasOwn(unfixed, severity)) unfixed[severity] += 1;
+          }
 
           fs.appendFileSync(
             process.env.GITHUB_STEP_SUMMARY,
             `\n### Exact-image vulnerability gate\n\nHigh findings: ${counts.high}\nCritical findings: ${counts.critical}\n`
+              + `Unfixed (no fixed version, not blocking): high ${unfixed.high}, critical ${unfixed.critical}\n`
           );
 
           if (counts.high > 0 || counts.critical > 0) {

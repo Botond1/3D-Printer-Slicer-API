@@ -94,14 +94,9 @@ function withGeneration(transform) {
     return (tree) => { tree['app/services/slice/bambu-generation.js'] = transform(tree['app/services/slice/bambu-generation.js']); };
 }
 
-const NEW_ASSERT = [
-    'function assertBambuBuildCurrent() {',
-    '    if (nativeIdentityMonitorEnabled()) return assertMonitoredBuildCurrent();',
-    `    if (!generation || ${LEGACY_LOOP_EXPRESSION}) {`,
-    "        throw new Error('Bambu runtime build changed after startup.');",
-    '    }',
-    '}'
-].join('\n');
+// The shipped (pinned) new body: any other body needs a re-pin in the checker.
+const SHIPPED_GENERATION = fs.readFileSync(path.join(ROOT, 'app/services/slice/bambu-generation.js'), 'utf8').replace(/\r\n/g, '\n');
+const NEW_ASSERT = /function assertBambuBuildCurrent\(\) \{\n[\s\S]*?\n\}\n/.exec(SHIPPED_GENERATION)[0].slice(0, -1);
 const OLD_ASSERT = /function assertBambuBuildCurrent\(\) \{\n[\s\S]*?\n\}\n/.exec(BASE_GENERATION)[0].slice(0, -1);
 const MONITOR_BLOCK = [
     MONITOR_BLOCK_BEGIN,
@@ -203,7 +198,7 @@ test('a new body that drops the 3.8.3 loop expression or assigns generation fail
     assert.equal(dropped.status, 1);
     assert.match(dropped.err, /keep the 3\.8\.3 loop expression/);
     const assigns = check(withGeneration((source) => allowedEdit(source).replace(
-        '    if (nativeIdentityMonitorEnabled())', '    generation = null;\n    if (nativeIdentityMonitorEnabled())')));
+        '    if (!generation) throw', '    generation = null;\n    if (!generation) throw')));
     assert.equal(assigns.status, 1);
     assert.match(assigns.err, /assigns the frozen binding generation/);
 });
@@ -249,4 +244,60 @@ test('the 3.8.3 fixture copy of bambu-generation.js is the dbc539e blob when the
         return;
     }
     assert.equal(result.stdout, BASE_GENERATION);
+});
+
+test('C1-1: writes onto exports or required modules in the monitor block are refused, whatever their form', () => {
+    const probes = [
+        '(module.exports).assertBambuBuildCurrent = () => undefined;',
+        "module['exports'].getBambuGeneration = () => null;",
+        'const e = module.exports; e.getBambuGeneration = () => null;',
+        "require('node:fs').readFileSync = () => Buffer.alloc(0);",
+        "require.cache[require.resolve('./receipt-hash')].exports.hashValue = () => 'x';",
+        "Object.defineProperty(require('./receipt-hash'), 'hashValue', { value: () => 'x' });",
+        "const second = require('./receipt-hash');",
+        'module.exports.getBambuGeneration2 = 1;',
+        'module.exports.startNativeIdentityMonitor = startNativeIdentityMonitor;'
+    ];
+    for (const probe of probes) {
+        const edited = allowedEdit(BASE_GENERATION).replace(MONITOR_BLOCK_END, `${probe}\n${MONITOR_BLOCK_END}`);
+        const verdict = checkGenerationModule(BASE_GENERATION, edited);
+        assert.equal(verdict.status, 'refused', probe);
+    }
+    // Inside a function body the module system is out of reach too.
+    for (const inside of ["require('node:fs').readFileSync = null;", 'module.exports.x = 1;', 'const r = require; r("x");']) {
+        const edited = allowedEdit(BASE_GENERATION).replace(
+            'function assertMonitoredBuildCurrent() { return undefined; }',
+            `function assertMonitoredBuildCurrent() { ${inside} return undefined; }`);
+        assert.equal(checkGenerationModule(BASE_GENERATION, edited).status, 'refused', inside);
+    }
+});
+
+test('C1-1: the shipped monitor block and body pass the allowlist', () => {
+    const verdict = checkGenerationModule(BASE_GENERATION, SHIPPED_GENERATION);
+    assert.deepEqual(verdict, { status: 'allowed', reasons: [] });
+});
+
+test('C1-2: a body whose only trace of the 3.8.3 loop is a comment or a string is refused', () => {
+    for (const body of [
+        `{\n    // ${LEGACY_LOOP_EXPRESSION}\n}`,
+        `{\n    /* if (${LEGACY_LOOP_EXPRESSION}) { throw new Error('x'); } */\n}`,
+        `{\n    const text = '${LEGACY_LOOP_EXPRESSION}';\n    return text;\n}`,
+        `{\n    ${LEGACY_LOOP_EXPRESSION};\n}`
+    ]) {
+        const edited = BASE_GENERATION.replace(OLD_ASSERT, `function assertBambuBuildCurrent() ${body}`);
+        // Even with the body pinned, the loop must be live code inside an if that throws.
+        const { createHash: hash } = require('node:crypto');
+        const pinned = [hash('sha256').update(body).digest('hex')];
+        const verdict = checkGenerationModule(BASE_GENERATION, edited, pinned);
+        assert.equal(verdict.status, 'refused', body);
+        assert.ok(verdict.reasons.some((reason) => /keep the 3\.8\.3 loop expression/.test(reason)), body);
+    }
+});
+
+test('C1-2: any body other than the pinned one is refused until it is re-pinned', () => {
+    const body = `{\n    if (!generation || ${LEGACY_LOOP_EXPRESSION}) {\n        throw new Error('Bambu runtime build changed after startup.');\n    }\n    return undefined;\n}`;
+    const edited = BASE_GENERATION.replace(OLD_ASSERT, `function assertBambuBuildCurrent() ${body}`);
+    const verdict = checkGenerationModule(BASE_GENERATION, edited);
+    assert.equal(verdict.status, 'refused');
+    assert.ok(verdict.reasons.some((reason) => /not the pinned approved body/.test(reason)));
 });

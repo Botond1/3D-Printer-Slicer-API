@@ -44,6 +44,13 @@ const { getSupportedInputExtensionsText } = require('./common');
 const { recordArchivePreflightWait } = require('../observability/metrics');
 
 const WORKER_PATH = path.join(__dirname, 'archive-preflight-worker.js');
+/**
+ * Heap ceiling of the preflight worker. The scan's own state is bounded by
+ * the expansion limits (a few hundred MB at the policy maxima); a worker
+ * that runs out of it exits, which refuses only the request it was serving
+ * (`ARCHIVE_UNREADABLE`), instead of growing beside the live slices.
+ */
+const WORKER_RESOURCE_LIMITS = Object.freeze({ maxOldGenerationSizeMb: 1024, maxYoungGenerationSizeMb: 64 });
 
 /** Same resolution as the slice queue's own `MAX_SLICE_QUEUE_LENGTH`. */
 function resolveMaxWaiting(env = process.env) {
@@ -79,7 +86,7 @@ function reviveError(described) {
 /**
  * Create one serialised preflight. The application uses the default
  * instance through `preflightArchive`; tests create their own.
- * @param {{maxWaiting?: number, workerPath?: string, resourcePolicy?: object, expansionLimits?: object, now?: () => number, recordWait?: (seconds: number) => void}} [options] Options.
+ * @param {{maxWaiting?: number, workerPath?: string, workerResourceLimits?: object, resourcePolicy?: object, expansionLimits?: object, now?: () => number, recordWait?: (seconds: number) => void}} [options] Options.
  * @returns {{run: (file: string, runOptions?: {signal?: AbortSignal}) => Promise<object>, stats: () => object, terminateActiveWorker: () => Promise<void>, close: () => Promise<void>}} Preflight.
  */
 function createArchivePreflight(options = {}) {
@@ -87,6 +94,7 @@ function createArchivePreflight(options = {}) {
         ? options.maxWaiting
         : resolveMaxWaiting();
     const workerPath = options.workerPath || WORKER_PATH;
+    const workerResourceLimits = options.workerResourceLimits || WORKER_RESOURCE_LIMITS;
     const now = options.now || Date.now;
     const recordWait = options.recordWait || recordArchivePreflightWait;
     const resolvePolicy = () => options.resourcePolicy || resolveResourcePolicy(process.env);
@@ -100,7 +108,7 @@ function createArchivePreflight(options = {}) {
 
     function ensureWorker() {
         if (worker) return worker;
-        const created = new Worker(workerPath);
+        const created = new Worker(workerPath, { resourceLimits: { ...workerResourceLimits } });
         counters.workersCreated += 1;
         created.unref();
         created.on('message', (message) => {
@@ -303,6 +311,7 @@ async function closeDefaultArchivePreflight() {
 }
 
 module.exports = {
+    WORKER_RESOURCE_LIMITS,
     closeDefaultArchivePreflight,
     createArchivePreflight,
     getDefaultArchivePreflight,

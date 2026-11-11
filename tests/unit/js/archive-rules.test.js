@@ -345,3 +345,35 @@ test('a caller that replaces the pipeline owns validation: no preflight runs; no
     assert.equal(await preflightArchive(bare), null);
     assert.ok(new SliceResourceError('X', 'y', 400) instanceof Error);
 });
+
+test('the async path hands the preflight the request abort signal, so a departed client leaves its FIFO (LPC-3)', async (t) => {
+    const root = await tempDir(t);
+    const valid = path.join(root, 'upload-valid');
+    await makeArchive(valid, tetrahedronThreeMf());
+    const seen = [];
+    for (const prefer of [true, false]) {
+        const controller = new AbortController();
+        const handlers = createSliceHandlers({
+            validateSliceRequestImpl: () => null,
+            preflightArchiveImpl: async (req, options) => {
+                seen.push({ prefer, signal: options.signal });
+                controller.abort();
+                const error = new Error('aborted');
+                error.name = 'AbortError';
+                throw error;
+            },
+            enqueueSliceJobImpl: async () => assert.fail('an aborted preflight never takes a queue place'),
+            bindRequestAbortImpl: () => ({ signal: controller.signal, dispose() {} }),
+            setResponseAbortSignalImpl: () => {},
+            asyncJobStore: { hasCapacity: () => assert.fail('an aborted preflight never reaches the async store') }
+        });
+        const res = mockResponse();
+        assert.equal(await handlers.handleSliceBambu(sliceRequest(root, valid, prefer), res), undefined);
+        assert.equal(res.body, undefined, 'nothing is answered to a client that left');
+    }
+    assert.equal(seen.length, 2);
+    for (const { prefer, signal } of seen) {
+        assert.ok(signal instanceof AbortSignal, `prefer=${prefer}: the preflight got the request's signal`);
+        assert.equal(signal.aborted, true);
+    }
+});

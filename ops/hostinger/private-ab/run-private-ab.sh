@@ -138,7 +138,12 @@ cmd_heavy() {
 cmd_down() {
   run env R3D_S390_ENV_FILE="$ENV_FILE" R3D_S390_CONFIGS_DIR="$CONFIGS" R3D_S390_IMAGE=unused \
     docker compose -p "$PROJECT" -f "$HERE/compose.private.yml" down --volumes --timeout 30
-  run docker network rm r3d-s390-internal
+  # compose down already removes the project-defined network; remove it only if it is left.
+  if [ "$EXECUTE" -eq 1 ]; then
+    if docker network inspect r3d-s390-internal >/dev/null 2>&1; then docker network rm r3d-s390-internal; fi
+  else
+    echo "DRY-RUN would remove the network r3d-s390-internal if compose down left it"
+  fi
   case "$DATA" in /srv/r3d-s390-private) ;; *) die "refusing to remove an unexpected data path" ;; esac
   run rm -r -- "$DATA"
   echo "kept: the signed images and $KEYDIR (shred the throwaway env file when the evidence is filed)"

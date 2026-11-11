@@ -38,6 +38,24 @@ async function tempFiles(t) {
     return createExportFiles({ root: path.join(root, '.export-results') });
 }
 
+/**
+ * The file removal is fire-and-forget: wait for it with a deadline, never a
+ * fixed sleep (a loaded runner may take longer than 20 ms to unlink).
+ */
+async function waitUntilGone(target, timeoutMs = 5_000) {
+    const until = Date.now() + timeoutMs;
+    for (;;) {
+        try {
+            await fs.lstat(target);
+        } catch (error) {
+            if (error.code === 'ENOENT') return;
+            throw error;
+        }
+        if (Date.now() > until) return;
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+}
+
 function createStore(overrides = {}) {
     const timers = manualTimers();
     let clock = 1_000_000;
@@ -186,7 +204,7 @@ test('DELETE aborts a running job, deletes a finished job and its file, and answ
     await fs.writeFile(lateSource, 'late');
     const lateFile = await files.storeResultFile(running.id, 'stl', lateSource);
     assert.equal(store.complete(running, { status: 200, file: { path: lateFile } }), false);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitUntilGone(files.resultDirectory(running.id));
     await assert.rejects(fs.lstat(files.resultDirectory(running.id)), { code: 'ENOENT' });
 
     const finished = store.admit({ principal: 'slice:shop', format: '3mf', fidelity: 'unverified' });
@@ -195,7 +213,7 @@ test('DELETE aborts a running job, deletes a finished job and its file, and answ
     const stored = await files.storeResultFile(finished.id, '3mf', source);
     store.complete(finished, { status: 200, file: { path: stored }, view: {} });
     assert.equal(store.cancel(finished.id, 'slice:shop'), true);
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await waitUntilGone(files.resultDirectory(finished.id));
     await assert.rejects(fs.lstat(files.resultDirectory(finished.id)), { code: 'ENOENT' });
     assert.equal(store.lookup(finished.id, 'slice:shop'), null);
     assert.deepEqual(outcomes, ['cancelled']);
@@ -213,4 +231,25 @@ test('the export files purge removes every stored result', async (t) => {
     await assert.rejects(fs.lstat(files.root), { code: 'ENOENT' });
     assert.throws(() => files.resultDirectory('../escape'), /Invalid export job id/);
     assert.throws(() => files.resultDirectory('sj_' + 'a'.repeat(32)), /Invalid export job id/);
+});
+
+test('retained result bytes are bounded: above the budget new exports wait; a DELETE or the TTL frees them (SEC-3)', () => {
+    const { DEFAULT_MAX_RETAINED_BYTES } = require('../../../app/services/export/export-jobs');
+    assert.ok(DEFAULT_MAX_RETAINED_BYTES > 0 && DEFAULT_MAX_RETAINED_BYTES <= 8 * 1024 ** 3);
+    const { store, timers } = createStore({ maxRetainedBytes: 1000, files: { removeResult: async () => {} } });
+    const owner = 'slice:shop';
+    const first = store.admit({ principal: owner, format: 'stl', fidelity: 'exact' });
+    store.complete(first, { status: 200, view: {}, file: { size: 600 } });
+    assert.equal(store.hasCapacity(), true, 'under the byte budget');
+    const second = store.admit({ principal: owner, format: 'stl', fidelity: 'exact' });
+    store.complete(second, { status: 200, view: {}, file: { size: 600 } });
+    assert.equal(store.inFlight(), 0, 'nothing queued or running');
+    assert.equal(store.hasCapacity(), false, '1 200 retained bytes > 1 000: refused (429 queue-full)');
+    assert.equal(store.admit({ principal: owner, format: 'stl', fidelity: 'exact' }), null);
+    assert.deepEqual(store.retained(), { results: 2, bytes: 1200, maxResults: 64, maxBytes: 1000 });
+    assert.equal(store.cancel(first.id, owner), true);
+    assert.equal(store.retained().bytes, 600);
+    assert.equal(store.hasCapacity(), true, 'the DELETE freed its bytes');
+    timers.fire(900_000);
+    assert.equal(store.retained().bytes, 0, 'the TTL frees the rest');
 });

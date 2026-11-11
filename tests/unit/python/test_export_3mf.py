@@ -200,6 +200,18 @@ class Export3mfCliTest(unittest.TestCase):
         self.assertEqual(self.run_helper(stl, output).returncode, 2)
         self.assertEqual(output.read_bytes(), b"keep")
 
+    def test_degenerate_triangle_is_a_write_failure_and_writes_nothing(self):
+        # Two bitwise-equal corners would become a repeated vertex index, which
+        # the 3MF core specification forbids: exit 1 (500 EXPORT_WRITE_FAILED).
+        stl = self.root / "placed.stl"
+        triangles = cube_triangles() + [((1.0, 2.0, 3.0), (1.0, 2.0, 3.0), (4.0, 5.0, 6.0))]
+        write_stl(stl, triangles)
+        output = self.root / "out.3mf"
+        result = self.run_helper(stl, output)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("write failed", result.stderr)
+        self.assertFalse(output.exists())
+
     def test_usage_error(self):
         result = subprocess.run([sys.executable, "-I", str(HELPER)], capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 2)

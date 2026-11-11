@@ -239,10 +239,49 @@ test('inspectThreeMfArchive keeps its 3.8.3 return value and tokenizes a real ar
     const bomb = path.join(root, 'bomb.3mf');
     await makeArchive(bomb, withModel(fanOutModel()));
     assert.ok((await fsp.stat(bomb)).size < 2048, 'the 10^16 bomb is a file of about 2 KB');
-    const started = process.hrtime.bigint();
     await assert.rejects(inspectThreeMfArchive(bomb), { code: 'INVALID_SOURCE_GEOMETRY', archiveRule: 'ARCHIVE_EXPANSION_EXCEEDED' });
-    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
-    assert.ok(elapsedMs < 50, `fan-out refusal took ${elapsedMs} ms`);
+    // The bound is on work, not wall-clock time (a loaded runner stretches
+    // time, never memo misses): the 10^16 bomb is refused after a few dozen
+    // memo misses, where an unmemoised walk would need ~10^16.
+    const counter = new ExpansionCounter(LIMITS);
+    const scanner = counter.createPartScanner('3D/3dmodel.model');
+    scanner.write(Buffer.from(fanOutModel(), 'utf8'));
+    scanner.end();
+    assert.throws(() => counter.finish(), { archiveRule: 'ARCHIVE_EXPANSION_EXCEEDED' });
+    assert.ok(counter.walkVisits > 0 && counter.walkVisits <= 64, `fan-out refusal took ${counter.walkVisits} memo misses`);
     // The 3.8.3 checks alone admit it: the refusal is the new pre-scan's.
     assert.ok(await inspectThreeMfPackage(bomb, { expansion: false }));
+});
+
+test('references to undeclared ids are bounded by the object limit (SEC-1)', () => {
+    const limits = { maxTriangles: 25_000_000, maxInstances: 100_000, maxObjects: 1_000 };
+    // One declared object holding component references to 2 000 distinct
+    // undeclared ids: before 3.9.0's fix every reference took a node and
+    // memo slots unbounded (8M of them drove the process to several GB).
+    const refs = Array.from({ length: 2_000 }, (_, k) => `<component objectid="u${k}"/>`).join('');
+    const model = modelXml(`<object id="1" type="model"><components>${refs}</components></object>`, '<item objectid="1"/>');
+    const counter = new ExpansionCounter(limits);
+    const scanner = counter.createPartScanner('3D/3dmodel.model');
+    assert.throws(() => scanner.write(Buffer.from(model, 'utf8')),
+        { code: 'INVALID_SOURCE_GEOMETRY', archiveRule: 'ARCHIVE_EXPANSION_EXCEEDED', archiveLimit: 1_000 });
+    assert.ok(counter.nodeIndex.size <= limits.maxObjects);
+    // Up to the limit, undeclared references are still left to Python.
+    const few = Array.from({ length: 10 }, (_, k) => `<component objectid="u${k}"/>`).join('');
+    assert.deepEqual(scan({ '3D/3dmodel.model': modelXml(`<object id="1" type="model"><components>${few}</components></object>`,
+        '<item objectid="1"/>') }, limits), { triangles: 0, instances: 0, objects: 1 });
+});
+
+test('component references and build items are bounded by the instance limit (SEC-1)', () => {
+    const limits = { maxTriangles: 25_000_000, maxInstances: 4_096, maxObjects: 1_000 };
+    const edges = '<component objectid="2"/>'.repeat(4_097);
+    const model = modelXml(`<object id="2" type="model"/><object id="1" type="model"><components>${edges}</components></object>`,
+        '<item objectid="1"/>');
+    assert.throws(() => scan({ '3D/3dmodel.model': model }, limits),
+        { archiveRule: 'ARCHIVE_EXPANSION_EXCEEDED', archiveLimit: 4_096 });
+    const items = '<item objectid="2"/>'.repeat(4_097);
+    assert.throws(() => scan({ '3D/3dmodel.model': modelXml('<object id="2" type="model"/>', items) }, limits),
+        { archiveRule: 'ARCHIVE_EXPANSION_EXCEEDED', archiveLimit: 4_096 });
+    // At the limit it is admitted (empty targets place nothing).
+    assert.deepEqual(scan({ '3D/3dmodel.model': modelXml('<object id="2" type="model"/>', '<item objectid="2"/>'.repeat(4_096)) }, limits),
+        { triangles: 0, instances: 0, objects: 1 });
 });

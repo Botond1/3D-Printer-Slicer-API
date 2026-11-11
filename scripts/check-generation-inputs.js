@@ -74,6 +74,18 @@ const ALLOWED_BODY_PLACEHOLDER = '{ /* r3d-allowed-hunk: assertBambuBuildCurrent
 /** The 3.8.3 legacy check; the new body keeps it verbatim (the `off` path). */
 const LEGACY_LOOP_EXPRESSION = 'nativeIdentity.some(({ file, sha256 }) => hashNativeFile(file) !== sha256)';
 const ALLOWED_EDIT_LABEL = 'bambu-generation.js CHANGED (allowed hunks only)';
+/** The only names the monitor block may add to `module.exports`, each once. */
+const ALLOWED_BLOCK_EXPORTS = Object.freeze(['startNativeIdentityMonitor', 'getNativeIdentityStatus', 'IDENTITY_FAILURE_REASONS']);
+/** The one module the monitor block may require, once, at top level. */
+const ALLOWED_BLOCK_REQUIRE = './native-identity-monitor';
+/**
+ * sha256 of the approved new `assertBambuBuildCurrent` body (LF endings,
+ * braces included). Any later edit of the body needs an explicit re-pin here,
+ * reviewed like a change to the generation recipe itself.
+ */
+const APPROVED_ASSERT_BODY_SHA256 = Object.freeze([
+    '0ede04fd53753b7cd5a3d095b80be4b6f975a6815558f4ffb044d31cbb92dc83'
+]);
 
 class CheckError extends Error {}
 
@@ -159,6 +171,216 @@ function matchBrace(source, open) {
         index += 1;
     }
     throw new CheckError('assertBambuBuildCurrent has an unbalanced body.');
+}
+
+/**
+ * Blank out comments and the text of string and template literals (keeping
+ * every `${…}` expression of a template, and every line break), so that
+ * token checks see code only and positions still match the raw source.
+ * @param {string} code Source text.
+ * @returns {string} Same-length text with comments and literal text blanked.
+ */
+function blankCommentsAndStrings(code) {
+    const out = code.split('');
+    const blank = (from, to) => {
+        for (let index = from; index < to; index += 1) if (out[index] !== '\n') out[index] = ' ';
+    };
+    // Stack of contexts: 'code' (with its brace depth) or a template literal.
+    const stack = [{ kind: 'code', depth: 0 }];
+    let index = 0;
+    while (index < code.length) {
+        const top = stack[stack.length - 1];
+        const character = code[index];
+        const next = code[index + 1];
+        if (top.kind === 'template') {
+            if (character === '\\') { blank(index, index + 2); index += 2; continue; }
+            if (character === '`') { stack.pop(); index += 1; continue; }
+            if (character === '$' && next === '{') { stack.push({ kind: 'code', depth: 0, inTemplate: true }); index += 2; continue; }
+            blank(index, index + 1);
+            index += 1;
+            continue;
+        }
+        if (character === '/' && next === '/') {
+            const end = code.indexOf('\n', index);
+            const stop = end === -1 ? code.length : end;
+            blank(index, stop);
+            index = stop;
+            continue;
+        }
+        if (character === '/' && next === '*') {
+            const end = code.indexOf('*/', index + 2);
+            if (end === -1) throw new CheckError('an allowed hunk holds an unterminated comment.');
+            blank(index, end + 2);
+            index = end + 2;
+            continue;
+        }
+        if (character === '\'' || character === '"') {
+            let cursor = index + 1;
+            while (cursor < code.length && code[cursor] !== character) {
+                if (code[cursor] === '\\') cursor += 1;
+                if (code[cursor] === '\n') throw new CheckError('an allowed hunk holds an unterminated string.');
+                cursor += 1;
+            }
+            blank(index + 1, cursor);
+            index = cursor + 1;
+            continue;
+        }
+        if (character === '`') { stack.push({ kind: 'template' }); index += 1; continue; }
+        if (character === '{') { top.depth += 1; index += 1; continue; }
+        if (character === '}') {
+            if (top.depth === 0 && top.inTemplate) { stack.pop(); index += 1; continue; }
+            top.depth -= 1;
+            index += 1;
+            continue;
+        }
+        index += 1;
+    }
+    if (stack.length !== 1) throw new CheckError('an allowed hunk holds an unterminated template literal.');
+    return out.join('');
+}
+
+/**
+ * Refusals for module-system access inside code that is not one of the
+ * block's exact allowed statements: no `module`, `exports`, `require`
+ * (`require.cache` included) and no reflective escape hatch. The member and
+ * call forms are also checked on the raw text, so a literal the blanking
+ * misreads can never hide them.
+ * @param {string} raw Raw code.
+ * @param {string} blanked Same code with comments and literal text blanked.
+ * @param {string} where Label for the refusal.
+ * @returns {string[]} Refusal reasons.
+ */
+function refuseModuleAccess(raw, blanked, where) {
+    const reasons = [];
+    if (/(?<![\w$])(?:module|exports|require)(?![\w$])/.test(blanked)
+        || /(?<![\w$])module\s*[.[)]|(?<![\w$])exports\s*[.[=]|(?<![\w$])require\s*[.([]/.test(raw)) {
+        reasons.push(`${where} touches module, exports or require`);
+    }
+    if (/(?<![\w$])(?:globalThis|global|Reflect|Proxy|eval|Function|__proto__|mainModule)(?![\w$])/.test(blanked)) {
+        reasons.push(`${where} uses a reflective or global escape hatch`);
+    }
+    return reasons;
+}
+
+/** Index just past the bracket that closes the one opened at `open` (blanked text). */
+function matchBracket(blanked, open, opener, closer) {
+    let depth = 0;
+    for (let index = open; index < blanked.length; index += 1) {
+        if (blanked[index] === opener) depth += 1;
+        else if (blanked[index] === closer) {
+            depth -= 1;
+            if (depth === 0) return index + 1;
+        }
+    }
+    throw new CheckError('the monitor block holds an unbalanced statement.');
+}
+
+/** Index just past the `;` that ends the statement starting at `from` (blanked text, depth 0). */
+function statementEnd(blanked, from) {
+    let depth = 0;
+    for (let index = from; index < blanked.length; index += 1) {
+        const character = blanked[index];
+        if (character === '(' || character === '[' || character === '{') depth += 1;
+        else if (character === ')' || character === ']' || character === '}') depth -= 1;
+        else if (character === ';' && depth === 0) return index + 1;
+        if (depth < 0) break;
+    }
+    throw new CheckError('the monitor block holds a statement without its closing semicolon.');
+}
+
+/**
+ * Allowlist of the monitor block's top-level statements (3.9.0 §4.11): only
+ * `let nativeMonitor = null;`, ONE `const <name> = require('./native-identity-monitor');`,
+ * function declarations, and `module.exports.<name> = <expr>;` for the
+ * three allowed names, each once. Function bodies and export values may not
+ * touch `module`, `exports` or `require`. Anything else is refused.
+ * @param {string} block Block text between the markers.
+ * @returns {string[]} Refusal reasons.
+ */
+function refuseBlockStatements(block) {
+    const reasons = [];
+    let blanked;
+    try {
+        blanked = blankCommentsAndStrings(block);
+    } catch (error) {
+        if (error instanceof CheckError) return [`the monitor block: ${error.message}`];
+        throw error;
+    }
+    const seenExports = new Set();
+    let requires = 0;
+    let index = 0;
+    try {
+        while (index < blanked.length) {
+            const rest = blanked.slice(index);
+            const space = /^\s+/.exec(rest);
+            if (space) { index += space[0].length; continue; }
+            const fn = /^(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(/.exec(rest);
+            if (fn) {
+                const paramsOpen = index + fn[0].length - 1;
+                const paramsClose = matchBracket(blanked, paramsOpen, '(', ')');
+                const braceMatch = /^\s*\{/.exec(blanked.slice(paramsClose));
+                if (!braceMatch) throw new CheckError(`function ${fn[1]} has no body.`);
+                const bodyOpen = paramsClose + braceMatch[0].length - 1;
+                const bodyClose = matchBracket(blanked, bodyOpen, '{', '}');
+                reasons.push(...refuseModuleAccess(block.slice(paramsOpen, bodyClose), blanked.slice(paramsOpen, bodyClose),
+                    `the monitor block function ${fn[1]}`));
+                index = bodyClose;
+                continue;
+            }
+            const end = statementEnd(blanked, index);
+            const raw = block.slice(index, end).replace(/\s+/g, ' ').trim();
+            const statementBlanked = blanked.slice(index, end);
+            index = end;
+            if (raw === 'let nativeMonitor = null;') continue;
+            const required = /^const ([A-Za-z_$][\w$]*) = require\('([^'\\]+)'\);$/.exec(raw);
+            if (required) {
+                requires += 1;
+                if (required[2] !== ALLOWED_BLOCK_REQUIRE || requires > 1) {
+                    reasons.push(`the monitor block may require only ${ALLOWED_BLOCK_REQUIRE}, once`);
+                }
+                continue;
+            }
+            const exported = /^module\.exports\.([A-Za-z_$][\w$]*) = ([\s\S]+);$/.exec(raw);
+            if (exported && /^\s*module\.exports\.[A-Za-z_$][\w$]*\s*=(?!=)/.test(statementBlanked)) {
+                const name = exported[1];
+                if (!ALLOWED_BLOCK_EXPORTS.includes(name) || seenExports.has(name)) {
+                    reasons.push(`the monitor block may add only ${ALLOWED_BLOCK_EXPORTS.join(', ')} to module.exports, each once (not ${name})`);
+                }
+                seenExports.add(name);
+                const valueAt = statementBlanked.indexOf('=') + 1;
+                reasons.push(...refuseModuleAccess(raw.slice(raw.indexOf('=') + 1), statementBlanked.slice(valueAt),
+                    `the monitor block export ${name}`));
+                continue;
+            }
+            reasons.push(`the monitor block holds a statement outside its allowlist: ${raw.slice(0, 80)}`);
+        }
+    } catch (error) {
+        if (error instanceof CheckError) return [...reasons, `the monitor block: ${error.message}`];
+        throw error;
+    }
+    return reasons;
+}
+
+/**
+ * Whether a body (comments and literal text blanked) still runs the 3.8.3
+ * check as code: the loop expression inside an `if (…)` that throws.
+ * @param {string} body Body text, braces included.
+ * @returns {boolean} True when the check is live code.
+ */
+function keepsLegacyCheck(body) {
+    let blanked;
+    try {
+        blanked = blankCommentsAndStrings(body);
+    } catch (error) {
+        if (error instanceof CheckError) return false;
+        throw error;
+    }
+    const pattern = new RegExp(`(?<![\\w$])if\\s*\\([^{};]*?${escapeRegExp(LEGACY_LOOP_EXPRESSION)}\\s*\\)\\s*\\{?\\s*throw\\s+new\\s+Error\\s*\\(`);
+    return pattern.test(blanked);
+}
+
+function sha256Text(text) {
+    return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
 /** Top-level names the frozen part of `bambu-generation.js` binds. */
@@ -293,9 +515,19 @@ function normalizeAllowedEdit(source) {
  * rule.
  * @param {string} baseSource Source at the base revision.
  * @param {string} currentSource Source at the compared revision.
+ * @param {string[]} [approvedBodies] sha256 values of approved new bodies (test seam).
  * @returns {{status: 'unchanged'|'allowed'|'refused', reasons: string[]}} Verdict.
  */
-function checkGenerationModule(baseSource, currentSource) {
+function blankCommentsAndStringsSafe(code) {
+    try {
+        return blankCommentsAndStrings(code);
+    } catch (error) {
+        if (error instanceof CheckError) return code;
+        throw error;
+    }
+}
+
+function checkGenerationModule(baseSource, currentSource, approvedBodies = APPROVED_ASSERT_BODY_SHA256) {
     const base = String(baseSource).replace(/\r\n/g, '\n');
     const current = String(currentSource).replace(/\r\n/g, '\n');
     if (base === current) return { status: 'unchanged', reasons: [] };
@@ -312,16 +544,23 @@ function checkGenerationModule(baseSource, currentSource) {
     if (before.normalized !== after.normalized) {
         reasons.push('bambu-generation.js changed outside the assertBambuBuildCurrent body and the monitor block');
     }
-    if (!before.body.includes(LEGACY_LOOP_EXPRESSION)) {
+    if (!keepsLegacyCheck(before.body)) {
         reasons.push('the base assertBambuBuildCurrent no longer holds the 3.8.3 loop expression');
     }
-    if (!after.body.includes(LEGACY_LOOP_EXPRESSION)) {
-        reasons.push('the new assertBambuBuildCurrent body must keep the 3.8.3 loop expression verbatim');
+    if (!keepsLegacyCheck(after.body)) {
+        // Comments and strings do not count: the expression must be live code
+        // inside an `if (…)` that throws.
+        reasons.push('the new assertBambuBuildCurrent body must keep the 3.8.3 loop expression verbatim, as code inside an if that throws');
+    }
+    if (after.body !== before.body && !approvedBodies.includes(sha256Text(after.body))) {
+        reasons.push(`the new assertBambuBuildCurrent body (sha256 ${sha256Text(after.body)}) is not the pinned approved body; re-pin APPROVED_ASSERT_BODY_SHA256 after review`);
     }
     const bindings = frozenBindings(after.normalized);
     reasons.push(...refuseUnsafeHunk(after.block, bindings, after.exportNames, 'the monitor block'));
+    reasons.push(...refuseBlockStatements(after.block));
     reasons.push(...refuseUnsafeHunk(after.body.slice(1, -1), bindings, after.exportNames, 'the assertBambuBuildCurrent body'));
-    return { status: reasons.length === 0 ? 'allowed' : 'refused', reasons };
+    reasons.push(...refuseModuleAccess(after.body, blankCommentsAndStringsSafe(after.body), 'the assertBambuBuildCurrent body'));
+    return { status: reasons.length === 0 ? 'allowed' : 'refused', reasons: [...new Set(reasons)] };
 }
 
 /**
@@ -460,7 +699,9 @@ if (require.main === module) {
 }
 
 module.exports = {
+    ALLOWED_BLOCK_EXPORTS,
     ALLOWED_EDIT_LABEL,
+    APPROVED_ASSERT_BODY_SHA256,
     BLOB_IDENTICAL_INPUTS,
     BUNDLE_AND_BUILD_INPUTS,
     CheckError,
@@ -469,6 +710,7 @@ module.exports = {
     MEASUREMENT_CONFIG_INPUTS,
     MONITOR_BLOCK_BEGIN,
     MONITOR_BLOCK_END,
+    blankCommentsAndStrings,
     checkGenerationModule,
     createGitReader,
     normalizeAllowedEdit,

@@ -20,6 +20,13 @@ const { EXPORT_JOB_ID, defaultExportFiles } = require('./export-files');
 const EXPORT_CONTRACT = 1;
 const POLL_AFTER_MS = 2000;
 const STATUS_URL_PREFIX = '/bambu/export/jobs/';
+/**
+ * Bytes of completed, not yet fetched-and-deleted result files the store
+ * keeps before it refuses new asynchronous exports (429 queue-full). The
+ * result files share the input volume with the live slice workspaces, so a
+ * client that never deletes its results must not be able to fill it.
+ */
+const DEFAULT_MAX_RETAINED_BYTES = 4 * 1024 * 1024 * 1024;
 
 /** Abort reason of a job whose deadline passed (sync or async). */
 class ExportDeadlineError extends Error {
@@ -63,6 +70,7 @@ function createExportJobStore(options = {}) {
     // Completed records are bounded too, so a flood of finished-but-unfetched
     // results cannot grow memory or disk without limit before their TTL.
     const maxRetained = options.maxRetained ?? Math.max(64, maxJobs * 16);
+    const maxRetainedBytes = options.maxRetainedBytes ?? DEFAULT_MAX_RETAINED_BYTES;
     const now = options.now || Date.now;
     const setTimer = options.setTimeout || setTimeout;
     const clearTimer = options.clearTimeout || clearTimeout;
@@ -72,6 +80,18 @@ function createExportJobStore(options = {}) {
     const countOutcome = options.incrementExportJob || defaultIncrementExportJob;
     const jobs = new Map();
     let syncInFlight = 0;
+    let retainedBytes = 0;
+
+    function fileBytes(job) {
+        const bytes = Number(job.file?.size);
+        return Number.isFinite(bytes) && bytes > 0 ? bytes : 0;
+    }
+
+    /** Remove a record from the map, releasing the bytes its result held. */
+    function forget(job) {
+        jobs.delete(job.id);
+        if (job.state === 'completed') retainedBytes = Math.max(0, retainedBytes - fileBytes(job));
+    }
 
     function inFlight() {
         let count = syncInFlight;
@@ -80,7 +100,7 @@ function createExportJobStore(options = {}) {
     }
 
     function hasCapacity() {
-        return inFlight() < maxJobs && jobs.size < maxRetained;
+        return inFlight() < maxJobs && jobs.size < maxRetained && retainedBytes < maxRetainedBytes;
     }
 
     /**
@@ -180,13 +200,13 @@ function createExportJobStore(options = {}) {
     function discard(job) {
         if (!isLive(job)) return;
         clearTimers(job);
-        jobs.delete(job.id);
+        forget(job);
     }
 
     function expire(job) {
         if (!isLive(job)) return;
         clearTimers(job);
-        jobs.delete(job.id);
+        forget(job);
         swallow(() => countOutcome('expired'));
         emitDeleted(job, 'expired', 'ttl');
         void removeFiles(job);
@@ -209,6 +229,7 @@ function createExportJobStore(options = {}) {
         job.completedAt = now();
         job.fileExpiresAt = job.completedAt + resultTtlMs;
         job.file = result?.file || null;
+        retainedBytes += fileBytes(job);
         // The stored view may depend on the completion time (`file_expires_at`).
         job.result = { ...result, view: typeof result?.view === 'function' ? result.view(job) : result?.view };
         job.ttlTimer = setTimer(() => {
@@ -242,7 +263,7 @@ function createExportJobStore(options = {}) {
         if (!job) return false;
         const running = job.state !== 'completed';
         clearTimers(job);
-        jobs.delete(job.id);
+        forget(job);
         if (running && !job.controller.signal.aborted) job.controller.abort(new ExportCancelledError());
         if (running) swallow(() => countOutcome('cancelled'));
         emitDeleted(job, running ? 'cancelled' : 'deleted', running ? 'abort' : 'discard');
@@ -310,6 +331,10 @@ function createExportJobStore(options = {}) {
         return jobs.size;
     }
 
+    function retained() {
+        return { results: jobs.size, bytes: retainedBytes, maxResults: maxRetained, maxBytes: maxRetainedBytes };
+    }
+
     return {
         acceptedView,
         admit,
@@ -323,6 +348,7 @@ function createExportJobStore(options = {}) {
         lookup,
         markRunning,
         reserveSync,
+        retained,
         size,
         view,
         deadlineMs,
@@ -340,6 +366,7 @@ function getDefaultExportJobStore() {
 }
 
 module.exports = {
+    DEFAULT_MAX_RETAINED_BYTES,
     EXPORT_CONTRACT,
     POLL_AFTER_MS,
     STATUS_URL_PREFIX,

@@ -151,7 +151,11 @@ function createSliceHandlers(options = {}) {
             return null;
         }
         if (early) return early;
-        return runArchivePreflight(req, res, preflight);
+        // The binding is memoised on the request, so the submission reuses
+        // it; with its signal a departed client leaves the preflight's FIFO
+        // instead of being inflated and tokenized for nobody.
+        const binding = bindAbort(req, res);
+        return runArchivePreflight(req, res, preflight, binding.signal);
     }
     // `null` disables the asynchronous mode; the default store is created on
     // the first asynchronous submission from the validated resource policy.

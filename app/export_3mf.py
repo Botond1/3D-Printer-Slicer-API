@@ -244,9 +244,12 @@ def verify_package(out_path: str, data: bytes, count: int, metadata: list[tuple[
         raise ExportWriteError("Triangle count did not round-trip.")
     for index, triangle in enumerate(triangles):
         try:
-            corners = [vertices[int(triangle.get(key))] for key in ("v1", "v2", "v3")]
+            refs = [int(triangle.get(key)) for key in ("v1", "v2", "v3")]
+            corners = [vertices[ref] for ref in refs]
         except (TypeError, ValueError, IndexError) as error:
             raise ExportWriteError("Triangle references an unknown vertex.") from error
+        if len(set(refs)) < 3:
+            raise ExportWriteError("Triangle repeats a vertex index.")
         if tuple(corners) != triangle_vertex_bytes(data, index):
             raise ExportWriteError("Triangle soup differs from the STL.")
 
@@ -263,10 +266,17 @@ def run(arguments: list[str]) -> dict:
     metadata = load_metadata(metadata_path)
     # Every coordinate must be finite before anything is written.
     for index in range(count):
-        for raw in triangle_vertex_bytes(data, index):
+        corners = triangle_vertex_bytes(data, index)
+        for raw in corners:
             for offset in (0, 4, 8):
                 if not math.isfinite(struct.unpack_from("<f", raw, offset)[0]):
                     raise ExportInputError("STL holds a non-finite coordinate.")
+        # Vertices are shared when bitwise equal, so a triangle with two equal
+        # corners would be written with a repeated index, which the 3MF core
+        # specification forbids (strict readers refuse it). Such a mesh is
+        # exported as `stl` only: this is a write failure (exit 1).
+        if len(set(corners)) < 3:
+            raise ExportWriteError("A triangle repeats a vertex; the 3MF core specification forbids it (use stl).")
     try:
         vertex_count = write_package(data, count, metadata, out_path)
         verify_package(out_path, data, count, metadata)

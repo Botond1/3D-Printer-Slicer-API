@@ -17,6 +17,8 @@ const {
     deleteArtifact,
     listPendingArtifactDeletions,
     resetPendingArtifactDeletionsForTests,
+    LOST_LEASE_MS,
+    PENDING_WATCH_MAX_FAILURES,
     SWEEP_PHASE
 } = require('../../../app/services/artifact-store');
 const { setEventWriter } = require('../../../app/services/observability/events');
@@ -83,16 +85,72 @@ test('a leased artifact is marked pending and is gone as soon as the last lease 
     assert.deepEqual(listPendingArtifactDeletions(), []);
 });
 
-test('a lease whose release is never called: the next periodic sweep removes it far below the TTL', async (t) => {
+test('a lease whose release is never called: the first periodic sweep after the lost-lease age removes it far below the TTL', async (t) => {
     const outputRoot = await createOutputRoot(t);
     const artifact = await createManagedArtifact(outputRoot, 4, NOW);
     acquireArtifactLease([artifact.realPath]); // never released
-    assert.deepEqual(await deleteArtifact(artifact.artifactId, { outputRoot }), { state: 'pending' });
-    const summary = await cleanupManagedArtifacts({ outputRoot, clock: () => NOW + 1_000, phase: SWEEP_PHASE });
+    assert.deepEqual(await deleteArtifact(artifact.artifactId, { outputRoot, clock: () => NOW }), { state: 'pending' });
+    // A sweep while the lease may still be a live download leaves it (CONC-1).
+    const early = await cleanupManagedArtifacts({ outputRoot, clock: () => NOW + 300_000, phase: SWEEP_PHASE });
+    assert.equal(early.deletedPending, 0);
+    assert.equal(await exists(artifact.artifactPath), true, 'a live download keeps its file');
+    assert.deepEqual(listPendingArtifactDeletions(), [artifact.artifactId]);
+    assert.ok(LOST_LEASE_MS < resolveResourcePolicy({ ARTIFACT_TTL_MS: '3600000' }).ARTIFACT_TTL_MS, 'below the live TTL');
+    // While the overriding sweep unlinks the file no new lease can start.
+    const leaseAttempts = [];
+    const removeFile = async (target, options) => {
+        try {
+            acquireArtifactLease([artifact.realPath]).release();
+            leaseAttempts.push('acquired');
+        } catch (error) {
+            leaseAttempts.push(error.code);
+        }
+        return require('node:fs/promises').rm(target, options);
+    };
+    const summary = await cleanupManagedArtifacts({
+        outputRoot, clock: () => NOW + LOST_LEASE_MS, phase: SWEEP_PHASE, removeFile
+    });
     assert.equal(summary.deletedPending, 1);
+    assert.deepEqual(leaseAttempts, ['ARTIFACT_BUSY', 'ARTIFACT_BUSY']);
     assert.equal(summary.verdict, 'satisfied');
     assert.equal(await exists(artifact.artifactPath), false);
     assert.equal(await exists(artifact.markerPath), false);
+    assert.deepEqual(listPendingArtifactDeletions(), []);
+});
+
+test('a released mark whose removal keeps failing: one watcher pass at a time, then left to the periodic sweep (CONC-2)', async (t) => {
+    const outputRoot = await createOutputRoot(t);
+    const artifact = await createManagedArtifact(outputRoot, 7, NOW);
+    let active = 0;
+    let maxActive = 0;
+    let attempts = 0;
+    const removeFile = async () => {
+        attempts += 1;
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        // Slower than several 10 ms watcher ticks.
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        active -= 1;
+        const error = new Error('read-only file system');
+        error.code = 'EROFS';
+        throw error;
+    };
+    const lease = acquireArtifactLease([artifact.realPath]);
+    assert.deepEqual(await deleteArtifact(artifact.artifactId, { outputRoot, removeFile }), { state: 'pending' });
+    lease.release();
+    await waitFor(() => attempts >= PENDING_WATCH_MAX_FAILURES);
+    // Well past the point where an unguarded watcher would have retried again.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(maxActive, 1, 'never two watcher passes at once');
+    assert.equal(attempts, PENDING_WATCH_MAX_FAILURES, 'the watcher stops retrying after its failure budget');
+    const failures = events.filter((entry) => entry.event === 'artifact.cleanup'
+        && entry.artifact_id === artifact.artifactId && entry.error_code === 'ARTIFACT_CLEANUP_FAILED');
+    assert.equal(failures.length, PENDING_WATCH_MAX_FAILURES);
+    assert.deepEqual(listPendingArtifactDeletions(), [artifact.artifactId], 'the mark stays for the periodic sweep');
+    // The periodic sweep still tries (and, with a working volume, deletes).
+    const summary = await cleanupManagedArtifacts({ outputRoot, clock: () => NOW, phase: SWEEP_PHASE, removeFile: require('node:fs/promises').rm });
+    assert.equal(summary.deletedPending, 1);
+    assert.equal(await exists(artifact.artifactPath), false);
     assert.deepEqual(listPendingArtifactDeletions(), []);
 });
 

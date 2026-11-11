@@ -394,3 +394,37 @@ test('3mf through the real export_3mf.py round-trips the placed STL bitwise', as
     assert.equal(verdict.trim(), 'OK');
     assert.deepEqual(await remainingWorkspaces(context), []);
 });
+
+test('the preflight verdict moves to the run copy, so the job does not tokenize the archive again (SEC-2)', async (t) => {
+    const {
+        clearExpansionVerdictsForTests, consumeExpansionVerdict, registerExpansionVerdict
+    } = require('../../../app/services/slice/three-mf-expansion');
+    clearExpansionVerdictsForTests();
+    t.after(clearExpansionVerdictsForTests);
+    const context = await createContext(t);
+    const uploadStats = await fs.lstat(context.uploadPath, { bigint: true });
+    const counts = { triangles: 4, instances: 1, objects: 1 };
+    registerExpansionVerdict({
+        realpath: await fs.realpath(context.uploadPath),
+        dev: uploadStats.dev, ino: uploadStats.ino, size: uploadStats.size, mtimeNs: uploadStats.mtimeNs, counts
+    });
+    const consumed = [];
+    const runner = createExportRunner({
+        createWorkspace: context.createWorkspace,
+        resolveRequestOrResponse: passResolve,
+        prepareSliceJob: fakePrepare([], {
+            before: async (res, request) => {
+                // What the job's own inspection does with the file it reads.
+                const stats = await fs.lstat(request.inputFile, { bigint: true });
+                consumed.push(consumeExpansionVerdict(await fs.realpath(request.inputFile), stats));
+            }
+        }),
+        inspectMesh: async () => ({ volume_mm3: 1 })
+    });
+    const result = await runner(input(context), new AbortController().signal, context.persist);
+    assert.equal(result.status, 200);
+    assert.deepEqual(consumed, [counts], 'the run copy carries the verdict');
+    const after = await fs.lstat(context.uploadPath, { bigint: true });
+    assert.equal(consumeExpansionVerdict(await fs.realpath(context.uploadPath), after), null,
+        'the upload\'s verdict was consumed, not left to its TTL');
+});

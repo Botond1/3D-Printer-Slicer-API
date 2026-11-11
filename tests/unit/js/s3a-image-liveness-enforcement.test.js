@@ -377,3 +377,25 @@ test('runtime diagnostic evidence boundary rejects path, name, shape, and size a
         });
     }
 });
+
+test('C1-4: HIGH/CRITICAL advisories moved to ignoredMatches by only-fixed are counted as unfixed, not blocking', () => {
+    const { countUnfixedIgnored } = require(TRIAGE_HELPER_PATH);
+    const ignored = (severity, rules) => ({ vulnerability: { id: `CVE-${severity}`, severity }, appliedIgnoreRules: rules });
+    const report = {
+        matches: [],
+        ignoredMatches: [
+            ignored('Critical', [{ 'fix-state': 'not-fixed' }]),
+            ignored('High', [{ 'fix-state': 'wont-fix' }]),
+            ignored('High', [{ vulnerability: 'CVE-LISTED', reason: 'allowlisted' }]),
+            ignored('Medium', [{ 'fix-state': 'not-fixed' }])
+        ]
+    };
+    assert.deepEqual(countUnfixedIgnored(report), { critical: 1, high: 1 });
+    const summary = renderSummary(report);
+    assert.match(summary, /Critical matches: 0/);
+    assert.match(summary, /Unfixed \(no fixed version, not blocking\): critical 1, high 1/);
+    assert.match(renderSummary({ matches: [] }), /Unfixed \(no fixed version, not blocking\): critical 0, high 0/);
+    assert.throws(() => renderSummary({ matches: [], ignoredMatches: {} }), /triage_parser_failure/);
+    const gate = require('node:fs').readFileSync(require('node:path').resolve(__dirname, '../../../.github/actions/exact-image-gate/action.yml'), 'utf8');
+    assert.match(gate, /Unfixed \(no fixed version, not blocking\)/, 'the scan gate summary names them too');
+});

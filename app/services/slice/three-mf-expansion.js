@@ -21,7 +21,10 @@
  * part's build items and refused as soon as a limit is passed. The count
  * over-counts (an object's mesh and components both count, object types are
  * ignored) but never under-counts what the Python build walk would flatten.
- * Missing references and cycles are left to Python, as in 3.8.3.
+ * Missing references and cycles are left to Python, as in 3.8.3, but they
+ * are bounded: every distinct (part, id) the archive names, declared or not,
+ * counts against the object limit, and every component reference and build
+ * item counts against the instance limit.
  */
 
 const { SliceResourceError, labelArchiveError } = require('./resource-errors');
@@ -237,6 +240,8 @@ class ExpansionCounter {
         this.edges = [];
         this.items = [];
         this.objects = 0;
+        this.references = 0;
+        this.walkVisits = 0;
         this.finished = null;
     }
 
@@ -244,6 +249,13 @@ class ExpansionCounter {
         const key = `${partKey}\u0000${objectId}`;
         let index = this.nodeIndex.get(key);
         if (index === undefined) {
+            // Every distinct (part, id) the archive names, declared or only
+            // referenced, takes a node and memo slots: bound them all, so
+            // references to undeclared ids cannot grow the scan unbounded.
+            if (this.nodeIndex.size >= this.limits.maxObjects) {
+                throw expansionExceeded('3MF names more model objects than the allowed limit.',
+                    this.limits.maxObjects, this.counts());
+            }
             index = this.triangles.length;
             this.nodeIndex.set(key, index);
             this.triangles.push(0);
@@ -266,7 +278,22 @@ class ExpansionCounter {
         return this.node(partKey, objectId);
     }
 
+    /**
+     * Count one component reference or build item. Each can place an
+     * instance, so more of them than the instance limit is refused before
+     * the edge lists grow unbounded (an over-count, as the rest of the scan).
+     */
+    countReference() {
+        this.references += 1;
+        if (this.references > this.limits.maxInstances) {
+            throw expansionExceeded(
+                '3MF holds more component references and build items than the allowed instance count.',
+                this.limits.maxInstances, this.counts());
+        }
+    }
+
     addEdge(from, to) {
+        this.countReference();
         const list = this.edges[from];
         if (list) list.push(to);
         else this.edges[from] = [to];
@@ -306,6 +333,8 @@ class ExpansionCounter {
         const walk = (node, depth) => {
             const slot = node * levels + depth;
             if (memoTriangles[slot] >= 0) return slot;
+            // Memo misses: the walk's work, which tests bound (not its time).
+            this.walkVisits += 1;
             let triangles = this.triangles[node];
             let instances = triangles > 0 ? 1 : 0;
             const targets = this.edges[node];
@@ -508,6 +537,7 @@ class PartScanner {
                 if (kind === KIND_COMPONENT) {
                     if (this.current >= 0) counter.addEdge(this.current, counter.node(targetPart, objectId));
                 } else if (this.isRoot) {
+                    counter.countReference();
                     counter.items.push(counter.node(attributes.path ? targetPart : ROOT_MODEL_PART, objectId));
                 }
             }
