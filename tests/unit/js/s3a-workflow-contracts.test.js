@@ -663,8 +663,11 @@ function validateBuildInputs(step, errors) {
     }
     const allowedKeys = [
         'context', 'file', 'platforms', 'load', 'push', 'pull', 'no-cache',
-        'provenance', 'sbom', 'tags', 'labels', 'github-token'
+        'provenance', 'sbom', 'tags', 'labels', 'github-token', 'add-hosts'
     ].sort();
+    // 3.9.0: the two Ubuntu package hosts only, resolved by the audited step before the build.
+    addError(errors, directScalar(withBlock, 'add-hosts') === '${{ steps.package_hosts.outputs.add_hosts }}',
+        'image: build input add-hosts must be the package_hosts step output');
     const actualKeys = directKeys(withBlock).sort();
     addError(errors, JSON.stringify(actualKeys) === JSON.stringify(allowedKeys),
         'image: build with mapping must contain only the exact audited input-key allowlist');

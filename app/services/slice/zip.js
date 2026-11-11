@@ -11,6 +11,7 @@ const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { invalidArchive, labelArchiveError, resourceLimit } = require('./resource-errors');
 const { isUnsafeZipPath, assertDeclaredEntryPolicy } = require('./zip-policy');
 const { archiveIdentity, openZipWithRetry } = require('./zip-open');
+const { assertCentralDirectoryConsistent } = require('./zip-directory');
 const { extractZipEntry } = require('./zip-stream');
 
 /** Platform metadata basenames that desktop archivers add and that carry no model data. */
@@ -54,6 +55,12 @@ async function inspectZipFile(zipPath, supportedExts, options = {}) {
     if (!before.isFile() || before.isSymbolicLink()) throw labelArchiveError(invalidArchive('Unsafe ZIP archive target.'), 'ARCHIVE_UNSAFE_PATH');
     const expectedArchiveIdentity = archiveIdentity(before);
     const zipFile = await openZipWithRetry(zipPath);
+    try {
+        await assertCentralDirectoryConsistent(zipPath, zipFile);
+    } catch (error) {
+        zipFile.close();
+        throw error;
+    }
 
     return new Promise((resolve, reject) => {
         let totalUncompressed = 0;

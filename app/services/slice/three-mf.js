@@ -6,6 +6,7 @@ const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { invalidArchive, labelArchiveError, resourceLimit } = require('./resource-errors');
 const { isUnsafeZipPath, assertDeclaredEntryPolicy } = require('./zip-policy');
 const { archiveIdentity, openZipWithRetry } = require('./zip-open');
+const { assertCentralDirectoryConsistent } = require('./zip-directory');
 const { ExpansionCounter, consumeExpansionVerdict, isModelPart } = require('./three-mf-expansion');
 
 const REQUIRED_PARTS = new Set(['[Content_Types].xml', '_rels/.rels', '3D/3dmodel.model']);
@@ -149,6 +150,7 @@ async function inspectThreeMfPackage(filePath, options = {}) {
     let actualTotal = 0;
 
     try {
+        await assertCentralDirectoryConsistent(filePath, zipFile);
         await new Promise((resolve, reject) => {
             let settled = false;
             const fail = (error) => {
