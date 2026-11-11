@@ -164,3 +164,43 @@ jobs:
             git merge-base --is-ancestor "$base_sha" "$CANDIDATE_SHA"
           fi
           git diff --check "$base_sha" "$CANDIDATE_SHA" --
+
+      - name: Generation and live-contract gate
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The Bambu measurement_generation must not move (3.9.0 §4.11): every
+          # processing file, bundle input and measurement configuration file is
+          # blob-identical to the base, bambu-generation.js differs by allowed
+          # hunks only, and the live plugin's validators accept every answer.
+          if [ "$EVENT_NAME" = "push" ]; then
+            generation_base_sha="$EVENT_BEFORE"
+          else
+            generation_base_sha="$(git merge-base 'refs/remotes/origin/main' "$CANDIDATE_SHA")"
+          fi
+          if [[ ! "$generation_base_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "No usable generation base for $CANDIDATE_SHA." >&2
+            exit 1
+          fi
+          node scripts/check-generation-inputs.js "$generation_base_sha" --ref "$CANDIDATE_SHA"
+          node --test tests/unit/js/check-generation-inputs.test.js tests/unit/js/generation-golden.test.js \
+            tests/unit/js/measurement-config-golden.test.js tests/unit/js/grype-ignore.test.js
+          node --test tests/contract/live-plugin-29a4a1c7/*.test.js
+
+      - name: Python geometry tests (pinned stack)
+        env:
+          R3D_REQUIRE_GEOMETRY_DEPS: '1'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libglu1-mesa libxcursor1 libxft2 libxinerama1
+          geometry_venv="$RUNNER_TEMP/r3d-geometry-venv"
+          python -m venv "$geometry_venv"
+          "$geometry_venv/bin/python" -m pip install --no-cache-dir -r requirements.txt
+          "$geometry_venv/bin/python" -m pip freeze --all > "$RUNNER_TEMP/r3d-geometry-freeze.txt"
+          node -e "const fs = require('node:fs'); const { compareFreeze } = require('./tests/golden/image-golden-gate'); const reasons = compareFreeze(fs.readFileSync(process.argv[1], 'utf8'), fs.readFileSync('tests/golden/python-geometry-stack-3.8.3.txt', 'utf8')); for (const reason of reasons) console.error(reason); process.exit(reasons.length === 0 ? 0 : 1);" "$RUNNER_TEMP/r3d-geometry-freeze.txt"
+          "$geometry_venv/bin/python" scripts/run-python-tests.py

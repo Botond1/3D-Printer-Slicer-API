@@ -1,0 +1,16 @@
+# Grype ignore list for the exact-image gate (3.9.0 specification R21, §7).
+#
+# The scan runs with only-fixed: true, so an advisory without a fixed version
+# never blocks a release; a fixable HIGH or CRITICAL still does. This list is
+# the only other way past the gate, and every entry is temporary:
+#
+#   ignore:
+#     - vulnerability: CVE-2026-12345        # or GHSA-xxxx-xxxx-xxxx
+#       package: example-package             # optional: limit to one package
+#       reason: "Why it cannot reach us and what removes the entry."
+#       expires: 2026-12-31                  # YYYY-MM-DD, at most 180 days ahead
+#
+# An entry without a reason, without an expiry, or past its expiry fails
+# tests/unit/js/grype-ignore.test.js and the image gate step that renders this
+# file into the scanner configuration (tests/golden/grype-ignore-policy.js).
+ignore: []

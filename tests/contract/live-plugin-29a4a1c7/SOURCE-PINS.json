@@ -1,0 +1,16 @@
+{
+  "plugin": "r3d-quote",
+  "build": "29a4a1c7",
+  "commit": "29a4a1c76ac27b56cb322a816419730613763a5a",
+  "hash": "sha256 of the Git blob bytes (git show 29a4a1c7:<path>), not of a CRLF checkout",
+  "root": "plugin/r3d-quote/src",
+  "files": {
+    "Slicer/TechnicalReceipt.php": { "sha256": "9c0e50b8265f1c1b68625941cd44d3767106c0b3a806a48503a61730801c8854", "ported": ["validate", "validateGeometryDescription", "validateResponseAgreement", "infill"] },
+    "Slicer/AsyncSliceAcceptance.php": { "sha256": "1d7a1c6bd0309da21abf02c6b59a9c09bab1ed292c9a1e289e20c6e802378539", "ported": ["fromResponse", "retryAfter", "nonNegativeInt", "validJobId"] },
+    "Slicer/AsyncSliceStatus.php": { "sha256": "3b9d27eb967ba435792de849531b8afa4c5eca9be54b573c05a894394e3c6f2e", "ported": ["fromResponse"] },
+    "Slicer/HttpSlicerClient.php": { "sha256": "d4ca61b6a715d4b42b4deccd6a5cc343f4bf7ec760598fa9bdead5fc2cab88d7", "ported": ["answer", "gatewayGap", "machineCode", "interpretAnswer", "completed", "status (401/403)", "toSliceResult", "responseInfill", "mapErrorCode", "buildMultipartBody (field order)"] },
+    "Slicer/SlicerContract.php": { "sha256": "561ee21f956d7c108e8315c592b8d9d4a52e090fed7cd88c73197d2cad3c384a", "ported": ["assert", "assertFacts", "positiveNumber", "layerHeightAllowed"] },
+    "Pricing/IdentitySignature.php": { "sha256": "33a44e13e72b3fedf1a0fe64b02f24f65fe8fdbddc28aebad908c58a5b9e332b", "ported": ["technicalReceipt", "javascriptJson", "javascriptNumber", "javascriptString"] },
+    "Quote/QuoteService.php": { "sha256": "00ecc37d2a49aa5655772e06209424380ba723d7667500be1402a02e42c36d64", "ported": ["classifyFailure", "OUTAGE_CODES", "OUTAGE_PREFIXES", "OUTAGE_MARKERS", "GEOMETRY_CODES", "OUT_OF_BOUNDS_CODE", "DIMENSIONS_REFUSED_CODE"] }
+  }
+}

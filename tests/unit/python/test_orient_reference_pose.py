@@ -24,6 +24,8 @@ HAS_GEOMETRY_STACK = (
     importlib.util.find_spec("trimesh") is not None
     and importlib.util.find_spec("numpy") is not None
 )
+if not HAS_GEOMETRY_STACK and __import__("os").environ.get("R3D_REQUIRE_GEOMETRY_DEPS") == "1":
+    raise ImportError("R3D_REQUIRE_GEOMETRY_DEPS=1: the pinned geometry stack is required here, not skipped")
 # Rotation of 90 degrees about X in the column-vector convention the contract uses.
 RX_90 = [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]]
 IDENTITY = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]

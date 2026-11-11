@@ -12,6 +12,8 @@ try:
     AVAILABLE = True
 except ImportError:
     AVAILABLE = False
+if not AVAILABLE and __import__("os").environ.get("R3D_REQUIRE_GEOMETRY_DEPS") == "1":
+    raise ImportError("R3D_REQUIRE_GEOMETRY_DEPS=1: the pinned geometry stack is required here, not skipped")
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 NS = 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02'

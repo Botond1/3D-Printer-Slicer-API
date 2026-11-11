@@ -52,7 +52,14 @@ function initializeBambuGeneration(version, options = {}) {
 }
 
 function assertBambuBuildCurrent() {
-    if (!generation || nativeIdentity.some(({ file, sha256 }) => hashNativeFile(file) !== sha256)) {
+    // Synchronous: returns undefined and throws synchronously (hashed callers do not await it).
+    if (!generation) throw new Error('Bambu runtime build changed after startup.');
+    if (nativeMonitor && nativeMonitor.enabled) {
+        nativeMonitor.assertCurrentSync();
+        return;
+    }
+    // NATIVE_IDENTITY_MONITOR=off, or the startup verification failed: the 3.8.3 loop.
+    if (nativeIdentity.some(({ file, sha256 }) => hashNativeFile(file) !== sha256)) {
         throw new Error('Bambu runtime build changed after startup.');
     }
 }
@@ -68,3 +75,42 @@ function catalogueGenerationFields() {
         engine_build_sha256: current.engine.build_sha256, profile_bundle_sha256: current.bundle_sha256 } : {};
 }
 module.exports = { PROCESSING_SCHEMA, initializeBambuGeneration, getBambuGeneration, catalogueGenerationFields, assertBambuBuildCurrent };
+// BEGIN r3d-native-identity-monitor (3.9.0)
+/** Native identity off the request path (3.9.0 §4.1); null until started. */
+let nativeMonitor = null;
+const nativeIdentityMonitorModule = require('./native-identity-monitor');
+
+/**
+ * Create the native identity monitor from this module's startup identity and
+ * run its awaited streamed verification; on success the background re-hash
+ * starts and `assertBambuBuildCurrent()` becomes a stat check. On failure, or
+ * with NATIVE_IDENTITY_MONITOR=off, the 3.8.3 loop keeps serving.
+ * Call after `initializeBambuGeneration`.
+ * @param {object} [options] Overrides for `createNativeIdentityMonitor` (tests).
+ * @returns {Promise<object>} The monitor (`stop()` for shutdown, `getStatus()`).
+ */
+async function startNativeIdentityMonitor(options = {}) {
+    if (!generation) throw new Error('Bambu runtime identity is unavailable.');
+    if (nativeMonitor) nativeMonitor.stop();
+    const monitor = nativeIdentityMonitorModule.createNativeIdentityMonitor(
+        nativeIdentity.map(({ file, sha256 }) => ({ file, sha256 })),
+        { hashFileSync: hashNativeFile, ...options });
+    nativeMonitor = monitor;
+    await monitor.initialize();
+    monitor.start();
+    return monitor;
+}
+
+/**
+ * Labels for `/operations/readiness` (never `/ready`): `reasons` holds
+ * `IDENTITY_FAILURE_REASONS` values.
+ * @returns {Readonly<object>} Status.
+ */
+function getNativeIdentityStatus() {
+    return nativeMonitor ? nativeMonitor.getStatus() : nativeIdentityMonitorModule.notStartedStatus();
+}
+
+module.exports.startNativeIdentityMonitor = startNativeIdentityMonitor;
+module.exports.getNativeIdentityStatus = getNativeIdentityStatus;
+module.exports.IDENTITY_FAILURE_REASONS = nativeIdentityMonitorModule.IDENTITY_FAILURE_REASONS;
+// END r3d-native-identity-monitor (3.9.0)

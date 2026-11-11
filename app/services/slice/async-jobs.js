@@ -20,6 +20,7 @@ const {
 } = require('./async-job-views');
 
 const JOB_ID_PATTERN = /^sj_[a-f0-9]{32}$/;
+const ARTIFACT_ID_PATTERN = /^artifact-[a-f0-9]{32}$/;
 const CAPACITY_RETRY_AFTER_SECONDS = 5;
 const DEADLINE_RESULT = Object.freeze({
     success: false,
@@ -58,7 +59,8 @@ function resolveLimits(options) {
 /**
  * Create an isolated async job store.
  * @param {object} [options] Limits (`deadlineMs`, `resultTtlMs`, `maxJobs` or a
- *   resolved `policy`), clock/timer seams, `createId`, and `emitEvent`.
+ *   resolved `policy`), clock/timer seams, `createId`, `emitEvent`, and
+ *   `deleteArtifact` (3.9.0; default `artifact-store.deleteArtifact`).
  * @returns {object} Store operations.
  */
 function createAsyncSliceJobStore(options = {}) {
@@ -68,6 +70,8 @@ function createAsyncSliceJobStore(options = {}) {
     const clearTimer = options.clearTimeout || clearTimeout;
     const createId = options.createId || createJobId;
     const publish = options.emitEvent || emitEvent;
+    const removeArtifact = options.deleteArtifact
+        || ((artifactId) => require('../artifact-store').deleteArtifact(artifactId));
     const jobs = new Map();
 
     function emit(eventName, job, data = {}) {
@@ -164,7 +168,7 @@ function createAsyncSliceJobStore(options = {}) {
         const job = {
             id: uniqueId(), principal, requestId, controller, admission,
             state: 'queued', acceptedAt, deadlineAt: acceptedAt + limits.deadlineMs,
-            captured: false, completedAt: null, result: null, deadlineTimer: undefined, retentionTimer: undefined
+            captured: false, completedAt: null, result: null, artifactId: null, deadlineTimer: undefined, retentionTimer: undefined
         };
         jobs.set(job.id, job);
         startTimer(job, 'deadlineTimer', limits.deadlineMs, () => expireDeadline(job));
@@ -185,14 +189,19 @@ function createAsyncSliceJobStore(options = {}) {
      * Record the sync-equivalent answer of a live job and start its retention.
      * @param {object} job Live job.
      * @param {{status: number, body: object, retryAfterSeconds?: number|null}} result Captured answer.
+     * @param {{artifactId?: string|null}} [details] The promoted artifact of the
+     *   answer (3.9.0): a later DELETE of the completed job removes it.
      * @returns {boolean} Whether the job was still live.
      */
-    function complete(job, result) {
+    function complete(job, result, details = {}) {
         if (!isLive(job)) return false;
         stopTimer(job, 'deadlineTimer');
         job.state = 'completed';
         job.completedAt = now();
         job.result = Object.freeze({ ...result });
+        job.artifactId = typeof details?.artifactId === 'string' && ARTIFACT_ID_PATTERN.test(details.artifactId)
+            ? details.artifactId
+            : null;
         // A retained result must not pin the request, its queue task or signal.
         job.controller = null;
         job.admission = null;
@@ -228,7 +237,21 @@ function createAsyncSliceJobStore(options = {}) {
     }
 
     /**
-     * Cancel a live job or discard a finished one.
+     * Delete a completed job's sliced artifact (3.9.0). Fire and forget: the
+     * DELETE answers 204 at once; a leased artifact is deleted on release.
+     */
+    function discardArtifact(job) {
+        if (!job.artifactId) return;
+        try {
+            Promise.resolve(removeArtifact(job.artifactId)).catch(() => {});
+        } catch {
+            // The record is already gone; the artifact TTL bounds the file.
+        }
+    }
+
+    /**
+     * Cancel a live job, or discard a finished one together with its sliced
+     * artifact (3.9.0). The answer does not depend on the artifact's fate.
      * @returns {boolean} False when the job is unknown to this principal.
      */
     function cancel(jobId, principal, reason = 'cancelled') {
@@ -238,6 +261,8 @@ function createAsyncSliceJobStore(options = {}) {
         remove(job);
         if (isLiveState(previousState)) {
             job.controller.abort(abortError('Slice job was cancelled.', 'SLICE_JOB_CANCELLED'));
+        } else if (previousState === 'completed') {
+            discardArtifact(job);
         }
         emit('async.cancelled', job, { outcome: 'cancelled', extra: { queue_state: previousState, reason } });
         return true;

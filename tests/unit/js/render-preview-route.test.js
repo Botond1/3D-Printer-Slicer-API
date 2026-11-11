@@ -28,7 +28,7 @@ function routeLayer(router) {
     return layer.route.stack;
 }
 
-test('POST /render is the only route and keeps limiter -> auth -> lifecycle order', () => {
+test('POST /render is the only route and keeps auth -> limiter -> lifecycle order', () => {
     assert.equal(RENDER_ROUTE_PATH, '/render');
     assert.equal(UPLOAD_FIELD_NAME, 'choosenFile');
     const marks = [];
@@ -42,6 +42,8 @@ test('POST /render is the only route and keeps limiter -> auth -> lifecycle orde
     assert.equal(router.stack.filter((item) => item.route).length, 1);
     const stack = routeLayer(router);
     assert.equal(stack.length, 3);
+    // 3.9.0: authentication (with the failure-bucket charge) runs first.
+    assert.equal(stack[0].handle.name, 'authenticateOrCharge');
 });
 
 test('rate limiter and authentication reject before workspace allocation', async () => {
@@ -60,7 +62,7 @@ test('rate limiter and authentication reject before workspace allocation', async
         });
         const stack = routeLayer(router);
         const res = { status() { return this; }, end() {} };
-        const index = rejecting === 'rateLimiter' ? 0 : 1;
+        const index = rejecting === 'rateLimiter' ? 1 : 0;
         await new Promise((resolve) => {
             stack[index].handle({ method: 'POST' }, res, () => assert.fail(`${rejecting} should settle response`));
             setImmediate(resolve);

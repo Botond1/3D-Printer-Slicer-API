@@ -1,0 +1,31 @@
+# The committed .disabled template is outside the mounted dynamic directory.
+# Render only through scripts/i12-hostinger-operator-contract.js. It replaces
+# the exact .invalid hostname and __J2_SOURCE_RANGE__ placeholder from private
+# inputs.
+http:
+  routers:
+    slicer-api:
+      entryPoints:
+        - websecure
+      rule: "Host(`api.rocket3d.hu`)"
+      service: slicer-api
+      middlewares:
+        - slicer-api-source-allowlist
+      tls:
+        certResolver: letsencrypt
+  middlewares:
+    slicer-api-source-allowlist:
+      ipAllowList:
+        sourceRange:
+          - "31.97.75.126/32"
+          - "45.84.204.13/32"
+  services:
+    slicer-api:
+      loadBalancer:
+        passHostHeader: true
+        healthCheck:
+          path: /ready
+          interval: 10s
+          timeout: 8s
+        servers:
+          - url: "http://3d-psa-backend-server:3000"

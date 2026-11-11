@@ -8,7 +8,7 @@ const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const { EXTENSIONS } = require('../../config/constants');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
-const { invalidArchive, resourceLimit } = require('./resource-errors');
+const { invalidArchive, labelArchiveError, resourceLimit } = require('./resource-errors');
 const { isUnsafeZipPath, assertDeclaredEntryPolicy } = require('./zip-policy');
 const { archiveIdentity, openZipWithRetry } = require('./zip-open');
 const { extractZipEntry } = require('./zip-stream');
@@ -51,7 +51,7 @@ function isIgnorableZipEntry(fileName) {
 async function inspectZipFile(zipPath, supportedExts, options = {}) {
     const policy = options.resourcePolicy || resolveResourcePolicy(options.env || process.env);
     const before = await fsPromises.lstat(zipPath, { bigint: true });
-    if (!before.isFile() || before.isSymbolicLink()) throw invalidArchive('Unsafe ZIP archive target.');
+    if (!before.isFile() || before.isSymbolicLink()) throw labelArchiveError(invalidArchive('Unsafe ZIP archive target.'), 'ARCHIVE_UNSAFE_PATH');
     const expectedArchiveIdentity = archiveIdentity(before);
     const zipFile = await openZipWithRetry(zipPath);
 
@@ -69,12 +69,12 @@ async function inspectZipFile(zipPath, supportedExts, options = {}) {
 
         zipFile.on('entry', (entry) => {
             if (entry.generalPurposeBitFlag & 0x1) {
-                return fail(invalidArchive('Encrypted ZIP files are not supported.'));
+                return fail(labelArchiveError(invalidArchive('Encrypted ZIP files are not supported.'), 'ARCHIVE_ENCRYPTED'));
             }
 
             const directoryEntry = entry.fileName.endsWith('/');
             if (isUnsafeZipPath(directoryEntry ? entry.fileName.slice(0, -1) : entry.fileName)) {
-                return fail(invalidArchive('ZIP contains unsafe file paths.'));
+                return fail(labelArchiveError(invalidArchive('ZIP contains unsafe file paths.'), 'ARCHIVE_UNSAFE_PATH'));
             }
 
             const ignorable = isIgnorableZipEntry(entry.fileName);
@@ -92,12 +92,14 @@ async function inspectZipFile(zipPath, supportedExts, options = {}) {
             }
             totalUncompressed += entry.uncompressedSize;
             if (!Number.isSafeInteger(totalUncompressed) || totalUncompressed > policy.MAX_ZIP_UNCOMPRESSED_BYTES) {
-                return fail(resourceLimit('ZIP expanded size exceeds the allowed limit.'));
+                return fail(labelArchiveError(resourceLimit('ZIP expanded size exceeds the allowed limit.'),
+                    'ARCHIVE_TOO_LARGE', policy.MAX_ZIP_UNCOMPRESSED_BYTES));
             }
 
             fileEntryCount += 1;
             if (fileEntryCount > policy.MAX_ZIP_ENTRIES) {
-                return fail(resourceLimit('ZIP contains too many files.'));
+                return fail(labelArchiveError(resourceLimit('ZIP contains too many files.'),
+                    'ARCHIVE_TOO_MANY_ENTRIES', policy.MAX_ZIP_ENTRIES));
             }
 
             if (ignorable) {
@@ -107,7 +109,8 @@ async function inspectZipFile(zipPath, supportedExts, options = {}) {
 
             const ext = path.extname(entry.fileName).toLowerCase();
             if (!supportedExts.has(ext)) {
-                return fail(invalidArchive('ZIP contains unsupported file type.'));
+                return fail(labelArchiveError(invalidArchive('ZIP contains unsupported file type.'),
+                    ext === '.zip' || ext === '.3mf' ? 'ARCHIVE_NESTED' : 'ARCHIVE_DISALLOWED_PART'));
             }
 
             candidates.push({
@@ -125,7 +128,7 @@ async function inspectZipFile(zipPath, supportedExts, options = {}) {
             zipFile.close();
             const after = await fsPromises.lstat(zipPath, { bigint: true }).catch(() => null);
             if (!after || archiveIdentity(after) !== expectedArchiveIdentity) {
-                reject(invalidArchive('ZIP archive changed during inspection.'));
+                reject(labelArchiveError(invalidArchive('ZIP archive changed during inspection.'), 'ARCHIVE_UNREADABLE'));
             } else if (candidates.length !== 1) {
                 reject(invalidArchive('ZIP must contain exactly one supported source file.'));
             } else {
@@ -135,7 +138,7 @@ async function inspectZipFile(zipPath, supportedExts, options = {}) {
         });
 
         zipFile.once('error', (err) => {
-            fail(invalidArchive('ZIP archive could not be inspected.'));
+            fail(labelArchiveError(invalidArchive('ZIP archive could not be inspected.'), 'ARCHIVE_UNREADABLE'));
         });
 
         zipFile.readEntry();
@@ -176,6 +179,21 @@ function resolveExtractionDirectory(workspace, pathFactory) {
 }
 
 /**
+ * Name of the extracted model inside its private extraction directory: 16
+ * random bytes in hex plus the entry's extension in lower case (3.9.0). The
+ * entry's own base name never reaches the disk, and a mixed-case CAD
+ * extension (`model.Step`, `x.sTP`, `y.Igs`) reaches the converter in the
+ * lower case its dispatch expects. The extension set was already checked
+ * case-insensitively by `inspectZipFile`.
+ * @param {string} entryName Selected ZIP entry name.
+ * @param {(size: number) => Buffer} [random] Random source (test seam).
+ * @returns {string} Extracted file name.
+ */
+function extractedFileName(entryName, random = randomBytes) {
+    return `${random(16).toString('hex')}${path.extname(String(entryName)).toLowerCase()}`;
+}
+
+/**
  * Extract first supported file from uploaded ZIP archive.
  * @param {string} inputFile Uploaded zip file path.
  * @param {{resolvePath(...segments: string[]): string, assertContainedPath(candidatePath: string): string}} workspace Owning workspace.
@@ -195,8 +213,7 @@ async function extractFirstSupportedFromZip(inputFile, workspace, options = {}) 
     const selectedEntry = zipCandidates[0];
     if (!selectedEntry) throw invalidArchive('ZIP does not contain a supported model file.');
 
-    const selectedName = path.basename(selectedEntry.fileName);
-    const extractedPath = workspace.assertContainedPath(path.join(unzipDir, selectedName));
+    const extractedPath = workspace.assertContainedPath(path.join(unzipDir, extractedFileName(selectedEntry.fileName)));
     try {
         await extractZipEntry(zipPath, selectedEntry, extractedPath, { resourcePolicy: policy });
     } catch (error) {
@@ -214,6 +231,7 @@ async function extractFirstSupportedFromZip(inputFile, workspace, options = {}) 
 
 module.exports = {
     extractFirstSupportedFromZip,
+    extractedFileName,
     resolveExtractionDirectory,
     inspectZipFile,
     isIgnorableZipEntry,

@@ -154,7 +154,7 @@ test('mutation rejects authentication moved after request lifecycle allocation',
 
     const mutatedSource = mutate(
         source,
-        "router.post('/prusa/slice', rateLimiter, authenticate, lifecycle('prusa'));",
+        "router.post('/prusa/slice', authenticate, rateLimiter, lifecycle('prusa'));",
         "router.post('/prusa/slice', rateLimiter, lifecycle('prusa'), authenticate);",
         'authentication moved after lifecycle'
     );
@@ -169,7 +169,7 @@ test('mutation rejects authentication removed from the real route chain', async 
     const source = readSource(ROUTE_PATH);
     const mutatedSource = mutate(
         source,
-        "router.post('/prusa/slice', rateLimiter, authenticate, lifecycle('prusa'));",
+        "router.post('/prusa/slice', authenticate, rateLimiter, lifecycle('prusa'));",
         "router.post('/prusa/slice', rateLimiter, lifecycle('prusa'));",
         'authentication removed from route'
     );

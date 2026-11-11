@@ -42,8 +42,24 @@ const ALLOWLIST_PLACEHOLDER = '__J2_SOURCE_RANGE__';
 const ROUTER_RENDER_COMMENT = '# Render only through scripts/i12-hostinger-operator-contract.js. It replaces\n'
     + '# the exact .invalid hostname and __J2_SOURCE_RANGE__ placeholder from private\n'
     + '# inputs.';
-const ALLOWLIST_PHASES = Object.freeze(['leadpilot-only']);
-const MAX_ALLOWLIST_ENTRIES = 1;
+// 3.9.0 (§4.10): the live file carries two ordered ranges (LeadPilot, then the
+// shop's egress). A phase pins the exact entry count; the list order is kept.
+const ALLOWLIST_PHASES = Object.freeze(['leadpilot-only', 'production-two-range']);
+const ALLOWLIST_PHASE_ENTRY_COUNTS = Object.freeze({
+    'leadpilot-only': 1,
+    'production-two-range': 2
+});
+const MIN_ALLOWLIST_ENTRIES = 1;
+const MAX_ALLOWLIST_ENTRIES = 4;
+// The rule line of router `slicer-api`: `public-routes` renders the 3.9.0 path
+// allowlist from ops/hostinger/public-routes.json; `host-only-3.8.3` is the
+// Host-only rule the live file carried up to 3.8.3 (reproduction and restore).
+const RULE_SET_PUBLIC_ROUTES = 'public-routes';
+const RULE_SET_HOST_ONLY = 'host-only-3.8.3';
+const RULE_SETS = Object.freeze([RULE_SET_PUBLIC_ROUTES, RULE_SET_HOST_ONLY]);
+const PUBLIC_ROUTES_FILE = 'public-routes.json';
+const PUBLIC_ROUTE_METHODS = Object.freeze(['GET', 'POST', 'DELETE']);
+const HEALTH_CHECK_BLOCK = '        healthCheck:\n          path: /ready\n          interval: 10s\n          timeout: 8s';
 const MAX_ALLOWLIST_FILE_BYTES = 256;
 const MAX_PRIVATE_INPUT_PATH_BYTES = 4096;
 const LIVE_DYNAMIC_RELEASE_MISMATCH = 'STOP_LIVE_DYNAMIC_RELEASE_MISMATCH';
@@ -160,13 +176,118 @@ function canonicalIpv4Cidr(value) {
     return Boolean(match && match[1].split('.').every((octet) => Number(octet) <= 255));
 }
 
+/**
+ * Validates an ORDERED list of 1–4 canonical, unique IPv4 /32 CIDRs. A phase,
+ * when given, must be known and pins the exact entry count.
+ * @param {unknown} cidrs Candidate list.
+ * @param {string|null} [phase] Allowlist phase.
+ * @returns {string|null} Error code or null.
+ */
 function validateAllowlistCidrs(cidrs, phase = null) {
-    if (!Array.isArray(cidrs) || cidrs.length !== MAX_ALLOWLIST_ENTRIES
+    if (!Array.isArray(cidrs) || cidrs.length < MIN_ALLOWLIST_ENTRIES
+        || cidrs.length > MAX_ALLOWLIST_ENTRIES
         || cidrs.some((cidr) => !canonicalIpv4Cidr(cidr))
         || new Set(cidrs).size !== cidrs.length) {
         return 'j2_allowlist_cidr_invalid';
     }
     if (phase !== null && !ALLOWLIST_PHASES.includes(phase)) return 'j2_allowlist_phase_invalid';
+    if (phase !== null && cidrs.length !== ALLOWLIST_PHASE_ENTRY_COUNTS[phase]) {
+        return 'j2_allowlist_cidr_invalid';
+    }
+    return null;
+}
+
+const PUBLIC_ROUTE_PATH_PATTERN = /^\/[a-z0-9][a-z0-9/._-]{0,127}$/;
+const PUBLIC_ROUTE_REGEXP_PATTERN = /^\^\/[A-Za-z0-9_/[\]{}-]{1,160}\$$/;
+let publicRoutesCache = null;
+
+/**
+ * Validates the parsed `public-routes.json` document (router groups + route
+ * inventory). The router part is what reaches the Traefik rule.
+ * @param {unknown} document Parsed JSON.
+ * @returns {string|null} Error code or null.
+ */
+function validatePublicRoutesDocument(document) {
+    const invalid = 'public_routes_contract_mismatch';
+    if (!document || typeof document !== 'object' || document.schema !== 'r3d-public-routes-v1'
+        || !Array.isArray(document.router) || document.router.length < 1 || document.router.length > 8
+        || !Array.isArray(document.routes) || document.routes.length < 1) {
+        return invalid;
+    }
+    for (const group of document.router) {
+        if (!group || !exactArray(Object.keys(group), ['methods', 'matchers'])
+            || !Array.isArray(group.methods) || group.methods.length < 1
+            || group.methods.some((method) => !PUBLIC_ROUTE_METHODS.includes(method))
+            || new Set(group.methods).size !== group.methods.length
+            || !Array.isArray(group.matchers) || group.matchers.length < 1) {
+            return invalid;
+        }
+        for (const matcher of group.matchers) {
+            const keys = matcher && typeof matcher === 'object' ? Object.keys(matcher) : [];
+            if (keys.length !== 1) return invalid;
+            if (keys[0] === 'Path') {
+                if (typeof matcher.Path !== 'string' || !PUBLIC_ROUTE_PATH_PATTERN.test(matcher.Path)) return invalid;
+            } else if (keys[0] === 'PathRegexp') {
+                if (typeof matcher.PathRegexp !== 'string'
+                    || !PUBLIC_ROUTE_REGEXP_PATTERN.test(matcher.PathRegexp)) return invalid;
+            } else {
+                return invalid;
+            }
+        }
+    }
+    for (const route of document.routes) {
+        if (!route || typeof route.method !== 'string' || typeof route.path !== 'string'
+            || !['public', 'private'].includes(route.visibility)
+            || typeof route.sample !== 'string' || !route.sample.startsWith('/')) {
+            return invalid;
+        }
+    }
+    return null;
+}
+
+/**
+ * Loads and validates ops/hostinger/public-routes.json (cached per process).
+ * @param {string} [packRoot] Operator pack root.
+ * @returns {object} Frozen routes document.
+ */
+function loadPublicRoutes(packRoot = PACK_ROOT) {
+    if (publicRoutesCache && publicRoutesCache.packRoot === packRoot) return publicRoutesCache.document;
+    const source = fs.readFileSync(path.join(packRoot, PUBLIC_ROUTES_FILE), 'utf8');
+    if (Buffer.byteLength(source, 'utf8') > MAX_FILE_BYTES) throw new Error('public_routes_contract_mismatch');
+    const document = JSON.parse(source);
+    const error = validatePublicRoutesDocument(document);
+    if (error) throw new Error(error);
+    publicRoutesCache = { packRoot, document };
+    return document;
+}
+
+/**
+ * Renders the one-line Traefik rule of router `slicer-api` from the route
+ * groups: Host(`h`) && ((M && (m1 || …)) || …).
+ * @param {string} hostname Approved hostname.
+ * @param {object} [routes] Routes document.
+ * @returns {string} Rule expression (without the surrounding quotes).
+ */
+function renderPublicRouteRule(hostname, routes = loadPublicRoutes()) {
+    const groups = routes.router.map((group) => {
+        const methods = group.methods.map((method) => `Method(\`${method}\`)`);
+        const method = methods.length === 1 ? methods[0] : `(${methods.join(' || ')})`;
+        const matchers = group.matchers.map((matcher) => (matcher.Path !== undefined
+            ? `Path(\`${matcher.Path}\`)` : `PathRegexp(\`${matcher.PathRegexp}\`)`));
+        return `(${method} && (${matchers.join(' || ')}))`;
+    });
+    return `Host(\`${hostname}\`) && (${groups.join(' || ')})`;
+}
+
+/**
+ * The exact rule line a router file must carry.
+ * @param {string} hostname Host of the rule.
+ * @param {string} ruleSet One of RULE_SETS.
+ * @returns {string|null} Rule line, or null for an unknown rule set.
+ */
+function expectedRuleLine(hostname, ruleSet) {
+    if (ruleSet === RULE_SET_HOST_ONLY) return `      rule: "Host(\`${hostname}\`)"`;
+    if (ruleSet === RULE_SET_PUBLIC_ROUTES) return `      rule: "${renderPublicRouteRule(hostname)}"`;
     return null;
 }
 
@@ -187,7 +308,8 @@ function parsePrivateAllowlist(source, phase) {
 
 function parseRenderedSourceRanges(block) {
     const lines = normalize(block).split('\n');
-    if (lines[0] !== '        sourceRange:' || lines.length !== 2) return null;
+    if (lines[0] !== '        sourceRange:' || lines.length < 1 + MIN_ALLOWLIST_ENTRIES
+        || lines.length > 1 + MAX_ALLOWLIST_ENTRIES) return null;
     const cidrs = [];
     for (const line of lines.slice(1)) {
         const match = line.match(/^          - "([^"]+)"$/);
@@ -344,12 +466,30 @@ function validHostname(hostname, allowDisabled = false) {
     return allowDisabled || hostname !== DISABLED_HOST;
 }
 
-function validateRouterSource(source, expectedHost = DISABLED_HOST, disabled = true, expectedCidrs = null) {
+/**
+ * Validates a router file. The disabled template carries the Host-only
+ * placeholder rule; an active file carries the rule of `options.ruleSet`
+ * (default `public-routes`, byte for byte) and 1–4 ordered source ranges.
+ * @param {string} source File content.
+ * @param {string} [expectedHost] Host of the rule.
+ * @param {boolean} [disabled] True for the committed template.
+ * @param {string[]|null} [expectedCidrs] Exact ordered ranges, when known.
+ * @param {{ruleSet?: string}} [options] Rule set of an active file.
+ * @returns {string|null} Error code or null.
+ */
+function validateRouterSource(
+    source, expectedHost = DISABLED_HOST, disabled = true, expectedCidrs = null, options = {}
+) {
     if (!safeSource(source) || !validHostname(expectedHost, disabled)) return 'traefik_router_source_malformed';
     if (!source.includes(ROUTER_RENDER_COMMENT)) return 'traefik_router_render_boundary_mismatch';
+    const ruleSet = disabled ? RULE_SET_HOST_ONLY : (options.ruleSet || RULE_SET_PUBLIC_ROUTES);
+    let ruleLine;
+    try { ruleLine = expectedRuleLine(expectedHost, ruleSet); } catch { ruleLine = null; }
+    if (!ruleLine) return 'traefik_router_rule_set_invalid';
     const active = activeSource(source);
     const escapedHost = expectedHost.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (exactLineCount(active, `      rule: "Host(\`${expectedHost}\`)"`) !== 1
+    if (exactLineCount(active, ruleLine) !== 1
+        || occurrences(active, '      rule:') !== 1
         || exactLineCount(active, `          - url: "${BACKEND_URL}"`) !== 1
         || occurrences(active, BACKEND_URL) !== 1
         || !new RegExp(`Host\\(\\\`${escapedHost}\\\`\\)`).test(active)) {
@@ -387,7 +527,7 @@ function validateRouterSource(source, expectedHost = DISABLED_HOST, disabled = t
         '      entryPoints:\n        - websecure', '      service: slicer-api',
         `      middlewares:\n        - ${ALLOWLIST_MIDDLEWARE}`,
         '      tls:\n        certResolver: letsencrypt', '        passHostHeader: true',
-        '        healthCheck:\n          path: /ready\n          interval: 10s\n          timeout: 8s'
+        HEALTH_CHECK_BLOCK
     ]) {
         if (!active.includes(fragment)) return 'traefik_router_contract_mismatch';
     }
@@ -395,6 +535,7 @@ function validateRouterSource(source, expectedHost = DISABLED_HOST, disabled = t
         || exactLineCount(healthCheck, '          path: /ready') !== 1
         || exactLineCount(healthCheck, '          interval: 10s') !== 1
         || exactLineCount(healthCheck, '          timeout: 8s') !== 1
+        || healthCheck.replace(/\n+$/, '') !== HEALTH_CHECK_BLOCK
         || canonicalServers !== expectedServers
         || exactLineCount(servers, `          - url: "${BACKEND_URL}"`) !== 1) {
         return 'traefik_router_service_mismatch';
@@ -427,20 +568,96 @@ function validateRouterSource(source, expectedHost = DISABLED_HOST, disabled = t
     return null;
 }
 
-function renderRouterSource(template, hostname, cidrs) {
+/**
+ * Renders the committed template: the placeholder line expands to one
+ * `          - "<cidr>"` line per entry in input order and the rule line is
+ * replaced by the rule of `options.ruleSet` (default `public-routes`).
+ * @param {string} template Disabled template.
+ * @param {string} hostname Approved hostname.
+ * @param {string[]} cidrs Ordered 1–4 ranges.
+ * @param {{ruleSet?: string, phase?: string|null}} [options] Rule set and phase.
+ * @returns {{error: string|null, source: string|null}} Rendered file.
+ */
+function renderRouterSource(template, hostname, cidrs, options = {}) {
+    const ruleSet = options.ruleSet || RULE_SET_PUBLIC_ROUTES;
+    const phase = options.phase === undefined ? null : options.phase;
     const templateError = validateRouterSource(template);
-    const inputError = validHostname(hostname) ? validateAllowlistCidrs(cidrs) : 'active_router_argument_invalid';
+    const inputError = !validHostname(hostname) ? 'active_router_argument_invalid'
+        : (!RULE_SETS.includes(ruleSet) ? 'traefik_router_rule_set_invalid'
+            : validateAllowlistCidrs(cidrs, phase));
     const markerLine = `          - "${ALLOWLIST_PLACEHOLDER}"`;
+    const templateRuleLine = expectedRuleLine(DISABLED_HOST, RULE_SET_HOST_ONLY);
     if (templateError || inputError || occurrences(template, DISABLED_HOST) !== 1
-        || exactLineCount(template, markerLine) !== 1) {
+        || exactLineCount(template, markerLine) !== 1 || exactLineCount(template, templateRuleLine) !== 1) {
         return Object.freeze({ error: templateError || inputError || 'traefik_router_template_mismatch', source: null });
     }
-    const source = template.replace(DISABLED_HOST, hostname).replace(
-        markerLine,
-        `          - "${cidrs[0]}"`
-    );
-    const error = validateRouterSource(source, hostname, false, cidrs);
+    let ruleLine;
+    try { ruleLine = expectedRuleLine(hostname, ruleSet); } catch { ruleLine = null; }
+    if (!ruleLine) return Object.freeze({ error: 'public_routes_contract_mismatch', source: null });
+    const source = template.split('\n').map((line) => {
+        if (line === templateRuleLine) return ruleLine;
+        if (line === markerLine) return cidrs.map((cidr) => `          - "${cidr}"`).join('\n');
+        return line;
+    }).join('\n');
+    const error = validateRouterSource(source, hostname, false, cidrs, { ruleSet });
     return Object.freeze({ error, source: error ? null : source });
+}
+
+/**
+ * Line-level diff of two router files of equal line count.
+ * @param {string} left First file.
+ * @param {string} right Second file.
+ * @returns {number[]|null} Differing 0-based line indexes, or null when the line counts differ.
+ */
+function differingLines(left, right) {
+    const a = left.split('\n');
+    const b = right.split('\n');
+    if (a.length !== b.length) return null;
+    return a.map((line, index) => (line === b[index] ? -1 : index)).filter((index) => index >= 0);
+}
+
+/**
+ * §8 step 5: reads the ordered CIDR list from the LIVE router file (validated
+ * as a 3.8.3 Host-only file of the given phase), renders the template with
+ * that list and the requested rule set, and refuses unless the only differing
+ * line is `rule:` and the `sourceRange` list and `healthCheck` block are
+ * identical. With the `host-only-3.8.3` rule set the result must equal the
+ * live file byte for byte.
+ * @param {string} template Disabled template.
+ * @param {string} live Live router file.
+ * @param {string} hostname Approved hostname.
+ * @param {{phase: string, ruleSet?: string}} options Phase and rule set.
+ * @returns {{error: string|null, source: string|null, entries: number, differing: number}} Result.
+ */
+function renderFromLiveSource(template, live, hostname, options = {}) {
+    const ruleSet = options.ruleSet || RULE_SET_PUBLIC_ROUTES;
+    const fail = (error) => Object.freeze({ error, source: null, entries: 0, differing: 0 });
+    if (!ALLOWLIST_PHASES.includes(options.phase)) return fail('j2_allowlist_phase_invalid');
+    if (!validHostname(hostname)) return fail('active_router_argument_invalid');
+    const liveError = validateRouterSource(live, hostname, false, null, { ruleSet: RULE_SET_HOST_ONLY });
+    if (liveError) return fail(`live_${liveError}`);
+    const liveActive = activeSource(live);
+    const liveRanges = parseRenderedSourceRanges(indentedBlock(liveActive, '        sourceRange:', 8));
+    if (!liveRanges) return fail('live_traefik_allowlist_source_range_mismatch');
+    const phaseError = validateAllowlistCidrs(liveRanges, options.phase);
+    if (phaseError) return fail(phaseError);
+    const rendered = renderRouterSource(template, hostname, liveRanges, { ruleSet, phase: options.phase });
+    if (rendered.error) return fail(rendered.error);
+    const renderedActive = activeSource(rendered.source);
+    if (indentedBlock(renderedActive, '        sourceRange:', 8) !== indentedBlock(liveActive, '        sourceRange:', 8)) {
+        return fail('render_source_range_differs_from_live');
+    }
+    if (indentedBlock(renderedActive, '        healthCheck:', 8) !== indentedBlock(liveActive, '        healthCheck:', 8)) {
+        return fail('render_health_check_differs_from_live');
+    }
+    const diff = differingLines(rendered.source, live);
+    if (!diff) return fail('render_line_count_differs_from_live');
+    const liveRuleIndex = live.split('\n').indexOf(expectedRuleLine(hostname, RULE_SET_HOST_ONLY));
+    if (ruleSet === RULE_SET_HOST_ONLY ? diff.length !== 0
+        : (diff.length !== 1 || diff[0] !== liveRuleIndex)) {
+        return fail('render_differs_from_live_beyond_rule');
+    }
+    return Object.freeze({ error: null, source: rendered.source, entries: liveRanges.length, differing: diff.length });
 }
 
 function validatePerimeterScriptSource(source) {
@@ -718,9 +935,9 @@ function validateRunbookSource(source) {
         'separate `HEAD`/index Git contract',
         'release the full-rehearsal lock with `exec 9>&-`',
         'only `.gitkeep` remains',
-        'canonical format is exactly one unique IPv4 `/32` line',
-        'Only phase `leadpilot-only` exists.',
-        'A second address,\nanother phase, `/24`, or any prefix other than `/32` is forbidden.',
+        'canonical format is an ordered list of one to four unique IPv4 `/32` lines',
+        'Phase `leadpilot-only` admits\nexactly one line and phase `production-two-range` exactly two',
+        'A fifth\naddress, another phase, `/24`, or any prefix other than `/32` is forbidden.',
         'machine-level perimeter control, not an application-level',
         'approved address belongs to a shared host that currently carries',
         'owner accepted that scope explicitly; the separate',
@@ -1651,7 +1868,13 @@ function validateOperatorPack(sources) {
         || validateAllowlistProbeSource(sources.allowlistProbe)
         || validatePerimeterServiceSource(sources.perimeterService)
         || validateRunbookSource(sources.runbook)
-        || validateCapacityProducerSource(sources.capacityProducerExec);
+        || validateCapacityProducerSource(sources.capacityProducerExec)
+        || validatePublicRoutesFile();
+}
+
+function validatePublicRoutesFile() {
+    try { loadPublicRoutes(); } catch { return 'public_routes_contract_mismatch'; }
+    return null;
 }
 
 function parseRouterArguments(args) {
@@ -2449,6 +2672,86 @@ function assertRouterDark(sourceTarget, sourceKind, hostname, options = {}) {
     return null;
 }
 
+const LIVE_RENDER_OUTPUT_FORBIDDEN = /\.(?:ya?ml|toml)(?:\.disabled)?$/i;
+
+/**
+ * CLI of the §8 step 5 render. Never prints an address, a digest or the file:
+ *   --reproduce-live <live-file> --host <h> --phase <p>
+ *       renders with the live CIDR list and the 3.8.3 Host-only rule and
+ *       requires byte identity with the live file (read-only).
+ *   --render-from-live <live-file> --host <h> --phase <p> --output <new-file>
+ *       renders the public-routes rule with the live CIDR list, requires that
+ *       only `rule:` differs, and writes a new 0600 file (O_EXCL) whose name
+ *       is not a Traefik configuration name.
+ * @param {string[]} args Arguments.
+ * @param {string} template Disabled template.
+ * @returns {{error: string|null, message?: string}} Result.
+ */
+function runLiveRender(args, template) {
+    const mode = args[0];
+    const allowed = mode === '--reproduce-live'
+        ? ['--reproduce-live', '--host', '--phase'] : ['--render-from-live', '--host', '--phase', '--output'];
+    if (args.length !== allowed.length * 2) return { error: 'live_render_argument_invalid' };
+    const values = {};
+    for (let index = 0; index < args.length; index += 2) {
+        if (!allowed.includes(args[index]) || values[args[index]] !== undefined
+            || typeof args[index + 1] !== 'string' || !args[index + 1]) {
+            return { error: 'live_render_argument_invalid' };
+        }
+        values[args[index]] = args[index + 1];
+    }
+    const livePath = values[mode];
+    const output = values['--output'];
+    for (const candidate of [livePath, output].filter((value) => value !== undefined)) {
+        if (!path.isAbsolute(candidate) || /[\0\r\n\t]/.test(candidate)
+            || Buffer.byteLength(candidate, 'utf8') > MAX_PRIVATE_INPUT_PATH_BYTES) {
+            return { error: 'live_render_argument_invalid' };
+        }
+    }
+    if (output !== undefined && (LIVE_RENDER_OUTPUT_FORBIDDEN.test(path.basename(output))
+        || path.resolve(output) === path.resolve(livePath))) {
+        return { error: 'live_render_output_name_forbidden' };
+    }
+    let live;
+    try {
+        const stat = fs.lstatSync(livePath);
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_FILE_BYTES) {
+            return { error: 'live_router_unavailable' };
+        }
+        live = fs.readFileSync(livePath, 'utf8');
+    } catch {
+        return { error: 'live_router_unavailable' };
+    }
+    const result = renderFromLiveSource(template, live, values['--host'], {
+        phase: values['--phase'],
+        ruleSet: mode === '--reproduce-live' ? RULE_SET_HOST_ONLY : RULE_SET_PUBLIC_ROUTES
+    });
+    if (result.error) return { error: result.error };
+    if (mode === '--reproduce-live') {
+        return { error: null, message: `router_reproduce_live=PASS phase=${values['--phase']} entries=${result.entries} byte_identical=true` };
+    }
+    let descriptor;
+    try {
+        descriptor = fs.openSync(
+            output,
+            fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW || 0),
+            0o600
+        );
+        fs.writeFileSync(descriptor, result.source, { encoding: 'utf8' });
+        fs.fsyncSync(descriptor);
+    } catch {
+        return { error: 'live_render_output_create_failed' };
+    } finally {
+        if (descriptor !== undefined) {
+            try { fs.closeSync(descriptor); } catch { /* the write result is already fixed */ }
+        }
+    }
+    return {
+        error: null,
+        message: `router_render_from_live=PASS phase=${values['--phase']} entries=${result.entries} differing_lines=rule`
+    };
+}
+
 function main(args = process.argv.slice(2)) {
     if (args.length === 0) {
         let sources;
@@ -2481,6 +2784,12 @@ function main(args = process.argv.slice(2)) {
             ? validateLiveDynamicSource(args[1]) : LIVE_DYNAMIC_RELEASE_MISMATCH;
         if (error) { console.error(error); process.exitCode = 2; return; }
         console.log('live_dynamic_source_contract=PASS');
+        return;
+    }
+    if (args[0] === '--render-from-live' || args[0] === '--reproduce-live') {
+        const result = runLiveRender(args, sources.routerTemplate);
+        if (result.error) { console.error(result.error); process.exitCode = 2; return; }
+        console.log(result.message);
         return;
     }
     const values = parseRouterArguments(args);
@@ -2575,7 +2884,11 @@ function main(args = process.argv.slice(2)) {
 if (require.main === module) main();
 
 module.exports = Object.freeze({
-    ACTIVE_ROUTER_NAME, ALLOWLIST_MIDDLEWARE, ALLOWLIST_PHASES, ALLOWLIST_PLACEHOLDER,
+    ACTIVE_ROUTER_NAME, ALLOWLIST_MIDDLEWARE, ALLOWLIST_PHASES, ALLOWLIST_PHASE_ENTRY_COUNTS,
+    ALLOWLIST_PLACEHOLDER, HEALTH_CHECK_BLOCK, MIN_ALLOWLIST_ENTRIES, PUBLIC_ROUTES_FILE,
+    RULE_SET_HOST_ONLY, RULE_SET_PUBLIC_ROUTES, RULE_SETS,
+    expectedRuleLine, loadPublicRoutes, renderFromLiveSource, renderPublicRouteRule,
+    runLiveRender, validatePublicRoutesDocument,
     ACTIVE_ROUTER_IGNORE_PATTERN, BACKEND_URL, CAPACITY_PRODUCER_EXEC, DARK_DYNAMIC_ENTRY,
     DISABLED_HOST, FILES, LIVE_DYNAMIC_RELEASE_MISMATCH,
     MAX_ALLOWLIST_ENTRIES, MAX_ALLOWLIST_FILE_BYTES, MAX_FILE_BYTES, PACK_ROOT, TRAEFIK_COMMANDS,

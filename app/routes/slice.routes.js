@@ -10,6 +10,7 @@ const { DEFAULTS, EXTENSIONS } = require('../config/constants');
 const { resolveResourcePolicy } = require('../config/resource-policy');
 const { sliceRateLimiter } = require('../middleware/rateLimit');
 const requireSliceService = require('../middleware/requireSliceService');
+const { createAuthenticateOrCharge } = require('../middleware/sliceAdmission');
 const { handleSlicePrusa, handleSliceOrca, handleSliceBambu } = require('../services/slice.service');
 const {
     createJobWorkspace,
@@ -245,7 +246,12 @@ async function finalizeLifecycle(context) {
 function createSliceRouter(options = {}) {
     const router = express.Router();
     const rateLimiter = options.rateLimiter || sliceRateLimiter;
-    const authenticate = options.authenticate || requireSliceService;
+    // 3.9.0: authentication first (wrong keys charge the per-IP failure
+    // bucket, never a principal's slice tokens), then the per-principal limiter.
+    const authenticate = options.authenticateOrCharge || createAuthenticateOrCharge({
+        authenticate: options.authenticate || requireSliceService,
+        failureLimiter: options.authFailureLimiter
+    });
     const allocate = options.createWorkspace || createJobWorkspace;
     const attach = options.attachWorkspace || attachWorkspaceToRequest;
     const detach = options.detachWorkspace || detachWorkspaceFromRequest;
@@ -324,10 +330,11 @@ function createSliceRouter(options = {}) {
         };
     }
 
-    // Rate limiting and authentication must reject before request-owned allocation.
-    router.post('/prusa/slice', rateLimiter, authenticate, lifecycle('prusa'));
-    router.post('/orca/slice', rateLimiter, authenticate, lifecycle('orca'));
-    router.post('/bambu/slice', rateLimiter, authenticate, lifecycle('bambu'));
+    // Authentication and rate limiting must reject before request-owned
+    // allocation; authentication runs first so the limiter keys on the principal.
+    router.post('/prusa/slice', authenticate, rateLimiter, lifecycle('prusa'));
+    router.post('/orca/slice', authenticate, rateLimiter, lifecycle('orca'));
+    router.post('/bambu/slice', authenticate, rateLimiter, lifecycle('bambu'));
     return router;
 }
 

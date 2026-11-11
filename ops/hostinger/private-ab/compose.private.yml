@@ -1,0 +1,52 @@
+# §8 step 1: the PRIVATE A/B container of slicer 3.9.0 (project r3d-s390).
+# Started only by run-private-ab.sh. No Traefik route, no published port, an
+# internal network only. Configs are read-only from the SAME release tree the
+# live service mounts. Throwaway keys live in a 0600 env file made on the VPS.
+#
+# Global-OOM guard (host 15 992 MB, no swap, live cgroup 12 GiB):
+# oom_score_adj 1000 makes this container's Node, helpers and natives the
+# kernel's first choice, never a live customer's native or Traefik.
+services:
+  private:
+    image: ${R3D_S390_IMAGE:?Set R3D_S390_IMAGE to the A or B digest ref}
+    container_name: r3d-s390-private
+    env_file:
+      - ${R3D_S390_ENV_FILE:?Set R3D_S390_ENV_FILE to the 0600 throwaway env file}
+    environment:
+      CHILD_OOM_SCORE_ADJ: ${R3D_S390_CHILD_OOM_SCORE_ADJ:-1000}
+      MAX_CONCURRENT_SLICES: "1"
+      EXPECTED_MEMORY_BYTES: ${R3D_S390_MEMORY_BYTES:-3221225472}
+      EXPECTED_CPU_LIMIT: "2.0"
+    mem_limit: ${R3D_S390_MEMORY_BYTES:-3221225472}
+    memswap_limit: ${R3D_S390_MEMORY_BYTES:-3221225472}
+    cpus: 2.0
+    pids_limit: 512
+    oom_score_adj: 1000
+    user: "999:999"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=64m,uid=999,gid=999,mode=0700
+    volumes:
+      - type: bind
+        source: /srv/r3d-s390-private/input
+        target: /app/input
+      - type: bind
+        source: /srv/r3d-s390-private/output
+        target: /app/output
+      - type: bind
+        source: ${R3D_S390_CONFIGS_DIR:?Set R3D_S390_CONFIGS_DIR to the live release tree's configs}
+        target: /app/configs
+        read_only: true
+      - type: bind
+        source: /srv/r3d-s390-private/pricing-state
+        target: /app/configs/pricing-state
+    networks:
+      - r3d-s390-internal
+networks:
+  r3d-s390-internal:
+    name: r3d-s390-internal
+    internal: true

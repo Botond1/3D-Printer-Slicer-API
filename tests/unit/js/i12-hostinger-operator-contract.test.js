@@ -199,8 +199,8 @@ test('committed Hostinger pack satisfies the bounded operator contract', () => {
     assert.match(sources.runbook, /actual default\nroute uses `traefik-ingress`/);
     assert.match(sources.runbook, /effective `RW=false`/);
     assert.match(sources.runbook, /`Mode=""` or `Mode="ro"`/);
-    assert.match(sources.runbook, /exactly one unique IPv4 `\/32` line/);
-    assert.match(sources.runbook, /Only phase `leadpilot-only` exists/);
+    assert.match(sources.runbook, /ordered list of one to four unique IPv4 `\/32` lines/);
+    assert.match(sources.runbook, /phase `production-two-range` exactly two/);
     assert.match(sources.runbook, /machine-level perimeter control/);
     assert.match(sources.runbook, /no verified provider reservation/);
     assert.match(sources.runbook, /consumer must notify the owner before any rebuild or migration/);

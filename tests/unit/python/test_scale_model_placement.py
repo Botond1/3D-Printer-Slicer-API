@@ -24,6 +24,8 @@ try:  # scale_model builds its scale matrix with numpy; skip cleanly where absen
     NUMPY_AVAILABLE = True
 except ImportError:  # pragma: no cover - environment dependent
     NUMPY_AVAILABLE = False
+if not NUMPY_AVAILABLE and __import__("os").environ.get("R3D_REQUIRE_GEOMETRY_DEPS") == "1":
+    raise ImportError("R3D_REQUIRE_GEOMETRY_DEPS=1: the pinned geometry stack is required here, not skipped")
 
 
 class FakeMesh:

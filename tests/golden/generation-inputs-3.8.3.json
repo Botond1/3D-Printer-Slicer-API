@@ -1,0 +1,104 @@
+{
+  "captured_from": {
+    "image": "ghcr.io/botond1/3d-printer-slicer-api@sha256:8f582f9e54ef44020e638d1f2dd8848ac730c19845d5d1c65a79206f17abb436",
+    "source_commit": "dbc539e",
+    "release": "3.8.3",
+    "method": "read-only in-container hash of /app/<name> (sha256 of the bytes, hashValue of the list, as bambu-generation.js:46) on the live 3d-psa-backend-server container running that image, 2026-11-11; equal to the git blobs at dbc539e"
+  },
+  "processing_schema": "r3d-bambu-processing-v1",
+  "files": [
+    {
+      "name": "mesh2stl.py",
+      "sha256": "cd6f2229e3534596c11b499143f29d4c819ef17a0e4a27bc3fd6785673131555"
+    },
+    {
+      "name": "cad2stl.py",
+      "sha256": "0ff6347d835cb8ceaee6d7ef246c94e87f096d0ad0f25cc73342865856906b01"
+    },
+    {
+      "name": "orient.py",
+      "sha256": "c081d943320c82fb0776d40ac1a8aff971d4df7f023cf2ad7aeeb8afaa7fdb77"
+    },
+    {
+      "name": "scale_model.py",
+      "sha256": "9103c05f550cfc8976d25ca2828af4cbf8b6a1a246e21186ecebef63311dbf65"
+    },
+    {
+      "name": "inspect_mesh.py",
+      "sha256": "70b42e4730d8b6000e90ff9a8148110385cd975af7fa825e3628ab7bbcd6277a"
+    },
+    {
+      "name": "services/slice/gcode-metrics.js",
+      "sha256": "bd99ff131dec9bb5fdca70b0a832c60267fa767a62fce7567549beb90a5ede76"
+    },
+    {
+      "name": "services/slice/bambu-receipt.js",
+      "sha256": "d7d4b922c3f5049188a1dfb98f040d2ea586bb5d0b7580073e03f2c34d906ded"
+    },
+    {
+      "name": "services/slice/bambu-source.js",
+      "sha256": "0ce7bc3b6751eb8cacb763af8460c8451c5ea00ed9f608d9344f22a8194f3ffa"
+    },
+    {
+      "name": "services/slice/bambu-artifact.js",
+      "sha256": "01a548003580f9af139ec0ed86efd944b31d0ed68811da45230c338b8ac4dca3"
+    },
+    {
+      "name": "services/slice/transform.js",
+      "sha256": "75138acde85d723b6650b20a5da555e372b643307e993a013463149b951acceb"
+    },
+    {
+      "name": "services/slice/engine.js",
+      "sha256": "08778ce4a3c63328d96ecc51c7498c9c6a9405e952a8713ccc90eef7f13fdc77"
+    },
+    {
+      "name": "services/slice/pipeline.js",
+      "sha256": "146f13b4fde88d67bcfaaabf6f6367b460c0d5824b0b76ecd31d89fa6de2fa2e"
+    },
+    {
+      "name": "services/slice/input-processing.js",
+      "sha256": "b3e00c5d889ad2d456290a0d274376d966462832b59b48b06e6cef33e42e32d8"
+    },
+    {
+      "name": "services/slice/model-stats.js",
+      "sha256": "000ca4ffc6f11269fc0848d3aa75025dbba510c6b36e48c9342100c393c4b070"
+    },
+    {
+      "name": "services/slice/profiles.js",
+      "sha256": "8f5772d33e6c2cc66c314cd9bc2a90b94b7f3ade7518b58568a6df93f9291ce1"
+    },
+    {
+      "name": "services/slice/profile-digest.js",
+      "sha256": "78fb0f9ff24fbb18562c4b789bf138492b1d5375bfc2cba97f2f2007f120f4f9"
+    },
+    {
+      "name": "services/slice/profile-snapshot.js",
+      "sha256": "f4e7c5e56a2138cc4cf88b0e543c2926d43aa17d4b46d74952e61f7880e23444"
+    },
+    {
+      "name": "services/slice/bambu-profile-chain.js",
+      "sha256": "63aa6fa961e74f68e6eab0c159e3feabe2ae037cc8c392efeb66250a1d6c3970"
+    },
+    {
+      "name": "services/slice/bambu-placement.js",
+      "sha256": "4b2baab7ba9189607f04f4ab25a0e0ba6f0dd2967d9c6243f53b1619f70e2859"
+    },
+    {
+      "name": "services/slice/bambu-bed-geometry.js",
+      "sha256": "8366f92808030e1c99b1376273d7f0d81d882f5209f8ad3c7932f7dd69ea457e"
+    },
+    {
+      "name": "services/slice/orientation-contract.js",
+      "sha256": "ff46c006cd4d3dd378a036dcfe3bb2152360a7c1e1aabdf6570b97b981f3f77d"
+    },
+    {
+      "name": "services/slice/output-lifecycle.js",
+      "sha256": "93526b3a7f074803218f6de244196b7361961d9e3600804a40c6e3e08010b905"
+    },
+    {
+      "name": "services/slice/receipt-hash.js",
+      "sha256": "28478762f0fd1d251477390794ff7c5ef6f91e31bd99a0bb5aaf6601ae96fac4"
+    }
+  ],
+  "processing_sha256": "5d461b7c4968ed0b2b61c555d8614bf9ffbf5d9d9067fc7eb970205d0dfbdfdc"
+}

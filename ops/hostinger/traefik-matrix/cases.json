@@ -1,0 +1,206 @@
+{
+  "schema": "r3d-traefik-matrix-cases-v1",
+  "note": "router=true: the rule matches, so the shop- and LeadPilot-position addresses reach the backend (whoami 200) and an unlisted address gets the ipAllowList 403. router=false: no router matches, every address gets the Traefik 404. Built from ops/hostinger/public-routes.json plus negative paths; tests/unit/js/traefik-matrix.test.js keeps them in step.",
+  "cases": [
+    {
+      "method": "POST",
+      "path": "/bambu/slice",
+      "router": true
+    },
+    {
+      "method": "POST",
+      "path": "/prusa/slice",
+      "router": true
+    },
+    {
+      "method": "POST",
+      "path": "/bambu/export",
+      "router": true
+    },
+    {
+      "method": "GET",
+      "path": "/bambu/slice/jobs/sj_0123456789abcdef0123456789abcdef",
+      "router": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/bambu/slice/jobs/sj_0123456789abcdef0123456789abcdef",
+      "router": true
+    },
+    {
+      "method": "GET",
+      "path": "/bambu/export/jobs/ex_0123456789abcdef0123456789abcdef",
+      "router": true
+    },
+    {
+      "method": "DELETE",
+      "path": "/bambu/export/jobs/ex_0123456789abcdef0123456789abcdef",
+      "router": true
+    },
+    {
+      "method": "GET",
+      "path": "/bambu/export/jobs/ex_0123456789abcdef0123456789abcdef/file",
+      "router": true
+    },
+    {
+      "method": "GET",
+      "path": "/capabilities",
+      "router": true
+    },
+    {
+      "method": "GET",
+      "path": "/profiles",
+      "router": true
+    },
+    {
+      "method": "GET",
+      "path": "/health",
+      "router": true
+    },
+    {
+      "method": "GET",
+      "path": "/pricing",
+      "router": true
+    },
+    {
+      "method": "POST",
+      "path": "/orca/slice",
+      "router": false
+    },
+    {
+      "method": "POST",
+      "path": "/render",
+      "router": false
+    },
+    {
+      "method": "POST",
+      "path": "/pricing/FDM",
+      "router": false
+    },
+    {
+      "method": "POST",
+      "path": "/pricing/SLA",
+      "router": false
+    },
+    {
+      "method": "PATCH",
+      "path": "/pricing/FDM/PLA",
+      "router": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/pricing/FDM/PLA",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/ready",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/health/detailed",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/operations/readiness",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/operations/metrics",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/favicon.ico",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/admin/output-files",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/admin/download/x.gcode",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/openapi.json",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/docs",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/no-such-route",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/bambu/slice/jobs/sj_0123",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/bambu/slice/jobs/ex_0123456789abcdef0123456789abcdef",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/bambu/slice/jobs/sj_0123456789ABCDEF0123456789ABCDEF",
+      "router": false
+    },
+    {
+      "method": "POST",
+      "path": "/bambu/slice/jobs/sj_0123456789abcdef0123456789abcdef",
+      "router": false
+    },
+    {
+      "method": "DELETE",
+      "path": "/bambu/export/jobs/ex_0123456789abcdef0123456789abcdef/file",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/bambu/slice",
+      "router": false
+    },
+    {
+      "method": "PUT",
+      "path": "/bambu/slice",
+      "router": false
+    },
+    {
+      "method": "POST",
+      "path": "/profiles",
+      "router": false
+    },
+    {
+      "method": "POST",
+      "path": "/pricing",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/profiles/",
+      "router": false
+    },
+    {
+      "method": "GET",
+      "path": "/docs/",
+      "router": false
+    }
+  ]
+}

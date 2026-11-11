@@ -1,0 +1,63 @@
+{
+  "schema": "r3d-public-routes-v1",
+  "release": "3.9.0",
+  "note": "Every Express route mounted by app/server.js is listed here as public or private. Only the router groups below reach the Traefik rule of router slicer-api; everything else answers Traefik 404 from the internet. Rendered by scripts/i12-hostinger-operator-contract.js (renderPublicRouteRule).",
+  "router": [
+    {
+      "methods": ["POST"],
+      "matchers": [
+        { "Path": "/bambu/slice" },
+        { "Path": "/prusa/slice" },
+        { "Path": "/bambu/export" }
+      ]
+    },
+    {
+      "methods": ["GET", "DELETE"],
+      "matchers": [
+        { "PathRegexp": "^/bambu/slice/jobs/sj_[0-9a-f]{32}$" },
+        { "PathRegexp": "^/bambu/export/jobs/ex_[0-9a-f]{32}$" }
+      ]
+    },
+    {
+      "methods": ["GET"],
+      "matchers": [
+        { "PathRegexp": "^/bambu/export/jobs/ex_[0-9a-f]{32}/file$" },
+        { "Path": "/capabilities" },
+        { "Path": "/profiles" },
+        { "Path": "/health" },
+        { "Path": "/pricing" }
+      ]
+    }
+  ],
+  "routes": [
+    { "method": "POST", "path": "/bambu/slice", "visibility": "public", "sample": "/bambu/slice" },
+    { "method": "POST", "path": "/prusa/slice", "visibility": "public", "sample": "/prusa/slice" },
+    { "method": "POST", "path": "/bambu/export", "visibility": "public", "sample": "/bambu/export", "since": "3.9.0" },
+    { "method": "GET", "path": "/bambu/slice/jobs/:param", "visibility": "public", "sample": "/bambu/slice/jobs/sj_0123456789abcdef0123456789abcdef" },
+    { "method": "DELETE", "path": "/bambu/slice/jobs/:param", "visibility": "public", "sample": "/bambu/slice/jobs/sj_0123456789abcdef0123456789abcdef" },
+    { "method": "GET", "path": "/bambu/export/jobs/:param", "visibility": "public", "sample": "/bambu/export/jobs/ex_0123456789abcdef0123456789abcdef", "since": "3.9.0" },
+    { "method": "DELETE", "path": "/bambu/export/jobs/:param", "visibility": "public", "sample": "/bambu/export/jobs/ex_0123456789abcdef0123456789abcdef", "since": "3.9.0" },
+    { "method": "GET", "path": "/bambu/export/jobs/:param/file", "visibility": "public", "sample": "/bambu/export/jobs/ex_0123456789abcdef0123456789abcdef/file", "since": "3.9.0" },
+    { "method": "GET", "path": "/capabilities", "visibility": "public", "sample": "/capabilities", "since": "3.9.0" },
+    { "method": "GET", "path": "/profiles", "visibility": "public", "sample": "/profiles" },
+    { "method": "GET", "path": "/health", "visibility": "public", "sample": "/health" },
+    { "method": "GET", "path": "/pricing", "visibility": "public", "sample": "/pricing" },
+    { "method": "POST", "path": "/orca/slice", "visibility": "private", "sample": "/orca/slice" },
+    { "method": "POST", "path": "/render", "visibility": "private", "sample": "/render" },
+    { "method": "POST", "path": "/pricing/FDM", "visibility": "private", "sample": "/pricing/FDM" },
+    { "method": "POST", "path": "/pricing/SLA", "visibility": "private", "sample": "/pricing/SLA" },
+    { "method": "PATCH", "path": "/pricing/:param/:param", "visibility": "private", "sample": "/pricing/FDM/PLA" },
+    { "method": "DELETE", "path": "/pricing/:param/:param", "visibility": "private", "sample": "/pricing/FDM/PLA" },
+    { "method": "GET", "path": "/ready", "visibility": "private", "sample": "/ready", "note": "Traefik's own service health check reaches the backend directly" },
+    { "method": "GET", "path": "/health/detailed", "visibility": "private", "sample": "/health/detailed" },
+    { "method": "GET", "path": "/operations/readiness", "visibility": "private", "sample": "/operations/readiness" },
+    { "method": "GET", "path": "/operations/metrics", "visibility": "private", "sample": "/operations/metrics" },
+    { "method": "GET", "path": "/favicon.ico", "visibility": "private", "sample": "/favicon.ico" },
+    { "method": "GET", "path": "/admin/output-files", "visibility": "private", "sample": "/admin/output-files" },
+    { "method": "GET", "path": "/admin/download/:param", "visibility": "private", "sample": "/admin/download/x.gcode" },
+    { "method": "GET", "path": "/openapi.json", "visibility": "private", "sample": "/openapi.json" },
+    { "method": "USE", "path": "/docs", "visibility": "private", "sample": "/docs" },
+    { "method": "GET", "path": "/", "visibility": "private", "sample": "/" },
+    { "method": "ALL", "path": "*", "visibility": "private", "sample": "/no-such-route", "note": "404 catch-all" }
+  ]
+}

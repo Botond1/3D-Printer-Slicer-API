@@ -1,0 +1,2292 @@
+{
+  "recorded_from": "3.8.3 unit-test harness (fake pipeline) of an exported dbc539e tree",
+  "skeleton": {
+    "sync_success": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "body": {
+        "type": "object",
+        "keys": [
+          "success",
+          "job_id",
+          "artifact_id",
+          "slicer_engine",
+          "technology",
+          "engine_version",
+          "material",
+          "infill",
+          "supports",
+          "profiles",
+          "applied_layer_height_mm",
+          "stats",
+          "model_transform",
+          "build_volume_limits_mm",
+          "technical_receipt"
+        ],
+        "fields": {
+          "success": {
+            "type": "boolean",
+            "value": true
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "artifact_id": {
+            "type": "string"
+          },
+          "slicer_engine": {
+            "type": "string",
+            "value": "bambu"
+          },
+          "technology": {
+            "type": "string",
+            "value": "FDM"
+          },
+          "engine_version": {
+            "type": "string"
+          },
+          "material": {
+            "type": "string",
+            "value": "PLA"
+          },
+          "infill": {
+            "type": "string",
+            "value": "20%"
+          },
+          "supports": {
+            "type": "boolean",
+            "value": true
+          },
+          "profiles": {
+            "type": "object",
+            "keys": [
+              "effective_profile_sha256",
+              "printer",
+              "machine_profile",
+              "process_profile",
+              "filament_profile",
+              "bed_type"
+            ],
+            "fields": {
+              "effective_profile_sha256": {
+                "type": "string"
+              },
+              "printer": {
+                "type": "string"
+              },
+              "machine_profile": {
+                "type": "string"
+              },
+              "process_profile": {
+                "type": "string"
+              },
+              "filament_profile": {
+                "type": "string"
+              },
+              "bed_type": {
+                "type": "string"
+              }
+            }
+          },
+          "applied_layer_height_mm": {
+            "type": "number"
+          },
+          "stats": {
+            "type": "object",
+            "keys": [
+              "print_time_seconds",
+              "print_time_source",
+              "material_used_m",
+              "material_used_g",
+              "material_used_g_source"
+            ],
+            "fields": {
+              "print_time_seconds": {
+                "type": "integer"
+              },
+              "print_time_source": {
+                "type": "string",
+                "value": "total_estimated_time"
+              },
+              "material_used_m": {
+                "type": "number"
+              },
+              "material_used_g": {
+                "type": "number"
+              },
+              "material_used_g_source": {
+                "type": "string",
+                "value": "total_filament_weight_g"
+              }
+            }
+          },
+          "model_transform": {
+            "type": "object",
+            "keys": [
+              "transform_schema",
+              "size_unit",
+              "orientation_mode",
+              "scale_factors",
+              "requested_rotation_deg",
+              "rotation_deg",
+              "rotation_matrix",
+              "automatic_rotation_matrix",
+              "orientation_outcome",
+              "oriented_dimensions_mm",
+              "final_dimensions_mm"
+            ],
+            "fields": {
+              "transform_schema": {
+                "type": "integer",
+                "value": 2
+              },
+              "size_unit": {
+                "type": "string",
+                "value": "mm"
+              },
+              "orientation_mode": {
+                "type": "string",
+                "value": "auto"
+              },
+              "scale_factors": {
+                "type": "object",
+                "keys": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "fields": {
+                  "x": {
+                    "type": "integer"
+                  },
+                  "y": {
+                    "type": "integer"
+                  },
+                  "z": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "requested_rotation_deg": {
+                "type": "object",
+                "keys": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "fields": {
+                  "x": {
+                    "type": "integer"
+                  },
+                  "y": {
+                    "type": "integer"
+                  },
+                  "z": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "rotation_deg": {
+                "type": "object",
+                "keys": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "fields": {
+                  "x": {
+                    "type": "integer"
+                  },
+                  "y": {
+                    "type": "integer"
+                  },
+                  "z": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "rotation_matrix": {
+                "type": "array",
+                "length": 3,
+                "items": [
+                  {
+                    "type": "array",
+                    "length": 3,
+                    "items": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "length": 3,
+                    "items": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "length": 3,
+                    "items": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "automatic_rotation_matrix": {
+                "type": "array",
+                "length": 3,
+                "items": [
+                  {
+                    "type": "array",
+                    "length": 3,
+                    "items": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "length": 3,
+                    "items": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "length": 3,
+                    "items": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "integer"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "orientation_outcome": {
+                "type": "string",
+                "value": "unchanged"
+              },
+              "oriented_dimensions_mm": {
+                "type": "object",
+                "keys": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "fields": {
+                  "x": {
+                    "type": "integer"
+                  },
+                  "y": {
+                    "type": "integer"
+                  },
+                  "z": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "final_dimensions_mm": {
+                "type": "object",
+                "keys": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "fields": {
+                  "x": {
+                    "type": "integer"
+                  },
+                  "y": {
+                    "type": "integer"
+                  },
+                  "z": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          },
+          "build_volume_limits_mm": {
+            "type": "object",
+            "keys": [
+              "min",
+              "max",
+              "source_profile"
+            ],
+            "fields": {
+              "min": {
+                "type": "object",
+                "keys": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "fields": {
+                  "x": {
+                    "type": "integer"
+                  },
+                  "y": {
+                    "type": "integer"
+                  },
+                  "z": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "max": {
+                "type": "object",
+                "keys": [
+                  "x",
+                  "y",
+                  "z"
+                ],
+                "fields": {
+                  "x": {
+                    "type": "integer"
+                  },
+                  "y": {
+                    "type": "integer"
+                  },
+                  "z": {
+                    "type": "number"
+                  }
+                }
+              },
+              "source_profile": {
+                "type": "string"
+              }
+            }
+          },
+          "technical_receipt": {
+            "type": "object",
+            "keys": [
+              "schema",
+              "request_id",
+              "job_id",
+              "measurement_generation",
+              "source",
+              "engine",
+              "profiles",
+              "applied",
+              "geometry",
+              "scope",
+              "estimates",
+              "artifact",
+              "warnings",
+              "identity",
+              "receipt_sha256"
+            ],
+            "fields": {
+              "schema": {
+                "type": "string",
+                "value": "r3d-technical-receipt-v1"
+              },
+              "request_id": {
+                "type": "string"
+              },
+              "job_id": {
+                "type": "string"
+              },
+              "measurement_generation": {
+                "type": "string"
+              },
+              "source": {
+                "type": "object",
+                "keys": [
+                  "sha256",
+                  "format",
+                  "normalized_geometry_sha256",
+                  "sliced_geometry_sha256",
+                  "units",
+                  "unit_source"
+                ],
+                "fields": {
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "format": {
+                    "type": "string",
+                    "value": "stl"
+                  },
+                  "normalized_geometry_sha256": {
+                    "type": "string"
+                  },
+                  "sliced_geometry_sha256": {
+                    "type": "string"
+                  },
+                  "units": {
+                    "type": "string",
+                    "value": "mm"
+                  },
+                  "unit_source": {
+                    "type": "string"
+                  }
+                }
+              },
+              "engine": {
+                "type": "object",
+                "keys": [
+                  "name",
+                  "version",
+                  "platform",
+                  "build_sha256"
+                ],
+                "fields": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  },
+                  "platform": {
+                    "type": "string"
+                  },
+                  "build_sha256": {
+                    "type": "string"
+                  }
+                }
+              },
+              "profiles": {
+                "type": "object",
+                "keys": [
+                  "printer",
+                  "machine",
+                  "process",
+                  "filament",
+                  "effective_profile_sha256",
+                  "bundle_sha256",
+                  "machine_sha256",
+                  "process_sha256",
+                  "filament_sha256",
+                  "nozzle_diameter_mm",
+                  "extruder_mode",
+                  "bed_type"
+                ],
+                "fields": {
+                  "printer": {
+                    "type": "string"
+                  },
+                  "machine": {
+                    "type": "string"
+                  },
+                  "process": {
+                    "type": "string"
+                  },
+                  "filament": {
+                    "type": "string"
+                  },
+                  "effective_profile_sha256": {
+                    "type": "string"
+                  },
+                  "bundle_sha256": {
+                    "type": "string"
+                  },
+                  "machine_sha256": {
+                    "type": "string"
+                  },
+                  "process_sha256": {
+                    "type": "string"
+                  },
+                  "filament_sha256": {
+                    "type": "string"
+                  },
+                  "nozzle_diameter_mm": {
+                    "type": "number"
+                  },
+                  "extruder_mode": {
+                    "type": "string"
+                  },
+                  "bed_type": {
+                    "type": "string"
+                  }
+                }
+              },
+              "applied": {
+                "type": "object",
+                "keys": [
+                  "layer_height_mm",
+                  "infill_percent",
+                  "supports",
+                  "material",
+                  "evidence",
+                  "configuration_sha256"
+                ],
+                "fields": {
+                  "layer_height_mm": {
+                    "type": "number"
+                  },
+                  "infill_percent": {
+                    "type": "integer"
+                  },
+                  "supports": {
+                    "type": "boolean",
+                    "value": true
+                  },
+                  "material": {
+                    "type": "string",
+                    "value": "PLA"
+                  },
+                  "evidence": {
+                    "type": "string"
+                  },
+                  "configuration_sha256": {
+                    "type": "string"
+                  }
+                }
+              },
+              "geometry": {
+                "type": "object",
+                "keys": [
+                  "valid",
+                  "watertight",
+                  "winding_consistent",
+                  "component_count",
+                  "closed_component_count",
+                  "open_edge_count",
+                  "dropped_degenerate_faces",
+                  "dropped_duplicate_faces",
+                  "volume_mm3",
+                  "volume_source",
+                  "model_transform"
+                ],
+                "fields": {
+                  "valid": {
+                    "type": "boolean"
+                  },
+                  "watertight": {
+                    "type": "boolean"
+                  },
+                  "winding_consistent": {
+                    "type": "boolean"
+                  },
+                  "component_count": {
+                    "type": "integer"
+                  },
+                  "closed_component_count": {
+                    "type": "integer"
+                  },
+                  "open_edge_count": {
+                    "type": "integer"
+                  },
+                  "dropped_degenerate_faces": {
+                    "type": "integer"
+                  },
+                  "dropped_duplicate_faces": {
+                    "type": "integer"
+                  },
+                  "volume_mm3": {
+                    "type": "integer"
+                  },
+                  "volume_source": {
+                    "type": "string",
+                    "value": "validated_triangle_mesh"
+                  },
+                  "model_transform": {
+                    "type": "object",
+                    "keys": [
+                      "transform_schema",
+                      "size_unit",
+                      "orientation_mode",
+                      "scale_factors",
+                      "requested_rotation_deg",
+                      "rotation_deg",
+                      "rotation_matrix",
+                      "automatic_rotation_matrix",
+                      "orientation_outcome",
+                      "oriented_dimensions_mm",
+                      "final_dimensions_mm"
+                    ],
+                    "fields": {
+                      "transform_schema": {
+                        "type": "integer",
+                        "value": 2
+                      },
+                      "size_unit": {
+                        "type": "string",
+                        "value": "mm"
+                      },
+                      "orientation_mode": {
+                        "type": "string",
+                        "value": "auto"
+                      },
+                      "scale_factors": {
+                        "type": "object",
+                        "keys": [
+                          "x",
+                          "y",
+                          "z"
+                        ],
+                        "fields": {
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "z": {
+                            "type": "integer"
+                          }
+                        }
+                      },
+                      "requested_rotation_deg": {
+                        "type": "object",
+                        "keys": [
+                          "x",
+                          "y",
+                          "z"
+                        ],
+                        "fields": {
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "z": {
+                            "type": "integer"
+                          }
+                        }
+                      },
+                      "rotation_deg": {
+                        "type": "object",
+                        "keys": [
+                          "x",
+                          "y",
+                          "z"
+                        ],
+                        "fields": {
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "z": {
+                            "type": "integer"
+                          }
+                        }
+                      },
+                      "rotation_matrix": {
+                        "type": "array",
+                        "length": 3,
+                        "items": [
+                          {
+                            "type": "array",
+                            "length": 3,
+                            "items": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "array",
+                            "length": 3,
+                            "items": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "array",
+                            "length": 3,
+                            "items": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "automatic_rotation_matrix": {
+                        "type": "array",
+                        "length": 3,
+                        "items": [
+                          {
+                            "type": "array",
+                            "length": 3,
+                            "items": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "array",
+                            "length": 3,
+                            "items": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "array",
+                            "length": 3,
+                            "items": [
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              },
+                              {
+                                "type": "integer"
+                              }
+                            ]
+                          }
+                        ]
+                      },
+                      "orientation_outcome": {
+                        "type": "string",
+                        "value": "unchanged"
+                      },
+                      "oriented_dimensions_mm": {
+                        "type": "object",
+                        "keys": [
+                          "x",
+                          "y",
+                          "z"
+                        ],
+                        "fields": {
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "z": {
+                            "type": "integer"
+                          }
+                        }
+                      },
+                      "final_dimensions_mm": {
+                        "type": "object",
+                        "keys": [
+                          "x",
+                          "y",
+                          "z"
+                        ],
+                        "fields": {
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "z": {
+                            "type": "integer"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "scope": {
+                "type": "object",
+                "keys": [
+                  "kind",
+                  "object_count",
+                  "instance_count",
+                  "plate_count",
+                  "filament_count",
+                  "quantity"
+                ],
+                "fields": {
+                  "kind": {
+                    "type": "string",
+                    "value": "single_part"
+                  },
+                  "object_count": {
+                    "type": "integer"
+                  },
+                  "instance_count": {
+                    "type": "integer"
+                  },
+                  "plate_count": {
+                    "type": "integer"
+                  },
+                  "filament_count": {
+                    "type": "integer"
+                  },
+                  "quantity": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "estimates": {
+                "type": "object",
+                "keys": [
+                  "print_time_seconds",
+                  "print_time_source",
+                  "time_basis",
+                  "material_used_g",
+                  "material_used_g_source",
+                  "model_time_seconds",
+                  "preparation_time_seconds",
+                  "support_material_g",
+                  "calibration"
+                ],
+                "fields": {
+                  "print_time_seconds": {
+                    "type": "integer"
+                  },
+                  "print_time_source": {
+                    "type": "string",
+                    "value": "total_estimated_time"
+                  },
+                  "time_basis": {
+                    "type": "string"
+                  },
+                  "material_used_g": {
+                    "type": "number"
+                  },
+                  "material_used_g_source": {
+                    "type": "string",
+                    "value": "total_filament_weight_g"
+                  },
+                  "model_time_seconds": {
+                    "type": "null"
+                  },
+                  "preparation_time_seconds": {
+                    "type": "null"
+                  },
+                  "support_material_g": {
+                    "type": "null"
+                  },
+                  "calibration": {
+                    "type": "string"
+                  }
+                }
+              },
+              "artifact": {
+                "type": "object",
+                "keys": [
+                  "id",
+                  "sha256",
+                  "size_bytes",
+                  "media_type",
+                  "extension",
+                  "gcode_sha256",
+                  "access",
+                  "retention_seconds"
+                ],
+                "fields": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "type": "integer"
+                  },
+                  "media_type": {
+                    "type": "string",
+                    "value": "model/3mf"
+                  },
+                  "extension": {
+                    "type": "string",
+                    "value": ".gcode.3mf"
+                  },
+                  "gcode_sha256": {
+                    "type": "string"
+                  },
+                  "access": {
+                    "type": "string",
+                    "value": "artifact_audience"
+                  },
+                  "retention_seconds": {
+                    "type": "integer"
+                  }
+                }
+              },
+              "warnings": {
+                "type": "array",
+                "length": 0,
+                "items": []
+              },
+              "identity": {
+                "type": "object",
+                "keys": [
+                  "schema",
+                  "job_sha256",
+                  "processing_schema"
+                ],
+                "fields": {
+                  "schema": {
+                    "type": "string",
+                    "value": "r3d-slice-identity-v1"
+                  },
+                  "job_sha256": {
+                    "type": "string"
+                  },
+                  "processing_schema": {
+                    "type": "string"
+                  }
+                }
+              },
+              "receipt_sha256": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "async_accepted": {
+      "status": 202,
+      "headers": {
+        "location": "/bambu/slice/jobs/sj_<32hex>",
+        "retry-after": "2",
+        "preference-applied": "respond-async",
+        "cache-control": "no-store",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "body": {
+        "type": "object",
+        "keys": [
+          "success",
+          "async_contract",
+          "job_id",
+          "status",
+          "status_url",
+          "poll_after_ms",
+          "deadline_at",
+          "deadline_ms"
+        ],
+        "fields": {
+          "success": {
+            "type": "boolean",
+            "value": true
+          },
+          "async_contract": {
+            "type": "integer",
+            "value": 1
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "value": "queued"
+          },
+          "status_url": {
+            "type": "string"
+          },
+          "poll_after_ms": {
+            "type": "integer",
+            "value": 2000
+          },
+          "deadline_at": {
+            "type": "string"
+          },
+          "deadline_ms": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "async_running": {
+      "status": 200,
+      "headers": {
+        "retry-after": "2",
+        "cache-control": "no-store",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "body": {
+        "type": "object",
+        "keys": [
+          "success",
+          "async_contract",
+          "job_id",
+          "status",
+          "queue_position",
+          "elapsed_ms",
+          "deadline_at",
+          "poll_after_ms"
+        ],
+        "fields": {
+          "success": {
+            "type": "boolean",
+            "value": true
+          },
+          "async_contract": {
+            "type": "integer",
+            "value": 1
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "value": "running"
+          },
+          "queue_position": {
+            "type": "null"
+          },
+          "elapsed_ms": {
+            "type": "integer"
+          },
+          "deadline_at": {
+            "type": "string"
+          },
+          "poll_after_ms": {
+            "type": "integer",
+            "value": 2000
+          }
+        }
+      }
+    },
+    "async_completed": {
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "body": {
+        "type": "object",
+        "keys": [
+          "success",
+          "async_contract",
+          "job_id",
+          "status",
+          "elapsed_ms",
+          "result_status",
+          "result"
+        ],
+        "fields": {
+          "success": {
+            "type": "boolean",
+            "value": true
+          },
+          "async_contract": {
+            "type": "integer",
+            "value": 1
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "value": "completed"
+          },
+          "elapsed_ms": {
+            "type": "integer"
+          },
+          "result_status": {
+            "type": "integer",
+            "value": 200
+          },
+          "result": {
+            "type": "object",
+            "keys": [
+              "success",
+              "job_id",
+              "artifact_id",
+              "slicer_engine",
+              "technology",
+              "engine_version",
+              "material",
+              "infill",
+              "supports",
+              "profiles",
+              "applied_layer_height_mm",
+              "stats",
+              "model_transform",
+              "build_volume_limits_mm",
+              "technical_receipt"
+            ],
+            "fields": {
+              "success": {
+                "type": "boolean",
+                "value": true
+              },
+              "job_id": {
+                "type": "string"
+              },
+              "artifact_id": {
+                "type": "string"
+              },
+              "slicer_engine": {
+                "type": "string",
+                "value": "bambu"
+              },
+              "technology": {
+                "type": "string",
+                "value": "FDM"
+              },
+              "engine_version": {
+                "type": "string"
+              },
+              "material": {
+                "type": "string",
+                "value": "PLA"
+              },
+              "infill": {
+                "type": "string",
+                "value": "20%"
+              },
+              "supports": {
+                "type": "boolean",
+                "value": true
+              },
+              "profiles": {
+                "type": "object",
+                "keys": [
+                  "effective_profile_sha256",
+                  "printer",
+                  "machine_profile",
+                  "process_profile",
+                  "filament_profile",
+                  "bed_type"
+                ],
+                "fields": {
+                  "effective_profile_sha256": {
+                    "type": "string"
+                  },
+                  "printer": {
+                    "type": "string"
+                  },
+                  "machine_profile": {
+                    "type": "string"
+                  },
+                  "process_profile": {
+                    "type": "string"
+                  },
+                  "filament_profile": {
+                    "type": "string"
+                  },
+                  "bed_type": {
+                    "type": "string"
+                  }
+                }
+              },
+              "applied_layer_height_mm": {
+                "type": "number"
+              },
+              "stats": {
+                "type": "object",
+                "keys": [
+                  "print_time_seconds",
+                  "print_time_source",
+                  "material_used_m",
+                  "material_used_g",
+                  "material_used_g_source"
+                ],
+                "fields": {
+                  "print_time_seconds": {
+                    "type": "integer"
+                  },
+                  "print_time_source": {
+                    "type": "string",
+                    "value": "total_estimated_time"
+                  },
+                  "material_used_m": {
+                    "type": "number"
+                  },
+                  "material_used_g": {
+                    "type": "number"
+                  },
+                  "material_used_g_source": {
+                    "type": "string",
+                    "value": "total_filament_weight_g"
+                  }
+                }
+              },
+              "model_transform": {
+                "type": "object",
+                "keys": [
+                  "transform_schema",
+                  "size_unit",
+                  "orientation_mode",
+                  "scale_factors",
+                  "requested_rotation_deg",
+                  "rotation_deg",
+                  "rotation_matrix",
+                  "automatic_rotation_matrix",
+                  "orientation_outcome",
+                  "oriented_dimensions_mm",
+                  "final_dimensions_mm"
+                ],
+                "fields": {
+                  "transform_schema": {
+                    "type": "integer",
+                    "value": 2
+                  },
+                  "size_unit": {
+                    "type": "string",
+                    "value": "mm"
+                  },
+                  "orientation_mode": {
+                    "type": "string",
+                    "value": "auto"
+                  },
+                  "scale_factors": {
+                    "type": "object",
+                    "keys": [
+                      "x",
+                      "y",
+                      "z"
+                    ],
+                    "fields": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      },
+                      "z": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "requested_rotation_deg": {
+                    "type": "object",
+                    "keys": [
+                      "x",
+                      "y",
+                      "z"
+                    ],
+                    "fields": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      },
+                      "z": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "rotation_deg": {
+                    "type": "object",
+                    "keys": [
+                      "x",
+                      "y",
+                      "z"
+                    ],
+                    "fields": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      },
+                      "z": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "rotation_matrix": {
+                    "type": "array",
+                    "length": 3,
+                    "items": [
+                      {
+                        "type": "array",
+                        "length": 3,
+                        "items": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "array",
+                        "length": 3,
+                        "items": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "array",
+                        "length": 3,
+                        "items": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "automatic_rotation_matrix": {
+                    "type": "array",
+                    "length": 3,
+                    "items": [
+                      {
+                        "type": "array",
+                        "length": 3,
+                        "items": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "array",
+                        "length": 3,
+                        "items": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "array",
+                        "length": 3,
+                        "items": [
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "integer"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  "orientation_outcome": {
+                    "type": "string",
+                    "value": "unchanged"
+                  },
+                  "oriented_dimensions_mm": {
+                    "type": "object",
+                    "keys": [
+                      "x",
+                      "y",
+                      "z"
+                    ],
+                    "fields": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      },
+                      "z": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "final_dimensions_mm": {
+                    "type": "object",
+                    "keys": [
+                      "x",
+                      "y",
+                      "z"
+                    ],
+                    "fields": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      },
+                      "z": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              },
+              "build_volume_limits_mm": {
+                "type": "object",
+                "keys": [
+                  "min",
+                  "max",
+                  "source_profile"
+                ],
+                "fields": {
+                  "min": {
+                    "type": "object",
+                    "keys": [
+                      "x",
+                      "y",
+                      "z"
+                    ],
+                    "fields": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      },
+                      "z": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "max": {
+                    "type": "object",
+                    "keys": [
+                      "x",
+                      "y",
+                      "z"
+                    ],
+                    "fields": {
+                      "x": {
+                        "type": "integer"
+                      },
+                      "y": {
+                        "type": "integer"
+                      },
+                      "z": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "source_profile": {
+                    "type": "string"
+                  }
+                }
+              },
+              "technical_receipt": {
+                "type": "object",
+                "keys": [
+                  "schema",
+                  "request_id",
+                  "job_id",
+                  "measurement_generation",
+                  "source",
+                  "engine",
+                  "profiles",
+                  "applied",
+                  "geometry",
+                  "scope",
+                  "estimates",
+                  "artifact",
+                  "warnings",
+                  "identity",
+                  "receipt_sha256"
+                ],
+                "fields": {
+                  "schema": {
+                    "type": "string",
+                    "value": "r3d-technical-receipt-v1"
+                  },
+                  "request_id": {
+                    "type": "string"
+                  },
+                  "job_id": {
+                    "type": "string"
+                  },
+                  "measurement_generation": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "object",
+                    "keys": [
+                      "sha256",
+                      "format",
+                      "normalized_geometry_sha256",
+                      "sliced_geometry_sha256",
+                      "units",
+                      "unit_source"
+                    ],
+                    "fields": {
+                      "sha256": {
+                        "type": "string"
+                      },
+                      "format": {
+                        "type": "string",
+                        "value": "stl"
+                      },
+                      "normalized_geometry_sha256": {
+                        "type": "string"
+                      },
+                      "sliced_geometry_sha256": {
+                        "type": "string"
+                      },
+                      "units": {
+                        "type": "string",
+                        "value": "mm"
+                      },
+                      "unit_source": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "engine": {
+                    "type": "object",
+                    "keys": [
+                      "name",
+                      "version",
+                      "platform",
+                      "build_sha256"
+                    ],
+                    "fields": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "string"
+                      },
+                      "platform": {
+                        "type": "string"
+                      },
+                      "build_sha256": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "profiles": {
+                    "type": "object",
+                    "keys": [
+                      "printer",
+                      "machine",
+                      "process",
+                      "filament",
+                      "effective_profile_sha256",
+                      "bundle_sha256",
+                      "machine_sha256",
+                      "process_sha256",
+                      "filament_sha256",
+                      "nozzle_diameter_mm",
+                      "extruder_mode",
+                      "bed_type"
+                    ],
+                    "fields": {
+                      "printer": {
+                        "type": "string"
+                      },
+                      "machine": {
+                        "type": "string"
+                      },
+                      "process": {
+                        "type": "string"
+                      },
+                      "filament": {
+                        "type": "string"
+                      },
+                      "effective_profile_sha256": {
+                        "type": "string"
+                      },
+                      "bundle_sha256": {
+                        "type": "string"
+                      },
+                      "machine_sha256": {
+                        "type": "string"
+                      },
+                      "process_sha256": {
+                        "type": "string"
+                      },
+                      "filament_sha256": {
+                        "type": "string"
+                      },
+                      "nozzle_diameter_mm": {
+                        "type": "number"
+                      },
+                      "extruder_mode": {
+                        "type": "string"
+                      },
+                      "bed_type": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "applied": {
+                    "type": "object",
+                    "keys": [
+                      "layer_height_mm",
+                      "infill_percent",
+                      "supports",
+                      "material",
+                      "evidence",
+                      "configuration_sha256"
+                    ],
+                    "fields": {
+                      "layer_height_mm": {
+                        "type": "number"
+                      },
+                      "infill_percent": {
+                        "type": "integer"
+                      },
+                      "supports": {
+                        "type": "boolean",
+                        "value": true
+                      },
+                      "material": {
+                        "type": "string",
+                        "value": "PLA"
+                      },
+                      "evidence": {
+                        "type": "string"
+                      },
+                      "configuration_sha256": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "geometry": {
+                    "type": "object",
+                    "keys": [
+                      "valid",
+                      "watertight",
+                      "winding_consistent",
+                      "component_count",
+                      "closed_component_count",
+                      "open_edge_count",
+                      "dropped_degenerate_faces",
+                      "dropped_duplicate_faces",
+                      "volume_mm3",
+                      "volume_source",
+                      "model_transform"
+                    ],
+                    "fields": {
+                      "valid": {
+                        "type": "boolean"
+                      },
+                      "watertight": {
+                        "type": "boolean"
+                      },
+                      "winding_consistent": {
+                        "type": "boolean"
+                      },
+                      "component_count": {
+                        "type": "integer"
+                      },
+                      "closed_component_count": {
+                        "type": "integer"
+                      },
+                      "open_edge_count": {
+                        "type": "integer"
+                      },
+                      "dropped_degenerate_faces": {
+                        "type": "integer"
+                      },
+                      "dropped_duplicate_faces": {
+                        "type": "integer"
+                      },
+                      "volume_mm3": {
+                        "type": "integer"
+                      },
+                      "volume_source": {
+                        "type": "string",
+                        "value": "validated_triangle_mesh"
+                      },
+                      "model_transform": {
+                        "type": "object",
+                        "keys": [
+                          "transform_schema",
+                          "size_unit",
+                          "orientation_mode",
+                          "scale_factors",
+                          "requested_rotation_deg",
+                          "rotation_deg",
+                          "rotation_matrix",
+                          "automatic_rotation_matrix",
+                          "orientation_outcome",
+                          "oriented_dimensions_mm",
+                          "final_dimensions_mm"
+                        ],
+                        "fields": {
+                          "transform_schema": {
+                            "type": "integer",
+                            "value": 2
+                          },
+                          "size_unit": {
+                            "type": "string",
+                            "value": "mm"
+                          },
+                          "orientation_mode": {
+                            "type": "string",
+                            "value": "auto"
+                          },
+                          "scale_factors": {
+                            "type": "object",
+                            "keys": [
+                              "x",
+                              "y",
+                              "z"
+                            ],
+                            "fields": {
+                              "x": {
+                                "type": "integer"
+                              },
+                              "y": {
+                                "type": "integer"
+                              },
+                              "z": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "requested_rotation_deg": {
+                            "type": "object",
+                            "keys": [
+                              "x",
+                              "y",
+                              "z"
+                            ],
+                            "fields": {
+                              "x": {
+                                "type": "integer"
+                              },
+                              "y": {
+                                "type": "integer"
+                              },
+                              "z": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "rotation_deg": {
+                            "type": "object",
+                            "keys": [
+                              "x",
+                              "y",
+                              "z"
+                            ],
+                            "fields": {
+                              "x": {
+                                "type": "integer"
+                              },
+                              "y": {
+                                "type": "integer"
+                              },
+                              "z": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "rotation_matrix": {
+                            "type": "array",
+                            "length": 3,
+                            "items": [
+                              {
+                                "type": "array",
+                                "length": 3,
+                                "items": [
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "array",
+                                "length": 3,
+                                "items": [
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "array",
+                                "length": 3,
+                                "items": [
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          "automatic_rotation_matrix": {
+                            "type": "array",
+                            "length": 3,
+                            "items": [
+                              {
+                                "type": "array",
+                                "length": 3,
+                                "items": [
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "array",
+                                "length": 3,
+                                "items": [
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "array",
+                                "length": 3,
+                                "items": [
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  },
+                                  {
+                                    "type": "integer"
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          "orientation_outcome": {
+                            "type": "string",
+                            "value": "unchanged"
+                          },
+                          "oriented_dimensions_mm": {
+                            "type": "object",
+                            "keys": [
+                              "x",
+                              "y",
+                              "z"
+                            ],
+                            "fields": {
+                              "x": {
+                                "type": "integer"
+                              },
+                              "y": {
+                                "type": "integer"
+                              },
+                              "z": {
+                                "type": "integer"
+                              }
+                            }
+                          },
+                          "final_dimensions_mm": {
+                            "type": "object",
+                            "keys": [
+                              "x",
+                              "y",
+                              "z"
+                            ],
+                            "fields": {
+                              "x": {
+                                "type": "integer"
+                              },
+                              "y": {
+                                "type": "integer"
+                              },
+                              "z": {
+                                "type": "integer"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "scope": {
+                    "type": "object",
+                    "keys": [
+                      "kind",
+                      "object_count",
+                      "instance_count",
+                      "plate_count",
+                      "filament_count",
+                      "quantity"
+                    ],
+                    "fields": {
+                      "kind": {
+                        "type": "string",
+                        "value": "single_part"
+                      },
+                      "object_count": {
+                        "type": "integer"
+                      },
+                      "instance_count": {
+                        "type": "integer"
+                      },
+                      "plate_count": {
+                        "type": "integer"
+                      },
+                      "filament_count": {
+                        "type": "integer"
+                      },
+                      "quantity": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "estimates": {
+                    "type": "object",
+                    "keys": [
+                      "print_time_seconds",
+                      "print_time_source",
+                      "time_basis",
+                      "material_used_g",
+                      "material_used_g_source",
+                      "model_time_seconds",
+                      "preparation_time_seconds",
+                      "support_material_g",
+                      "calibration"
+                    ],
+                    "fields": {
+                      "print_time_seconds": {
+                        "type": "integer"
+                      },
+                      "print_time_source": {
+                        "type": "string",
+                        "value": "total_estimated_time"
+                      },
+                      "time_basis": {
+                        "type": "string"
+                      },
+                      "material_used_g": {
+                        "type": "number"
+                      },
+                      "material_used_g_source": {
+                        "type": "string",
+                        "value": "total_filament_weight_g"
+                      },
+                      "model_time_seconds": {
+                        "type": "null"
+                      },
+                      "preparation_time_seconds": {
+                        "type": "null"
+                      },
+                      "support_material_g": {
+                        "type": "null"
+                      },
+                      "calibration": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "artifact": {
+                    "type": "object",
+                    "keys": [
+                      "id",
+                      "sha256",
+                      "size_bytes",
+                      "media_type",
+                      "extension",
+                      "gcode_sha256",
+                      "access",
+                      "retention_seconds"
+                    ],
+                    "fields": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "type": "string"
+                      },
+                      "size_bytes": {
+                        "type": "integer"
+                      },
+                      "media_type": {
+                        "type": "string",
+                        "value": "model/3mf"
+                      },
+                      "extension": {
+                        "type": "string",
+                        "value": ".gcode.3mf"
+                      },
+                      "gcode_sha256": {
+                        "type": "string"
+                      },
+                      "access": {
+                        "type": "string",
+                        "value": "artifact_audience"
+                      },
+                      "retention_seconds": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "warnings": {
+                    "type": "array",
+                    "length": 0,
+                    "items": []
+                  },
+                  "identity": {
+                    "type": "object",
+                    "keys": [
+                      "schema",
+                      "job_sha256",
+                      "processing_schema"
+                    ],
+                    "fields": {
+                      "schema": {
+                        "type": "string",
+                        "value": "r3d-slice-identity-v1"
+                      },
+                      "job_sha256": {
+                        "type": "string"
+                      },
+                      "processing_schema": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "receipt_sha256": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "async_delete_completed": {
+      "status": 204
+    },
+    "async_after_delete": {
+      "status": 404,
+      "headers": {
+        "cache-control": "no-store",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "body": {
+        "type": "object",
+        "keys": [
+          "success",
+          "error",
+          "errorCode"
+        ],
+        "fields": {
+          "success": {
+            "type": "boolean",
+            "value": false
+          },
+          "error": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": "string",
+            "value": "SLICE_JOB_NOT_FOUND"
+          }
+        }
+      }
+    },
+    "async_refused_completed": {
+      "status": 200,
+      "headers": {
+        "cache-control": "no-store",
+        "content-type": "application/json; charset=utf-8"
+      },
+      "body": {
+        "type": "object",
+        "keys": [
+          "success",
+          "async_contract",
+          "job_id",
+          "status",
+          "elapsed_ms",
+          "result_status",
+          "result"
+        ],
+        "fields": {
+          "success": {
+            "type": "boolean",
+            "value": true
+          },
+          "async_contract": {
+            "type": "integer",
+            "value": 1
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "value": "completed"
+          },
+          "elapsed_ms": {
+            "type": "integer"
+          },
+          "result_status": {
+            "type": "integer",
+            "value": 400
+          },
+          "result": {
+            "type": "object",
+            "keys": [
+              "success",
+              "error",
+              "errorCode"
+            ],
+            "fields": {
+              "success": {
+                "type": "boolean",
+                "value": false
+              },
+              "error": {
+                "type": "string"
+              },
+              "errorCode": {
+                "type": "string",
+                "value": "INVALID_SOURCE_GEOMETRY"
+              }
+            }
+          }
+        }
+      }
+    },
+    "sync_refused": {
+      "status": 400,
+      "headers": {
+        "content-type": "application/json; charset=utf-8"
+      },
+      "body": {
+        "type": "object",
+        "keys": [
+          "success",
+          "error",
+          "errorCode"
+        ],
+        "fields": {
+          "success": {
+            "type": "boolean",
+            "value": false
+          },
+          "error": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": "string",
+            "value": "INVALID_SOURCE_GEOMETRY"
+          }
+        }
+      }
+    }
+  }
+}

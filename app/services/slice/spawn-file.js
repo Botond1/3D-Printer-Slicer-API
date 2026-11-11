@@ -31,15 +31,60 @@ function resolveMaxBuffer(value) {
 }
 
 /**
+ * Exit statuses util-linux's `choom` uses when its in-place `execvp` of the
+ * wrapped program fails (`EX_EXEC_ENOENT` 127, `EX_EXEC_FAILED` 126), with the
+ * line it prints. A real program can exit 126/127 itself, so both the status
+ * and choom's own message must match.
+ */
+const WRAPPER_EXEC_FAILURE = /^choom: failed to execute /m;
+const WRAPPER_EXEC_STATUS = Object.freeze({ 127: 'ENOENT', 126: 'EACCES' });
+
+function normalizeWrapped(wrapped) {
+    if (!wrapped || typeof wrapped !== 'object' || typeof wrapped.file !== 'string') return null;
+    return { file: wrapped.file, args: Array.isArray(wrapped.args) ? wrapped.args : [] };
+}
+
+/**
+ * The spawn error Node would have raised had the wrapped program been spawned
+ * directly: choom reports a failed exec as an exit status, Node as an `error`
+ * event with `code`/`errno`/`syscall`/`path`.
+ * @param {{file: string, args: string[]}} wrapped Original program.
+ * @param {unknown} code Wrapper exit status.
+ * @param {unknown} signal Wrapper signal.
+ * @param {string} stderr Wrapper stderr.
+ * @returns {Error|null} Equivalent spawn error, or null when the program itself ran.
+ */
+function wrapperExecFailure(wrapped, code, signal, stderr) {
+    if (signal !== null || !Object.prototype.hasOwnProperty.call(WRAPPER_EXEC_STATUS, code)) return null;
+    if (!WRAPPER_EXEC_FAILURE.test(stderr)) return null;
+    const errorCode = WRAPPER_EXEC_STATUS[code];
+    const error = new Error(`spawn ${wrapped.file} ${errorCode}`);
+    error.errno = errorCode === 'ENOENT' ? -2 : -13;
+    error.code = errorCode;
+    error.syscall = `spawn ${wrapped.file}`;
+    error.path = wrapped.file;
+    error.spawnargs = [...wrapped.args];
+    return error;
+}
+
+/**
  * Run a file like `execFile(file, args, options, callback)`.
+ *
+ * `options.wrapped` names the real program when `file` is an in-place exec
+ * wrapper (`choom -n <adj> -- <program> <args…>`, 3.9.0): the error's `cmd` and
+ * message then name the real program, and a failed exec of it is reported as
+ * the spawn error Node would have given, so classifiers see exactly what they
+ * saw without the wrapper. PID, process group, exit status and signal are the
+ * real program's because the wrapper replaces itself with it.
  * @param {string} file Executable path.
  * @param {string[]} [args] Argument array; never interpreted by a shell.
- * @param {{detached?: boolean, env?: object, cwd?: string, maxBuffer?: number, shell?: boolean, windowsHide?: boolean}} [options] Spawn options.
+ * @param {{detached?: boolean, env?: object, cwd?: string, maxBuffer?: number, shell?: boolean, windowsHide?: boolean, wrapped?: {file: string, args: string[]}}} [options] Spawn options.
  * @param {(error: Error|null, stdout: string, stderr: string) => void} callback Completion callback.
  * @returns {import('node:child_process').ChildProcess} Spawned child.
  */
 function spawnFile(file, args = [], options = {}, callback = () => {}) {
     const maxBuffer = resolveMaxBuffer(options.maxBuffer);
+    const wrapped = normalizeWrapped(options.wrapped);
     const child = spawn(file, args, {
         cwd: options.cwd,
         env: options.env,
@@ -62,7 +107,15 @@ function spawnFile(file, args = [], options = {}, callback = () => {}) {
             callback(null, stdout, stderr);
             return;
         }
-        const cmd = args.length ? `${file} ${args.join(' ')}` : file;
+        const shown = wrapped || { file, args };
+        const cmd = shown.args.length ? `${shown.file} ${shown.args.join(' ')}` : shown.file;
+        const execFailure = !failure && wrapped ? wrapperExecFailure(wrapped, code, signal, stderr) : null;
+        if (execFailure) {
+            // As without the wrapper: an `error` event, empty streams.
+            execFailure.cmd = cmd;
+            callback(execFailure, '', '');
+            return;
+        }
         if (!failure) {
             failure = new Error(`Command failed: ${cmd}\n${stderr}`);
             failure.code = code < 0 ? getSystemErrorName(code) : code;
@@ -120,5 +173,6 @@ function spawnFile(file, args = [], options = {}, callback = () => {}) {
 
 module.exports = {
     DEFAULT_MAX_BUFFER_BYTES,
-    spawnFile
+    spawnFile,
+    wrapperExecFailure
 };

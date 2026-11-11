@@ -29,7 +29,11 @@ function handleJobStatus(req, res, store) {
     return sendNoStoreJson(res, 200, body);
 }
 
-/** `DELETE /bambu/slice/jobs/:job_id` */
+/**
+ * `DELETE /bambu/slice/jobs/:job_id`. Statuses as in 3.8.3 (204 / 404). From
+ * 3.9.0 the store also deletes a completed job's sliced artifact; that
+ * deletion runs after the answer and never changes it.
+ */
 function handleJobCancel(req, res, store) {
     if (!store.cancel(req.params?.job_id, resolveJobPrincipal(req))) return sendJobNotFound(res);
     res.setHeader('Cache-Control', 'no-store');

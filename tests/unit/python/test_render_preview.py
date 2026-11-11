@@ -19,6 +19,8 @@ try:  # The renderer needs numpy and Pillow; skip cleanly where they are absent.
     DEPENDENCIES_AVAILABLE = True
 except ImportError:  # pragma: no cover - environment dependent
     DEPENDENCIES_AVAILABLE = False
+if not DEPENDENCIES_AVAILABLE and __import__("os").environ.get("R3D_REQUIRE_GEOMETRY_DEPS") == "1":
+    raise ImportError("R3D_REQUIRE_GEOMETRY_DEPS=1: the pinned geometry stack is required here, not skipped")
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
