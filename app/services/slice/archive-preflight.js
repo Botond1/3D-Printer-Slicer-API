@@ -132,6 +132,8 @@ function createArchivePreflight(options = {}) {
     function settle(task, message) {
         if (active !== task) return;
         active = null;
+        // Idle again: an idle worker never holds the process open (pump refs it for the next task).
+        worker?.unref();
         counters.running -= 1;
         counters.completed += 1;
         task.finish(message);
@@ -152,7 +154,13 @@ function createArchivePreflight(options = {}) {
             // A metrics failure never refuses an upload.
         }
         try {
-            ensureWorker().postMessage({
+            const current = ensureWorker();
+            // While a request waits on it the worker keeps the event loop alive:
+            // unreferenced, a scan that holds no other handle (a heap that runs
+            // out, a long tokenizer pass) let the loop drain with the request's
+            // promise never settled.
+            current.ref();
+            current.postMessage({
                 id: task.id,
                 file: task.file,
                 resourcePolicy: resolvePolicy(),

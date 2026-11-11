@@ -412,5 +412,6 @@ module.exports = {
     isNativeKilledBySystem,
     isNativeOutputOverflowError,
     isProcessingTimeoutError,
-    isSourceGeometryError
+    isSourceGeometryError,
+    reportNativeFailure
 };

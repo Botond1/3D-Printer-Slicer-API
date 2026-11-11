@@ -45,6 +45,11 @@ CMD="${1:-help}"
 [ "$#" -gt 0 ] && shift
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# The script calls itself for the automatic rollback. Run it through bash by
+# its absolute path: it may be invoked as `bash deploy-390.sh` without the
+# execute bit (git and the release tree keep it 0644), where "$0" alone is
+# "Permission denied" and the rollback would never start.
+SELF="$SCRIPT_DIR/$(basename "$0")"
 PACK="${R3D_PACK:-/opt/rocket3d/slicer-api-5794efad764af0eb79a52747ce123c5e60c5ac44}"
 COMPOSE_ENV="${R3D_COMPOSE_ENV:-/etc/rocket3d/slicer-api/5794efad764af0eb79a52747ce123c5e60c5ac44/compose-n1-exact-configs.env}"
 DYNAMIC_DIR="${R3D_DYNAMIC_DIR:-/opt/rocket3d/slicer-api-9e9621a3f6110192aeb77a5c182da5aad79c80e7/ops/hostinger/dynamic}"
@@ -592,7 +597,7 @@ automatic_rollback() { # only on an idle queue; jobs in flight -> hold and page
   running="$(docker inspect -f '{{.State.Running}} {{.State.Restarting}}' "$NAME" 2>/dev/null || echo 'missing')"
   if [ "$running" != "true false" ]; then
     echo "a check failed and the new container is not running ($running): automatic rollback" >&2
-    "$0" --execute rollback "$NEW_REF" "$NEW_SHA" --backup "$BACKUP_DIR" \
+    bash "$SELF" --execute rollback "$NEW_REF" "$NEW_SHA" --backup "$BACKUP_DIR" \
       || { echo "AUTOMATIC ROLLBACK FAILED: page the operator; the env backup is $BACKUP_DIR" >&2; exit 5; }
     exit 2
   fi
@@ -603,7 +608,7 @@ automatic_rollback() { # only on an idle queue; jobs in flight -> hold and page
     exit 3
   fi
   echo "a check failed and the queue is idle: automatic rollback" >&2
-  "$0" --execute rollback "$NEW_REF" "$NEW_SHA" --backup "$BACKUP_DIR" \
+  bash "$SELF" --execute rollback "$NEW_REF" "$NEW_SHA" --backup "$BACKUP_DIR" \
     || { echo "AUTOMATIC ROLLBACK FAILED: page the operator; the env backup is $BACKUP_DIR" >&2; exit 5; }
   exit 2
 }

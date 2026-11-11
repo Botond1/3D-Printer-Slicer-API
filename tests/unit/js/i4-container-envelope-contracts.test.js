@@ -310,7 +310,11 @@ test('the entrypoint turns core dumps off, soft and hard, and the limit reads ba
     const run = spawnSync('sh', ['-c', `set -eu\n${block}\nsh -c 'ulimit -Sc; ulimit -Hc'\n`], {
         windowsHide: true, encoding: 'utf8'
     });
-    const sticks = spawnSync('sh', ['-c', 'ulimit -Hc 0; ulimit -Hc'], { windowsHide: true, encoding: 'utf8' });
+    // Soft first, as the entrypoint does: a hard limit below the current soft
+    // one is EINVAL (setrlimit), and a Linux runner starts with soft cores on.
+    const sticks = spawnSync('sh', ['-c', 'ulimit -Sc 0; ulimit -Hc 0; ulimit -Hc'], {
+        windowsHide: true, encoding: 'utf8'
+    });
     if (sticks.stdout.trim() !== '0') {
         // A host whose shell cannot hold a hard core limit of 0 (Cygwin/MSYS):
         // the read-back must refuse the start instead of running with dumps.

@@ -238,7 +238,10 @@ function createOomWrapper(options = {}) {
                 try { child?.kill?.('SIGKILL'); } catch { /* already gone */ }
                 finish(off('self_test_timeout'));
             }, selfTestTimeoutMs);
-            timer.unref?.();
+            // Kept referenced: it is the only bound on a promise the startup
+            // (and the first command) awaits. Unreferenced, a self-test whose
+            // child holds no handle of its own lets the event loop drain with
+            // the verdict never decided. It is cleared the moment one is.
         });
     }
 
