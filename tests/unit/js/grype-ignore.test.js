@@ -77,8 +77,7 @@ test('the renderer CLI writes the run-local config for admitted entries and refu
         const target = path.join(directory, 'grype.yaml');
         fs.writeFileSync(target, '');
         const emptyPolicy = path.join(directory, 'empty.yaml');
-        fs.writeFileSync(emptyPolicy, 'ignore: []
-');
+        fs.writeFileSync(emptyPolicy, 'ignore: []\n');
         const empty = spawnSync(process.execPath, [SCRIPT, emptyPolicy, target], { encoding: 'utf8' });
         assert.equal(empty.status, 0, empty.stderr);
         assert.equal(fs.readFileSync(target, 'utf8'), '');
