@@ -1,0 +1,47 @@
+name: Debug DNS (temporary)
+on:
+  pull_request:
+    paths:
+      - .github/workflows/debug-dns.yml
+permissions:
+  contents: read
+jobs:
+  dns:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Host resolver
+        run: |
+          set +e
+          cat /etc/resolv.conf
+          resolvectl status 2>/dev/null | head -30
+          getent hosts archive.ubuntu.com
+          docker version --format '{{.Server.Version}}'
+          cat /etc/docker/daemon.json 2>/dev/null
+          sudo iptables -S 2>/dev/null | head -30
+      - name: Plain container
+        run: |
+          set +e
+          docker run --rm ubuntu:24.04 sh -c 'cat /etc/resolv.conf; getent hosts archive.ubuntu.com; echo "getent exit $?"; apt-get update 2>&1 | tail -5'
+      - name: Plain container, host network
+        run: |
+          set +e
+          docker run --rm --network host ubuntu:24.04 sh -c 'cat /etc/resolv.conf; getent hosts archive.ubuntu.com; echo "getent exit $?"'
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+        with:
+          version: v0.35.0
+          cache-binary: false
+      - name: Buildx RUN step
+        run: |
+          set +e
+          mkdir /tmp/dbg && cd /tmp/dbg
+          printf 'FROM ubuntu:24.04\nRUN cat /etc/resolv.conf; getent hosts archive.ubuntu.com; echo "getent exit $?"; apt-get update 2>&1 | tail -6; exit 0\n' > Dockerfile
+          docker buildx build --progress plain --no-cache . 2>&1 | tail -40
+          docker buildx build --progress plain --no-cache --network host . 2>&1 | tail -25
+          docker exec "$(docker ps -q --filter name=buildx_buildkit | head -1)" sh -c 'cat /etc/resolv.conf; nslookup archive.ubuntu.com 2>&1 | tail -6'
+      - name: Docker default builder
+        run: |
+          set +e
+          cd /tmp/dbg
+          DOCKER_BUILDKIT=1 docker --context default build --progress plain --no-cache . 2>&1 | tail -25
