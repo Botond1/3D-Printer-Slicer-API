@@ -95,13 +95,34 @@ runs:
           version: v0.35.0
           cache-binary: false
           cleanup: true
-          # RUN steps share the BuildKit container's network namespace. On the default
-          # bridge that container resolves names through Docker's fallback resolvers,
-          # which stopped answering on hosted runners on 2026-11-11 (apt could not
-          # resolve archive.ubuntu.com in thirteen consecutive runs). The host network
-          # uses the runner's own resolver.
-          driver-opts: |
-            network=host
+
+      - name: Resolve the Ubuntu package hosts for the build
+        id: package_hosts
+        shell: bash
+        run: |
+          # On 2026-11-11 the hosted runners' resolver (and 8.8.8.8 from there)
+          # stopped answering for *.ubuntu.com only, which failed `apt-get update`
+          # in every image build. The build gets the two addresses explicitly:
+          # from the system resolver when it answers, else from 1.1.1.1. Only
+          # /etc/hosts of the build steps is affected; the image is unchanged.
+          set -uo pipefail
+          resolve() {
+            local name="$1" address=""
+            address="$(getent ahostsv4 "$name" 2>/dev/null | awk 'NR==1 {print $1}')" || true
+            if [[ ! "$address" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+              address="$(dig +short +time=3 +tries=2 @1.1.1.1 "$name" A 2>/dev/null | grep -E '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' | head -n 1)" || true
+            fi
+            [[ "$address" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+            printf '%s' "$address"
+          }
+          archive="$(resolve archive.ubuntu.com)" || { echo "archive.ubuntu.com does not resolve." >&2; exit 1; }
+          security="$(resolve security.ubuntu.com)" || { echo "security.ubuntu.com does not resolve." >&2; exit 1; }
+          {
+            echo 'add_hosts<<PACKAGE_HOSTS'
+            echo "archive.ubuntu.com:$archive"
+            echo "security.ubuntu.com:$security"
+            echo 'PACKAGE_HOSTS'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build the exact candidate image once and load it locally
         id: build
@@ -109,6 +130,7 @@ runs:
         with:
           context: .
           file: ./Dockerfile
+          add-hosts: ${{ steps.package_hosts.outputs.add_hosts }}
           platforms: linux/amd64
           load: true
           push: false
