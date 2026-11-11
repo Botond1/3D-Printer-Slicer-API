@@ -100,7 +100,7 @@ cmd_up() {
     R3D_S390_IMAGE="$ref" R3D_S390_CHILD_OOM_SCORE_ADJ="$adj" compose up --detach --pull never
     docker inspect --format '{{.HostConfig.OomScoreAdj}} {{.HostConfig.Memory}} {{.HostConfig.NanoCpus}}' "$PRIVATE"
     [ "$(docker inspect --format '{{.HostConfig.OomScoreAdj}}' "$PRIVATE")" = "1000" ] || die "oom_score_adj is not 1000"
-    [ "$(docker inspect --format '{{json .NetworkSettings.Ports}}' "$PRIVATE")" = "{}" ] || die "a port is published"
+    [ -z "$(docker port "$PRIVATE")" ] || die "a port is published"
   else
     echo "DRY-RUN would start $PRIVATE ($side = $ref) with oom_score_adj 1000, CHILD_OOM_SCORE_ADJ=$adj, internal network only"
   fi

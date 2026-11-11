@@ -13,4 +13,12 @@
 # An entry without a reason, without an expiry, or past its expiry fails
 # tests/unit/js/grype-ignore.test.js and the image gate step that renders this
 # file into the scanner configuration (tests/golden/grype-ignore-policy.js).
-ignore: []
+ignore:
+  - vulnerability: CVE-2026-109518
+    package: apt
+    reason: "apt of the ubuntu:24.04 base; the runtime never runs apt (non-root user, read-only root filesystem, internal network without egress). The 3.9.0 release may not change the Dockerfile (generation gate); the next image release that may refresh the base removes this entry."
+    expires: 2026-12-31
+  - vulnerability: CVE-2026-109518
+    package: libapt-pkg6.0t64
+    reason: "Library of the same apt advisory, loaded only by apt, which the runtime never runs (non-root user, read-only root filesystem, internal network without egress). Removed with the apt entry at the next base refresh."
+    expires: 2026-12-31

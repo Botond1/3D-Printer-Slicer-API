@@ -17,6 +17,12 @@ services:
       MAX_CONCURRENT_SLICES: "1"
       EXPECTED_MEMORY_BYTES: ${R3D_S390_MEMORY_BYTES:-3221225472}
       EXPECTED_CPU_LIMIT: "2.0"
+      EXPECTED_SERVICE_UID: "999"
+      EXPECTED_SERVICE_GID: "999"
+      EXPECTED_PIDS_LIMIT: "512"
+      EXPECTED_LOG_MAX_SIZE: "20m"
+      EXPECTED_LOG_MAX_FILES: "5"
+      EXPECTED_STOP_GRACE_PERIOD: "30s"
     mem_limit: ${R3D_S390_MEMORY_BYTES:-3221225472}
     memswap_limit: ${R3D_S390_MEMORY_BYTES:-3221225472}
     cpus: 2.0
@@ -24,6 +30,13 @@ services:
     oom_score_adj: 1000
     user: "999:999"
     read_only: true
+    init: true
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
     security_opt:
       - no-new-privileges:true
     cap_drop:
