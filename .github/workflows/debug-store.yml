@@ -1,0 +1,46 @@
+name: Debug image store (temporary)
+on:
+  pull_request:
+    paths:
+      - .github/workflows/debug-store.yml
+permissions:
+  contents: read
+jobs:
+  store:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Before
+        run: |
+          set +e
+          docker info --format 'driver={{.Driver}} status={{.DriverStatus}}'
+          cat /etc/docker/daemon.json 2>/dev/null; echo
+      - name: Switch to the classic image store
+        run: |
+          set -euo pipefail
+          config=/etc/docker/daemon.json
+          sudo mkdir -p /etc/docker
+          if [ ! -s "$config" ]; then echo '{}' | sudo tee "$config" >/dev/null; fi
+          sudo jq '.features = ((.features // {}) + {"containerd-snapshotter": false})' "$config" | sudo tee "$config.next" >/dev/null
+          sudo mv "$config.next" "$config"
+          sudo systemctl restart docker
+          docker info --format 'driver={{.Driver}} status={{.DriverStatus}}'
+          if docker info --format '{{.DriverStatus}}' | grep -q 'io.containerd.snapshotter'; then echo "still the containerd image store" >&2; exit 1; fi
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+        with:
+          version: v0.35.0
+          cache-binary: false
+      - name: Build, load and compare ids
+        run: |
+          set -euo pipefail
+          mkdir /tmp/dbg && cd /tmp/dbg
+          printf 'FROM busybox:1.36\nRUN echo hello > /hello\n' > Dockerfile
+          docker buildx build --load -t local/dbg:1 . >/dev/null 2>&1
+          id="$(docker image inspect --format '{{.Id}}' local/dbg:1)"
+          docker save local/dbg:1 -o img.tar
+          config="sha256:$(tar -xOf img.tar manifest.json | jq -r '.[0].Config' | sed -E 's#^blobs/sha256/##; s#\.json$##')"
+          echo "image id      $id"
+          echo "config digest $config"
+          echo "repo digests  $(docker image inspect --format '{{json .RepoDigests}}' local/dbg:1)"
+          [ "$id" = "$config" ] && echo "CLASSIC: id equals the config digest" || echo "NOT CLASSIC"
