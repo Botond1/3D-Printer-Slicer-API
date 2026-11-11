@@ -193,6 +193,26 @@ jobs:
           [ "$REGISTRY_REPOSITORY" = "ghcr.io/botond1/3d-printer-slicer-api" ]
           [ "$DISCOVERY_TAG" = "candidate-$CANDIDATE_SHA" ]
 
+      - name: Use the classic Docker image store for the identity checks
+        shell: bash
+        run: |
+          # The hosted runner image moved to the containerd image store, where a
+          # loaded image's id is its manifest digest. Every identity check of this
+          # job is written for the classic store: the local id is the CONFIG digest
+          # and differs from the registry's manifest digest. Two publications were
+          # refused on 2026-11-11 after a successful push for that reason alone.
+          set -euo pipefail
+          config=/etc/docker/daemon.json
+          sudo mkdir -p /etc/docker
+          if [ ! -s "$config" ]; then echo '{}' | sudo tee "$config" >/dev/null; fi
+          sudo jq '.features = ((.features // {}) + {"containerd-snapshotter": false})' "$config"             | sudo tee "$config.next" >/dev/null
+          sudo mv "$config.next" "$config"
+          sudo systemctl restart docker
+          if docker info --format '{{.DriverStatus}}' | grep -q 'io.containerd.snapshotter'; then
+            echo "The runner still uses the containerd image store." >&2
+            exit 1
+          fi
+
       - name: Run the complete shared prepublication build-once gate
         id: exact_image_gate
         uses: ./.github/actions/exact-image-gate
