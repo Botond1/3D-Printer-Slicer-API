@@ -596,8 +596,15 @@ function validateContract(sources) {
         "['i11-publication-draft.json', 96 * 1024]",
         "['i11-main-candidate-provenance.json', 96 * 1024]",
         "['sbom.spdx.json', 16 * 1024 * 1024]",
-        "['grype.json', 100 * 1024 * 1024]"
+        "['grype.json', 100 * 1024 * 1024]",
+        "['syft.yaml', 1]", "['grype.yaml', 16 * 1024]",
+        "require('./tests/golden/grype-ignore-policy.js')",
+        "fs.readFileSync('ops/security/grype-ignore.yaml', 'utf8')",
+        'policy.validateEntries(entries).length !== 0',
+        "const emptyTrustedConfig = (name === 'syft.yaml');",
+        'bytes.length !== 0 && !bytes.equals(renderedGrypeConfig)'
     ], 'publication evidence boundary');
+    // The behaviour of this step is run in publication-grype-config-boundary.test.js.
     const uploadId = stepIdContaining(publication, 'actions/upload-artifact@');
     const upload = stepText(publication, uploadId);
     requireIncludes(upload, [

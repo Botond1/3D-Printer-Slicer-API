@@ -1175,19 +1175,37 @@ jobs:
             ['sbom.spdx.json', 16 * 1024 * 1024],
             ['grype.json', 100 * 1024 * 1024],
             ['syft.yaml', 1],
-            ['grype.yaml', 1]
+            ['grype.yaml', 16 * 1024]
           ]);
+          // grype.yaml is the gate's empty file, or exactly the bytes the candidate's
+          // own renderer gives for the candidate's ignore list (recomputed here, never
+          // "any content"); syft.yaml stays empty.
+          let renderedGrypeConfig;
+          try {
+            const policy = require('./tests/golden/grype-ignore-policy.js');
+            const entries = policy.parseIgnoreFile(fs.readFileSync('ops/security/grype-ignore.yaml', 'utf8'));
+            if (policy.validateEntries(entries).length !== 0) process.exit(2);
+            renderedGrypeConfig = Buffer.from(policy.renderGrypeConfig(entries), 'utf8');
+          } catch {
+            process.exit(2);
+          }
+          if (renderedGrypeConfig.length > limits.get('grype.yaml')) process.exit(2);
           const actual = fs.readdirSync(root).sort();
           const expected = [...limits.keys()].sort();
           if (JSON.stringify(actual) !== JSON.stringify(expected)) process.exit(2);
           for (const [name, limit] of limits) {
             const target = path.join(root, name);
             const details = fs.lstatSync(target);
-            const emptyTrustedConfig = (name === 'syft.yaml' || name === 'grype.yaml');
+            const emptyTrustedConfig = (name === 'syft.yaml');
+            const renderedTrustedConfig = (name === 'grype.yaml');
             if (!details.isFile() || details.isSymbolicLink()
-                || (emptyTrustedConfig ? details.size !== 0 : details.size <= 0)
+                || (emptyTrustedConfig ? details.size !== 0 : (!renderedTrustedConfig && details.size <= 0))
                 || details.size > limit || path.dirname(fs.realpathSync(target)) !== root) {
               process.exit(2);
+            }
+            if (renderedTrustedConfig) {
+              const bytes = fs.readFileSync(target);
+              if (bytes.length !== 0 && !bytes.equals(renderedGrypeConfig)) process.exit(2);
             }
           }
           NODE

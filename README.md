@@ -18,6 +18,16 @@ It converts supported 3D model and CAD inputs into printer-ready artifacts, meas
 print time and mass with three native slicers, and returns a validated HUF quote.
 Version **3.4.0** (2026-09-08).
 
+**Deployed: 3.9.0**, live on the Slicer VPS since 2026-11-11 17:37 UTC as
+`ghcr.io/botond1/3d-printer-slicer-api@sha256:f4aafd5c14f3e149f71e8f7736aedb05451477dde31cbd54895576372e94c50b`
+(source `abe899791d69618ba29e75dfb32501d4b8d2c776`; Bambu `measurement_generation`
+`0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27`, unchanged from 3.8.3). The key
+ring runs in `principals` mode with the former shared key as `SLICE_SERVICE_WOOCOMMERCE_API_KEY_PREVIOUS`;
+live values `ARTIFACT_TTL_MS=3600000`, `MAX_UPLOAD_BYTES=125829120`, `EXPORT_ROUTE_ENABLED=true`. The
+Traefik public path allowlist was applied on 2026-11-11 18:04 UTC. Rollback, the CI lessons
+and the pending items: [`CHANGELOG.md`](CHANGELOG.md) (v3.9.0, Deployment); operator procedure:
+[`ops/hostinger/RUNBOOK.md`](ops/hostinger/RUNBOOK.md) §8.6.
+
 - Consumer contract (WooCommerce plugin, LeadPilot): [`docs/integration-guide.md`](docs/integration-guide.md)
 - Operator handoff: [`docs/codex/handoff-2026-09-03.md`](docs/codex/handoff-2026-09-03.md)
   (previous: [`docs/codex/handoff-2026-09-02.md`](docs/codex/handoff-2026-09-02.md))
