@@ -6,6 +6,8 @@ const { GcodeMetricsError } = require('./gcode-metrics');
 const { buildNativeBoundsResponse } = require('./native-bounds');
 const { nativeExitFacts, printableStderrTail } = require('./command');
 const { emitEvent } = require('../observability/events');
+const { incrementArchiveRejection } = require('../observability/metrics');
+const { archiveBodyKeys } = require('./resource-errors');
 
 /** Exit status a POSIX shell reports for a child that died of SIGKILL (128 + 9). */
 const SHELL_SIGKILL_EXIT_STATUS = 137;
@@ -77,6 +79,9 @@ function combinedDiagnostic(err) {
  * guessing is involved.
  */
 const SOURCE_GEOMETRY_MARKER_PREFIX = 'INVALID_SOURCE_GEOMETRY|';
+
+/** Public text of the 400 `INVALID_SOURCE_GEOMETRY` body (3.8.3 wording). */
+const SOURCE_GEOMETRY_ERROR_TEXT = 'The uploaded model holds no printable geometry: it is empty, unreadable, has no finite coordinates, or encloses no volume. Please upload a corrected model file.';
 
 /**
  * Whether a raw command stream carries a converter geometry marker line.
@@ -167,6 +172,37 @@ function isZipInputError(err) {
     );
 }
 
+/**
+ * Count an archive refusal by its rule and, for the build-expansion
+ * refusal, log its three counts (never a name or a path).
+ * @param {{archiveRule: string, archiveLimit?: number|null, expansion?: {triangles: number, instances: number, objects: number}}} err Labelled error.
+ */
+function recordArchiveRefusal(err) {
+    incrementArchiveRejection(err.archiveRule);
+    if (err.archiveRule !== 'ARCHIVE_EXPANSION_EXCEEDED') return;
+    const extra = { reason: '3mf_expansion', rule: err.archiveRule };
+    if (Number.isFinite(err.archiveLimit)) extra.limit = err.archiveLimit;
+    for (const key of ['triangles', 'instances', 'objects']) {
+        if (Number.isFinite(err.expansion?.[key])) extra[key] = err.expansion[key];
+    }
+    emitEvent('resource.rejected', {
+        audience: 'slice',
+        outcome: 'rejected',
+        error_code: err.code,
+        extra
+    });
+}
+
+/**
+ * Whether an error is the build-expansion refusal of the 3MF pre-scan, which
+ * keeps the converter's own `INVALID_SOURCE_GEOMETRY` (400).
+ * @param {unknown} err Processing error.
+ * @returns {boolean} True for the labelled expansion refusal.
+ */
+function isArchiveExpansionError(err) {
+    return err?.code === 'INVALID_SOURCE_GEOMETRY' && err?.archiveRule === 'ARCHIVE_EXPANSION_EXCEEDED';
+}
+
 /** Message shape the command runner assigns to a budget expiry. */
 const TIMEOUT_MESSAGE_PATTERN = /timed out after \d+ minutes/i;
 
@@ -249,11 +285,26 @@ function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, g
         });
     }
 
+    // 3.9.0: an archive refusal keeps its 3.8.3 status and errorCode and
+    // gains the two additive body keys `archive_rule` / `archive_limit`.
+    const archiveKeys = archiveBodyKeys(err);
+    if (archiveKeys.archive_rule) recordArchiveRefusal(err);
+
+    if (isArchiveExpansionError(err)) {
+        return res.status(400).json({
+            success: false,
+            error: SOURCE_GEOMETRY_ERROR_TEXT,
+            errorCode: 'INVALID_SOURCE_GEOMETRY',
+            ...archiveKeys
+        });
+    }
+
     if (err?.code === 'SLICE_RESOURCE_LIMIT_EXCEEDED') {
         return res.status(413).json({
             success: false,
             error: 'Slice processing exceeded a configured resource limit.',
-            errorCode: 'SLICE_RESOURCE_LIMIT_EXCEEDED'
+            errorCode: 'SLICE_RESOURCE_LIMIT_EXCEEDED',
+            ...archiveKeys
         });
     }
 
@@ -309,7 +360,7 @@ function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, g
     if (isSourceGeometryError(err)) {
         return res.status(400).json({
             success: false,
-            error: 'The uploaded model holds no printable geometry: it is empty, unreadable, has no finite coordinates, or encloses no volume. Please upload a corrected model file.',
+            error: SOURCE_GEOMETRY_ERROR_TEXT,
             errorCode: 'INVALID_SOURCE_GEOMETRY'
         });
     }
@@ -318,7 +369,8 @@ function handleProcessingError(err, res, _legacyCleanupList, _legacyInputFile, g
         return res.status(400).json({
             success: false,
             error: 'Uploaded ZIP file is invalid or does not contain a supported model file.',
-            errorCode: 'INVALID_SOURCE_ARCHIVE'
+            errorCode: 'INVALID_SOURCE_ARCHIVE',
+            ...archiveKeys
         });
     }
 
@@ -355,9 +407,11 @@ module.exports = {
     classifyUnsliceableSourceGeometry,
     handleProcessingError,
     hasSourceGeometryMarker,
+    isArchiveExpansionError,
     isNativeCommandFailure,
     isNativeKilledBySystem,
     isNativeOutputOverflowError,
     isProcessingTimeoutError,
-    isSourceGeometryError
+    isSourceGeometryError,
+    reportNativeFailure
 };

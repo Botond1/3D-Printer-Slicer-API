@@ -98,8 +98,69 @@ function validSlicerRuntime(runtime) {
     ));
 }
 
+const IDENTITY_KEYS = Object.freeze([
+    'monitor', 'enabled', 'changed', 'stale', 'verifying', 'stalled', 'lastOutcome',
+    'consecutiveFailures', 'lastVerifiedAgeMs', 'reasons'
+]);
+const IDENTITY_TIMING_KEYS = Object.freeze(['intervalMs', 'maxAgeMs', 'timeoutMs']);
+const IDENTITY_ADVISORY_REASONS = Object.freeze([
+    'NATIVE_IDENTITY_STALE', 'NATIVE_IDENTITY_VERIFY_FAILED', 'NATIVE_IDENTITY_MONITOR_OFF'
+]);
+const ADVISORY_REASONS = Object.freeze([...IDENTITY_ADVISORY_REASONS, 'LEGACY_SLICE_SLOT_EXPIRED']);
+const OOM_WRAPPER_REASONS = Object.freeze([
+    'disabled', 'unsupported_platform', 'choom_missing', 'self_test_failed', 'self_test_mismatch', 'self_test_timeout'
+]);
+
+function count(value) {
+    return Number.isSafeInteger(value) && value >= 0;
+}
+
+function reasonSet(value, allowed, nonEmpty) {
+    return Array.isArray(value) && (!nonEmpty || value.length > 0)
+        && new Set(value).size === value.length && value.every((reason) => allowed.includes(reason));
+}
+
+function validNativeIdentity(item) {
+    const timed = exactKeys(item, [...IDENTITY_KEYS, ...IDENTITY_TIMING_KEYS]);
+    if (!timed && !exactKeys(item, IDENTITY_KEYS)) return false;
+    return (timed ? ['pending', 'active', 'disabled', 'off'] : ['not_started']).includes(item.monitor)
+        && item.enabled === (item.monitor === 'active') && item.changed === false
+        && ['stale', 'verifying', 'stalled'].every((key) => typeof item[key] === 'boolean')
+        && ['pending', 'off', 'not_started', 'verified', 'unstable', 'timeout', 'stalled', 'error']
+            .includes(item.lastOutcome)
+        && count(item.consecutiveFailures)
+        && (item.lastVerifiedAgeMs === null || count(item.lastVerifiedAgeMs))
+        && reasonSet(item.reasons, IDENTITY_ADVISORY_REASONS, false)
+        && (!timed || IDENTITY_TIMING_KEYS.every((key) => count(item[key]) && item[key] > 0));
+}
+
+function validChildOomWrapper(item) {
+    return exactKeys(item, ['state', 'active', 'oom_score_adj', 'reason'])
+        && ['pending', 'active', 'disabled', 'off'].includes(item.state)
+        && item.active === (item.state === 'active')
+        && Number.isSafeInteger(item.oom_score_adj) && item.oom_score_adj >= -1000 && item.oom_score_adj <= 1000
+        && (item.state === 'active' || item.state === 'pending'
+            ? item.reason === null : OOM_WRAPPER_REASONS.includes(item.reason));
+}
+
+/**
+ * The readiness body without the 3.9.0 advisory fields (§4.1, §4.5, §4.6),
+ * each checked to its exact shape first. A 3.8.3 body carries none of them; a
+ * 3.9.0 body carries `nativeIdentity` and `childOomWrapper` (and
+ * `advisoryReasonCodes` when there is one). Any half or malformed set → null.
+ */
+function withoutAdvisory(body) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+    const { nativeIdentity, childOomWrapper, advisoryReasonCodes, ...base } = body;
+    const has = (key) => Object.prototype.hasOwnProperty.call(body, key);
+    if (!has('nativeIdentity') && !has('childOomWrapper') && !has('advisoryReasonCodes')) return base;
+    if (!validNativeIdentity(nativeIdentity) || !validChildOomWrapper(childOomWrapper)) return null;
+    if (has('advisoryReasonCodes') && !reasonSet(advisoryReasonCodes, ADVISORY_REASONS, true)) return null;
+    return base;
+}
+
 function validOperations(result, ready) {
-    const body = result?.body;
+    const body = withoutAdvisory(result?.body);
     const keys = [
         'checkedAt', 'ready', 'admissionOpen', 'probes', 'reasonCodes',
         'queue', 'legacyMigration', 'slicerRuntime'

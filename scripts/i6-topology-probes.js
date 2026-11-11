@@ -171,8 +171,48 @@ const validSlicerRuntime=runtime=>{
       ?validEngineVersion(engine,item.version)
       :item.version===null));
 };
+const oneOf=(item,list)=>list.includes(item);
+const count=item=>Number.isSafeInteger(item)&&item>=0;
+const IDENTITY_KEYS=['monitor','enabled','changed','stale','verifying','stalled','lastOutcome',
+  'consecutiveFailures','lastVerifiedAgeMs','reasons'];
+const IDENTITY_TIMING_KEYS=['intervalMs','maxAgeMs','timeoutMs'];
+const IDENTITY_REASONS=['NATIVE_IDENTITY_STALE','NATIVE_IDENTITY_VERIFY_FAILED','NATIVE_IDENTITY_MONITOR_OFF'];
+const ADVISORY_REASONS=[...IDENTITY_REASONS,'LEGACY_SLICE_SLOT_EXPIRED'];
+const OOM_REASONS=['disabled','unsupported_platform','choom_missing','self_test_failed',
+  'self_test_mismatch','self_test_timeout'];
+const reasonSet=(item,allowed,nonEmpty)=>Array.isArray(item)&&(!nonEmpty||item.length>0)
+  &&new Set(item).size===item.length&&item.every(reason=>oneOf(reason,allowed));
+// 3.9.0 (§4.1, §4.5, §4.6): a ready answer also carries the native identity
+// monitor and the child OOM wrapper, and advisory reasons that never change
+// ready. Each is checked to its exact shape and then removed, so the base
+// contract below stays exact and any other key still fails.
+const validNativeIdentity=item=>{
+  const timed=exactKeys(item,[...IDENTITY_KEYS,...IDENTITY_TIMING_KEYS]);
+  if(!timed&&!exactKeys(item,IDENTITY_KEYS))return false;
+  return oneOf(item.monitor,timed?['pending','active','disabled','off']:['not_started'])
+    &&item.enabled===(item.monitor==='active')&&item.changed===false
+    &&['stale','verifying','stalled'].every(key=>typeof item[key]==='boolean')
+    &&oneOf(item.lastOutcome,['pending','off','not_started','verified','unstable','timeout','stalled','error'])
+    &&count(item.consecutiveFailures)&&(item.lastVerifiedAgeMs===null||count(item.lastVerifiedAgeMs))
+    &&reasonSet(item.reasons,IDENTITY_REASONS,false)
+    &&(!timed||IDENTITY_TIMING_KEYS.every(key=>count(item[key])&&item[key]>0));
+};
+const validChildOomWrapper=item=>exactKeys(item,['state','active','oom_score_adj','reason'])
+  &&oneOf(item.state,['pending','active','disabled','off'])&&item.active===(item.state==='active')
+  &&Number.isSafeInteger(item.oom_score_adj)&&item.oom_score_adj>=-1000&&item.oom_score_adj<=1000
+  &&(item.state==='active'||item.state==='pending'?item.reason===null:oneOf(item.reason,OOM_REASONS));
+const withoutAdvisory=body=>{
+  if(!body||typeof body!=='object'||Array.isArray(body))return null;
+  const {nativeIdentity,childOomWrapper,...base}=body;
+  if(!validNativeIdentity(nativeIdentity)||!validChildOomWrapper(childOomWrapper))return null;
+  if(Object.prototype.hasOwnProperty.call(base,'advisoryReasonCodes')){
+    if(!reasonSet(base.advisoryReasonCodes,ADVISORY_REASONS,true))return null;
+    delete base.advisoryReasonCodes;
+  }
+  return base;
+};
 const validOperations=value=>{
-  const body=value.body;
+  const body=withoutAdvisory(value.body);
   if(value.status!==200
     ||!exactKeys(body,['checkedAt','ready','admissionOpen','probes','reasonCodes','queue','legacyMigration','slicerRuntime'])
     ||typeof body.checkedAt!=='string'||body.checkedAt.length>64

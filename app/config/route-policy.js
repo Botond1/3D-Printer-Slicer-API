@@ -25,6 +25,16 @@ function classifyRoute(methodValue, pathValue) {
     if (['GET', 'DELETE'].includes(method) && /^\/bambu\/slice\/jobs\/[^/]+$/.test(requestPath)) {
         return ROUTE_AUDIENCES.SLICE;
     }
+    // 3.9.0: the production-model export and feature detection use the slice key.
+    if (method === 'POST' && requestPath === '/bambu/export') {
+        return ROUTE_AUDIENCES.SLICE;
+    }
+    if (['GET', 'DELETE'].includes(method) && /^\/bambu\/export\/jobs\/[^/]+$/.test(requestPath)) {
+        return ROUTE_AUDIENCES.SLICE;
+    }
+    if (method === 'GET' && (/^\/bambu\/export\/jobs\/[^/]+\/file$/.test(requestPath) || requestPath === '/capabilities')) {
+        return ROUTE_AUDIENCES.SLICE;
+    }
     if (
         ['POST', 'PATCH', 'DELETE'].includes(method)
         && /^\/pricing\/(?:FDM|SLA)(?:\/[^/]+)?$/i.test(requestPath)

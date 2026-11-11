@@ -58,8 +58,9 @@ test('structured events enforce schema, correlation identifiers, bounds, and fix
         extra: { action: 'completed', count: 2 }
     });
     assert.equal(Object.isFrozen(entries[0]), true);
-    // 3.8.2 added async.retry_alone and native.failure_detail; still a fixed, bounded vocabulary.
-    assert.ok(EVENT_NAMES.length <= 34);
+    // 3.8.2 added async.retry_alone and native.failure_detail; 3.9.0 added
+    // eleven identity/auth/runtime/export names; still a fixed, bounded vocabulary.
+    assert.ok(EVENT_NAMES.length <= 45);
     assert.equal(new Set(EVENT_NAMES).size, EVENT_NAMES.length);
 });
 
@@ -147,6 +148,67 @@ test('metrics use fixed-cardinality labels and bounded operational values only',
     assert.doesNotMatch(rendered, /request_id|artifact_id|job_id|filename|material|profile|customer-message|arbitrary/);
     assert.ok(Buffer.byteLength(rendered, 'utf8') < 16 * 1024);
     assert.equal(rendered.split('\n').length < 128, true);
+});
+
+test('3.9.0 metric families are registered at zero and keep fixed-cardinality labels', () => {
+    const zero = metrics.renderMetrics();
+    for (const expected of [
+        'slicer_event_loop_delay_seconds{stat="p50"} 0',
+        'slicer_event_loop_delay_seconds{stat="p99"} 0',
+        'slicer_event_loop_delay_seconds{stat="max"} 0',
+        'slicer_identity_verification_seconds 0',
+        'slicer_identity_verification_failures_total{reason="timeout"} 0',
+        'slicer_identity_stale 0',
+        'slicer_artifact_sweep_seconds 0',
+        'slicer_artifact_sweep_incomplete_total 0',
+        'slicer_auth_accepted_total{audience="slice",slot="woocommerce",rotation="previous"} 0',
+        'slicer_auth_failure_limited_total 0',
+        'slicer_export_jobs_total{result="exact"} 0',
+        'slicer_archive_rejections_total{rule="ARCHIVE_EXPANSION_EXCEEDED"} 0',
+        'slicer_archive_preflight_wait_seconds 0'
+    ]) assert.ok(zero.split('\n').includes(expected), expected);
+
+    metrics.setEventLoopDelay({ p50: 0.01, p99: 0.2, max: 1.5 });
+    metrics.recordIdentityVerification(3.25);
+    metrics.recordIdentityVerificationFailure('timeout');
+    metrics.recordIdentityVerificationFailure('/opt/bambu/customer-path');
+    metrics.setIdentityStale(true);
+    metrics.recordArtifactSweep(0.5, 'incomplete');
+    metrics.recordArtifactSweep(0.25, 'satisfied');
+    metrics.incrementAuthAccepted('slice', 'woocommerce', 'previous');
+    metrics.incrementAuthAccepted('slice', 'arbitrary-slot', 'arbitrary-rotation');
+    metrics.incrementAuthFailureLimited();
+    metrics.incrementExportJob('exact');
+    metrics.incrementExportJob('customer-message');
+    metrics.incrementArchiveRejection('ARCHIVE_EXPANSION_EXCEEDED');
+    metrics.incrementArchiveRejection('arbitrary-rule');
+    metrics.recordArchivePreflightWait(Number.NaN);
+
+    const lines = metrics.renderMetrics().split('\n');
+    for (const expected of [
+        'slicer_event_loop_delay_seconds{stat="max"} 1.5',
+        'slicer_identity_verification_seconds 3.25',
+        'slicer_identity_verification_failures_total{reason="timeout"} 1',
+        'slicer_identity_verification_failures_total{reason="other"} 1',
+        'slicer_identity_stale 1',
+        'slicer_artifact_sweep_seconds 0.25',
+        'slicer_artifact_sweep_incomplete_total 1',
+        'slicer_auth_accepted_total{audience="slice",slot="woocommerce",rotation="previous"} 1',
+        'slicer_auth_accepted_total{audience="slice",slot="shared",rotation="active"} 1',
+        'slicer_auth_failure_limited_total 1',
+        'slicer_export_jobs_total{result="exact"} 1',
+        'slicer_export_jobs_total{result="failed"} 1',
+        'slicer_archive_rejections_total{rule="ARCHIVE_EXPANSION_EXCEEDED"} 1',
+        'slicer_archive_rejections_total{rule="ARCHIVE_UNREADABLE"} 1',
+        'slicer_archive_preflight_wait_seconds 0'
+    ]) assert.ok(lines.includes(expected), expected);
+    const rendered = lines.join('\n');
+    assert.doesNotMatch(rendered, /arbitrary|customer|\/opt/);
+    assert.ok(Buffer.byteLength(rendered, 'utf8') < 16 * 1024);
+    assert.ok(lines.length < 128);
+
+    metrics.resetMetricsForTests();
+    assert.equal(metrics.renderMetrics(), zero);
 });
 
 test('request lifecycle settles once on finish or an aborted close and telemetry cannot escape', () => {

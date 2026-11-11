@@ -108,15 +108,17 @@ function createSuccessfulHandler(engine, outputRoot, effects) {
     };
 }
 
-function assertRouteOrder(router, engine, rateLimiter, authenticate) {
+function assertRouteOrder(router, engine, rateLimiter) {
     assert.deepEqual(
         router.stack.filter((layer) => layer.route).map((layer) => layer.route.path).sort(),
         ['/bambu/slice', '/orca/slice', '/prusa/slice']
     );
     const route = router.stack.find((layer) => layer.route.path === `/${engine}/slice`).route;
     assert.equal(route.stack.length, 3);
-    assert.equal(route.stack[0].handle, rateLimiter);
-    assert.equal(route.stack[1].handle, authenticate);
+    // 3.9.0: authentication (wrapped by the failure-bucket charge) runs first,
+    // then the per-principal limiter (sliceAdmission.js).
+    assert.equal(route.stack[0].handle.name, 'authenticateOrCharge');
+    assert.equal(route.stack[1].handle, rateLimiter);
 }
 
 async function createRouteHarness(engine, root) {
@@ -133,6 +135,7 @@ async function createRouteHarness(engine, root) {
     const router = createSliceRouter({
         rateLimiter,
         authenticate,
+        authFailureLimiter: { allow: () => ({ allowed: true }) },
         async createWorkspace() {
             events.push('lifecycle');
             effects.allocations += 1;
@@ -153,7 +156,7 @@ async function createRouteHarness(engine, root) {
         handleOrca: handler,
         handleBambu: handler
     });
-    assertRouteOrder(router, engine, rateLimiter, authenticate);
+    assertRouteOrder(router, engine, rateLimiter);
     return { effects, events, jobsRoot, lifecycleSettled, outputRoot, router, warnings };
 }
 
@@ -182,12 +185,8 @@ async function assertUnauthorizedCalls(url, harness) {
         assert.equal(response.status, 401);
         assert.deepEqual(await response.json(), AUTHENTICATION_FAILURE);
     }
-    assert.deepEqual(harness.events, [
-        'limiter', 'auth',
-        'limiter', 'auth',
-        'limiter', 'auth',
-        'limiter', 'auth'
-    ]);
+    // A rejected request never reaches the per-principal limiter.
+    assert.deepEqual(harness.events, ['auth', 'auth', 'auth', 'auth']);
     assert.equal(harness.warnings.length, 4);
     assert.deepEqual(harness.effects, EMPTY_EFFECTS);
     assert.deepEqual(await listOrEmpty(harness.jobsRoot), []);
@@ -203,7 +202,7 @@ async function assertAuthorizedCall(url, engine, harness) {
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { success: true, engine });
     await harness.lifecycleSettled;
-    assert.deepEqual(harness.events, ['limiter', 'auth', 'lifecycle']);
+    assert.deepEqual(harness.events, ['auth', 'limiter', 'lifecycle']);
     assert.equal(harness.effects.allocations, 1);
     assert.equal(harness.effects.uploads, 1);
     assert.equal(harness.effects.handlers, 1);
@@ -212,7 +211,7 @@ async function assertAuthorizedCall(url, engine, harness) {
 }
 
 for (const engine of ['prusa', 'orca', 'bambu']) {
-    test(`${engine} route is limiter -> auth -> lifecycle; unauthorized calls allocate nothing`, async (t) => {
+    test(`${engine} route is auth -> limiter -> lifecycle; unauthorized calls allocate nothing`, async (t) => {
         const root = await fs.mkdtemp(path.join(os.tmpdir(), `i3-auth-${engine}-`));
         const harness = await createRouteHarness(engine, root);
         const url = await startRouteServer(t, root, engine, harness.router);

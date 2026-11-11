@@ -55,11 +55,15 @@ test('requirements.txt pins exactly the signed production image versions without
         'lxml==6.1.2',
         'networkx==3.6.1',
         'numpy==2.5.2',
+        // 3.9.0: the transitive the 3.8.3 image freeze already carries
+        // (tests/golden/python-geometry-stack-3.8.3.txt); version unchanged.
+        'packaging==26.3',
         'Pillow==13.0.0',
         'scipy==1.18.1',
         'trimesh==5.1.0'
     ]);
-    for (const line of lines) assert.match(line, /^[A-Za-z0-9_-]+==\d+\.\d+\.\d+$/);
+    // Exact pins only (packaging uses a two-part version, 26.3).
+    for (const line of lines) assert.match(line, /^[A-Za-z0-9_-]+==\d+\.\d+(?:\.\d+)?$/);
     assert.doesNotMatch(content, /numpy-stl/);
 
     const pythonSources = ['mesh2stl.py', 'cad2stl.py', 'orient.py', 'scale_model.py']

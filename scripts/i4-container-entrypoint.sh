@@ -101,4 +101,13 @@ do
     ensure_runtime_directory "$runtime_directory"
 done
 
+# No core dumps (3.9.0): a crashed native's core would hold the customer's
+# mesh. Soft and hard limit, so no child can raise it again; every child
+# inherits it. Refuse to start when the limit does not read back as 0.
+ulimit -Sc 0 || exit 78
+ulimit -Hc 0 || exit 78
+if [ "$(ulimit -Sc)" != "0" ] || [ "$(ulimit -Hc)" != "0" ]; then
+    exit 78
+fi
+
 exec "$@"

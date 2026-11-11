@@ -196,8 +196,8 @@ function withPrivateRouterMetadata(fixture, filePaths, callback) {
 }
 
 test('private allowlist accepts exactly one canonical IPv4 /32 in the only phase', () => {
-    assert.deepEqual(ALLOWLIST_PHASES, ['leadpilot-only']);
-    assert.equal(MAX_ALLOWLIST_ENTRIES, 1);
+    assert.deepEqual(ALLOWLIST_PHASES, ['leadpilot-only', 'production-two-range']);
+    assert.equal(MAX_ALLOWLIST_ENTRIES, 4);
     assert.equal(canonicalIpv4Cidr(LEADPILOT), true);
     assert.equal(canonicalIpv4Cidr('192.000.2.10/32'), false);
     assert.equal(canonicalIpv4Cidr('192.0.2.10/24'), false);
@@ -898,15 +898,15 @@ test('runbook mutations cannot weaken DNS-only, firewall, ACME, or final-dark ga
     const cases = [
         ['single /32 contract widened', mutateRequired(
             runbook,
-            'canonical format is exactly one unique IPv4 `/32` line',
+            'canonical format is an ordered list of one to four unique IPv4 `/32` lines',
             'canonical format is one to four IPv4 CIDR lines'
         )],
         ['expanded phase reintroduced', mutateRequired(
-            runbook, 'Only phase `leadpilot-only` exists.', 'Phase `expanded` also exists.'
+            runbook, 'Phase `leadpilot-only` admits\nexactly one line and phase `production-two-range` exactly two', 'Phase `expanded` also exists.'
         )],
         ['/24 widening admitted', mutateRequired(
             runbook,
-            'A second address,\nanother phase, `/24`, or any prefix other than `/32` is forbidden.',
+            'A fifth\naddress, another phase, `/24`, or any prefix other than `/32` is forbidden.',
             'A shared provider `/24` may be admitted.'
         )],
         ['machine perimeter mislabeled as application identity', mutateRequired(

@@ -1,0 +1,82 @@
+# T-TRF (3.9.0 §7): a throwaway Traefik of the live digest in front of
+# traefik/whoami, on an INTERNAL network (no egress, no published port), with
+# three client containers at fixed addresses. Started only by run-matrix.sh,
+# always under its own project name `r3d-trf-<ts>`; it never touches the live
+# `3d-psa-traefik`, its networks or its ACME volume.
+#
+# The dynamic dir holds the throwaway router file: the rendered slicer-api.yml
+# with the live ranges replaced BY POSITION (1st = LeadPilot position ->
+# 172.31.239.12, 2nd = shop position -> 172.31.239.11). 172.31.239.13 is in no
+# list. whoami answers as `3d-psa-backend-server:3000`, the live backend URL.
+services:
+  traefik:
+    image: traefik:v3.7.11@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144
+    command:
+      - --global.checkNewVersion=false
+      - --global.sendAnonymousUsage=false
+      - --entryPoints.web.address=:8080
+      - --entryPoints.websecure.address=:8443
+      - --entryPoints.health.address=127.0.0.1:8082
+      - --providers.file=true
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --api.dashboard=false
+      - --api.insecure=false
+      - --ping=true
+      - --ping.entryPoint=health
+      - --log.level=INFO
+      - --log.format=json
+      - --accessLog=true
+      - --accessLog.format=json
+      - --certificatesResolvers.letsencrypt.acme.email=matrix@example.invalid
+      - --certificatesResolvers.letsencrypt.acme.storage=/tmp/acme.json
+      - --certificatesResolvers.letsencrypt.acme.httpChallenge=true
+      - --certificatesResolvers.letsencrypt.acme.httpChallenge.entryPoint=web
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,size=16m,mode=0700
+    volumes:
+      - type: bind
+        source: ${R3D_TRF_DYNAMIC_DIR:?Set R3D_TRF_DYNAMIC_DIR to the run's private dynamic dir}
+        target: /etc/traefik/dynamic
+        read_only: true
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping=true", "--ping.entryPoint=health", "--entryPoints.health.address=127.0.0.1:8082"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks:
+      matrix:
+        ipv4_address: 172.31.239.2
+  backend:
+    image: traefik/whoami:v1.10.3
+    command: ["--port", "3000", "--verbose"]
+    networks:
+      matrix:
+        ipv4_address: 172.31.239.3
+        aliases:
+          - 3d-psa-backend-server
+  client-shop:
+    image: curlimages/curl:8.11.0
+    entrypoint: ["sleep", "3600"]
+    networks:
+      matrix:
+        ipv4_address: 172.31.239.11
+  client-leadpilot:
+    image: curlimages/curl:8.11.0
+    entrypoint: ["sleep", "3600"]
+    networks:
+      matrix:
+        ipv4_address: 172.31.239.12
+  client-unlisted:
+    image: curlimages/curl:8.11.0
+    entrypoint: ["sleep", "3600"]
+    networks:
+      matrix:
+        ipv4_address: 172.31.239.13
+networks:
+  matrix:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.239.0/24

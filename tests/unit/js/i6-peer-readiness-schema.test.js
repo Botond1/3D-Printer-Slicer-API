@@ -25,7 +25,14 @@ function readiness() {
                 prusa: { available: true, version: '2.8.1+linux-x64-GTK3', required_for_bambu: false },
                 orca: { available: true, version: '2.3.1', required_for_bambu: false }
             }
-        }
+        },
+        // 3.9.0 advisory fields (§4.1, §4.6): always present on a 3.9.0 answer.
+        nativeIdentity: {
+            monitor: 'active', enabled: true, changed: false, stale: false, verifying: false, stalled: false,
+            lastOutcome: 'verified', consecutiveFailures: 0, lastVerifiedAgeMs: 1200,
+            intervalMs: 600000, maxAgeMs: 1800000, timeoutMs: 120000, reasons: []
+        },
+        childOomWrapper: { state: 'active', active: true, oom_score_adj: 500, reason: null }
     };
 }
 
@@ -57,7 +64,46 @@ test('actual private-peer HTTP probe strictly validates the extended readiness c
         body.slicerRuntime.engines.orca = { available: false, version: null, required_for_bambu: false };
         assert.equal((await probe()).authenticatedReadiness, true);
     });
+    const advisoryVariants = {
+        'wrapper off with its closed reason': value => {
+            value.childOomWrapper = { state: 'off', active: false, oom_score_adj: 500, reason: 'self_test_mismatch' };
+        },
+        'monitor still pending, with its advisory reason': value => {
+            Object.assign(value.nativeIdentity, { monitor: 'pending', enabled: false, lastOutcome: 'pending',
+                lastVerifiedAgeMs: null, reasons: ['NATIVE_IDENTITY_MONITOR_OFF'] });
+            value.advisoryReasonCodes = ['NATIVE_IDENTITY_MONITOR_OFF'];
+        },
+        'monitor not started (short status)': value => {
+            value.nativeIdentity = { monitor: 'not_started', enabled: false, changed: false, stale: false,
+                verifying: false, stalled: false, lastOutcome: 'not_started', consecutiveFailures: 0,
+                lastVerifiedAgeMs: null, reasons: ['NATIVE_IDENTITY_MONITOR_OFF'] };
+        },
+        'expired legacy slot is advisory only': value => { value.advisoryReasonCodes = ['LEGACY_SLICE_SLOT_EXPIRED']; }
+    };
+    for (const [name, change] of Object.entries(advisoryVariants)) {
+        await t.test(`3.9.0 advisory: ${name}`, async () => {
+            body = readiness();
+            change(body);
+            assert.equal((await probe()).authenticatedReadiness, true);
+        });
+    }
     const mutations = {
+        'missing native identity': value => { delete value.nativeIdentity; },
+        'missing child OOM wrapper': value => { delete value.childOomWrapper; },
+        'changed native identity': value => { value.nativeIdentity.changed = true; },
+        'unknown native identity field': value => { value.nativeIdentity.path = '/opt/bambustudio'; },
+        'native identity digest leaked': value => { value.nativeIdentity.sha256 = 'a'.repeat(64); },
+        'unknown identity reason': value => { value.nativeIdentity.reasons = ['NATIVE_IDENTITY_CHANGED']; },
+        'unknown wrapper field': value => { value.childOomWrapper.choomPath = '/usr/bin/choom'; },
+        'wrapper active flag disagrees with its state': value => { value.childOomWrapper.active = false; },
+        'wrapper off without a closed reason': value => {
+            value.childOomWrapper = { state: 'off', active: false, oom_score_adj: 500, reason: 'other' };
+        },
+        'empty advisory reason list': value => { value.advisoryReasonCodes = []; },
+        'unknown advisory reason': value => { value.advisoryReasonCodes = ['STORAGE_UNSAFE']; },
+        'duplicate advisory reason': value => {
+            value.advisoryReasonCodes = ['LEGACY_SLICE_SLOT_EXPIRED', 'LEGACY_SLICE_SLOT_EXPIRED'];
+        },
         'missing runtime': value => { delete value.slicerRuntime; },
         'missing Bambu probe': value => { delete value.probes.bambu; },
         'false Bambu probe': value => { value.probes.bambu = false; },

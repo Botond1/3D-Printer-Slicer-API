@@ -3,6 +3,7 @@
 /** Versioned, allowlisted, redacted JSON event emission. */
 
 const { randomUUID } = require('node:crypto');
+const { isIP } = require('node:net');
 const metrics = require('./metrics');
 const { captureCorrelationContext } = require('./context');
 
@@ -21,7 +22,16 @@ const EVENT_NAMES = Object.freeze([
     'async.evicted',
     'async.expired',
     'async.retry_alone',
+    'auth.legacy_migration_expired',
     'auth.rejected',
+    'auth.slot_summary',
+    'export.accepted',
+    'export.completed',
+    'export.deleted',
+    'export.preempted',
+    'identity.failed',
+    'identity.stale',
+    'identity.verified',
     'native.completed',
     'native.failure_detail',
     'native.quarantined',
@@ -40,11 +50,14 @@ const EVENT_NAMES = Object.freeze([
     'request.accepted',
     'request.completed',
     'request.rejected',
+    'runtime.event_loop_stall',
+    'runtime.limits_unavailable',
     'shutdown.started',
     'startup.completed'
 ]);
-// A request workspace (`job-<hex>`) or a public async slice job (`sj_<hex>`).
-const JOB_ID = /^(?:job-[a-f0-9]{32}|sj_[a-f0-9]{32})$/;
+// A request workspace (`job-<hex>`), a public async slice job (`sj_<hex>`) or
+// an export job (`ex_<hex>`, 3.9.0).
+const JOB_ID = /^(?:job-[a-f0-9]{32}|sj_[a-f0-9]{32}|ex_[a-f0-9]{32})$/;
 const ARTIFACT_ID = /^artifact-[a-f0-9]{32}$/;
 const SAFE_LABEL = /^[A-Za-z0-9_.:-]+$/;
 const REDACTED_KEY = /(?:authorization|cookie|credential|key|password|secret|token)/i;
@@ -52,8 +65,15 @@ const SUSPICIOUS_VALUE = /(?:bearer\s+|basic\s+|api[_-]?key\s*[=:]|eyJ[A-Za-z0-9
 const EXTRA_KEYS = Object.freeze([
     'action', 'bytes', 'count', 'native_kind', 'queue_state', 'reason', 'technology',
     // Native failure diagnostics (3.8.2): bounded and printable on emission.
-    'bambu_error', 'bambu_return_code', 'exit_code', 'killed_by_runner', 'signal', 'stderr_tail'
+    'bambu_error', 'bambu_return_code', 'exit_code', 'killed_by_runner', 'signal', 'stderr_tail',
+    // 3.9.0: slot labels, rejected-request attribution, archive rules,
+    // expansion counts, sweep verdicts and export labels. `audience` is
+    // already a top-level field, so no `audience_slot` key exists.
+    'slot', 'rotation', 'client_ip', 'client_request_id', 'rule', 'limit',
+    'triangles', 'instances', 'objects', 'verdict', 'format', 'fidelity'
 ]);
+/** Keys whose value must be a literal IPv4/IPv6 address, else it is dropped. */
+const IP_EXTRA_KEYS = Object.freeze(['client_ip']);
 /** Diagnostic keys whose absence is itself a fact and is kept as JSON null. */
 const NULLABLE_EXTRA_KEYS = Object.freeze(['bambu_error', 'bambu_return_code', 'exit_code', 'signal']);
 /** Text budget per key; every other string value keeps the 128-character cap. */
@@ -98,6 +118,7 @@ function sanitizeExtra(extra) {
             safe[safeKey] = null;
             continue;
         }
+        if (IP_EXTRA_KEYS.includes(safeKey) && (typeof value !== 'string' || isIP(value) === 0)) continue;
         const redacted = redactValue(safeKey, value);
         if (redacted !== undefined) safe[safeKey] = redacted;
     }

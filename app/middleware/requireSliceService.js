@@ -3,8 +3,10 @@
 /**
  * Authentication middleware for service-to-service slicing requests.
  * On success the shared audience guard attaches a frozen
- * `req.slicePrincipal = { audience: 'slice', slot }` (never the key) so later
- * layers can key fairness on the authenticated caller family.
+ * `req.slicePrincipal = { audience: 'slice', slot, rotation }` (never the key)
+ * so later layers key fairness and the per-principal limiters on the
+ * authenticated caller family. `options.onAccepted` receives the labels of each
+ * accepted request (the integrator wires `auth-log-aggregator.js`).
  */
 
 const crypto = require('node:crypto');
@@ -40,7 +42,9 @@ function createRequireSliceService(options = {}) {
         clock: options.clock,
         alwaysComparePrevious: Boolean(options.keyRing || previous),
         logMessage: '[SLICE AUTH] Authentication rejected.',
-        hideAudienceMetadata: true
+        hideAudienceMetadata: true,
+        onAccepted: options.onAccepted,
+        emit: options.emit
     });
 }
 

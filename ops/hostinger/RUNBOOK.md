@@ -210,9 +210,11 @@ network merely to make a probe pass.
 
 Keep the J2 caller allowlist in a separate absolute, root:root-owned, mode
 `0600`, regular, non-link, single-link private file outside the repository. Its
-canonical format is exactly one unique IPv4 `/32` line, one final LF, and no
-comments or blank lines. Only phase `leadpilot-only` exists. A second address,
-another phase, `/24`, or any prefix other than `/32` is forbidden. In
+canonical format is an ordered list of one to four unique IPv4 `/32` lines,
+one final LF, and no comments or blank lines. Phase `leadpilot-only` admits
+exactly one line and phase `production-two-range` exactly two, in the order the
+live router carries them (LeadPilot first, then the shop's egress). A fifth
+address, another phase, `/24`, or any prefix other than `/32` is forbidden. In
 particular, never widen the approved host address to its provider's shared
 `/24`; that would admit unrelated tenants rather than identify the approved
 machine. Before any
@@ -1269,3 +1271,95 @@ the key gives the 60 s default, not 300 s. The change does not touch the Bambu
 `measurement_generation`; check that with
 `node scripts/check-generation-inputs.js <deployed-sha>` before cutover and by
 reading the catalogue's `measurement_generation` after it.
+
+## 8. Release 3.9.0 operations
+
+The binding text is `docs/release/3.9.0-specification.md` (§4.10, §6, §8, §10).
+Every script below is a dry-run unless its first argument is `--execute`,
+prints NAMES instead of values, and refuses instead of guessing.
+
+### 8.1 Public router path allowlist
+
+`ops/hostinger/public-routes.json` lists every Express route as `public` or
+`private` and holds the route groups of the Traefik rule. The operator contract
+renders the rule of router `slicer-api` from it as ONE `rule:` line:
+
+- `POST` on `/bambu/slice`, `/prusa/slice`, `/bambu/export`;
+- `GET` or `DELETE` on `^/bambu/slice/jobs/sj_[0-9a-f]{32}$` and
+  `^/bambu/export/jobs/ex_[0-9a-f]{32}$`;
+- `GET` on `^/bambu/export/jobs/ex_[0-9a-f]{32}/file$`, `/capabilities`,
+  `/profiles`, `/health`, `/pricing`.
+
+Everything else answers Traefik 404 from the internet: `/admin/*`,
+`/operations/*`, `/health/detailed`, pricing writes, `/docs`, `/openapi.json`,
+`/`, `/render`, `/orca/slice`. `/ready` stays the service health check (Traefik
+reaches the backend directly). `tests/unit/js/public-routes-inventory.test.js`
+fails on any mounted route that the file does not list.
+
+An active router file carries 1–4 ordered `/32` ranges, the rule rendered from
+`public-routes.json` byte for byte, and the health check exactly `path: /ready`,
+`interval: 10s`, `timeout: 8s`. The live file carries two ranges in this order:
+LeadPilot first, then the shop's egress (phase `production-two-range`).
+
+Admin and operations reads after the release, from the VPS only:
+
+```sh
+docker exec 3d-psa-backend-server node -e "require('http').get({host:'127.0.0.1',port:3000,path:'/operations/readiness',headers:{'x-api-key':process.env.OPERATIONS_API_KEY||''}},(r)=>r.pipe(process.stdout))"
+```
+
+The key comes from the container's own environment; it never appears in the
+command line or the output.
+
+### 8.2 Render from the live file
+
+```sh
+node scripts/i12-hostinger-operator-contract.js --reproduce-live <live-router-file> --host api.rocket3d.hu --phase production-two-range
+node scripts/i12-hostinger-operator-contract.js --render-from-live <live-router-file> --host api.rocket3d.hu --phase production-two-range --output <new-file-outside-the-dynamic-dir>
+```
+
+`--reproduce-live` renders the template with the CIDR list read from the live
+file and the 3.8.3 Host-only rule and requires byte identity with the live
+file (read-only). `--render-from-live` renders the 3.9.0 rule with the same list,
+refuses unless the only differing line is `rule:` (the source ranges and the
+health check are compared separately), and writes a new 0600 file whose name is
+not a Traefik configuration name. Neither prints an address or a digest. The
+list is never typed and never comes from a phase default.
+
+### 8.3 T-TRF
+
+`ops/hostinger/traefik-matrix/run-matrix.sh run --rendered <file> --evidence <dir>`
+starts a throwaway Traefik of the live digest and `traefik/whoami` on an
+internal network (project `r3d-trf-<ts>`), substitutes the two live ranges by
+position with test-network addresses, and probes every case of `cases.json`
+from the shop-position, the LeadPilot-position and an unlisted address: a rule
+match answers 200 from the first two and 403 from the third, every other path
+404 from all three. Without `run` it only plans.
+
+### 8.4 Cutover: `ops/hostinger/cutover/deploy-390.sh`
+
+| Step | Command | What it proves or does |
+|---|---|---|
+| 2 | `deploy-390.sh --execute capture` | control dir `/root/r3d-390-control-<date>/`: logs, inspect, env NAMES, both env files (0600), compose limits, catalogue bodies, the live router copied out of the dynamic dir, cube auto and block preserve 90/0/0 twice each, retention tag |
+| — | `deploy-390.sh check-env` | both env files read, the 3.9.0 rewrite proved in a private temp dir |
+| 4 | `deploy-390.sh --execute deploy <ref> <sha> --export-route true\|false` | both env files backed up together, rewritten atomically (compose: `SLICER_API_IMAGE` only; service: the key-ring move, `ARTIFACT_TTL_MS`, `MAX_UPLOAD_BYTES`, `EXPORT_ROUTE_ENABLED`), must-survive lists and compose limits asserted before `up`, then identity, cgroup limits, tuning, catalogue, control slices, `/ready` p99, `auth.slot_summary`; a failure rolls back only on an idle queue, else it holds and pages |
+| 5 | `deploy-390.sh --execute traefik` | render from the live file, T-TRF, the live file copied to `<control>/traefik/*.orig` (never into the dynamic dir), atomic swap through `.slicer-api.tmp-<ts>`, 60 s watch with automatic restore on any 403, 404 or unrouted request from the shop's address, then a 30-minute report |
+| 6 | `deploy-390.sh --execute rollback <ref> <sha>` | both env files back from the backup, the key-ring move re-applied (3.8.3 accepts principals mode), must-survive lists, `up`, identity |
+| §10.1 | `deploy-390.sh --execute keyring-only` | the key-ring move alone on the running 3.8.3 image |
+
+The script refuses, before anything is written: a compose env without any of
+the 14 `SLICER_*` names, a limit other than the live 12 GiB / 4.0 CPU / pids 512
+/ 30 s, a tuning value other than the §6 list, a non-empty
+`SLICE_SERVICE_WOOCOMMERCE_API_KEY_PREVIOUS`, a live router with other than two
+ranges, and a control or backup path inside the watched dynamic dir.
+
+### 8.5 Prepared, not run
+
+- `ops/hostinger/private-ab/run-private-ab.sh` (§8 step 1): project `r3d-s390`,
+  internal network, `oom_score_adj` 1000, 3 GiB / 2 CPU, the heavy-case gate and
+  its 1 s watcher.
+- `ops/hostinger/host-hardening/r3d-host-hardening.sh` with `CHECKLIST.md`
+  (owner decision 3): sshd drop-in with a 10-minute dead-man revert confirmed
+  from a second fresh key login, fail2ban, the exited old Traefik container,
+  the diagnostic key files' mode, the keep-list and the reads.
+- `ops/hostinger/keyring/provision-staging-key.sh` (owner decision 4): the
+  hash-prefix check, a generated root-only key file and its env line.

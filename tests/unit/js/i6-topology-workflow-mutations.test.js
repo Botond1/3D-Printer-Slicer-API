@@ -101,6 +101,7 @@ function validateTopology(source, probes) {
         "value.body.errorCode==='OPERATIONS_AUTH_REQUIRED'",
         "exactKeys(value.body,['status','uptime'])",
         "exactKeys(value.body,['status'])",
+        'const body=withoutAdvisory(value.body);',
         "exactKeys(body,['checkedAt','ready','admissionOpen','probes','reasonCodes','queue','legacyMigration','slicerRuntime'])",
         "exactKeys(body.probes,['queue','native','storage','retention','pricing','config','bambu','commonDependencies'])",
         '||!validSlicerRuntime(body.slicerRuntime)',
@@ -244,6 +245,8 @@ test('topology runtime and probe sources reject private-peer and calibration mut
         ['wrong auth rejection omitted',
             "'i6-wrong-operations-key-260725-z9'", 'process.env.OPERATIONS_API_KEY'],
         ['response bound relaxed', 'if(size>32768)', 'if(size>65536)'],
+        ['advisory fields passed through unchecked',
+            'const body=withoutAdvisory(value.body);', 'const body=value.body;'],
         ['Python TCP calibration omitted',
             'socket.create_connection(("${SENTINEL_IP}",41234),1.5)', 'None']
     ];

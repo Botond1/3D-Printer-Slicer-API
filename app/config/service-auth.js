@@ -7,6 +7,14 @@ const SLICE_SERVICE_KEY_LIMITS = SERVICE_KEY_LIMITS;
 const SERVICE_AUTH_CONFIGURATION_ERROR = 'Service authentication configuration is invalid.';
 const SERVICE_AUTH_AUDIENCES = Object.freeze(['slice', 'pricing', 'artifact', 'operations']);
 const SLICE_SERVICE_PRINCIPALS = Object.freeze(['woocommerce', 'leadpilot']);
+/**
+ * Optional slice principals (3.9.0): their own rate bucket and queue share,
+ * revocable apart from the live shop. Never part of `allPrincipalsActive`;
+ * absent = today's key ring to the byte (no extra comparison slots).
+ */
+const OPTIONAL_SLICE_SERVICE_PRINCIPALS = Object.freeze(['staging']);
+/** Readiness reason of a slice migration whose date has passed (never `/ready`). */
+const LEGACY_SLICE_SLOT_EXPIRED = 'LEGACY_SLICE_SLOT_EXPIRED';
 const SLICE_SERVICE_AUTH_MODES = Object.freeze(['legacy', 'migration', 'principals']);
 const LEGACY_MIGRATION_MAX_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -25,6 +33,13 @@ const SLICE_PRINCIPAL_ENV = Object.freeze({
     leadpilot: Object.freeze({
         active: 'SLICE_SERVICE_LEADPILOT_API_KEY',
         previous: 'SLICE_SERVICE_LEADPILOT_API_KEY_PREVIOUS'
+    })
+});
+
+const OPTIONAL_SLICE_PRINCIPAL_ENV = Object.freeze({
+    staging: Object.freeze({
+        active: 'SLICE_SERVICE_STAGING_API_KEY',
+        previous: 'SLICE_SERVICE_STAGING_API_KEY_PREVIOUS'
     })
 });
 
@@ -113,13 +128,24 @@ function immutableSliceAudienceKey(legacy, principals) {
     });
 }
 
+/**
+ * Resolve the slice credential mode.
+ *
+ * 3.9.0: a `migration` whose date has passed no longer refuses startup (a
+ * restart after the date used to crash-loop the service). It resolves
+ * `{mode: 'migration', legacyAccepted: false, expired: true, expiresAt}`;
+ * the legacy slots are refused per request exactly as `requireAudience`
+ * already does after the date, the principals keep working, and the
+ * integrator reports `LEGACY_SLICE_SLOT_EXPIRED` on `/operations/readiness`
+ * only. A malformed date or one more than 90 days ahead stays a startup error.
+ */
 function parseSliceCredentialMode(env, now, legacy, principals) {
     const configuredMode = optionalSecret(env.SLICE_SERVICE_AUTH_MODE);
     const mode = configuredMode || 'legacy';
     const expiryValue = optionalSecret(env.SLICE_SERVICE_LEGACY_MIGRATION_UNTIL);
     const principalPairs = SLICE_SERVICE_PRINCIPALS.map((principal) => principals[principal]);
     const allPrincipalsActive = principalPairs.every((pair) => Boolean(pair.active));
-    const anyPrincipalMaterial = principalPairs.some((pair) => Boolean(pair.active || pair.previous));
+    const anyPrincipalMaterial = Object.values(principals).some((pair) => Boolean(pair.active || pair.previous));
     const legacyActive = Boolean(legacy.active);
 
     if (!SLICE_SERVICE_AUTH_MODES.includes(mode)) {
@@ -143,16 +169,41 @@ function parseSliceCredentialMode(env, now, legacy, principals) {
         !legacyActive
         || !allPrincipalsActive
         || !Number.isFinite(expiryMs)
-        || expiryMs <= now
         || expiryMs - now > LEGACY_MIGRATION_MAX_MS
     ) {
         throw new Error(SERVICE_AUTH_CONFIGURATION_ERROR);
+    }
+    if (expiryMs <= now) {
+        return Object.freeze({
+            mode,
+            legacyAccepted: false,
+            expired: true,
+            expiresAt: new Date(expiryMs).toISOString()
+        });
     }
     return Object.freeze({
         mode,
         legacyAccepted: true,
         expiresAt: new Date(expiryMs).toISOString()
     });
+}
+
+/**
+ * Readiness reason codes of a resolved key ring, for `/operations/readiness`
+ * only (never `/ready`): `LEGACY_SLICE_SLOT_EXPIRED` once a slice migration's
+ * date has passed, judged at startup or at `now`.
+ * @param {{sliceCredentialMode?: {mode?: string, expired?: boolean, expiresAt?: string|null}}} keyRing Resolved key ring.
+ * @param {number} [now] Clock seam.
+ * @returns {string[]} Reason codes (empty when none applies).
+ */
+function resolveKeyRingReadinessReasons(keyRing, now = Date.now()) {
+    const mode = keyRing?.sliceCredentialMode;
+    if (!mode || mode.mode !== 'migration') return [];
+    const expiresAtMs = typeof mode.expiresAt === 'string' ? Date.parse(mode.expiresAt) : NaN;
+    if (mode.expired === true || (Number.isFinite(expiresAtMs) && now >= expiresAtMs)) {
+        return [LEGACY_SLICE_SLOT_EXPIRED];
+    }
+    return [];
 }
 
 /**
@@ -202,6 +253,10 @@ function resolveServiceKeyRing(env = process.env, options = {}) {
             material
         );
     }
+    for (const principal of OPTIONAL_SLICE_SERVICE_PRINCIPALS) {
+        const pair = resolveOptionalRotationPair(env, OPTIONAL_SLICE_PRINCIPAL_ENV[principal], material);
+        if (pair.active || pair.previous) slicePrincipals[principal] = pair;
+    }
     const sliceCredentialMode = parseSliceCredentialMode(
         env,
         now,
@@ -233,6 +288,9 @@ function resolveSliceServiceApiKey(env = process.env) {
 
 module.exports = {
     AUDIENCE_ENV,
+    LEGACY_SLICE_SLOT_EXPIRED,
+    OPTIONAL_SLICE_PRINCIPAL_ENV,
+    OPTIONAL_SLICE_SERVICE_PRINCIPALS,
     SLICE_PRINCIPAL_ENV,
     SLICE_SERVICE_AUTH_MODES,
     SLICE_SERVICE_PRINCIPALS,
@@ -242,6 +300,7 @@ module.exports = {
     SLICE_SERVICE_KEY_LIMITS,
     isValidServiceSecret,
     isValidSliceServiceSecret,
+    resolveKeyRingReadinessReasons,
     resolveServiceKeyRing,
     resolveSliceServiceApiKey
 };

@@ -1,4 +1,15 @@
-/** Stateful scheduler for bounded FIFO slice queues. */
+/**
+ * Stateful scheduler for bounded FIFO slice queues.
+ *
+ * Three admission classes share the slots (3.9.0 §4.7): synchronous slices,
+ * then asynchronous slices, then production-model exports. An export is held
+ * in its own list, never counts toward `maxQueueLength` or the per-key cap,
+ * and starts only when a slot is free, no slice waits, no solo hold is
+ * pending and no other export runs. A solo request (the retry-alone of a
+ * system-killed native) pre-empts a running export: the export's signal is
+ * aborted and the export is re-queued at the head of its class, keeping its
+ * own external deadline. Without exports every path below is the 3.8.3 one.
+ */
 
 function abortReason(signal) {
     if (signal?.reason instanceof Error) return signal.reason;
@@ -13,6 +24,14 @@ function soloUnavailable(message) {
     const error = new Error(message);
     error.name = 'SliceSoloUnavailableError';
     error.code = 'SLICE_SOLO_UNAVAILABLE';
+    return error;
+}
+
+/** Abort reason of an export pre-empted by a solo hold; it is re-queued, never surfaced. */
+function exportPreempted() {
+    const error = new Error('Export job was pre-empted by a slice that runs alone.');
+    error.name = 'AbortError';
+    error.code = 'EXPORT_PREEMPTED';
     return error;
 }
 
@@ -47,6 +66,18 @@ function createQueueScheduler(config) {
      * the hold ends when the holder settles, aborts or the queue shuts down.
      */
     let solo = null;
+    /** Export class (3.9.0): its own FIFO and at most one running export. */
+    const queuedExports = [];
+    let activeExport = null;
+    let maxExportJobs;
+    /** The export limit, resolved on the first export admission. */
+    function exportLimit() {
+        if (maxExportJobs === undefined) {
+            const value = typeof config.maxExportJobs === 'function' ? config.maxExportJobs() : config.maxExportJobs;
+            maxExportJobs = Number.isSafeInteger(value) && value > 0 ? value : Number.POSITIVE_INFINITY;
+        }
+        return maxExportJobs;
+    }
 
     function closeRuntimeSubscription() {
         if (runtimeSubscriptionClosed) return;
@@ -211,11 +242,28 @@ function createQueueScheduler(config) {
             if (!shuttingDown) runNextSliceJob();
         };
         signal?.addEventListener('abort', holder.onAbort, { once: true });
+        preemptActiveExport();
         grantSoloIfReady();
         return promise;
     }
 
+    /**
+     * A solo hold never waits for an export's run: the running export is
+     * aborted and goes back to the head of the export class once its task
+     * has settled (its workspace cleaned by the task itself).
+     */
+    function preemptActiveExport() {
+        const job = activeExport;
+        if (!job || job.preempted || job.controller.signal.aborted) return;
+        job.preempted = true;
+        job.controller.abort(exportPreempted());
+    }
+
     function settleActiveJob(job, outcome, value) {
+        if (job.jobClass === 'export') {
+            settleActiveExport(job, outcome, value);
+            return;
+        }
         if (job.state !== 'active') return;
         job.state = 'settled';
         activeJobs.delete(job);
@@ -279,6 +327,122 @@ function createQueueScheduler(config) {
             queuedJobs.splice(queuedJobs.indexOf(job), 1);
             activateJob(job);
         }
+        startNextExportIfIdle();
+    }
+
+    /** The lowest class: a free slot, no waiting slice, no solo hold, no running export. */
+    function startNextExportIfIdle() {
+        if (shuttingDown || solo || activeExport || queuedJobs.length > 0) return;
+        if (activeJobs.size >= config.maxConcurrent || queuedExports.length === 0) return;
+        const job = queuedExports.shift();
+        job.state = 'active';
+        job.controller.signal.removeEventListener('abort', job.onEffectiveAbort);
+        activeExport = job;
+        activeJobs.add(job);
+        runTask(job);
+    }
+
+    function removeQueuedExport(job) {
+        if (job.state !== 'queued') return false;
+        const index = queuedExports.indexOf(job);
+        if (index < 0) return false;
+        queuedExports.splice(index, 1);
+        return true;
+    }
+
+    function rejectQueuedExport(job, error) {
+        if (!removeQueuedExport(job)) return;
+        job.state = 'settled';
+        removeAbortListeners(job);
+        job.reject(error);
+    }
+
+    /** Arm a fresh controller for a queued export (first admission or re-queue). */
+    function armExportController(job) {
+        job.controller = new AbortController();
+        job.onEffectiveAbort = () => rejectQueuedExport(job, abortReason(job.controller.signal));
+        job.controller.signal.addEventListener('abort', job.onEffectiveAbort, { once: true });
+    }
+
+    function settleActiveExport(job, outcome, value) {
+        if (job.state !== 'active') return;
+        activeJobs.delete(job);
+        if (activeExport === job) activeExport = null;
+        const requeue = job.preempted === true && !shuttingDown && !job.externalSignal?.aborted;
+        job.preempted = false;
+        if (requeue) {
+            job.state = 'queued';
+            job.preemptions = (job.preemptions || 0) + 1;
+            armExportController(job);
+            queuedExports.unshift(job);
+            emitQueueEvent('export.preempted', {
+                outcome: 'requeued',
+                extra: { reason: 'retry_alone', count: job.preemptions }
+            }, job.correlation);
+        } else {
+            const ownSignal = job.controller.signal;
+            const preemptedNow = ownSignal.reason?.code === 'EXPORT_PREEMPTED';
+            job.state = 'settled';
+            removeAbortListeners(job);
+            // A pre-emption's own reason is never surfaced: the external
+            // reason (deadline, cancel) or the shutdown wins over it.
+            if (job.externalSignal?.aborted) job.reject(abortReason(job.externalSignal));
+            else if (preemptedNow) job.reject(config.createShutdownError());
+            else if (ownSignal.aborted) job.reject(abortReason(ownSignal));
+            else if (outcome === 'resolve') job.resolve(value);
+            else job.reject(value);
+        }
+        grantSoloIfReady();
+        resolveDrainIfReady();
+        if (!shuttingDown) runNextSliceJob();
+    }
+
+    /**
+     * Admit one export into the export class (3.9.0). It takes no slice queue
+     * place and no per-key share; `maxExportJobs` bounds queued + running.
+     * @param {(signal: AbortSignal) => Promise<unknown>} task Export task; it may run again after a pre-emption.
+     * @param {{signal?: AbortSignal, onAdmitted?: Function}} [options] External signal (deadline, cancel) and observer.
+     * @returns {Promise<unknown>} The task's settled value.
+     */
+    function enqueueExportJob(task, options = {}) {
+        const signal = options.signal;
+        const correlation = config.captureContext?.() || {};
+        const closed = shuttingDown || !runtimeAvailable();
+        if (closed) {
+            if (!shuttingDown) void beginSliceQueueShutdown();
+            return rejectAdmission(config.createShutdownError(), correlation);
+        }
+        if (signal?.aborted) return Promise.reject(abortReason(signal));
+        if (queuedExports.length + (activeExport ? 1 : 0) >= exportLimit()) {
+            const error = typeof config.createExportFullError === 'function'
+                ? config.createExportFullError()
+                : config.createFullError();
+            return rejectAdmission(error, correlation);
+        }
+        return new Promise((resolve, reject) => {
+            const job = {
+                task, queueKey: null, externalSignal: signal, resolve, reject,
+                jobClass: 'export', ignoreQueueWait: true, preempted: false, preemptions: 0,
+                enqueuedAt: config.now(), state: 'queued', deadlineTimer: undefined, correlation
+            };
+            armExportController(job);
+            job.onExternalAbort = () => forwardExternalAbort(job);
+            signal?.addEventListener('abort', job.onExternalAbort, { once: true });
+            queuedExports.push(job);
+            if (typeof options.onAdmitted === 'function') {
+                try {
+                    options.onAdmitted(Object.freeze({
+                        getState: () => job.state,
+                        getQueuePosition: () => (job.state === 'queued' && queuedExports.includes(job)
+                            ? queuedExports.indexOf(job) + 1
+                            : null)
+                    }));
+                } catch {
+                    // An admission observer cannot alter queue ownership or settlement.
+                }
+            }
+            runNextSliceJob();
+        });
     }
 
     function startDeadline(job) {
@@ -381,6 +545,10 @@ function createQueueScheduler(config) {
         for (const job of [...queuedJobs, ...activeJobs]) {
             if (!job.controller.signal.aborted) job.controller.abort(config.createShutdownError());
         }
+        // 3.9.0: queued exports (a running export is already in activeJobs).
+        for (const job of [...queuedExports]) {
+            if (!job.controller.signal.aborted) job.controller.abort(config.createShutdownError());
+        }
         resolveDrainIfReady();
         return shutdownPromise;
     }
@@ -400,6 +568,9 @@ function createQueueScheduler(config) {
         });
         // Non-enumerable like acceptingJobs: the serialized status is unchanged.
         Object.defineProperty(status, 'soloHold', { value: solo !== null, enumerable: false });
+        // 3.9.0 export class, also non-enumerable (no serialized change).
+        Object.defineProperty(status, 'exportQueueLength', { value: queuedExports.length, enumerable: false });
+        Object.defineProperty(status, 'exportActive', { value: activeExport !== null, enumerable: false });
         return status;
     }
 
@@ -417,6 +588,7 @@ function createQueueScheduler(config) {
 
     return {
         enqueueSliceJob,
+        enqueueExportJob,
         getQueueStatus,
         beginSliceQueueShutdown,
         shutdownSliceQueue: beginSliceQueueShutdown

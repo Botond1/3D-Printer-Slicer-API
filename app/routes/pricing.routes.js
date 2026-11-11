@@ -3,6 +3,7 @@
  */
 
 const express = require('express');
+const { resolveResourcePolicy } = require('../config/resource-policy');
 const requireAdmin = require('../middleware/requireAdmin');
 const { adminRateLimiter } = require('../middleware/rateLimit');
 const { emitEvent } = require('../services/observability/events');
@@ -105,6 +106,15 @@ function createPricingRouter(options = {}) {
     // Injectable service seam: tests bind an isolated catalog/repository pair;
     // production uses the module singleton backed by the root-scoped state.
     const { getPricing, commitPricingMutation, findMaterialKey } = options.pricingService || defaultPricingService;
+    // 3.9.0: the JSON/form parsers run only on the pricing mutations and only
+    // after `authenticatePricing` (the app-level parsers are removed by the
+    // integrator), so an unauthenticated body is never parsed. Same limits as
+    // the former app-level parsers (`JSON_BODY_LIMIT`, `FORM_BODY_LIMIT`).
+    const bodyLimits = options.bodyLimits || resolveResourcePolicy(options.env || process.env);
+    const parseBody = options.parseBody || [
+        express.json({ limit: bodyLimits.JSON_BODY_LIMIT }),
+        express.urlencoded({ extended: false, limit: bodyLimits.FORM_BODY_LIMIT })
+    ];
 
     router.get('/pricing', (req, res) => {
         res.status(200).json(getPricing());
@@ -116,7 +126,7 @@ function createPricingRouter(options = {}) {
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-    router.post('/pricing/FDM', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'FDM', commitPricingMutation));
+    router.post('/pricing/FDM', adminRateLimiter, authenticatePricing, parseBody, (req, res) => createMaterialForTechnology(req, res, 'FDM', commitPricingMutation));
 
 /**
  * Create a new SLA material.
@@ -124,7 +134,7 @@ function createPricingRouter(options = {}) {
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-    router.post('/pricing/SLA', adminRateLimiter, authenticatePricing, (req, res) => createMaterialForTechnology(req, res, 'SLA', commitPricingMutation));
+    router.post('/pricing/SLA', adminRateLimiter, authenticatePricing, parseBody, (req, res) => createMaterialForTechnology(req, res, 'SLA', commitPricingMutation));
 
 /**
  * Update an existing material hourly pricing entry.
@@ -133,7 +143,7 @@ function createPricingRouter(options = {}) {
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-    router.patch('/pricing/:technology/:material', adminRateLimiter, authenticatePricing, async (req, res) => {
+    router.patch('/pricing/:technology/:material', adminRateLimiter, authenticatePricing, parseBody, async (req, res) => {
     const technologyResult = parseTechnologyOrResponse(res, req.params.technology);
     if (technologyResult.response) {
         recordPricingMutation(req, undefined, 'update', 'failure', 'PRICING_VALIDATION_FAILED');
@@ -207,7 +217,7 @@ function createPricingRouter(options = {}) {
  * @param {import('express').Response} res Express response object.
  * @returns {import('express').Response}
  */
-    router.delete('/pricing/:technology/:material', adminRateLimiter, authenticatePricing, async (req, res) => {
+    router.delete('/pricing/:technology/:material', adminRateLimiter, authenticatePricing, parseBody, async (req, res) => {
     const technologyResult = parseTechnologyOrResponse(res, req.params.technology);
     if (technologyResult.response) {
         recordPricingMutation(req, undefined, 'delete', 'failure', 'PRICING_VALIDATION_FAILED');

@@ -100,12 +100,15 @@ function computeAdaptiveCooldownMs(rejectionStreak) {
  */
 class TokenBucketRateLimiter {
     /**
-     * @param {{windowMs: number, maxRequests: number, burstCapacity: number}} config Token-bucket configuration.
+     * @param {{windowMs: number, maxRequests: number, burstCapacity: number, adaptiveCooldown?: boolean}} config
+     *   Token-bucket configuration. `adaptiveCooldown: false` (the auth-failure
+     *   bucket, 3.9.0) answers with the plain token wait and never escalates.
      */
-    constructor({ windowMs, maxRequests, burstCapacity }) {
+    constructor({ windowMs, maxRequests, burstCapacity, adaptiveCooldown = true }) {
         this.windowMs = windowMs;
         this.maxRequests = maxRequests;
         this.burstCapacity = burstCapacity;
+        this.adaptiveCooldown = adaptiveCooldown !== false;
         this.refillRatePerMs = maxRequests / windowMs;
         this.buckets = new Map();
         this.startCleanup();
@@ -172,7 +175,7 @@ class TokenBucketRateLimiter {
         current.rejectionStreak += 1;
 
         const tokenWaitMs = Math.max(0, (1 - current.tokens) / this.refillRatePerMs);
-        const cooldownMs = computeAdaptiveCooldownMs(current.rejectionStreak);
+        const cooldownMs = this.adaptiveCooldown ? computeAdaptiveCooldownMs(current.rejectionStreak) : 0;
         if (cooldownMs > 0) {
             current.blockedUntil = Math.max(current.blockedUntil, now + cooldownMs);
         }
@@ -189,19 +192,22 @@ class TokenBucketRateLimiter {
 }
 
 /**
- * Resolve the client key used by the slice rate limiter.
+ * Resolve the client key used by the slice and job-route rate limiters.
  *
- * The slice limiter is mounted BEFORE `x-slicer-api-key` authentication on
- * every slice and render route (`rateLimiter, authenticate, ...`), so no
- * the authenticated principal exists when it runs and the limiter can only key on
- * the resolved client IP. Principal-aware fairness lives in the slice queue
- * (`resolveQueueKey` in `slice.service.js`), which runs after authentication.
- * Keep the limiter in front of authentication: rejecting excess traffic
- * before any digest comparison or workspace allocation is the point.
+ * 3.9.0 reverses the 3.8.x design on purpose: the limiter is mounted AFTER
+ * `x-slicer-api-key` authentication (`authenticate, rateLimiter, ...`, see
+ * `sliceAdmission.js`), so it keys on the authenticated principal's slot
+ * (`principal:woocommerce`, `principal:leadpilot`, `principal:staging`,
+ * `principal:shared`). Wrong-key traffic from a shared egress IP is charged to
+ * the separate per-IP auth-failure bucket and never spends a principal's
+ * slice tokens. A request that reaches the limiter without a principal (only
+ * possible with an injected test authenticator) keeps the per-IP key.
  * @param {import('express').Request} req Express request object.
- * @returns {string} Bounded per-client-IP limiter key.
+ * @returns {string} Bounded limiter key.
  */
 function resolveSliceClientKey(req) {
+    const slot = req?.slicePrincipal?.slot;
+    if (typeof slot === 'string' && /^[a-z]{1,32}$/.test(slot)) return `principal:${slot}`;
     return `ip:${getClientIp(req)}`;
 }
 
@@ -266,8 +272,8 @@ const SLICE_JOB_RATE_LIMIT_BURST_CAPACITY = parsePositiveInt(
 );
 
 /**
- * Token-bucket limiter used on slicing endpoints.
- * Sustained policy defaults to 3 requests / 60 seconds / IP with short burst allowance.
+ * Token-bucket limiter used on slicing endpoints, mounted after authentication
+ * and keyed per authenticated principal (`resolveSliceClientKey`).
  */
 const sliceRateLimiter = createLimiterMiddleware({
     limiter: new TokenBucketRateLimiter({
@@ -279,9 +285,9 @@ const sliceRateLimiter = createLimiterMiddleware({
 });
 
 /**
- * Per-client-IP token bucket in front of the async slice job status/cancel
- * routes. It runs before authentication like the slice limiter, but has its
- * own bucket so status polls never consume slice submissions.
+ * Per-principal token bucket on the async slice job status/cancel routes. It
+ * runs after authentication like the slice limiter, but has its own bucket so
+ * status polls never consume slice submissions.
  */
 const sliceJobRateLimiter = createLimiterMiddleware({
     limiter: new TokenBucketRateLimiter({

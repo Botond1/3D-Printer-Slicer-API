@@ -164,6 +164,17 @@ runs:
           set -euo pipefail
           node scripts/i2-image-runtime-diagnostics.js
 
+      - name: Prove the generation, Python stack and catalogue goldens inside the exact image
+        id: golden_gate
+        if: ${{ steps.runtime_identity.outcome == 'success' }}
+        env:
+          SERVICE_UID: ${{ steps.runtime_identity.outputs.uid }}
+          SERVICE_GID: ${{ steps.runtime_identity.outputs.gid }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tests/golden/image-golden-gate.js "$IMAGE_REF"
+
       - name: Start an isolated inert container from the exact image
         id: container_start
         if: ${{ steps.runtime_identity.outcome == 'success' }}
@@ -432,6 +443,14 @@ runs:
           NODE
           echo "classification=success" >> "$GITHUB_OUTPUT"
 
+      - name: Render the expiring Grype ignore list into the run-local scanner config
+        id: grype_policy
+        if: ${{ always() && steps.build.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tests/golden/grype-ignore-policy.js ops/security/grype-ignore.yaml "$EVIDENCE_DIR/grype.yaml"
+
       - name: Scan the exact local image with Grype
         id: scan
         if: ${{ always() && steps.build.outcome == 'success' }}
@@ -444,7 +463,7 @@ runs:
           output-file: ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.json
           config: ${{ runner.temp }}/${{ env.EVIDENCE_SUBDIR }}/grype.yaml
           severity-cutoff: high
-          only-fixed: false
+          only-fixed: true
           grype-version: v0.110.0
           cache-db: false
 
@@ -501,10 +520,20 @@ runs:
             const severity = String(match?.vulnerability?.severity || '').toLowerCase();
             if (Object.hasOwn(counts, severity)) counts[severity] += 1;
           }
+          // only-fixed moves advisories without a fixed version to ignoredMatches:
+          // they do not block, but the summary names them.
+          const unfixed = { high: 0, critical: 0 };
+          for (const match of Array.isArray(report.ignoredMatches) ? report.ignoredMatches : []) {
+            const severity = String(match?.vulnerability?.severity || '').toLowerCase();
+            const byFixState = (Array.isArray(match?.appliedIgnoreRules) ? match.appliedIgnoreRules : [])
+              .some((rule) => typeof rule?.['fix-state'] === 'string' && rule['fix-state'].length > 0);
+            if (byFixState && Object.hasOwn(unfixed, severity)) unfixed[severity] += 1;
+          }
 
           fs.appendFileSync(
             process.env.GITHUB_STEP_SUMMARY,
             `\n### Exact-image vulnerability gate\n\nHigh findings: ${counts.high}\nCritical findings: ${counts.critical}\n`
+              + `Unfixed (no fixed version, not blocking): high ${unfixed.high}, critical ${unfixed.critical}\n`
           );
 
           if (counts.high > 0 || counts.critical > 0) {

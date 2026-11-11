@@ -28,10 +28,49 @@ const {
 } = require('../services/slice/workspace');
 const { setCorrelationIds } = require('../services/observability/context');
 const { emitEvent } = require('../services/observability/events');
+const { isAsyncAccepted } = require('../services/slice/async-slice');
 
 const ALLOWED_UPLOAD_EXTENSIONS = new Set([...EXTENSIONS.direct, ...EXTENSIONS.cad, ...EXTENSIONS.archive]);
 const ABORT_ACTIVE_UPLOAD = Symbol('abortActiveUploadLifecycle');
+const ASYNC_HANDOFF = Symbol('uploadLifecycleAsyncHandoff');
+const WORKSPACE_TRANSFERRED = Symbol('uploadLifecycleWorkspaceTransferred');
 const UPLOAD_FIELD_NAME = 'choosenFile';
+
+/**
+ * Record that a handler answered 202 and handed the request's work to an
+ * asynchronous job (3.9.0, K2-B9). From then on the socket may carry the
+ * client's next request (keep-alive), so the lifecycle writes nothing more
+ * and never calls `next`; a late cleanup failure is reported, never answered.
+ * @param {object} req Express request.
+ * @returns {void}
+ */
+function markAsyncHandoff(req) {
+    if (req) req[ASYNC_HANDOFF] = true;
+}
+
+/** True once a 202 was written by this lifecycle's handler or the async slice path. */
+function isHandedOff(req) {
+    return req?.[ASYNC_HANDOFF] === true || isAsyncAccepted(req);
+}
+
+/**
+ * Detach the request-owned workspace for an accepted asynchronous job: the
+ * job now owns the workspace and must call its `cleanup` when it settles.
+ * The lifecycle then skips its own cleanup (it still detaches the request).
+ * @param {object} req Express request.
+ * @param {object} [attached] The attached workspace when a custom attach seam was used.
+ * @returns {object|null} The transferred workspace, or null when none is attached.
+ */
+function transferRequestWorkspace(req, attached) {
+    const workspace = attached || getRequestWorkspace(req);
+    if (!req || !workspace) return null;
+    req[WORKSPACE_TRANSFERRED] = workspace;
+    return workspace;
+}
+
+function isWorkspaceTransferred(req, workspace) {
+    return Boolean(workspace) && req?.[WORKSPACE_TRANSFERRED] === workspace;
+}
 
 /**
  * Build a multer instance whose storage writes exclusively into the request workspace.
@@ -168,7 +207,8 @@ function workspaceAllocationError() {
 async function finalizeLifecycle(context) {
     const { workspace, req, cleanupWorkspace, detach, reportCleanupFailure, observer, label, originalError } = context;
     let cleanupError;
-    if (workspace) {
+    // A workspace transferred to an accepted asynchronous job is that job's to clean.
+    if (workspace && !isWorkspaceTransferred(req, workspace)) {
         try {
             await cleanupWorkspace(workspace, req);
         } catch (error) {
@@ -258,6 +298,9 @@ function createUploadLifecycle(options = {}) {
                 });
             }
 
+            // After a 202 the socket may already carry the client's next request
+            // (keep-alive); a late failure is reported, never answered (3.9.0).
+            if (isHandedOff(req)) return undefined;
             if (originalError) return next(originalError);
             if (cleanupError) {
                 const error = new Error('Upload workspace cleanup failed.');
@@ -274,5 +317,8 @@ module.exports = {
     UPLOAD_FIELD_NAME,
     createWorkspaceUpload,
     createUploadLifecycle,
-    runUploadWithinDeadline
+    isHandedOff,
+    markAsyncHandoff,
+    runUploadWithinDeadline,
+    transferRequestWorkspace
 };

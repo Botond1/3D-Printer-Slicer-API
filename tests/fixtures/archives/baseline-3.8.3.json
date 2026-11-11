@@ -1,0 +1,96 @@
+{
+  "_comment": "Answers of the unmodified 3.8.3 (dbc539e) Node checks for tests/fixtures/archives/archive-cases.js: inspectThreeMfArchive + handleProcessingError. Captured 2026-11-11 before the WP3 edits.",
+  "cases": {
+    "valid-tetrahedron": "admitted",
+    "unreadable-missing-part": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "unreadable-not-a-zip": {
+      "status": 500,
+      "errorCode": "INTERNAL_PROCESSING_ERROR",
+      "error": "Slicing failed. The error has been logged for review."
+    },
+    "encrypted-entry": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "unsafe-dotdot": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "backslash-normalised-by-yauzl": "admitted",
+    "unsafe-dot-segment": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "unsafe-nul": "admitted",
+    "unsafe-case-duplicate": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "unsafe-directory": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "unsafe-symlink": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "unsafe-depth": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "nested-3mf": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "nested-zip": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "disallowed-extension": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "disallowed-root": {
+      "status": 400,
+      "errorCode": "INVALID_SOURCE_ARCHIVE",
+      "error": "Uploaded ZIP file is invalid or does not contain a supported model file."
+    },
+    "too-many-entries": {
+      "status": 413,
+      "errorCode": "SLICE_RESOURCE_LIMIT_EXCEEDED",
+      "error": "Slice processing exceeded a configured resource limit."
+    },
+    "too-large-entry": {
+      "status": 413,
+      "errorCode": "SLICE_RESOURCE_LIMIT_EXCEEDED",
+      "error": "Slice processing exceeded a configured resource limit."
+    },
+    "too-large-total": {
+      "status": 413,
+      "errorCode": "SLICE_RESOURCE_LIMIT_EXCEEDED",
+      "error": "Slice processing exceeded a configured resource limit."
+    },
+    "ratio-exceeded": {
+      "status": 413,
+      "errorCode": "SLICE_RESOURCE_LIMIT_EXCEEDED",
+      "error": "Slice processing exceeded a configured resource limit."
+    },
+    "expansion-fanout-1e16": "admitted",
+    "expansion-cycle-fanout-10": "admitted",
+    "cycle-fanout-1-left-to-python": "admitted"
+  }
+}

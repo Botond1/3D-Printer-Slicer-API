@@ -271,7 +271,7 @@ test('router mutations cannot become a generic proxy or drift from the exact API
     }
 });
 
-test('router allowlist mutations cannot widen the direct-peer single-/32 boundary', async (t) => {
+test('router allowlist mutations cannot widen the direct-peer /32 boundary', async (t) => {
     const router = SOURCES.routerTemplate;
     const cases = [
         ['legacy IPWhiteList', replaceRequired(router, /ipAllowList:/, 'ipWhiteList:')],
@@ -290,7 +290,7 @@ test('router allowlist mutations cannot widen the direct-peer single-/32 boundar
             '        sourceRange:',
             '        x-forwarded-for: true\n        sourceRange:'
         )],
-        ['plural source ranges', replaceRequired(
+        ['template literal range beside the placeholder', replaceRequired(
             router,
             `          - "${ALLOWLIST_PLACEHOLDER}"`,
             `          - "${ALLOWLIST_PLACEHOLDER}"\n          - "198.51.100.20/32"`

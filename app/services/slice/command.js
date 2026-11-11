@@ -2,8 +2,11 @@
 
 // Not child_process.execFile: it drops `detached`, so a native never led its
 // own process group and the tree terminator killed nothing (3.8.1).
+const fs = require('node:fs');
+const path = require('node:path');
 const { spawnFile } = require('./spawn-file');
 const { DEFAULTS } = require('../../config/constants');
+const { children: CHILDREN_POLICY } = require('../../config/release-policy');
 const { parseBoundedPositiveInt } = require('./number-utils');
 const { createChildEnvironment } = require('./child-environment');
 const { createProcessTreeTerminator } = require('./process-tree');
@@ -107,6 +110,214 @@ function isOrientationHelperCommand(args) {
     return Array.isArray(args) && args[0] === ORIENTATION_HELPER_PATH;
 }
 
+/**
+ * OOM score adjustment every slice child runs at (3.9.0, `CHILD_OOM_SCORE_ADJ`,
+ * default 500, 0 = no wrapper). Node itself stays at the container's score, so
+ * a cgroup OOM kills the largest child, never the process that holds every job.
+ */
+const CHILD_OOM_SCORE_ADJ = CHILDREN_POLICY.CHILD_OOM_SCORE_ADJ;
+
+/** Budget of the startup self-test of the `choom` wrapper. */
+const OOM_SELF_TEST_TIMEOUT_MS = 5_000;
+
+/** Closed reasons the wrapper is off for (`runtime.limits_unavailable`, readiness). */
+const OOM_WRAPPER_REASONS = Object.freeze([
+    'disabled',
+    'unsupported_platform',
+    'choom_missing',
+    'self_test_failed',
+    'self_test_mismatch',
+    'self_test_timeout'
+]);
+
+/** Reasons that are not failures: no event is emitted for them. */
+const QUIET_OOM_WRAPPER_REASONS = Object.freeze(['disabled', 'unsupported_platform']);
+
+/** Directories searched for `choom` when the child PATH is empty. */
+const FALLBACK_EXECUTABLE_PATH = '/usr/local/bin:/usr/bin:/bin';
+
+/**
+ * Absolute path of an executable regular file named `name` on a POSIX PATH.
+ * @param {string} name Executable name.
+ * @param {string|undefined} pathValue Colon-separated PATH.
+ * @returns {string|null} Absolute path, or null when none is found.
+ */
+function findExecutableOnPath(name, pathValue) {
+    for (const directory of String(pathValue || FALLBACK_EXECUTABLE_PATH).split(':')) {
+        if (!directory || !path.posix.isAbsolute(directory)) continue;
+        const candidate = path.posix.join(directory, name);
+        try {
+            if (!fs.statSync(candidate).isFile()) continue;
+            fs.accessSync(candidate, fs.constants.X_OK);
+            return candidate;
+        } catch {
+            // Not here; keep looking.
+        }
+    }
+    return null;
+}
+
+/**
+ * Build the `choom` OOM-score wrapper. Its verdict is decided once: the
+ * configured score must be non-zero, the platform Linux, `choom` present on the
+ * child PATH, and the self-test `choom -n <adj> -- /bin/sh -c 'cat
+ * /proc/self/oom_score_adj'` must print exactly the configured score (an
+ * unprivileged process may raise its score but not lower it below the value
+ * its container started with, so the test uses the value that will be used).
+ * Anything else leaves the wrapper off for the life of the process, with one
+ * `runtime.limits_unavailable` event for a genuine failure. `choom` replaces
+ * itself with the program (`execvp`), so PID, process group, exit status and
+ * signal are the program's and descendants inherit the score.
+ * @param {object} [options] Test seams.
+ * @param {number} [options.scoreAdj] Score to apply (default `CHILD_OOM_SCORE_ADJ`).
+ * @param {NodeJS.Platform} [options.platform] Platform (default `process.platform`).
+ * @param {() => string|null} [options.locate] Finds `choom`'s absolute path.
+ * @param {typeof spawnFile} [options.execute] Spawns the self-test.
+ * @param {(name: string, data: object) => unknown} [options.emitEvent] Event sink.
+ * @param {number} [options.selfTestTimeoutMs] Self-test budget.
+ * @returns {{resolve: () => (object|Promise<object>), status: () => object, wrap: (state: object|null, executable: string, args: string[]) => {file: string, args: string[], wrapped: ({file: string, args: string[]}|null)}}}
+ */
+function createOomWrapper(options = {}) {
+    const scoreAdj = options.scoreAdj ?? CHILD_OOM_SCORE_ADJ;
+    const platform = options.platform || process.platform;
+    const environmentFactory = options.createChildEnvironment || createChildEnvironment;
+    const locate = options.locate
+        || (() => findExecutableOnPath('choom', environmentFactory(process.env, platform).PATH));
+    const execute = options.execute || spawnFile;
+    const emit = options.emitEvent || emitEvent;
+    const selfTestTimeoutMs = options.selfTestTimeoutMs || OOM_SELF_TEST_TIMEOUT_MS;
+    let state = null;
+    let pending = null;
+
+    function decide(next) {
+        state = Object.freeze(next);
+        pending = null;
+        if (!state.active && !QUIET_OOM_WRAPPER_REASONS.includes(state.reason)) {
+            emit('runtime.limits_unavailable', {
+                outcome: 'wrapper_off',
+                extra: { reason: state.reason, limit: scoreAdj }
+            });
+        }
+        return state;
+    }
+
+    function off(reason) {
+        return decide({ active: false, scoreAdj, choomPath: null, reason });
+    }
+
+    function selfTest(choomPath) {
+        return new Promise((resolveTest) => {
+            let finished = false;
+            let timer;
+            const finish = (verdict) => {
+                if (finished) return;
+                finished = true;
+                clearTimeout(timer);
+                resolveTest(verdict);
+            };
+            let child;
+            try {
+                child = execute(choomPath,
+                    ['-n', String(scoreAdj), '--', '/bin/sh', '-c', 'cat /proc/self/oom_score_adj'],
+                    {
+                        env: environmentFactory(process.env, platform),
+                        maxBuffer: 4_096,
+                        shell: false,
+                        windowsHide: true
+                    },
+                    (error, stdout = '') => {
+                        if (error) return finish(off('self_test_failed'));
+                        if (String(stdout).trim() !== String(scoreAdj)) return finish(off('self_test_mismatch'));
+                        return finish(decide({ active: true, scoreAdj, choomPath, reason: null }));
+                    });
+            } catch {
+                finish(off('self_test_failed'));
+                return;
+            }
+            timer = setTimeout(() => {
+                try { child?.kill?.('SIGKILL'); } catch { /* already gone */ }
+                finish(off('self_test_timeout'));
+            }, selfTestTimeoutMs);
+            // Kept referenced: it is the only bound on a promise the startup
+            // (and the first command) awaits. Unreferenced, a self-test whose
+            // child holds no handle of its own lets the event loop drain with
+            // the verdict never decided. It is cleared the moment one is.
+        });
+    }
+
+    /**
+     * The verdict: synchronous once decided (or decidable without a child),
+     * otherwise one shared promise of the self-test. Never rejects.
+     */
+    function resolve() {
+        if (state) return state;
+        if (pending) return pending;
+        if (scoreAdj === 0) return off('disabled');
+        if (platform !== 'linux') return off('unsupported_platform');
+        let choomPath = null;
+        try {
+            choomPath = locate();
+        } catch {
+            choomPath = null;
+        }
+        if (!choomPath) return off('choom_missing');
+        pending = selfTest(choomPath);
+        return pending;
+    }
+
+    function status() {
+        if (!state) {
+            return { state: 'pending', active: false, oom_score_adj: scoreAdj, reason: null };
+        }
+        return {
+            state: state.active ? 'active' : (state.reason === 'disabled' ? 'disabled' : 'off'),
+            active: state.active,
+            oom_score_adj: scoreAdj,
+            reason: state.reason
+        };
+    }
+
+    return { resolve, status, wrap: wrapCommand };
+}
+
+/**
+ * The argv a command runs under: `choom -n <adj> -- <file> <args…>` when the
+ * wrapper is active, the command itself otherwise.
+ * @param {{active?: boolean, choomPath?: string, scoreAdj?: number}|null} wrapperState Wrapper verdict.
+ * @param {string} executable Program.
+ * @param {string[]} args Program arguments.
+ * @returns {{file: string, args: string[], wrapped: ({file: string, args: string[]}|null)}} Spawn argv.
+ */
+function wrapCommand(wrapperState, executable, args) {
+    if (!wrapperState?.active) return { file: executable, args, wrapped: null };
+    return {
+        file: wrapperState.choomPath,
+        args: ['-n', String(wrapperState.scoreAdj), '--', executable, ...args],
+        wrapped: { file: executable, args }
+    };
+}
+
+/** The process-wide wrapper every real slice child runs under. */
+const defaultOomWrapper = createOomWrapper();
+
+/**
+ * Run the wrapper's startup self-test now (idempotent) and return its verdict.
+ * The first command would run it otherwise; server startup calls this so the
+ * verdict and any `runtime.limits_unavailable` event come before traffic.
+ * @returns {Promise<object>} Frozen verdict `{active, scoreAdj, choomPath, reason}`.
+ */
+function verifyChildOomWrapper() {
+    return Promise.resolve(defaultOomWrapper.resolve());
+}
+
+/**
+ * Readiness view of the process-wide wrapper.
+ * @returns {{state: 'pending'|'active'|'disabled'|'off', active: boolean, oom_score_adj: number, reason: string|null}}
+ */
+function getChildOomWrapperStatus() {
+    return defaultOomWrapper.status();
+}
+
 function abortReason(signal) {
     if (signal?.reason instanceof Error) return signal.reason;
     const error = new Error('Slice processing was aborted.');
@@ -193,12 +404,13 @@ function nativeErrorCode(outcome, error) {
 }
 
 class CommandExecution {
-    constructor(dependencies, executable, args, signal, timeoutMs) {
+    constructor(dependencies, executable, args, signal, timeoutMs, wrapperState = null) {
         this.dependencies = dependencies;
         this.executable = executable;
         this.args = args;
         this.signal = signal;
         this.timeoutMs = timeoutMs;
+        this.wrapperState = wrapperState;
         this.onAbort = this.onAbort.bind(this);
     }
 
@@ -220,13 +432,17 @@ class CommandExecution {
 
     spawn() {
         const { execute, platform, environmentFactory } = this.dependencies;
-        this.child = execute(this.executable, this.args, {
+        // The budget was chosen from the original argv; only the spawn is wrapped.
+        const command = wrapCommand(this.wrapperState, this.executable, this.args);
+        const spawnOptions = {
             detached: platform !== 'win32',
             env: environmentFactory(process.env, platform),
             maxBuffer: this.dependencies.maxBuffer,
             shell: false,
             windowsHide: true
-        }, (error, stdout = '', stderr = '') => {
+        };
+        if (command.wrapped) spawnOptions.wrapped = command.wrapped;
+        this.child = execute(command.file, command.args, spawnOptions, (error, stdout = '', stderr = '') => {
             this.commandOutcome = { error, stdout, stderr };
             this.maybeSettle();
         });
@@ -350,7 +566,13 @@ function createCommandRunner(overrides = {}) {
         maxBuffer: overrides.maxBuffer || DEFAULT_MAX_BUFFER_BYTES,
         environmentFactory: overrides.createChildEnvironment || createChildEnvironment,
         terminatorFactory: overrides.createProcessTreeTerminator
-            || ((child) => createProcessTreeTerminator(child, overrides.terminationDependencies))
+            || ((child) => createProcessTreeTerminator(child, overrides.terminationDependencies)),
+        // Real slice children run under the process-wide `choom` wrapper; an
+        // injected spawn seam or the startup probe does not unless a test
+        // passes `oomWrapper` (null = never wrap).
+        oomWrapper: overrides.oomWrapper !== undefined
+            ? overrides.oomWrapper
+            : (overrides.execFile || telemetry === 'none' ? null : defaultOomWrapper)
     };
     return function run(executable, args = [], options = {}) {
         if (options.signal?.aborted) return Promise.reject(abortReason(options.signal));
@@ -363,7 +585,16 @@ function createCommandRunner(overrides = {}) {
             ? Math.min(dependencies.timeoutMs, dependencies.orientationTimeoutMs)
             : dependencies.timeoutMs;
         const timeoutMs = effectiveTimeoutMs(runnerTimeoutMs, options.timeoutMs);
-        return new CommandExecution(dependencies, executable, args, options.signal, timeoutMs).run().then(
+        const execute = (wrapperState) => new CommandExecution(
+            dependencies, executable, args, options.signal, timeoutMs, wrapperState
+        ).run();
+        // Synchronous once the wrapper's verdict is known; only the very first
+        // command of a process may wait for the self-test.
+        const verdict = dependencies.oomWrapper ? dependencies.oomWrapper.resolve() : null;
+        const execution = verdict && typeof verdict.then === 'function'
+            ? verdict.then(execute)
+            : execute(verdict);
+        return execution.then(
             (value) => {
                 if (telemetry === 'none') return value;
                 const duration = elapsedMilliseconds(started);
@@ -412,6 +643,14 @@ function createPythonHelperRunner(overrides = {}) {
 const runCommand = createCommandRunner();
 
 module.exports = {
+    CHILD_OOM_SCORE_ADJ,
+    OOM_SELF_TEST_TIMEOUT_MS,
+    OOM_WRAPPER_REASONS,
+    createOomWrapper,
+    findExecutableOnPath,
+    getChildOomWrapperStatus,
+    verifyChildOomWrapper,
+    wrapCommand,
     STDERR_TAIL_CHARS,
     nativeExitFacts,
     printableStderrTail,

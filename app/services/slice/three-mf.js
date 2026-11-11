@@ -3,9 +3,10 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
-const { invalidArchive, resourceLimit } = require('./resource-errors');
+const { invalidArchive, labelArchiveError, resourceLimit } = require('./resource-errors');
 const { isUnsafeZipPath, assertDeclaredEntryPolicy } = require('./zip-policy');
 const { archiveIdentity, openZipWithRetry } = require('./zip-open');
+const { ExpansionCounter, consumeExpansionVerdict, isModelPart } = require('./three-mf-expansion');
 
 const REQUIRED_PARTS = new Set(['[Content_Types].xml', '_rels/.rels', '3D/3dmodel.model']);
 const REQUIRED_PARTS_LOWER = new Set([...REQUIRED_PARTS].map((part) => part.toLowerCase()));
@@ -28,6 +29,10 @@ const PROJECT_METADATA_EXTENSIONS = new Set([
     '.gcode', '.md5', '.png', '.json', '.config', '.xml', '.txt', '.webp', '.pdf', '.cfg', '.ini', '.fdm_material'
 ]);
 const PROJECT_METADATA_ROOTS = new Set(['metadata', 'auxiliaries', 'cura']);
+/** Archive extensions the part allowlist refuses, labelled `ARCHIVE_NESTED`. */
+const NESTED_ARCHIVE_EXTENSIONS = new Set(['.zip', '.3mf']);
+/** yauzl's own entry-name refusals, which surface as an archive `error` event. */
+const YAUZL_UNSAFE_NAME = /^(?:invalid characters in fileName|absolute path|invalid relative path):/;
 
 function canonicalThreeMfPartName(name) {
     const raw = String(name || '');
@@ -40,7 +45,7 @@ function canonicalThreeMfPartName(name) {
         || segments.some((segment) => segment === '' || segment === '.' || segment === '..')
         || isUnsafeZipPath(raw)
     ) {
-        throw invalidArchive('3MF contains a non-canonical part path.');
+        throw labelArchiveError(invalidArchive('3MF contains a non-canonical part path.'), 'ARCHIVE_UNSAFE_PATH');
     }
     return normalized.toLowerCase();
 }
@@ -63,7 +68,21 @@ function isAllowedThreeMfPart(name) {
     return PROJECT_METADATA_ROOTS.has(root) && PROJECT_METADATA_EXTENSIONS.has(extension);
 }
 
-async function consumeEntry(zipFile, entry, policy) {
+/**
+ * The `archive_rule` of a part the allowlist refuses.
+ * @param {string} name Raw part name.
+ * @returns {'ARCHIVE_NESTED'|'ARCHIVE_DISALLOWED_PART'} Rule label.
+ */
+function disallowedPartRule(name) {
+    const extension = path.posix.extname(String(name).toLowerCase());
+    return NESTED_ARCHIVE_EXTENSIONS.has(extension) ? 'ARCHIVE_NESTED' : 'ARCHIVE_DISALLOWED_PART';
+}
+
+/**
+ * Stream one entry once: count its actual bytes and, for a model part, feed
+ * the expansion scanner with the same chunks.
+ */
+async function consumeEntry(zipFile, entry, policy, scanner = null) {
     const stream = await new Promise((resolve, reject) => {
         zipFile.openReadStream(entry, (error, value) => error ? reject(error) : resolve(value));
     });
@@ -72,23 +91,53 @@ async function consumeEntry(zipFile, entry, policy) {
         stream.on('data', (chunk) => {
             bytes += chunk.length;
             if (bytes > policy.MAX_ZIP_ENTRY_BYTES || bytes > policy.MAX_ZIP_UNCOMPRESSED_BYTES) {
-                stream.destroy(resourceLimit('3MF entry exceeded the actual-byte limit.'));
+                stream.destroy(labelArchiveError(resourceLimit('3MF entry exceeded the actual-byte limit.'),
+                    'ARCHIVE_TOO_LARGE', Math.min(policy.MAX_ZIP_ENTRY_BYTES, policy.MAX_ZIP_UNCOMPRESSED_BYTES)));
+                return;
+            }
+            if (scanner) {
+                try {
+                    scanner.write(chunk);
+                } catch (error) {
+                    stream.destroy(error);
+                }
             }
         });
         stream.once('end', () => resolve(bytes));
         stream.once('error', reject);
     });
+    scanner?.end();
     if (actualBytes !== entry.uncompressedSize) {
-        throw invalidArchive('3MF actual bytes do not match the declared entry size.');
+        throw labelArchiveError(invalidArchive('3MF actual bytes do not match the declared entry size.'), 'ARCHIVE_UNREADABLE');
     }
     return actualBytes;
 }
 
-async function inspectThreeMfArchive(filePath, options = {}) {
+/**
+ * Inspect a 3MF package and return the 3.8.3 summary plus the expansion
+ * counts. The expansion scan is skipped when `options.expansion === false`
+ * (the 3.8.3 checks alone, used by the corpus comparison) or when a
+ * preflight verdict registered for this very file is consumed (once); the
+ * other checks always run.
+ * @param {string} filePath 3MF path.
+ * @param {{resourcePolicy?: object, env?: object, expansionLimits?: object, expansion?: boolean, ignoreVerdict?: boolean}} [options] Options.
+ * @returns {Promise<{summary: {entries: number, declaredBytes: number, actualBytes: number}, expansion: {triangles: number, instances: number, objects: number}|null, verdictConsumed: boolean}>} Result.
+ */
+async function inspectThreeMfPackage(filePath, options = {}) {
     const policy = options.resourcePolicy || resolveResourcePolicy(options.env || process.env);
     const before = await fs.lstat(filePath, { bigint: true });
-    if (!before.isFile() || before.isSymbolicLink()) throw invalidArchive('Unsafe 3MF archive target.');
+    if (!before.isFile() || before.isSymbolicLink()) {
+        throw labelArchiveError(invalidArchive('Unsafe 3MF archive target.'), 'ARCHIVE_UNSAFE_PATH');
+    }
     const expectedIdentity = archiveIdentity(before);
+    let consumedCounts = null;
+    if (options.expansion !== false && options.ignoreVerdict !== true) {
+        const realpath = await fs.realpath(filePath).catch(() => null);
+        if (realpath) consumedCounts = consumeExpansionVerdict(realpath, before);
+    }
+    const counter = options.expansion === false || consumedCounts
+        ? null
+        : new ExpansionCounter(options.expansionLimits);
     const zipFile = await openZipWithRetry(filePath);
     const closeSettlement = new Promise((resolve) => {
         zipFile.once('close', resolve);
@@ -111,14 +160,16 @@ async function inspectThreeMfArchive(filePath, options = {}) {
             zipFile.on('entry', async (entry) => {
                 try {
                     if (entry.generalPurposeBitFlag & 0x1) {
-                        throw invalidArchive('Encrypted 3MF parts are not supported.');
+                        throw labelArchiveError(invalidArchive('Encrypted 3MF parts are not supported.'), 'ARCHIVE_ENCRYPTED');
                     }
                     const canonicalName = canonicalThreeMfPartName(entry.fileName);
                     if (entry.fileName.endsWith('/') || seen.has(canonicalName)) {
-                        throw invalidArchive('3MF contains an unsafe or duplicate part path.');
+                        throw labelArchiveError(invalidArchive('3MF contains an unsafe or duplicate part path.'),
+                            'ARCHIVE_UNSAFE_PATH');
                     }
                     if (!isAllowedThreeMfPart(entry.fileName)) {
-                        throw invalidArchive('3MF contains an unsupported part type.');
+                        throw labelArchiveError(invalidArchive('3MF contains an unsupported part type.'),
+                            disallowedPartRule(entry.fileName));
                     }
                     assertDeclaredEntryPolicy(entry, {
                         ...policy,
@@ -127,14 +178,21 @@ async function inspectThreeMfArchive(filePath, options = {}) {
                     seen.add(canonicalName);
                     count += 1;
                     declaredTotal += entry.uncompressedSize;
-                    if (
-                        count > policy.MAX_ZIP_ENTRIES
-                        || !Number.isSafeInteger(declaredTotal)
-                        || declaredTotal > policy.MAX_ZIP_UNCOMPRESSED_BYTES
-                    ) throw resourceLimit('3MF archive exceeded its declared resource envelope.');
-                    actualTotal += await consumeEntry(zipFile, entry, policy);
+                    if (count > policy.MAX_ZIP_ENTRIES) {
+                        throw labelArchiveError(resourceLimit('3MF archive exceeded its declared resource envelope.'),
+                            'ARCHIVE_TOO_MANY_ENTRIES', policy.MAX_ZIP_ENTRIES);
+                    }
+                    if (!Number.isSafeInteger(declaredTotal) || declaredTotal > policy.MAX_ZIP_UNCOMPRESSED_BYTES) {
+                        throw labelArchiveError(resourceLimit('3MF archive exceeded its declared resource envelope.'),
+                            'ARCHIVE_TOO_LARGE', policy.MAX_ZIP_UNCOMPRESSED_BYTES);
+                    }
+                    const scanner = counter && isModelPart(canonicalName)
+                        ? counter.createPartScanner(entry.fileName)
+                        : null;
+                    actualTotal += await consumeEntry(zipFile, entry, policy, scanner);
                     if (actualTotal > policy.MAX_ZIP_UNCOMPRESSED_BYTES) {
-                        throw resourceLimit('3MF archive exceeded its actual-byte envelope.');
+                        throw labelArchiveError(resourceLimit('3MF archive exceeded its actual-byte envelope.'),
+                            'ARCHIVE_TOO_LARGE', policy.MAX_ZIP_UNCOMPRESSED_BYTES);
                     }
                     zipFile.readEntry();
                 } catch (error) {
@@ -146,7 +204,10 @@ async function inspectThreeMfArchive(filePath, options = {}) {
                 settled = true;
                 resolve();
             });
-            zipFile.once('error', () => fail(invalidArchive('3MF archive could not be inspected.')));
+            zipFile.once('error', (error) => fail(labelArchiveError(
+                invalidArchive('3MF archive could not be inspected.'),
+                YAUZL_UNSAFE_NAME.test(String(error?.message || '')) ? 'ARCHIVE_UNSAFE_PATH' : 'ARCHIVE_UNREADABLE'
+            )));
             zipFile.readEntry();
         });
     } finally {
@@ -155,18 +216,35 @@ async function inspectThreeMfArchive(filePath, options = {}) {
     }
     const after = await fs.lstat(filePath, { bigint: true }).catch(() => null);
     if (!after || archiveIdentity(after) !== expectedIdentity) {
-        throw invalidArchive('3MF archive changed during inspection.');
+        throw labelArchiveError(invalidArchive('3MF archive changed during inspection.'), 'ARCHIVE_UNREADABLE');
     }
     for (const required of REQUIRED_PARTS_LOWER) {
         if (!seen.has(required)) {
-            throw invalidArchive('3MF archive is missing a required package part.');
+            throw labelArchiveError(invalidArchive('3MF archive is missing a required package part.'), 'ARCHIVE_UNREADABLE');
         }
     }
-    return { entries: count, declaredBytes: declaredTotal, actualBytes: actualTotal };
+    return {
+        summary: { entries: count, declaredBytes: declaredTotal, actualBytes: actualTotal },
+        expansion: counter ? counter.finish() : consumedCounts,
+        verdictConsumed: Boolean(consumedCounts)
+    };
+}
+
+/**
+ * Inspect a 3MF package: the 3.8.3 envelope checks plus, from 3.9.0, the
+ * NUL-name refusal and the build-expansion pre-scan. The return value for an
+ * admitted file is exactly that of 3.8.3.
+ * @param {string} filePath 3MF path.
+ * @param {object} [options] See `inspectThreeMfPackage`.
+ * @returns {Promise<{entries: number, declaredBytes: number, actualBytes: number}>} Summary.
+ */
+async function inspectThreeMfArchive(filePath, options = {}) {
+    return (await inspectThreeMfPackage(filePath, options)).summary;
 }
 
 module.exports = {
     inspectThreeMfArchive,
+    inspectThreeMfPackage,
     isAllowedThreeMfPart,
     canonicalThreeMfPartName
 };

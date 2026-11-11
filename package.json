@@ -1,6 +1,6 @@
 {
   "name": "3d-printer-slicer-api",
-  "version": "3.8.3",
+  "version": "3.9.0",
   "packageManager": "npm@10.9.8",
   "main": "app/server.js",
   "scripts": {
@@ -27,6 +27,7 @@
     "yauzl": "^3.2.0"
   },
   "overrides": {
-    "qs": "6.16.0"
+    "qs": "6.16.2",
+    "minimatch": "11.0.8"
   }
 }

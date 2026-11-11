@@ -1,0 +1,472 @@
+{
+  "captured_from": {
+    "source_commit": "dbc539e",
+    "release": "3.8.3",
+    "method": "JSON.stringify of require(app/config/constants.js), resolveResourcePolicy({}) and RESOURCE_DEFINITIONS loaded from the dbc539e blobs with PORT unset (constants.js reads only PORT at load)"
+  },
+  "constants": {
+    "DEFAULTS": {
+      "PORT": 3000,
+      "JSON_BODY_LIMIT": "1mb",
+      "FORM_BODY_LIMIT": "1mb",
+      "MAX_UPLOAD_BYTES": 524288000,
+      "HTTP_HEADERS_TIMEOUT_MS": 60000,
+      "HTTP_REQUEST_TIMEOUT_MS": 600000,
+      "HTTP_KEEP_ALIVE_TIMEOUT_MS": 95000,
+      "HTTP_MAX_HEADERS_COUNT": 2000,
+      "HTTP_MAX_CONNECTIONS": 128,
+      "HTTP_MAX_REQUESTS_PER_SOCKET": 100,
+      "WORKSPACE_STALE_AGE_MS": 86400000,
+      "MAX_LOG_OUTPUT": 4000,
+      "SLICE_COMMAND_TIMEOUT_MS": 600000,
+      "PYTHON_HELPER_TIMEOUT_MS": 120000,
+      "ORIENTATION_HELPER_TIMEOUT_MS": 60000,
+      "SLICE_TIMEOUT_MINUTES": 10,
+      "SLICE_RATE_LIMIT_WINDOW_MS": 60000,
+      "SLICE_RATE_LIMIT_MAX_REQUESTS": 3,
+      "SLICE_RATE_LIMIT_BURST_CAPACITY": 5,
+      "ADMIN_RATE_LIMIT_WINDOW_MS": 60000,
+      "ADMIN_RATE_LIMIT_MAX_REQUESTS": 30,
+      "SLICE_JOB_RATE_LIMIT_WINDOW_MS": 60000,
+      "SLICE_JOB_RATE_LIMIT_MAX_REQUESTS": 1200,
+      "SLICE_JOB_RATE_LIMIT_BURST_CAPACITY": 60,
+      "MAX_SLICE_QUEUE_LENGTH": 100,
+      "MAX_SLICE_QUEUE_PER_IP": 5,
+      "MAX_SLICE_QUEUE_WAIT_MS": 300000,
+      "MAX_CONCURRENT_SLICES": 1,
+      "MAX_ZIP_ENTRIES": 500,
+      "MAX_ZIP_UNCOMPRESSED_BYTES": 524288000,
+      "MAX_OUTPUT_BYTES": 524288000,
+      "UPLOAD_TOTAL_TIMEOUT_MS": 600000,
+      "DEFAULT_LAYER_HEIGHT": 0.2,
+      "DEFAULT_INFIL_PERCENT": 20,
+      "DEFAULT_FDM_MATERIAL": "PLA",
+      "DEFAULT_SLA_MATERIAL": "Standard",
+      "ORCA_DEFAULT_MACHINE_PROFILE": "Bambu_P1S_0.4_nozzle.json"
+    },
+    "MAX_CONCURRENT_SLICES_RANGE": {
+      "min": 1,
+      "max": 3
+    },
+    "LAYER_HEIGHTS": {
+      "PRUSA": [
+        0.025,
+        0.05,
+        0.1,
+        0.2,
+        0.3
+      ],
+      "ORCA": [
+        0.1,
+        0.2,
+        0.3
+      ],
+      "BY_TECHNOLOGY": {
+        "SLA": [
+          0.025,
+          0.05
+        ],
+        "FDM": [
+          0.1,
+          0.2,
+          0.3
+        ]
+      }
+    },
+    "ORCA_FILAMENT_PROFILE_BY_MATERIAL": {
+      "PLA": "PLA_generic.json",
+      "PETG": "PETG_generic.json",
+      "ABS": "ABS_generic.json",
+      "TPU": "TPU_generic.json"
+    },
+    "ORCA_PROCESS_PROFILE_BY_LAYER": {
+      "0.1": "FDM_0.1mm.json",
+      "0.2": "FDM_0.2mm.json",
+      "0.3": "FDM_0.3mm.json"
+    },
+    "BAMBU_DEFAULT_PROFILES_ROOT": "/opt/bambustudio/resources/profiles/BBL",
+    "BAMBU_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM": {
+      "Bambu Lab P1S 0.4 nozzle": {
+        "x": 256,
+        "y": 228,
+        "z": 249.9
+      },
+      "Bambu Lab H2D 0.4 nozzle": {
+        "x": 325,
+        "y": 320,
+        "z": 324.9
+      }
+    },
+    "BAMBU_P1S_ALTERNATIVE_FOOTPRINT_INCLUSIVE_MM": {
+      "x": 238,
+      "y": 256
+    },
+    "BAMBU_ALTERNATIVE_FOOTPRINTS_INCLUSIVE_MM": {
+      "Bambu Lab P1S 0.4 nozzle": [
+        {
+          "x": 238,
+          "y": 256
+        }
+      ],
+      "Bambu Lab H2D 0.4 nozzle": []
+    },
+    "DEFAULT_PRICING": {
+      "FDM": {
+        "PLA": 800,
+        "ABS": 800,
+        "PETG": 900,
+        "TPU": 900
+      },
+      "SLA": {
+        "Standard": 1800,
+        "ABS-Like": 1800,
+        "Flexible": 2400
+      }
+    },
+    "MAX_BUILD_VOLUMES": {
+      "FDM": {
+        "x": 350,
+        "y": 320,
+        "z": 325
+      },
+      "SLA": {
+        "x": 218.88,
+        "y": 122.88,
+        "z": 220
+      }
+    },
+    "P1S_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM": {
+      "prusa": {
+        "FDM_0.1mm.ini": {
+          "x": 256,
+          "y": 256,
+          "z": 249.9
+        },
+        "FDM_0.2mm.ini": {
+          "x": 256,
+          "y": 256,
+          "z": 249.9
+        },
+        "FDM_0.3mm.ini": {
+          "x": 256,
+          "y": 256,
+          "z": 249.9
+        }
+      },
+      "orca": {
+        "Bambu_P1S_0.4_nozzle.json": {
+          "x": 253.9,
+          "y": 253.9,
+          "z": 249.9
+        }
+      }
+    },
+    "H2D_QUOTE_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM": {
+      "prusa": {
+        "FDM_P1S_H2D_SIZE_QUOTING_0.1mm.ini": {
+          "x": 350,
+          "y": 320,
+          "z": 324.9
+        },
+        "FDM_P1S_H2D_SIZE_QUOTING_0.2mm.ini": {
+          "x": 350,
+          "y": 320,
+          "z": 324.9
+        },
+        "FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini": {
+          "x": 350,
+          "y": 320,
+          "z": 324.9
+        }
+      },
+      "orca": {
+        "Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json": {
+          "x": 347.9,
+          "y": 317.9,
+          "z": 324.9
+        }
+      }
+    },
+    "SLA_LARGEST_PASSING_DIMENSIONS_INCLUSIVE_MM": {
+      "prusa": {
+        "SLA_0.025mm.ini": {
+          "x": 218.88,
+          "y": 122.88,
+          "z": 220
+        },
+        "SLA_0.05mm.ini": {
+          "x": 218.88,
+          "y": 122.88,
+          "z": 220
+        }
+      }
+    },
+    "FDM_VALIDATION_ONLY_DERATE_MM_BY_ENGINE": {
+      "prusa": {
+        "x": 0,
+        "y": 0,
+        "z": 0.1
+      },
+      "orca": {
+        "x": 2.1,
+        "y": 2.1,
+        "z": 0.1
+      },
+      "bambu": {
+        "x": 2.1,
+        "y": 2.1,
+        "z": 0.1
+      }
+    },
+    "MIN_BUILD_VOLUMES": {
+      "FDM": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      },
+      "SLA": {
+        "x": 1,
+        "y": 1,
+        "z": 1
+      }
+    },
+    "EXTENSIONS": {
+      "direct": [
+        ".stl",
+        ".obj",
+        ".3mf"
+      ],
+      "cad": [
+        ".stp",
+        ".step",
+        ".igs",
+        ".iges",
+        ".ply"
+      ],
+      "archive": [
+        ".zip"
+      ]
+    },
+    "PORT": 3000
+  },
+  "resolveResourcePolicy_empty_env": {
+    "JSON_BODY_LIMIT": 1048576,
+    "FORM_BODY_LIMIT": 1048576,
+    "MAX_UPLOAD_BYTES": 524288000,
+    "UPLOAD_TOTAL_TIMEOUT_MS": 600000,
+    "MULTIPART_MAX_FIELDS": 40,
+    "MULTIPART_MAX_PARTS": 42,
+    "MULTIPART_MAX_FIELD_NAME_CHARS": 64,
+    "MULTIPART_MAX_FIELD_BYTES": 65536,
+    "MAX_ZIP_ENTRIES": 500,
+    "MAX_SL1_ENTRIES": 20000,
+    "MAX_ZIP_UNCOMPRESSED_BYTES": 524288000,
+    "MAX_ZIP_ENTRY_BYTES": 524288000,
+    "MAX_ZIP_COMPRESSION_RATIO": 100,
+    "MAX_ZIP_PATH_DEPTH": 1,
+    "MAX_3MF_PATH_DEPTH": 4,
+    "MAX_MODEL_FILE_BYTES": 524288000,
+    "MAX_OUTPUT_BYTES": 524288000,
+    "MAX_OUTPUT_PARSE_BYTES": 4194304,
+    "MAX_PROFILE_BYTES": 1048576,
+    "MAX_PRICING_BYTES": 1048576,
+    "MAX_PRINT_TIME_SECONDS": 2592000,
+    "MAX_MATERIAL_USED_METERS": 10000,
+    "MAX_MATERIAL_USED_GRAMS": 100000,
+    "MAX_MATERIAL_USED_ML": 100000,
+    "MAX_HOURLY_PRICE_HUF": 1000000,
+    "MAX_MODEL_DIMENSION_MM": 10000,
+    "ARTIFACT_TTL_MS": 86400000,
+    "MAX_MANAGED_ARTIFACTS": 500,
+    "MAX_MANAGED_ARTIFACT_BYTES": 524288000,
+    "PARTIAL_ARTIFACT_STALE_MS": 3600000,
+    "STARTUP_CLEANUP_MAX_ENTRIES": 500,
+    "STARTUP_CLEANUP_MAX_MS": 1000,
+    "MAX_CONCURRENT_SLICES": 1,
+    "ASYNC_SLICE_DEADLINE_MS": 600000,
+    "ASYNC_SLICE_RESULT_TTL_MS": 1800000,
+    "ASYNC_SLICE_MAX_JOBS": 200
+  },
+  "RESOURCE_DEFINITIONS": {
+    "JSON_BODY_LIMIT": {
+      "default": 1048576,
+      "min": 1024,
+      "max": 10485760
+    },
+    "FORM_BODY_LIMIT": {
+      "default": 1048576,
+      "min": 1024,
+      "max": 10485760
+    },
+    "MAX_UPLOAD_BYTES": {
+      "default": 524288000,
+      "min": 1,
+      "max": 524288000
+    },
+    "UPLOAD_TOTAL_TIMEOUT_MS": {
+      "default": 600000,
+      "min": 1000,
+      "max": 600000
+    },
+    "MULTIPART_MAX_FIELDS": {
+      "default": 40,
+      "min": 35,
+      "max": 64
+    },
+    "MULTIPART_MAX_PARTS": {
+      "default": 42,
+      "min": 37,
+      "max": 66
+    },
+    "MULTIPART_MAX_FIELD_NAME_CHARS": {
+      "default": 64,
+      "min": 20,
+      "max": 256
+    },
+    "MULTIPART_MAX_FIELD_BYTES": {
+      "default": 65536,
+      "min": 1024,
+      "max": 1048576
+    },
+    "MAX_ZIP_ENTRIES": {
+      "default": 500,
+      "min": 1,
+      "max": 500
+    },
+    "MAX_SL1_ENTRIES": {
+      "default": 20000,
+      "min": 1,
+      "max": 20000
+    },
+    "MAX_ZIP_UNCOMPRESSED_BYTES": {
+      "default": 524288000,
+      "min": 1,
+      "max": 524288000
+    },
+    "MAX_ZIP_ENTRY_BYTES": {
+      "default": 524288000,
+      "min": 1,
+      "max": 524288000
+    },
+    "MAX_ZIP_COMPRESSION_RATIO": {
+      "default": 100,
+      "min": 1,
+      "max": 1000
+    },
+    "MAX_ZIP_PATH_DEPTH": {
+      "default": 1,
+      "min": 1,
+      "max": 8
+    },
+    "MAX_3MF_PATH_DEPTH": {
+      "default": 4,
+      "min": 2,
+      "max": 8
+    },
+    "MAX_MODEL_FILE_BYTES": {
+      "default": 524288000,
+      "min": 1,
+      "max": 524288000
+    },
+    "MAX_OUTPUT_BYTES": {
+      "default": 524288000,
+      "min": 1,
+      "max": 524288000
+    },
+    "MAX_OUTPUT_PARSE_BYTES": {
+      "default": 4194304,
+      "min": 65536,
+      "max": 16777216
+    },
+    "MAX_PROFILE_BYTES": {
+      "default": 1048576,
+      "min": 1024,
+      "max": 10485760
+    },
+    "MAX_PRICING_BYTES": {
+      "default": 1048576,
+      "min": 1024,
+      "max": 10485760
+    },
+    "MAX_PRINT_TIME_SECONDS": {
+      "default": 2592000,
+      "min": 1,
+      "max": 31536000
+    },
+    "MAX_MATERIAL_USED_METERS": {
+      "default": 10000,
+      "min": 1,
+      "max": 100000
+    },
+    "MAX_MATERIAL_USED_GRAMS": {
+      "default": 100000,
+      "min": 1,
+      "max": 1000000
+    },
+    "MAX_MATERIAL_USED_ML": {
+      "default": 100000,
+      "min": 1,
+      "max": 1000000
+    },
+    "MAX_HOURLY_PRICE_HUF": {
+      "default": 1000000,
+      "min": 1,
+      "max": 100000000
+    },
+    "MAX_MODEL_DIMENSION_MM": {
+      "default": 10000,
+      "min": 350,
+      "max": 100000
+    },
+    "ARTIFACT_TTL_MS": {
+      "default": 86400000,
+      "min": 60000,
+      "max": 2592000000
+    },
+    "MAX_MANAGED_ARTIFACTS": {
+      "default": 500,
+      "min": 1,
+      "max": 5000
+    },
+    "MAX_MANAGED_ARTIFACT_BYTES": {
+      "default": 524288000,
+      "min": 1,
+      "max": 5242880000
+    },
+    "PARTIAL_ARTIFACT_STALE_MS": {
+      "default": 3600000,
+      "min": 60000,
+      "max": 86400000
+    },
+    "STARTUP_CLEANUP_MAX_ENTRIES": {
+      "default": 500,
+      "min": 1,
+      "max": 5000
+    },
+    "STARTUP_CLEANUP_MAX_MS": {
+      "default": 1000,
+      "min": 100,
+      "max": 10000
+    },
+    "MAX_CONCURRENT_SLICES": {
+      "default": 1,
+      "min": 1,
+      "max": 3
+    },
+    "ASYNC_SLICE_DEADLINE_MS": {
+      "default": 600000,
+      "min": 60000,
+      "max": 1800000
+    },
+    "ASYNC_SLICE_RESULT_TTL_MS": {
+      "default": 1800000,
+      "min": 60000,
+      "max": 86400000
+    },
+    "ASYNC_SLICE_MAX_JOBS": {
+      "default": 200,
+      "min": 1,
+      "max": 2000
+    }
+  }
+}

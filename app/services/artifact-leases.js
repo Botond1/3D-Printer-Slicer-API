@@ -61,6 +61,19 @@ function beginArtifactDeletion(realPath) {
     return true;
 }
 
+/**
+ * Begin a deletion although a lease is held (the periodic sweep removing a
+ * job-DELETE mark whose lease release was lost). The path is still marked
+ * deleting, so no new lease starts while the file is unlinked.
+ * @returns {boolean} False when another deletion of the path is running.
+ */
+function beginArtifactDeletionOverLease(realPath) {
+    const key = String(realPath);
+    if (deletingPaths.has(key)) return false;
+    deletingPaths.add(key);
+    return true;
+}
+
 function endArtifactDeletion(realPath) {
     deletingPaths.delete(String(realPath));
 }
@@ -73,5 +86,6 @@ module.exports = {
     acquireArtifactLease,
     isArtifactLeased,
     beginArtifactDeletion,
+    beginArtifactDeletionOverLease,
     endArtifactDeletion
 };

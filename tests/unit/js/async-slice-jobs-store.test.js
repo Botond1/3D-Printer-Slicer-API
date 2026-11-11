@@ -212,6 +212,56 @@ test('cancel aborts a live job, discards a finished one, and both then answer no
     assert.deepEqual(cancelled.map((event) => event.extra.queue_state), ['running', 'completed']);
 });
 
+test('DELETE of a completed job deletes its artifact; live, artifact-less, expired and evicted jobs never do (3.9.0)', async () => {
+    const deleted = [];
+    const { store, time } = createStore({
+        maxJobs: 2,
+        deleteArtifact: (artifactId) => { deleted.push(artifactId); return Promise.resolve({ state: 'deleted' }); }
+    });
+    const artifactId = `artifact-${'a'.repeat(32)}`;
+
+    const finished = admit(store);
+    assert.equal(store.complete(finished.job, OK_RESULT, { artifactId }), true);
+    assert.equal(finished.job.artifactId, artifactId);
+    assert.equal(store.cancel(finished.job.id, PRINCIPAL), true, 'the answer stays true (204)');
+    assert.deepEqual(deleted, [artifactId]);
+    assert.equal(store.cancel(finished.job.id, PRINCIPAL), false, 'a second DELETE is 404 and deletes nothing');
+    assert.deepEqual(deleted, [artifactId]);
+
+    const live = admit(store);
+    store.markRunning(live.job);
+    assert.equal(store.cancel(live.job.id, PRINCIPAL), true);
+    assert.deepEqual(deleted, [artifactId], 'a running job owns no promoted artifact yet');
+
+    const failed = admit(store);
+    store.complete(failed.job, { status: 422, body: { success: false } }, { artifactId: 'not-an-artifact' });
+    assert.equal(failed.job.artifactId, null, 'a malformed id is never kept');
+    assert.equal(store.cancel(failed.job.id, PRINCIPAL), true);
+    assert.deepEqual(deleted, [artifactId]);
+
+    const expiring = admit(store);
+    store.complete(expiring.job, OK_RESULT, { artifactId: `artifact-${'b'.repeat(32)}` });
+    time.advance(1_800_000);
+    assert.equal(store.lookup(expiring.job.id, PRINCIPAL), null);
+    const first = admit(store);
+    store.complete(first.job, OK_RESULT, { artifactId: `artifact-${'c'.repeat(32)}` });
+    admit(store);
+    admit(store);
+    assert.equal(store.lookup(first.job.id, PRINCIPAL), null, 'evicted for admission');
+    assert.deepEqual(deleted, [artifactId], 'result expiry and eviction leave the artifact to its TTL');
+});
+
+test('a throwing or rejecting artifact deletion never changes the DELETE answer', async () => {
+    for (const deleteArtifact of [() => { throw new Error('boom'); }, () => Promise.reject(new Error('boom'))]) {
+        const { store } = createStore({ deleteArtifact });
+        const { job } = admit(store);
+        store.complete(job, OK_RESULT, { artifactId: `artifact-${'d'.repeat(32)}` });
+        assert.equal(store.cancel(job.id, PRINCIPAL), true);
+        assert.equal(store.lookup(job.id, PRINCIPAL), null);
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+});
+
 test('at capacity the oldest finished result is evicted; when every retained job is live there is no room', () => {
     const { store, time, events } = createStore({ maxJobs: 3 });
     const first = admit(store);
@@ -238,8 +288,9 @@ test('the event vocabulary registers the async events and keeps sj_ identifiers'
     for (const name of ['async.accepted', 'async.completed', 'async.expired', 'async.cancelled', 'async.evicted']) {
         assert.ok(EVENT_NAMES.includes(name), name);
     }
-    // 3.8.2 added async.retry_alone and native.failure_detail; still a fixed, bounded vocabulary.
-    assert.ok(EVENT_NAMES.length <= 34);
+    // 3.8.2 added async.retry_alone and native.failure_detail, 3.9.0 the identity,
+    // auth, runtime and export names; still a fixed, bounded vocabulary.
+    assert.ok(EVENT_NAMES.length <= 45);
     const entries = [];
     const emit = createEventEmitter({ writer: (entry) => entries.push(entry), readContext: () => ({}) });
     const jobId = `sj_${'c'.repeat(32)}`;

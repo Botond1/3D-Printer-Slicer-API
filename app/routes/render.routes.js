@@ -3,6 +3,7 @@
 const express = require('express');
 const { sliceRateLimiter } = require('../middleware/rateLimit');
 const requireSliceService = require('../middleware/requireSliceService');
+const { createAuthenticateOrCharge } = require('../middleware/sliceAdmission');
 const { handleRender } = require('../services/render.service');
 const { createUploadLifecycle } = require('./upload-lifecycle');
 
@@ -16,12 +17,16 @@ const RENDER_ROUTE_PATH = '/render';
 function createRenderRouter(options = {}) {
     const router = express.Router();
     const rateLimiter = options.rateLimiter || sliceRateLimiter;
-    const authenticate = options.authenticate || requireSliceService;
+    const authenticate = options.authenticateOrCharge || createAuthenticateOrCharge({
+        authenticate: options.authenticate || requireSliceService,
+        failureLimiter: options.authFailureLimiter
+    });
     const handler = options.handleRender || handleRender;
     const lifecycle = createUploadLifecycle(options);
 
-    // Rate limiting and authentication must reject before request-owned allocation.
-    router.post(RENDER_ROUTE_PATH, rateLimiter, authenticate, lifecycle(handler, 'render'));
+    // Authentication and rate limiting must reject before request-owned
+    // allocation; authentication runs first so the limiter keys on the principal.
+    router.post(RENDER_ROUTE_PATH, authenticate, rateLimiter, lifecycle(handler, 'render'));
     return router;
 }
 

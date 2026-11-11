@@ -26,6 +26,7 @@ const READINESS_REASON_ORDER = Object.freeze([
     'QUEUE_UNAVAILABLE',
     'NATIVE_RUNTIME_QUARANTINED',
     'BAMBU_RUNTIME_UNAVAILABLE',
+    'NATIVE_IDENTITY_CHANGED',
     'COMMON_DEPENDENCIES_UNAVAILABLE',
     'STORAGE_UNSAFE',
     'RETENTION_UNSAFE',
@@ -75,6 +76,43 @@ function pricingHealthy(pricing) {
         && Object.keys(pricing.FDM).length
         && Object.keys(pricing.SLA).length
     );
+}
+
+/** Read an optional status seam; a failing seam never owns readiness. */
+function readSeam(seam) {
+    if (typeof seam !== 'function') return null;
+    try {
+        return seam() ?? null;
+    } catch {
+        return null;
+    }
+}
+
+function reasonList(value) {
+    return Array.isArray(value)
+        ? value.filter((reason) => typeof reason === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(reason))
+        : [];
+}
+
+/**
+ * 3.9.0 advisory state for `/operations/readiness` only (never `/ready`):
+ * the native identity monitor (§4.1), an expired legacy slice migration
+ * (§4.5) and the child OOM wrapper (§4.6). Advisory reasons never change
+ * `ready`; only `NATIVE_IDENTITY_CHANGED` also sits in `reasonCodes`, and only
+ * while the Bambu probe is already false (as in 3.8.3, `assertBambuBuildCurrent`
+ * makes it so).
+ */
+function readAdvisory(options) {
+    const identity = readSeam(options.getNativeIdentityStatus);
+    const keyRingReasons = reasonList(readSeam(options.getKeyRingReasons));
+    const childOomWrapper = readSeam(options.getChildOomWrapperStatus);
+    const identityReasons = reasonList(identity?.reasons);
+    return {
+        identity,
+        childOomWrapper,
+        identityChanged: identityReasons.includes('NATIVE_IDENTITY_CHANGED'),
+        reasons: Object.freeze([...new Set([...identityReasons, ...keyRingReasons])])
+    };
 }
 
 function createReadinessService(options = {}) {
@@ -168,6 +206,8 @@ function createReadinessService(options = {}) {
         if (!probes.queue) reasonCodes.push('QUEUE_UNAVAILABLE');
         if (!probes.native) reasonCodes.push('NATIVE_RUNTIME_QUARANTINED');
         if (slicerRuntime && !probes.bambu) reasonCodes.push('BAMBU_RUNTIME_UNAVAILABLE');
+        const advisory = readAdvisory(options);
+        if (slicerRuntime && !probes.bambu && advisory.identityChanged) reasonCodes.push('NATIVE_IDENTITY_CHANGED');
         if (slicerRuntime && !probes.commonDependencies) reasonCodes.push('COMMON_DEPENDENCIES_UNAVAILABLE');
         if (!probes.storage) reasonCodes.push('STORAGE_UNSAFE');
         if (!probes.retention) reasonCodes.push('RETENTION_UNSAFE');
@@ -183,7 +223,10 @@ function createReadinessService(options = {}) {
             reasonCodes: Object.freeze(reasonCodes),
             queue: Object.freeze({ ...queue, acceptingJobs: queue.acceptingJobs }),
             legacyMigration,
-            ...(slicerRuntime ? { slicerRuntime } : {})
+            ...(slicerRuntime ? { slicerRuntime } : {}),
+            ...(advisory.reasons.length ? { advisoryReasonCodes: advisory.reasons } : {}),
+            ...(advisory.identity ? { nativeIdentity: advisory.identity } : {}),
+            ...(advisory.childOomWrapper ? { childOomWrapper: advisory.childOomWrapper } : {})
         });
     }
 

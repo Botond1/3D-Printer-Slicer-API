@@ -145,6 +145,12 @@ function entrypointContract(source) {
         '/tmp/xdg-runtime'
     ]) assert.ok(source.includes(directory), `missing safely-created runtime directory: ${directory}`);
     assert.match(source, /^exec "\$@"$/m);
+    // 3.9.0: no core dumps, soft and hard, asserted before the service starts.
+    assert.match(source, /^ulimit -Sc 0 \|\| exit 78$/m);
+    assert.match(source, /^ulimit -Hc 0 \|\| exit 78$/m);
+    assert.match(source,
+        /^if \[ "\$\(ulimit -Sc\)" != "0" \] \|\| \[ "\$\(ulimit -Hc\)" != "0" \]; then\n\s+exit 78\nfi$/m);
+    assert.ok(source.indexOf('ulimit -Hc 0') < source.indexOf('exec "$@"'), 'core limit must precede exec');
     assert.doesNotMatch(source, /echo|printenv|env\b|set -x|sudo|su\b/);
 }
 
@@ -242,6 +248,11 @@ test('service-identity startup guard weakening mutations fail closed', async (t)
             'for profile_directory in /app/configs/prusa /app/configs/orca /app/configs/bambu; do',
             'for profile_directory in /app/configs/prusa /app/configs/orca; do'],
         ['job scratch creation removed', '    /tmp/slice-jobs \\\n', ''],
+        ['soft core limit removed', 'ulimit -Sc 0 || exit 78\n', ''],
+        ['hard core limit removed', 'ulimit -Hc 0 || exit 78\n', ''],
+        ['core limit read-back removed',
+            'if [ "$(ulimit -Sc)" != "0" ] || [ "$(ulimit -Hc)" != "0" ]; then',
+            'if false; then'],
         ['exec semantics removed', 'exec "$@"', '"$@"']
     ];
     for (const [name, from, to] of mutations) {
@@ -282,4 +293,40 @@ test('the entrypoint admits a memory envelope up to 12 GiB and refuses anything 
     for (const refused of ['1073741823', '12884901889', '17179869184', '012884901888', '']) {
         assert.equal(run(refused), 78, refused);
     }
+});
+
+test('the entrypoint turns core dumps off, soft and hard, and the limit reads back as 0', (t) => {
+    const { spawnSync } = require('node:child_process');
+    const start = ENTRYPOINT.indexOf('ulimit -Sc 0 || exit 78');
+    const end = ENTRYPOINT.indexOf('exec "$@"');
+    assert.ok(start > 0 && end > start, 'core limit block not found before exec');
+    const block = ENTRYPOINT.slice(start, end);
+    const probe = spawnSync('sh', ['-c', 'ulimit -Sc 0 && ulimit -Hc 0'], { windowsHide: true });
+    if (probe.error || probe.status !== 0) {
+        t.skip('a POSIX sh with ulimit -S/-H is unavailable on this host');
+        return;
+    }
+    // The block, then what a child sees: soft and hard both 0.
+    const run = spawnSync('sh', ['-c', `set -eu\n${block}\nsh -c 'ulimit -Sc; ulimit -Hc'\n`], {
+        windowsHide: true, encoding: 'utf8'
+    });
+    // Soft first, as the entrypoint does: a hard limit below the current soft
+    // one is EINVAL (setrlimit), and a Linux runner starts with soft cores on.
+    const sticks = spawnSync('sh', ['-c', 'ulimit -Sc 0; ulimit -Hc 0; ulimit -Hc'], {
+        windowsHide: true, encoding: 'utf8'
+    });
+    if (sticks.stdout.trim() !== '0') {
+        // A host whose shell cannot hold a hard core limit of 0 (Cygwin/MSYS):
+        // the read-back must refuse the start instead of running with dumps.
+        assert.equal(run.status, 78, 'a limit that does not read back as 0 refuses the start');
+        return;
+    }
+    assert.equal(run.status, 0, run.stderr);
+    assert.deepEqual(run.stdout.trim().split(/\s+/), ['0', '0']);
+    // An unprivileged child cannot raise the hard limit again (root can).
+    if (typeof process.getuid !== 'function' || process.getuid() === 0) return;
+    const raise = spawnSync('sh', ['-c', `set -eu\n${block}\nulimit -Hc unlimited\n`], {
+        windowsHide: true, encoding: 'utf8'
+    });
+    assert.notEqual(raise.status, 0);
 });

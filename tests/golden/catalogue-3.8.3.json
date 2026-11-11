@@ -1,0 +1,1357 @@
+{
+  "captured_from": {
+    "image": "ghcr.io/botond1/3d-printer-slicer-api@sha256:8f582f9e54ef44020e638d1f2dd8848ac730c19845d5d1c65a79206f17abb436",
+    "release": "3.8.3",
+    "method": "read-only unauthenticated in-container GET http://127.0.0.1:3000/profiles and /profiles?contract=material-v1 on the live 3d-psa-backend-server container running that image, 2026-11-11 (§8 step 0 live capture; the throwaway-container capture of the same image is TO CAPTURE in the image gate run on dbc539e)",
+    "identity_keys": [
+      "measurement_generation",
+      "engine_version",
+      "engine_build_sha256",
+      "profile_bundle_sha256",
+      "effective_profile_sha256"
+    ],
+    "absent_key_rule": "a key the 3.8.3 row does not carry (Prusa/Orca rows) must stay absent"
+  },
+  "v2": {
+    "path": "/profiles",
+    "status": 200,
+    "schema": "r3d-profile-catalogue-v2",
+    "catalogue_sha256": "bb07e0c325041bef95475db892e98de4c77125c59b54a4a6c3d3b59d4c19916c",
+    "body_sha256": "44d7f21861964562a45823c43564108a20d834e8f30dcb9393c064388f379d82",
+    "body_bytes": 139985,
+    "row_count": 96,
+    "rows": [
+      {
+        "id": "bambu:FDM:H2D:0.08:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "b12f1f8946948e3311e98f924b7b14fcc7315f89f3ee929732e597de0bedd618"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.08:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8ac6ada99903037dfeb7a49ba285f3e4b8276360d07b57337065f7a4b9ecb5ba"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.08:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "4abaa4cebad60ce884664f1547922f41f8a219bab09bd54360c4fa2d7ce315bc"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.08:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "4ea0530554c6059b3eb1cf919069d5f013ca824518d2b080cfe6febb73b80ee1"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.12:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "11219d1f9f458b35594243d23ca28da372ee7d9a5f112e15a5b420c71946185f"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.12:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "18d842df05c2f4ca76b7bd7c34390438429937c4d64027ef83b87343f2a18d38"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.12:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "9b08e78128e1574e531656eddf3136daa3dcb53ba1f5bc189e2ef19c4111b69a"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.12:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "de933bd9016a74610897b1f97f70a9bb632c6af258995415fc898611945dd21e"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.16:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "2143f9a5efc0b3be216d8e7caa03aab9346cee67afeab938e12fa194d1a439cb"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.16:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "11c0d7eab2b5d78039b92d5253bd0aa6b0057ade099afc3bf2899995c866c1a5"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.16:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "f01e038d06dfa8361839dae9a91a37e0269f2631b1aba7edbe73f81ca5d0a2f0"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.16:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "e6bd96486c546935db9810eff4b7466d96c5fc2626872b48c8e30431c790e702"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.1:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "11219d1f9f458b35594243d23ca28da372ee7d9a5f112e15a5b420c71946185f"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.1:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "18d842df05c2f4ca76b7bd7c34390438429937c4d64027ef83b87343f2a18d38"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.1:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "9b08e78128e1574e531656eddf3136daa3dcb53ba1f5bc189e2ef19c4111b69a"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.1:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "de933bd9016a74610897b1f97f70a9bb632c6af258995415fc898611945dd21e"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.24:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "f3a1eafe8e104abccde45a3f780c16562dbc5432a81d8f99d7d4bf37237a86f6"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.24:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8f815a183d1c5b00cec86ade2d002224610ba2a832069dc04fabeada011bd2f4"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.24:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "090c0ab117fd9cfed03ff81a9814d5765a8c52baeccabb344e43842909671a17"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.24:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "b70e0ead52e97e6522f7a59e86b4db13eef220ebd7be9fb5bf1014be582e4f5d"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.2:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "f08cb519a908e070e807f0e077bcfac38d2d9c8cf933bbc96b8129867733b6a6"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.2:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "26a3b32914e6efa21b0577a17fac460b330dd86e3dd4fea62c88c514a04d9046"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.2:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "b1fa0c4ae7856f5b02d471217b7f6824b281df731fa8af753ad4caa2635f857e"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.2:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8a4614b50a19f7fd6cddf24eb3966c46307d6ecbc84e823a0d9a92874da9c10b"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.3:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "f3a1eafe8e104abccde45a3f780c16562dbc5432a81d8f99d7d4bf37237a86f6"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.3:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8f815a183d1c5b00cec86ade2d002224610ba2a832069dc04fabeada011bd2f4"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.3:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "090c0ab117fd9cfed03ff81a9814d5765a8c52baeccabb344e43842909671a17"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.3:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "b70e0ead52e97e6522f7a59e86b4db13eef220ebd7be9fb5bf1014be582e4f5d"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.08:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "13f9b7231c69a08f2c7546147709cd44086cb8d4e0de9f77c65ec070b9eb597d"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.08:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "168f15729582ad561f8109f305c51e4c62984e7effb96b97d8097bee14ba9d2c"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.08:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "5fc7738dd9790fb079292865e33cc076d7b518a8910663ccc8f36b9b70dc0415"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.08:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "951d4913d578b2818a653afd120f05dd4db65c4c3f3e69b66befd41d95bb5ee5"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.12:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "615e593fb603a86139f038510c47c1b8725a11b960cdd3a3ef4b3a7f57dfdb7e"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.12:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "2afc1fbc51a90f33cd94f96edf7b75b4be5a5068d224e472c5aeaaf990209ea1"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.12:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "e014b9ef0a01ba9e9aa9d13948ad999a5e30f1ef2a9c32e92a59639081d7651e"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.12:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "677da00bb5a51a73b6bc19624470155335a9f51f8309d53bd89096eb497d7e75"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.16:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "018340ab4644bc887a3c96c69d3e1eb0005be6e5e8a3a61c5f4c3b8f603f9b79"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.16:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "1d49b368b1b4d2266e4674c01defa0fe9ec1e41acec17fe84a205cb21bcc6b4f"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.16:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "65fc5bd6ae0e7b6f33d469a856cbcd69d059f8e47b3bcf02690fce8f2b3a933e"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.16:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "63874f73d262a33ef7cacb46459772af0bae9c43680a336f9f6e6871a62ce458"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.1:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "615e593fb603a86139f038510c47c1b8725a11b960cdd3a3ef4b3a7f57dfdb7e"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.1:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "2afc1fbc51a90f33cd94f96edf7b75b4be5a5068d224e472c5aeaaf990209ea1"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.1:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "e014b9ef0a01ba9e9aa9d13948ad999a5e30f1ef2a9c32e92a59639081d7651e"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.1:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "677da00bb5a51a73b6bc19624470155335a9f51f8309d53bd89096eb497d7e75"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.24:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "742680a5d511ad01d44d421366b8d1d8a51891d792875421d23c3c04285d081a"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.24:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "3c9f2b5bc05617f6a156cf034549f96b1afc99a8a784493fac495d3ceaadcedf"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.24:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "7c2ea285dcb5fc4bbcbd4ddfb7fcd1273622df47e427a259c7dad32b8beccfd6"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.24:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "67b30d6ad71423f3cb51135324bc0d4b81f8a616ce389d240448a6357135e532"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.28:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "d69edb3be064c585168a3b8c751fd56d2cf5209900cdc07049522bb0cdf293b3"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.28:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "0ec032412c8304fb9755dcef1cd2f177011ca39927e9934461c7bff42710d3a6"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.28:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8265711d616dfc6ef4dd8dce7c611e541ddc85da4325e580f6a827eebaba3852"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.28:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "68f47af237d40dd6e0d5b330d0d2e9cf03c1b2697e798d30a4d2f917959e6681"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.2:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "181d5fd83212353569d739bcefdc3e891da6fb040c3f24a97e34b052278ef86d"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.2:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "cf7c744f182b004c0e6953075b41b9c34acf4004ca510d73698748011b50e98d"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.2:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.2:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "a0d13122a256f71da7aed0c2b62a0da04119e7e5031fed99c164fe3973af086a"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.3:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "d69edb3be064c585168a3b8c751fd56d2cf5209900cdc07049522bb0cdf293b3"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.3:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "0ec032412c8304fb9755dcef1cd2f177011ca39927e9934461c7bff42710d3a6"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.3:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8265711d616dfc6ef4dd8dce7c611e541ddc85da4325e580f6a827eebaba3852"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.3:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "68f47af237d40dd6e0d5b330d0d2e9cf03c1b2697e798d30a4d2f917959e6681"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.1:ABS:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "202dac63c41e41f2e4a975df325b82af2a02ccce85f436e6afd266dbaab254b9"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.1:PETG:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "0ef710278294a61872a1605783887ac069968e791379afbbd03fe34985723264"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.1:PLA:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "6f66657e4878c7ea1babe44e0f9bef4428c1d9b3c7f562f1f3bcd01300b659b3"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.1:TPU:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "9a47bbed10b8356d6a877a95c594d99702c18ef888811a9a619de808213160aa"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.2:ABS:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "6649bcba29374727dd8281a23b7485af1a2b2ffcd0452d237d38fe8d074adb30"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.2:PETG:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "0c44d628529f6229a3b61cc8de4529dc6ea539f7625e6c57c7b211b913df4a70"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.2:PLA:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "188a077d7ed49eaa544b5bb2b965a7468e652bf351d392529b10bcabaeb59f89"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.2:TPU:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "a633c37703919291fc1fc534b15416ab1ae0c68013bcd5c285442a046b3411ed"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.3:ABS:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "282937b5e04bd7b655c2f8999378d0f0ab438b311178c5f07520cb51216dda72"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.3:PETG:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "4ecef5571919b8ccc6692044b7a8424877ab315c3932197dfc3382cbe939b88e"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.3:PLA:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "9844f2a0751f2b66c7973fd298a7b4d92b5d9840c03b516f2afcd7eb67504f02"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.3:TPU:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "54a158911ccca7790697aadafd2c37fe2313b3605091d510fadf2a801af5fc09"
+      },
+      {
+        "id": "orca:FDM:P1S:0.1:ABS:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "4a48385cc4c81f6e873b26c820ad97131addf177a84f8baac443f73baff42dd3"
+      },
+      {
+        "id": "orca:FDM:P1S:0.1:PETG:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "59c727b3deb0d22b7027a2c0a32380570dac1b90306af48c14416816689d5ddc"
+      },
+      {
+        "id": "orca:FDM:P1S:0.1:PLA:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "3687a823c222541317d49605907dfb87394b6741b76e8ac771509fc00e10184e"
+      },
+      {
+        "id": "orca:FDM:P1S:0.1:TPU:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "ef626455a78e036086473e6ac4366aac0b87fa6f8eeff6f659e94c7ab2eeb960"
+      },
+      {
+        "id": "orca:FDM:P1S:0.2:ABS:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "949fec915fce948cccbdd2424ade86b8055a124d10128dc9e9a6c1b6a7d833c7"
+      },
+      {
+        "id": "orca:FDM:P1S:0.2:PETG:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "a0af7e23e150d02a861341c2c9974ff1d5a012cfedb9723cdad5fc2b049315be"
+      },
+      {
+        "id": "orca:FDM:P1S:0.2:PLA:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "ea787dbf09a44eb650343df38899bb0cf530b458c19f47939664302343c0e42e"
+      },
+      {
+        "id": "orca:FDM:P1S:0.2:TPU:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "ee678fffeccdd630b4f8d841414a8d3a3f0e52eff4a69351c6618d43d87d83c9"
+      },
+      {
+        "id": "orca:FDM:P1S:0.3:ABS:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "cd36bdbcd6d9f19759d1cec8e9a0a0d5f1f8cfc244045e04ef90ba067caefbbb"
+      },
+      {
+        "id": "orca:FDM:P1S:0.3:PETG:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "64a961930d600c7e669ab6809105b693f4176fd08fad58cf448a040b4b47466e"
+      },
+      {
+        "id": "orca:FDM:P1S:0.3:PLA:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "485ef5726a393e55f5f480990022b13a302d434605ef22542e4cf5b3ed0b6760"
+      },
+      {
+        "id": "orca:FDM:P1S:0.3:TPU:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "109153aaa0827bf44694299a797d7fbcdd61403bd368da84426431a43a950cf8"
+      },
+      {
+        "id": "prusa:FDM:H2D-QUOTE:0.1:FDM_P1S_H2D_SIZE_QUOTING_0.1mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "3bf0f02e09adb2877294e81c364128c7781d3cc6af702edde6b561e5c9e60fec"
+      },
+      {
+        "id": "prusa:FDM:H2D-QUOTE:0.2:FDM_P1S_H2D_SIZE_QUOTING_0.2mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "300458368f5f651011f1ccf57e16e315378cc6865386ea1b181cfbc5b5256943"
+      },
+      {
+        "id": "prusa:FDM:H2D-QUOTE:0.3:FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "98f9554502853554e04078c98b3c3da7bdf00b8384ec53348671100739806e3f"
+      },
+      {
+        "id": "prusa:FDM:P1S:0.1:FDM_0.1mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "7187dff1fc2e17840eb8804101ab09dafc12fd5b669e99202d0326b3c8b10f71"
+      },
+      {
+        "id": "prusa:FDM:P1S:0.2:FDM_0.2mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "49c5584e05e1bb58c9b93f1cb46a62b5a8c8aac6943e48319226cb848775f3b0"
+      },
+      {
+        "id": "prusa:FDM:P1S:0.3:FDM_0.3mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "5e92feaf93e9888f03182d126dea03a0518a7718f25b4c5f5d1087084df48b84"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.025:ABS-Like:SLA_0.025mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "1769fd85ab7dec1712b4652000bce97bf2944938f0f0c6f5383755000c3769fe"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.025:Flexible:SLA_0.025mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "1769fd85ab7dec1712b4652000bce97bf2944938f0f0c6f5383755000c3769fe"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.025:Standard:SLA_0.025mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "1769fd85ab7dec1712b4652000bce97bf2944938f0f0c6f5383755000c3769fe"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.05:ABS-Like:SLA_0.05mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "a3acad5173916977bf41724098853e74e11046dbea1dec6976fabc5fcce9c8da"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.05:Flexible:SLA_0.05mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "a3acad5173916977bf41724098853e74e11046dbea1dec6976fabc5fcce9c8da"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.05:Standard:SLA_0.05mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "a3acad5173916977bf41724098853e74e11046dbea1dec6976fabc5fcce9c8da"
+      }
+    ]
+  },
+  "v3": {
+    "path": "/profiles?contract=material-v1",
+    "status": 200,
+    "schema": "r3d-profile-catalogue-v3",
+    "catalogue_sha256": "08afef2f095c3209d61ee420a101eef9604b84018b29f402bbb43f2cc68452c0",
+    "body_sha256": "9b157be0484d04c86a923e0b8f5e3d76d2aaaef93aaa9d0e3162765695326140",
+    "body_bytes": 148749,
+    "row_count": 96,
+    "rows": [
+      {
+        "id": "bambu:FDM:H2D:0.08:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "b12f1f8946948e3311e98f924b7b14fcc7315f89f3ee929732e597de0bedd618"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.08:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8ac6ada99903037dfeb7a49ba285f3e4b8276360d07b57337065f7a4b9ecb5ba"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.08:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "4abaa4cebad60ce884664f1547922f41f8a219bab09bd54360c4fa2d7ce315bc"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.08:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "4ea0530554c6059b3eb1cf919069d5f013ca824518d2b080cfe6febb73b80ee1"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.12:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "11219d1f9f458b35594243d23ca28da372ee7d9a5f112e15a5b420c71946185f"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.12:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "18d842df05c2f4ca76b7bd7c34390438429937c4d64027ef83b87343f2a18d38"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.12:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "9b08e78128e1574e531656eddf3136daa3dcb53ba1f5bc189e2ef19c4111b69a"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.12:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "de933bd9016a74610897b1f97f70a9bb632c6af258995415fc898611945dd21e"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.16:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "2143f9a5efc0b3be216d8e7caa03aab9346cee67afeab938e12fa194d1a439cb"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.16:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "11c0d7eab2b5d78039b92d5253bd0aa6b0057ade099afc3bf2899995c866c1a5"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.16:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "f01e038d06dfa8361839dae9a91a37e0269f2631b1aba7edbe73f81ca5d0a2f0"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.16:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "e6bd96486c546935db9810eff4b7466d96c5fc2626872b48c8e30431c790e702"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.1:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "11219d1f9f458b35594243d23ca28da372ee7d9a5f112e15a5b420c71946185f"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.1:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "18d842df05c2f4ca76b7bd7c34390438429937c4d64027ef83b87343f2a18d38"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.1:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "9b08e78128e1574e531656eddf3136daa3dcb53ba1f5bc189e2ef19c4111b69a"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.1:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "de933bd9016a74610897b1f97f70a9bb632c6af258995415fc898611945dd21e"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.24:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "f3a1eafe8e104abccde45a3f780c16562dbc5432a81d8f99d7d4bf37237a86f6"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.24:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8f815a183d1c5b00cec86ade2d002224610ba2a832069dc04fabeada011bd2f4"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.24:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "090c0ab117fd9cfed03ff81a9814d5765a8c52baeccabb344e43842909671a17"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.24:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "b70e0ead52e97e6522f7a59e86b4db13eef220ebd7be9fb5bf1014be582e4f5d"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.2:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "f08cb519a908e070e807f0e077bcfac38d2d9c8cf933bbc96b8129867733b6a6"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.2:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "26a3b32914e6efa21b0577a17fac460b330dd86e3dd4fea62c88c514a04d9046"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.2:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "b1fa0c4ae7856f5b02d471217b7f6824b281df731fa8af753ad4caa2635f857e"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.2:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8a4614b50a19f7fd6cddf24eb3966c46307d6ecbc84e823a0d9a92874da9c10b"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.3:ABS:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "f3a1eafe8e104abccde45a3f780c16562dbc5432a81d8f99d7d4bf37237a86f6"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.3:PETG:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8f815a183d1c5b00cec86ade2d002224610ba2a832069dc04fabeada011bd2f4"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.3:PLA:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "090c0ab117fd9cfed03ff81a9814d5765a8c52baeccabb344e43842909671a17"
+      },
+      {
+        "id": "bambu:FDM:H2D:0.3:TPU:Bambu-Lab-H2D-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "b70e0ead52e97e6522f7a59e86b4db13eef220ebd7be9fb5bf1014be582e4f5d"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.08:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "13f9b7231c69a08f2c7546147709cd44086cb8d4e0de9f77c65ec070b9eb597d"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.08:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "168f15729582ad561f8109f305c51e4c62984e7effb96b97d8097bee14ba9d2c"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.08:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "5fc7738dd9790fb079292865e33cc076d7b518a8910663ccc8f36b9b70dc0415"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.08:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "951d4913d578b2818a653afd120f05dd4db65c4c3f3e69b66befd41d95bb5ee5"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.12:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "615e593fb603a86139f038510c47c1b8725a11b960cdd3a3ef4b3a7f57dfdb7e"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.12:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "2afc1fbc51a90f33cd94f96edf7b75b4be5a5068d224e472c5aeaaf990209ea1"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.12:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "e014b9ef0a01ba9e9aa9d13948ad999a5e30f1ef2a9c32e92a59639081d7651e"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.12:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "677da00bb5a51a73b6bc19624470155335a9f51f8309d53bd89096eb497d7e75"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.16:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "018340ab4644bc887a3c96c69d3e1eb0005be6e5e8a3a61c5f4c3b8f603f9b79"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.16:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "1d49b368b1b4d2266e4674c01defa0fe9ec1e41acec17fe84a205cb21bcc6b4f"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.16:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "65fc5bd6ae0e7b6f33d469a856cbcd69d059f8e47b3bcf02690fce8f2b3a933e"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.16:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "63874f73d262a33ef7cacb46459772af0bae9c43680a336f9f6e6871a62ce458"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.1:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "615e593fb603a86139f038510c47c1b8725a11b960cdd3a3ef4b3a7f57dfdb7e"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.1:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "2afc1fbc51a90f33cd94f96edf7b75b4be5a5068d224e472c5aeaaf990209ea1"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.1:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "e014b9ef0a01ba9e9aa9d13948ad999a5e30f1ef2a9c32e92a59639081d7651e"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.1:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "677da00bb5a51a73b6bc19624470155335a9f51f8309d53bd89096eb497d7e75"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.24:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "742680a5d511ad01d44d421366b8d1d8a51891d792875421d23c3c04285d081a"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.24:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "3c9f2b5bc05617f6a156cf034549f96b1afc99a8a784493fac495d3ceaadcedf"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.24:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "7c2ea285dcb5fc4bbcbd4ddfb7fcd1273622df47e427a259c7dad32b8beccfd6"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.24:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "67b30d6ad71423f3cb51135324bc0d4b81f8a616ce389d240448a6357135e532"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.28:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "d69edb3be064c585168a3b8c751fd56d2cf5209900cdc07049522bb0cdf293b3"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.28:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "0ec032412c8304fb9755dcef1cd2f177011ca39927e9934461c7bff42710d3a6"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.28:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8265711d616dfc6ef4dd8dce7c611e541ddc85da4325e580f6a827eebaba3852"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.28:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "68f47af237d40dd6e0d5b330d0d2e9cf03c1b2697e798d30a4d2f917959e6681"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.2:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "181d5fd83212353569d739bcefdc3e891da6fb040c3f24a97e34b052278ef86d"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.2:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "cf7c744f182b004c0e6953075b41b9c34acf4004ca510d73698748011b50e98d"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.2:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "70e87eaff59a65d93fbfddd507eaa08d2ee52e5857e222757f32199d7fc9f06f"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.2:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "a0d13122a256f71da7aed0c2b62a0da04119e7e5031fed99c164fe3973af086a"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.3:ABS:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "d69edb3be064c585168a3b8c751fd56d2cf5209900cdc07049522bb0cdf293b3"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.3:PETG:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "0ec032412c8304fb9755dcef1cd2f177011ca39927e9934461c7bff42710d3a6"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.3:PLA:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "8265711d616dfc6ef4dd8dce7c611e541ddc85da4325e580f6a827eebaba3852"
+      },
+      {
+        "id": "bambu:FDM:P1S:0.3:TPU:Bambu-Lab-P1S-0.4-nozzle",
+        "measurement_generation": "0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27",
+        "engine_version": "02.08.02.61",
+        "engine_build_sha256": "0dd1ab55a0f6237ac4a47f76b4b0966464caa79e6789a792dc251e0d0235786c",
+        "profile_bundle_sha256": "ad05bb2bdd19e49f7509d509288b6072704803ac3818101f05bba9b23a24d2ca",
+        "effective_profile_sha256": "68f47af237d40dd6e0d5b330d0d2e9cf03c1b2697e798d30a4d2f917959e6681"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.1:ABS:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "202dac63c41e41f2e4a975df325b82af2a02ccce85f436e6afd266dbaab254b9"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.1:PETG:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "0ef710278294a61872a1605783887ac069968e791379afbbd03fe34985723264"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.1:PLA:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "6f66657e4878c7ea1babe44e0f9bef4428c1d9b3c7f562f1f3bcd01300b659b3"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.1:TPU:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "9a47bbed10b8356d6a877a95c594d99702c18ef888811a9a619de808213160aa"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.2:ABS:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "6649bcba29374727dd8281a23b7485af1a2b2ffcd0452d237d38fe8d074adb30"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.2:PETG:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "0c44d628529f6229a3b61cc8de4529dc6ea539f7625e6c57c7b211b913df4a70"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.2:PLA:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "188a077d7ed49eaa544b5bb2b965a7468e652bf351d392529b10bcabaeb59f89"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.2:TPU:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "a633c37703919291fc1fc534b15416ab1ae0c68013bcd5c285442a046b3411ed"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.3:ABS:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "282937b5e04bd7b655c2f8999378d0f0ab438b311178c5f07520cb51216dda72"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.3:PETG:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "4ecef5571919b8ccc6692044b7a8424877ab315c3932197dfc3382cbe939b88e"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.3:PLA:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "9844f2a0751f2b66c7973fd298a7b4d92b5d9840c03b516f2afcd7eb67504f02"
+      },
+      {
+        "id": "orca:FDM:H2D-QUOTE:0.3:TPU:Bambu_P1S_H2D_SIZE_QUOTING_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "54a158911ccca7790697aadafd2c37fe2313b3605091d510fadf2a801af5fc09"
+      },
+      {
+        "id": "orca:FDM:P1S:0.1:ABS:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "4a48385cc4c81f6e873b26c820ad97131addf177a84f8baac443f73baff42dd3"
+      },
+      {
+        "id": "orca:FDM:P1S:0.1:PETG:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "59c727b3deb0d22b7027a2c0a32380570dac1b90306af48c14416816689d5ddc"
+      },
+      {
+        "id": "orca:FDM:P1S:0.1:PLA:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "3687a823c222541317d49605907dfb87394b6741b76e8ac771509fc00e10184e"
+      },
+      {
+        "id": "orca:FDM:P1S:0.1:TPU:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "ef626455a78e036086473e6ac4366aac0b87fa6f8eeff6f659e94c7ab2eeb960"
+      },
+      {
+        "id": "orca:FDM:P1S:0.2:ABS:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "949fec915fce948cccbdd2424ade86b8055a124d10128dc9e9a6c1b6a7d833c7"
+      },
+      {
+        "id": "orca:FDM:P1S:0.2:PETG:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "a0af7e23e150d02a861341c2c9974ff1d5a012cfedb9723cdad5fc2b049315be"
+      },
+      {
+        "id": "orca:FDM:P1S:0.2:PLA:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "ea787dbf09a44eb650343df38899bb0cf530b458c19f47939664302343c0e42e"
+      },
+      {
+        "id": "orca:FDM:P1S:0.2:TPU:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "ee678fffeccdd630b4f8d841414a8d3a3f0e52eff4a69351c6618d43d87d83c9"
+      },
+      {
+        "id": "orca:FDM:P1S:0.3:ABS:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "cd36bdbcd6d9f19759d1cec8e9a0a0d5f1f8cfc244045e04ef90ba067caefbbb"
+      },
+      {
+        "id": "orca:FDM:P1S:0.3:PETG:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "64a961930d600c7e669ab6809105b693f4176fd08fad58cf448a040b4b47466e"
+      },
+      {
+        "id": "orca:FDM:P1S:0.3:PLA:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "485ef5726a393e55f5f480990022b13a302d434605ef22542e4cf5b3ed0b6760"
+      },
+      {
+        "id": "orca:FDM:P1S:0.3:TPU:Bambu_P1S_0.4_nozzle.json",
+        "engine_version": "2.3.1",
+        "effective_profile_sha256": "109153aaa0827bf44694299a797d7fbcdd61403bd368da84426431a43a950cf8"
+      },
+      {
+        "id": "prusa:FDM:H2D-QUOTE:0.1:FDM_P1S_H2D_SIZE_QUOTING_0.1mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "3bf0f02e09adb2877294e81c364128c7781d3cc6af702edde6b561e5c9e60fec"
+      },
+      {
+        "id": "prusa:FDM:H2D-QUOTE:0.2:FDM_P1S_H2D_SIZE_QUOTING_0.2mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "300458368f5f651011f1ccf57e16e315378cc6865386ea1b181cfbc5b5256943"
+      },
+      {
+        "id": "prusa:FDM:H2D-QUOTE:0.3:FDM_P1S_H2D_SIZE_QUOTING_0.3mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "98f9554502853554e04078c98b3c3da7bdf00b8384ec53348671100739806e3f"
+      },
+      {
+        "id": "prusa:FDM:P1S:0.1:FDM_0.1mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "7187dff1fc2e17840eb8804101ab09dafc12fd5b669e99202d0326b3c8b10f71"
+      },
+      {
+        "id": "prusa:FDM:P1S:0.2:FDM_0.2mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "49c5584e05e1bb58c9b93f1cb46a62b5a8c8aac6943e48319226cb848775f3b0"
+      },
+      {
+        "id": "prusa:FDM:P1S:0.3:FDM_0.3mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "5e92feaf93e9888f03182d126dea03a0518a7718f25b4c5f5d1087084df48b84"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.025:ABS-Like:SLA_0.025mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "1769fd85ab7dec1712b4652000bce97bf2944938f0f0c6f5383755000c3769fe"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.025:Flexible:SLA_0.025mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "1769fd85ab7dec1712b4652000bce97bf2944938f0f0c6f5383755000c3769fe"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.025:Standard:SLA_0.025mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "1769fd85ab7dec1712b4652000bce97bf2944938f0f0c6f5383755000c3769fe"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.05:ABS-Like:SLA_0.05mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "a3acad5173916977bf41724098853e74e11046dbea1dec6976fabc5fcce9c8da"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.05:Flexible:SLA_0.05mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "a3acad5173916977bf41724098853e74e11046dbea1dec6976fabc5fcce9c8da"
+      },
+      {
+        "id": "prusa:SLA:SATURN4U:0.05:Standard:SLA_0.05mm.ini",
+        "engine_version": "2.8.1+linux-x64-GTK3-202409181416",
+        "effective_profile_sha256": "a3acad5173916977bf41724098853e74e11046dbea1dec6976fabc5fcce9c8da"
+      }
+    ]
+  }
+}

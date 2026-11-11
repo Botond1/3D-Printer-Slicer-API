@@ -30,7 +30,9 @@ test('rate limiter runs before allocation', async () => {
     const layer = router.stack.find((item) => item.route).route.stack;
     const req = { method: 'POST' };
     const res = { status() { return this; }, end() {} };
-    layer[0].handle(req, res, () => assert.fail('limiter should settle response'));
+    // 3.9.0: authentication runs first, then the per-principal limiter.
+    assert.equal(layer[0].handle.name, 'authenticateOrCharge');
+    layer[1].handle(req, res, () => assert.fail('limiter should settle response'));
     assert.equal(allocated, false);
 });
 

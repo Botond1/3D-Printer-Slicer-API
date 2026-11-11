@@ -2,7 +2,7 @@
 
 const fs = require('node:fs/promises');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
-const { invalidArchive, resourceLimit } = require('./resource-errors');
+const { invalidArchive, labelArchiveError, resourceLimit } = require('./resource-errors');
 const { archiveIdentity, openZipWithRetry } = require('./zip-open');
 
 async function writeFully(handle, chunk) {
@@ -32,7 +32,8 @@ function copyStreamBounded(readStream, handle, policy) {
                 if (
                     actualBytes > policy.MAX_ZIP_ENTRY_BYTES
                     || actualBytes > policy.MAX_ZIP_UNCOMPRESSED_BYTES
-                ) throw resourceLimit('ZIP extraction exceeded the actual-byte limit.');
+                ) throw labelArchiveError(resourceLimit('ZIP extraction exceeded the actual-byte limit.'),
+                    'ARCHIVE_TOO_LARGE', Math.min(policy.MAX_ZIP_ENTRY_BYTES, policy.MAX_ZIP_UNCOMPRESSED_BYTES));
                 await writeFully(handle, chunk);
                 readStream.resume();
             }).catch((error) => {
@@ -55,7 +56,7 @@ async function extractZipEntry(zipPath, selectedEntry, destinationPath, options 
         !current.isFile()
         || current.isSymbolicLink()
         || archiveIdentity(current) !== selectedEntry.archiveIdentity
-    ) throw invalidArchive('ZIP archive changed before extraction.');
+    ) throw labelArchiveError(invalidArchive('ZIP archive changed before extraction.'), 'ARCHIVE_UNREADABLE');
     const zipFile = await openZipWithRetry(zipPath);
 
     return new Promise((resolve, reject) => {
@@ -98,7 +99,7 @@ async function extractZipEntry(zipPath, selectedEntry, destinationPath, options 
             });
         });
         zipFile.once('end', () => {
-            if (!extracted) reject(invalidArchive('No supported file found in ZIP archive.'));
+            if (!extracted) reject(labelArchiveError(invalidArchive('No supported file found in ZIP archive.'), 'ARCHIVE_UNREADABLE'));
         });
         zipFile.once('error', reject);
         zipFile.readEntry();
@@ -107,13 +108,14 @@ async function extractZipEntry(zipPath, selectedEntry, destinationPath, options 
 
 function validateActualBytes(actualBytes, selectedEntry, policy) {
     if (actualBytes !== selectedEntry.declaredBytes) {
-        throw invalidArchive('ZIP actual bytes do not match its declared entry size.');
+        throw labelArchiveError(invalidArchive('ZIP actual bytes do not match its declared entry size.'), 'ARCHIVE_UNREADABLE');
     }
     const ratio = selectedEntry.compressedBytes === 0
         ? (actualBytes === 0 ? 1 : Infinity)
         : actualBytes / selectedEntry.compressedBytes;
     if (!Number.isFinite(ratio) || ratio > policy.MAX_ZIP_COMPRESSION_RATIO) {
-        throw resourceLimit('ZIP extraction exceeded the actual compression-ratio limit.');
+        throw labelArchiveError(resourceLimit('ZIP extraction exceeded the actual compression-ratio limit.'),
+            'ARCHIVE_RATIO_EXCEEDED', policy.MAX_ZIP_COMPRESSION_RATIO);
     }
 }
 

@@ -165,7 +165,21 @@ async function runToCompletion(admitted, req, ctx) {
         // release failure surfaced; the stored result mirrors that answer.
     }
     if (!ctx.store.isLive(admitted.job)) return;
-    ctx.store.complete(admitted.job, captureResult(admitted.capture, taskError, ctx.createQueueErrorResponse));
+    const result = captureResult(admitted.capture, taskError, ctx.createQueueErrorResponse);
+    ctx.store.complete(admitted.job, result, { artifactId: settledArtifactId(result) });
+}
+
+/**
+ * The artifact a settled 200 answer promoted (its top-level `artifact_id`),
+ * so a later DELETE of the completed job can remove it (3.9.0). Any other
+ * answer owns no artifact.
+ * @param {{status: number, body: unknown}} result Stored result.
+ * @returns {string|null} `artifact-<32 hex>` or null.
+ */
+function settledArtifactId(result) {
+    if (result?.status !== 200) return null;
+    const artifactId = result.body?.artifact_id;
+    return typeof artifactId === 'string' && /^artifact-[a-f0-9]{32}$/.test(artifactId) ? artifactId : null;
 }
 
 function admitIntoStore(admitted, req, ctx, controller, admission) {
@@ -345,5 +359,6 @@ module.exports = {
     isAsyncAccepted,
     prefersRespondAsync,
     resolveJobPrincipal,
+    settledArtifactId,
     submitAsyncSlice
 };

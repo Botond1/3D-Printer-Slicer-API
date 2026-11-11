@@ -1,0 +1,146 @@
+{
+  "verify_correct_hash": {
+    "resolved": "undefined"
+  },
+  "verify_wrong_hash": {
+    "rejected": "BAMBU_RESULT_UNVERIFIED",
+    "status": 422
+  },
+  "entry_count": 19,
+  "entries": [
+    {
+      "name": "[Content_Types].xml",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 432,
+      "compressedSize": 221
+    },
+    {
+      "name": "Metadata/plate_1.png",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 4019,
+      "compressedSize": 4019
+    },
+    {
+      "name": "Metadata/plate_1_small.png",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 1931,
+      "compressedSize": 1931
+    },
+    {
+      "name": "Metadata/plate_no_light_1.png",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 3049,
+      "compressedSize": 3049
+    },
+    {
+      "name": "Metadata/top_1.png",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 1171,
+      "compressedSize": 1171
+    },
+    {
+      "name": "Metadata/pick_1.png",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 1175,
+      "compressedSize": 1175
+    },
+    {
+      "name": "Metadata/plate_1.json",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 467,
+      "compressedSize": 235
+    },
+    {
+      "name": "3D/3dmodel.model",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 1487,
+      "compressedSize": 592
+    },
+    {
+      "name": "3D/_rels/3dmodel.model.rels",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 272,
+      "compressedSize": 190
+    },
+    {
+      "name": "3D/Objects/object_1.model",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 1336,
+      "compressedSize": 460
+    },
+    {
+      "name": "Metadata/project_settings.config",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 44643,
+      "compressedSize": 9486
+    },
+    {
+      "name": "Metadata/plate_1.gcode.md5",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 32,
+      "compressedSize": 37
+    },
+    {
+      "name": "Metadata/plate_1.gcode",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 150945,
+      "compressedSize": 19769
+    },
+    {
+      "name": "Metadata/_rels/model_settings.config.rels",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 255,
+      "compressedSize": 173
+    },
+    {
+      "name": "Metadata/model_settings.config",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 1567,
+      "compressedSize": 487
+    },
+    {
+      "name": "Metadata/cut_information.xml",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 139,
+      "compressedSize": 109
+    },
+    {
+      "name": "Metadata/slice_info.config",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 1616,
+      "compressedSize": 569
+    },
+    {
+      "name": "Metadata/filament_sequence.json",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 75,
+      "compressedSize": 68
+    },
+    {
+      "name": "_rels/.rels",
+      "unsafe": false,
+      "policy": "pass",
+      "uncompressedSize": 673,
+      "compressedSize": 265
+    }
+  ],
+  "decisions_sha256": "c1f5bb60f85daae02fd8a08a3c03b7f057b08f49a3cdd997229081e12ed76596"
+}

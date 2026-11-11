@@ -82,17 +82,21 @@ Production-envelope smoke of the current image, 40 mm PLA cube at 0.2 mm,
 | Audience | Header | Routes |
 | --- | --- | --- |
 | Public | none | `GET /health`, `GET /ready`, `GET /pricing`, `GET /profiles`, `GET /openapi.json`, `GET /docs`, `GET /` |
-| Slice service | `x-slicer-api-key` | `POST /prusa/slice`, `POST /orca/slice`, `POST /bambu/slice`, `POST /render`, `GET`/`DELETE /bambu/slice/jobs/:job_id` |
+| Slice service | `x-slicer-api-key` | `POST /prusa/slice`, `POST /orca/slice`, `POST /bambu/slice`, `POST /render`, `GET`/`DELETE /bambu/slice/jobs/:job_id`, `GET /capabilities` (3.9.0), and, only with `EXPORT_ROUTE_ENABLED=true`, `POST /bambu/export`, `GET`/`DELETE /bambu/export/jobs/:job_id`, `GET /bambu/export/jobs/:job_id/file` (3.9.0) |
 | Pricing | `x-api-key` (`PRICING_API_KEY`) | `POST /pricing/FDM`, `POST /pricing/SLA`, `PATCH /pricing/:technology/:material`, `DELETE /pricing/:technology/:material` |
 | Artifact | `x-api-key` (`ARTIFACT_API_KEY`) | `GET /admin/output-files`, `GET /admin/download/:fileName` (`ALL` streams a ZIP) |
 | Operations | `x-api-key` (`OPERATIONS_API_KEY`) | `GET /health/detailed`, `GET /operations/readiness`, `GET /operations/metrics` |
 
-All four slice-service routes share one rate limiter and one FIFO queue; a
-render never runs beside a native slice. Route order is fixed: rate limiter ->
-`x-slicer-api-key` authentication -> root-scoped workspace allocation ->
-Multer single-file upload (`choosenFile`) -> option/profile validation ->
-queue -> native processing. Authentication rejects before any workspace,
-upload, or queue side effect. Unknown routes return JSON 404 `ROUTE_NOT_FOUND`.
+All four slice-service routes share one FIFO queue; a render never runs beside
+a native slice. Route order is fixed (3.9.0): `x-slicer-api-key`
+authentication (a failure charges the per-IP auth-failure bucket) -> the
+per-principal slice rate limiter -> root-scoped workspace allocation -> Multer
+single-file upload (`choosenFile`) -> option/profile validation -> queue ->
+native processing. Authentication rejects before any workspace, upload, or queue
+side effect. Unknown routes return JSON 404 `ROUTE_NOT_FOUND`. Only the slicing
+paths, the job routes, the export routes, `/capabilities`, `/profiles`,
+`/health` and `/pricing` are routed from the internet
+(`ops/hostinger/public-routes.json`); the rest are reached inside the host.
 
 ---
 
@@ -107,6 +111,7 @@ WooCommerce and LeadPilot principal families:
 | Slice shared compatibility | `SLICE_SERVICE_API_KEY`, `SLICE_SERVICE_API_KEY_PREVIOUS` | `x-slicer-api-key` |
 | Slice WooCommerce | `SLICE_SERVICE_WOOCOMMERCE_API_KEY`, `..._PREVIOUS` | `x-slicer-api-key` |
 | Slice LeadPilot | `SLICE_SERVICE_LEADPILOT_API_KEY`, `..._PREVIOUS` | `x-slicer-api-key` |
+| Slice staging (optional, 3.9.0) | `SLICE_SERVICE_STAGING_API_KEY`, `..._PREVIOUS` | `x-slicer-api-key` |
 | Pricing | `PRICING_API_KEY`, `PRICING_API_KEY_PREVIOUS` | `x-api-key` |
 | Artifact | `ARTIFACT_API_KEY`, `ARTIFACT_API_KEY_PREVIOUS` | `x-api-key` |
 | Operations | `OPERATIONS_API_KEY`, `OPERATIONS_API_KEY_PREVIOUS` | `x-api-key` |
@@ -115,16 +120,24 @@ WooCommerce and LeadPilot principal families:
   `SLICE_SERVICE_AUTH_MODE` is `legacy` (default: shared active only),
   `migration` (shared active plus both principal actives plus a future
   `SLICE_SERVICE_LEGACY_MIGRATION_UNTIL` at most 90 days away; shared slots stop
-  authorizing at that instant), or `principals` (both principal actives, no
+  authorizing at that instant; since 3.9.0 a past date no longer refuses
+  startup, the legacy slot is refused and `/operations/readiness` reports
+  `LEGACY_SLICE_SLOT_EXPIRED`), or `principals` (both principal actives, no
   shared slots, no expiry). A previous slot is valid only with its own active.
+  The optional `staging` principal has its own buckets and queue share.
 - Every configured value must be globally unique, non-placeholder, and 32-256
   printable-ASCII bytes; violations refuse startup with a generic error.
 - `x-api-key` is never a slice alias. Missing or wrong slice credentials return
   HTTP `401`
   `{"success":false,"error":"Slice service authentication is required.","errorCode":"SLICE_SERVICE_AUTH_REQUIRED"}`.
+  A request that carries `x-slicer-api-key` (even empty) always gets this 401,
+  with `Retry-After` once its source IP's failure bucket
+  (`AUTH_FAILURE_RATE_LIMIT_*`, 60/min, burst 30) is spent; only a request with
+  no key header can get a 429 from that bucket.
 - Comparisons use fixed-length SHA-256 digests. A matching slice key attaches a
-  frozen `req.slicePrincipal {audience, slot}`; the slice rate limiter and the
-  queue fairness cap key on that principal and fall back to the client IP.
+  frozen `req.slicePrincipal {audience, slot, rotation}`; the slice and job rate
+  limiters key on that principal (`principal:<slot>`); the queue fairness cap is
+  unchanged.
 - Rotation is two restarts: replacement active + former active as previous,
   move the caller, remove previous, restart again (revocation).
 - `ADMIN_API_KEY` is legacy migration material only: it may fill exactly one
@@ -244,6 +257,21 @@ the exact status and JSON body the synchronous request would have answered
 process memory only: unknown, expired, cancelled, evicted, restarted-away,
 foreign, or malformed ids answer 404 `SLICE_JOB_NOT_FOUND`. The full contract is
 `docs/integration-guide.md` section 3.6.
+
+### Production-model export and feature detection (3.9.0)
+
+`GET /capabilities` (slice key, `no-store`) returns
+`r3d-slicer-capabilities-v1`: the service version, the running
+`measurement_generation`, which principal and rotation the key is, the export
+switch and limits, the deletion facts and the archive limits. 3.8.x answers 404.
+
+`POST /bambu/export` (off unless `EXPORT_ROUTE_ENABLED=true`) takes every field
+of the priced `POST /bambu/slice` plus `expectedSourceSha256`,
+`expectedMeasurementGeneration` (required), `expectedSlicedGeometrySha256`,
+`exportFormat` (`stl`|`3mf`) and `exportLabel`; it re-prepares the model
+exactly as the priced slice did, without slicing, and returns the placed mesh
+with `X-R3D-*` headers (sync) or an `ex_` job (`Prefer: respond-async`). See
+`docs/release/3.9.0-specification.md` §2.2–2.3.
 
 ### `POST /render`
 

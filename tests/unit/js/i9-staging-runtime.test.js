@@ -184,6 +184,42 @@ for (const ready of [true, false]) {
     });
 }
 
+for (const ready of [true, false]) {
+    const validate = ready ? validateHealthyObservation : validateDegradedObservation;
+    const mismatch = ready ? 'healthy_readiness_contract_mismatch' : 'storage_readiness_failure_not_observed';
+    test(`a 3.9.0 readiness body with its advisory fields passes; a half or malformed set does not (ready=${ready})`, () => {
+        const advisory = (body) => Object.assign(body, {
+            nativeIdentity: {
+                monitor: 'active', enabled: true, changed: false, stale: false, verifying: false, stalled: false,
+                lastOutcome: 'verified', consecutiveFailures: 0, lastVerifiedAgeMs: 900,
+                intervalMs: 600000, maxAgeMs: 1800000, timeoutMs: 120000, reasons: []
+            },
+            childOomWrapper: { state: 'active', active: true, oom_score_adj: 500, reason: null }
+        });
+        const value = observation(ready);
+        advisory(value.operations.body);
+        assert.equal(validate(value), null, 'the 3.9.0 shape');
+        value.operations.body.advisoryReasonCodes = ['NATIVE_IDENTITY_STALE'];
+        assert.equal(validate(value), null, 'an advisory reason never changes readiness');
+        for (const [name, mutate] of [
+            ['wrapper without identity', (o) => { delete o.nativeIdentity; }],
+            ['identity without wrapper', (o) => { delete o.childOomWrapper; }],
+            ['advisory list alone', (o) => { delete o.nativeIdentity; delete o.childOomWrapper; }],
+            ['changed identity', (o) => { o.nativeIdentity.changed = true; }],
+            ['identity path leaked', (o) => { o.nativeIdentity.path = '/opt/bambustudio'; }],
+            ['wrapper field extra', (o) => { o.childOomWrapper.extra = true; }],
+            ['unknown advisory reason', (o) => { o.advisoryReasonCodes = ['STORAGE_UNSAFE']; }],
+            ['empty advisory list', (o) => { o.advisoryReasonCodes = []; }]
+        ]) {
+            const changed = observation(ready);
+            advisory(changed.operations.body);
+            changed.operations.body.advisoryReasonCodes = ['NATIVE_IDENTITY_STALE'];
+            mutate(changed.operations.body);
+            assert.equal(validate(changed), mismatch, name);
+        }
+    });
+}
+
 test('runtime inspect requires exact digest/config, private network and no port binding', () => {
     const previous = candidate('a');
     const value = {
