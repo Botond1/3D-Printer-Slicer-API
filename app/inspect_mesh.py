@@ -245,16 +245,31 @@ def _winding_flips(vertices, clean_faces):
     face_count = len(clean_faces)
     pair_key = adjacency[:, 0].astype(np.int64) * face_count + adjacency[:, 1]
     needs_flip = dict(zip(pair_key.tolist(), same_direction.tolist()))
-    graph = nx.from_edgelist(adjacency)
+    # Plain integers hash and compare as numpy's do, so the graph's node and
+    # neighbour order (and with them networkx's own choice of each walk's first
+    # triangle) are those of `nx.from_edgelist(mesh.face_adjacency)`.
+    graph = nx.from_edgelist(adjacency.tolist())
+    neighbours = graph._adj
     flipped = bytearray(face_count)
     for component in nx.connected_components(graph):
         start = next(iter(graph.subgraph(component).nodes()))
-        for parent, child in nx.bfs_edges(graph, start):
-            parent = int(parent)
-            child = int(child)
-            pair = parent * face_count + child if parent < child else child * face_count + parent
-            if needs_flip[pair] != bool(flipped[parent]):
-                flipped[child] = 1
+        # `nx.bfs_edges` order: parents in the order they were reached, each
+        # parent's neighbours in the graph's insertion order.
+        seen = {start}
+        reached = [start]
+        position = 0
+        while position < len(reached):
+            parent = reached[position]
+            position += 1
+            parent_flipped = bool(flipped[parent])
+            for child in neighbours[parent]:
+                if child in seen:
+                    continue
+                seen.add(child)
+                reached.append(child)
+                pair = parent * face_count + child if parent < child else child * face_count + parent
+                if needs_flip[pair] != parent_flipped:
+                    flipped[child] = 1
     return np.frombuffer(bytes(flipped), dtype=np.uint8).astype(bool)
 
 
