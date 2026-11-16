@@ -20,13 +20,14 @@ const { createAuthenticateOrCharge } = require('../middleware/sliceAdmission');
 const { getBambuGeneration } = require('../services/slice/bambu-generation');
 const { ARCHIVE_RULES } = require('../services/slice/resource-errors');
 const { defaultExpansionLimits } = require('../services/slice/three-mf-expansion');
+const { FAST_LANE_POLICY } = require('../services/slice/fast-lane');
 
 /**
  * The release this document describes. A literal, not a `package.json` read:
  * the image flattens `app/` into `/app` beside `package.json`, the checkout
  * does not. `tests/unit/js/capabilities.test.js` pins it to `package.json`.
  */
-const SERVICE_VERSION = '3.9.0';
+const SERVICE_VERSION = '3.10.0';
 const CAPABILITIES_ROUTE_PATH = '/capabilities';
 const CAPABILITIES_SCHEMA = 'r3d-slicer-capabilities-v1';
 const ASYNC_CONTRACT = 1;
@@ -94,6 +95,13 @@ function buildCapabilitiesDocument(options) {
             job_delete_removes_artifact: true,
             startup_orphan_purge: true,
             core_dumps: false
+        },
+        // 3.10.0: a small STL upload may start beside the busy normal slots.
+        fast_lane: {
+            enabled: (options.fastLane || FAST_LANE_POLICY).enabled === true,
+            max_upload_bytes: (options.fastLane || FAST_LANE_POLICY).maxBytes,
+            formats: ['stl'],
+            max_concurrent: (options.fastLane || FAST_LANE_POLICY).maxJobs
         },
         archive_limits: {
             max_entries: resourcePolicy.MAX_ZIP_ENTRIES,

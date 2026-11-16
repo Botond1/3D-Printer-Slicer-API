@@ -17,6 +17,7 @@
 
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const { isFastLaneUpload } = require('./fast-lane');
 const { isResponseWritable } = require('./request-abort');
 const { emitEvent } = require('../observability/events');
 const { CAPACITY_RETRY_AFTER_SECONDS, POLL_AFTER_MS, retryAfterSeconds } = require('./async-jobs');
@@ -280,6 +281,7 @@ function enqueueAsyncJob(req, ctx) {
         queueKey: ctx.queueKey,
         signal: controller.signal,
         ignoreQueueWait: true,
+        fastLane: isFastLaneUpload(req),
         onAdmitted: (admission) => admitIntoStore(admitted, req, ctx, controller, admission)
     });
     // Every path below awaits it; this only keeps a late rejection from ever being unhandled.

@@ -123,7 +123,7 @@ async function buildBambuReceipt(context, generated, stats, effectiveProfileSha2
     const { config, applied } = validateAppliedConfig(gcode, context, generation.engine.version);
     const result = await readNativeResult(context.engineOutputDir, context.workspace);
     const plate = validateNativeScope(result, gcode, stats);
-    const finalGeometry = await inspectBambuMesh(context.processableFile, context.signal);
+    const finalGeometry = await inspectBambuMesh(context.processableFile, context.signal, context.sourceEvidence?.inspection);
     const processProfile = JSON.parse(await fs.readFile(runtimeConfigFile, 'utf8'));
     const machineProfile = JSON.parse(await fs.readFile(context.orcaMachineConfigFile, 'utf8'));
     const filamentProfile = JSON.parse(await fs.readFile(context.orcaFilamentConfigFile, 'utf8'));

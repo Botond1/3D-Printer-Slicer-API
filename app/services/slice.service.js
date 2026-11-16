@@ -3,6 +3,7 @@
 const { getClientIp } = require('../utils/client-ip');
 const { SHARED_SLOT } = require('../middleware/requireAudience');
 const { enqueueSliceJob, sendQueueErrorResponse, toQueueErrorResponse } = require('./slice/queue');
+const { isFastLaneUpload } = require('./slice/fast-lane');
 const {
     processSlice,
     appendOriginalExtensionToUpload,
@@ -206,7 +207,7 @@ function createSliceHandlers(options = {}) {
                         setAbortSignal(res, taskSignal);
                         return process(req, res, { forcedTechnology, engine, signal: taskSignal });
                     },
-                    { queueKey: clientQueueKey, signal: binding.signal }
+                    { queueKey: clientQueueKey, signal: binding.signal, fastLane: isFastLaneUpload(req) }
                 );
             }
         } catch (err) {

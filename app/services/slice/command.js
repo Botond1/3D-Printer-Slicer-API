@@ -396,6 +396,23 @@ function nativeExitFacts(error) {
     };
 }
 
+/**
+ * A bounded label of what a native step runs (3.10.0), so a log line names
+ * its helper instead of leaving it to the call order: the Python helper's
+ * file name without `.py` (`inspect_mesh`, `orient`, `scale_model`,
+ * `mesh2stl`, `cad2stl`, `render_preview`), `inspect_mesh_3mf_scope`,
+ * `engine_reference_pose` for the engine's `--export-stl` pose export and
+ * `engine` for every other engine run. Never a path or an argument value.
+ * @param {string[]} args Command arguments.
+ * @returns {string} Label made of `[a-z0-9_]` only.
+ */
+function nativeKind(args) {
+    const first = typeof args?.[0] === 'string' ? args[0] : '';
+    const helper = /(?:^|[\\/])([a-z0-9_]{1,32})\.py$/.exec(first);
+    if (helper) return helper[1] === 'inspect_mesh' && args[1] === '--3mf-scope' ? 'inspect_mesh_3mf_scope' : helper[1];
+    return Array.isArray(args) && args.includes('--export-stl') ? 'engine_reference_pose' : 'engine';
+}
+
 function nativeErrorCode(outcome, error) {
     if (outcome === 'timeout') return 'NATIVE_TIMEOUT';
     if (outcome === 'aborted') return 'NATIVE_ABORTED';
@@ -579,7 +596,7 @@ function createCommandRunner(overrides = {}) {
         const started = telemetry === 'slice' ? process.hrtime.bigint() : null;
         if (telemetry === 'slice') {
             nativeStarted();
-            emitEvent('native.started', { audience: 'slice', outcome: 'started' });
+            emitEvent('native.started', { audience: 'slice', outcome: 'started', extra: { native_kind: nativeKind(args) } });
         }
         const runnerTimeoutMs = isOrientationHelperCommand(args)
             ? Math.min(dependencies.timeoutMs, dependencies.orientationTimeoutMs)
@@ -600,7 +617,8 @@ function createCommandRunner(overrides = {}) {
                 const duration = elapsedMilliseconds(started);
                 nativeFinished('success', duration);
                 emitEvent('native.completed', {
-                    audience: 'slice', outcome: 'success', duration_ms: duration
+                    audience: 'slice', outcome: 'success', duration_ms: duration,
+                    extra: { native_kind: nativeKind(args) }
                 });
                 return value;
             },
@@ -616,9 +634,9 @@ function createCommandRunner(overrides = {}) {
                     outcome,
                     error_code: nativeErrorCode(outcome, error),
                     duration_ms: duration,
-                    ...(outcome === 'failure'
-                        ? { extra: { ...nativeExitFacts(error), stderr_tail: printableStderrTail(error?.stderr) } }
-                        : {})
+                    extra: outcome === 'failure'
+                        ? { native_kind: nativeKind(args), ...nativeExitFacts(error), stderr_tail: printableStderrTail(error?.stderr) }
+                        : { native_kind: nativeKind(args) }
                 });
                 throw error;
             }
@@ -653,6 +671,7 @@ module.exports = {
     wrapCommand,
     STDERR_TAIL_CHARS,
     nativeExitFacts,
+    nativeKind,
     printableStderrTail,
     ORIENTATION_HELPER_PATH,
     ORIENTATION_HELPER_TIMEOUT_MS,

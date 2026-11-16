@@ -25,6 +25,23 @@ const { throwIfAborted, isAbortError } = require('./command');
 const { resolveResourcePolicy } = require('../../config/resource-policy');
 const { resourceLimit } = require('./resource-errors');
 const { captureBambuSource, measureBambuMesh, measurementFromBambuInspection } = require('./bambu-source');
+const { emitEvent } = require('../observability/events');
+
+/**
+ * One bounded log line per job with the size of the submitted model (3.10.0):
+ * the triangle count the inspection kept. Telemetry never alters the job.
+ * @param {{inspection?: {triangle_count?: number}}|null} sourceEvidence Bambu source evidence.
+ * @returns {void}
+ */
+function reportSourceModel(sourceEvidence) {
+    const triangles = sourceEvidence?.inspection?.triangle_count;
+    if (!Number.isSafeInteger(triangles)) return;
+    try {
+        emitEvent('slice.model_inspected', { audience: 'slice', outcome: 'success', extra: { triangles } });
+    } catch {
+        // Telemetry can never alter the slice.
+    }
+}
 
 function findUploadedModelFile(req) {
     return req.file?.fieldname === 'choosenFile' ? req.file : null;
@@ -59,7 +76,11 @@ async function prepareProcessableModel(inputFile, technology, orientationMode, w
     await assertBoundedModelFile(processableFile, workspace);
     throwIfAborted(signal);
     const sourceEvidence = engine === 'bambu' ? await captureBambuSource(inputFile, processableFile, signal, threeMfScope) : null;
-    const measure = engine === 'bambu' ? measureBambuMesh : getModelInfo;
+    // 3.10.0: later inspections of this request may reuse the source's topology facts.
+    const measure = engine === 'bambu'
+        ? (file, abortSignal) => measureBambuMesh(file, abortSignal, sourceEvidence.inspection)
+        : getModelInfo;
+    reportSourceModel(sourceEvidence);
     // The source evidence already inspected this very file; a second helper
     // run on it would only repeat the same trimesh import and answer.
     const originalModelMeasurement = sourceEvidence !== null
@@ -131,7 +152,8 @@ async function prepareModelOrResponse(
     profileSnapshots,
     selectedProfiles,
     workspace,
-    signal
+    signal,
+    sourceInspection = null
 ) {
     throwIfAborted(signal);
     const buildVolumeLimits = resolveBuildVolumeLimits(
@@ -153,7 +175,9 @@ async function prepareModelOrResponse(
         {
             orientation,
             originalModelMeasurement,
-            measureModel: request.engine === 'bambu' ? measureBambuMesh : getModelInfo
+            measureModel: request.engine === 'bambu'
+                ? (file, abortSignal) => measureBambuMesh(file, abortSignal, sourceInspection)
+                : getModelInfo
         }
     );
     throwIfAborted(signal);
@@ -229,7 +253,8 @@ async function prepareSliceJob(res, request, workspace, signal) {
         profileSnapshots,
         profiles,
         workspace,
-        signal
+        signal,
+        source.sourceEvidence?.inspection || null
     );
     if (preparedModel.response) return preparedModel;
     throwIfAborted(signal);

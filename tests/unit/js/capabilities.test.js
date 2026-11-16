@@ -78,10 +78,11 @@ test('the document is the §2.1 shape, mirrored from the resolved policies', asy
     const document = await response.json();
     assert.deepEqual(Object.keys(document), [
         'schema', 'service_version', 'async_contract', 'measurement_generation', 'authenticated_as',
-        'export', 'deletion', 'archive_limits'
+        'export', 'deletion', 'fast_lane', 'archive_limits'
     ]);
     assert.equal(document.schema, 'r3d-slicer-capabilities-v1');
-    assert.equal(document.service_version, '3.9.0');
+    assert.equal(document.service_version, '3.10.0');
+    assert.deepEqual(document.fast_lane, { enabled: true, max_upload_bytes: 2_500_084, formats: ['stl'], max_concurrent: 1 });
     assert.equal(document.async_contract, 1);
     assert.deepEqual(document.measurement_generation, { bambu: GENERATION });
     assert.deepEqual(document.authenticated_as, { principal: 'woocommerce', rotation: 'active' });

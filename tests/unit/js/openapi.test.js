@@ -528,7 +528,7 @@ test('OpenAPI operations retain their documented response-status keys', () => {
 });
 
 test('OpenAPI documents the 3.9.0 export and capabilities routes behind the slice key', () => {
-    assert.equal(document.info.version, '3.9.0');
+    assert.equal(document.info.version, '3.10.0');
     for (const operationKey of [
         'POST /bambu/export',
         'GET /bambu/export/jobs/{job_id}',

@@ -25,10 +25,28 @@ async function hashFile(filePath) {
     return hash.digest('hex');
 }
 
-async function inspectBambuMesh(filePath, signal) {
+/**
+ * The part of an earlier inspection the helper may reuse (3.10.0): the
+ * topology digest and the shell and edge facts it stands for. The helper
+ * takes them only when the file it reads has the same digest and the earlier
+ * surface was a closed, consistently wound solid; it measures the indexing,
+ * the dropped counts, the dimensions and the volume on its own file always.
+ * @param {object|null|undefined} inspection Validated inspection of the same request.
+ * @returns {string[]} Extra helper arguments (empty without a usable prior).
+ */
+function priorInspectionArguments(inspection) {
+    if (!inspection || typeof inspection.topology_sha256 !== 'string'
+        || !/^[a-f0-9]{64}$/.test(inspection.topology_sha256)) return [];
+    return ['--prior', JSON.stringify({ schema: inspection.schema, valid: inspection.valid,
+        topology_sha256: inspection.topology_sha256, watertight: inspection.watertight,
+        winding_consistent: inspection.winding_consistent, open_edge_count: inspection.open_edge_count,
+        component_count: inspection.component_count, closed_component_count: inspection.closed_component_count })];
+}
+
+async function inspectBambuMesh(filePath, signal, prior = null) {
     try {
         const result = await runCommand(PYTHON_EXECUTABLE,
-            [resolvePythonHelper('inspect_mesh.py'), filePath],
+            [resolvePythonHelper('inspect_mesh.py'), filePath, ...priorInspectionArguments(prior)],
             { signal, timeoutMs: PYTHON_HELPER_TIMEOUT_MS });
         const data = JSON.parse(result.stdout);
         if (data.schema !== INSPECTION_SCHEMA || data.valid !== true
@@ -80,8 +98,8 @@ function measurementFromBambuInspection(inspection) {
         height_mm: inspection.dimensions_mm.z, volume_mm3: inspection.volume_mm3 });
 }
 
-async function measureBambuMesh(filePath, signal) {
-    return measurementFromBambuInspection(await inspectBambuMesh(filePath, signal));
+async function measureBambuMesh(filePath, signal, prior = null) {
+    return measurementFromBambuInspection(await inspectBambuMesh(filePath, signal, prior));
 }
 
 /**
@@ -103,5 +121,5 @@ async function captureBambuSource(inputFile, normalizedFile, signal, threeMfScop
     }, scope: threeMfScope || { object_count: 1, instance_count: 1 } };
 }
 
-module.exports = { hashFile, inspectBambuMesh, measureBambuMesh, measurementFromBambuInspection, captureBambuSource,
+module.exports = { hashFile, priorInspectionArguments, inspectBambuMesh, measureBambuMesh, measurementFromBambuInspection, captureBambuSource,
     parseThreeMfScope, ambiguousScope, INSPECTION_SCHEMA, VOLUME_SOURCES };

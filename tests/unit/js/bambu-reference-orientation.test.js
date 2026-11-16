@@ -119,7 +119,7 @@ test('the reference fallback is part of the fixed, bounded event vocabulary', ()
     assert.ok(EVENT_NAMES.includes('orientation.reference_fallback'));
     // 3.8.2 added async.retry_alone and native.failure_detail; 3.9.0 added the
     // eleven identity/auth/runtime/export names of §4.9. Still fixed and bounded.
-    assert.ok(EVENT_NAMES.length <= 45);
+    assert.ok(EVENT_NAMES.length <= 47);
     const emitted = [];
     const emit = createEventEmitter({ writer: (entry) => emitted.push(entry) });
     assert.equal(emit('orientation.reference_fallback', {

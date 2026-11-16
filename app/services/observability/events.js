@@ -43,6 +43,7 @@ const EVENT_NAMES = Object.freeze([
     'profile_catalogue.changed',
     'queue.admitted',
     'queue.expired',
+    'queue.fast_lane',
     'queue.rejected',
     'queue.shutdown',
     'readiness.changed',
@@ -53,6 +54,7 @@ const EVENT_NAMES = Object.freeze([
     'runtime.event_loop_stall',
     'runtime.limits_unavailable',
     'shutdown.started',
+    'slice.model_inspected',
     'startup.completed'
 ]);
 // A request workspace (`job-<hex>`), a public async slice job (`sj_<hex>`) or

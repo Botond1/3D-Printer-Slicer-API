@@ -5,6 +5,7 @@
 const { DEFAULTS, MAX_CONCURRENT_SLICES_RANGE } = require('../../config/constants');
 const { parsePositiveInt, parseBoundedPositiveInt } = require('./number-utils');
 const { createQueueScheduler } = require('./queue-scheduler');
+const { FAST_LANE_POLICY } = require('./fast-lane');
 const {
     getNativeRuntimeStatus,
     subscribeToNativeRuntimeQuarantine
@@ -235,6 +236,8 @@ function createSliceQueue(options = {}) {
         maxQueueLength: finiteLimit(options.maxQueueLength, MAX_SLICE_QUEUE_LENGTH),
         maxQueuePerClient: finiteLimit(options.maxQueuePerClient, MAX_SLICE_QUEUE_PER_IP),
         maxWaitMs: finiteLimit(options.maxWaitMs, MAX_SLICE_QUEUE_WAIT_MS),
+        // 3.10.0: a factory queue has no fast lane unless it asks for one.
+        fastLane: options.fastLane,
         // Resolved on the first export only: the release policy is never read
         // by a queue that admits no export (its slice limits stay 3.8.3's).
         maxExportJobs: () => finiteLimit(options.maxExportJobs, resolveExportMaxJobs()),
@@ -256,6 +259,7 @@ function createSliceQueue(options = {}) {
 }
 
 const defaultQueue = createSliceQueue({
+    fastLane: FAST_LANE_POLICY,
     isRuntimeAvailable: () => getNativeRuntimeStatus().available,
     subscribeToRuntimeQuarantine: subscribeToNativeRuntimeQuarantine
 });
