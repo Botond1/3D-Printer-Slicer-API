@@ -3,14 +3,14 @@
 /**
  * The 3.9.0 image golden gate (§4.11, §7): inside the exact built image,
  *  1. recompute the 23-file processing digest from `/app/<name>` and compare
- *     it with `generation-inputs-3.8.3.json`;
+ *     it with `generation-inputs-3.10.0.json`;
  *  2. compare `python -m pip freeze --all` (without pip, setuptools, wheel)
  *     with `python-geometry-stack-3.8.3.txt`;
  *  3. require `choom` on the image PATH (§4.6);
  *  4. start the image with throwaway keys and no network, read `GET /profiles`
  *     and `GET /profiles?contract=material-v1` from inside, and compare both
  *     `catalogue_sha256` values and every row's identity with
- *     `catalogue-3.8.3.json`;
+ *     `catalogue-3.10.0.json`;
  *  5. when the image answers `GET /capabilities` with export enabled, export
  *     a synthetic 40 mm cube (`preserve`) and check the body's sha256 against
  *     `X-R3D-Export-Sha256` (3.8.x answers 404: not applicable).
@@ -40,9 +40,9 @@ function readGolden(name) {
 
 function loadGoldens() {
     return {
-        generation: JSON.parse(readGolden('generation-inputs-3.8.3.json')),
+        generation: JSON.parse(readGolden('generation-inputs-3.10.0.json')),
         freeze: readGolden('python-geometry-stack-3.8.3.txt'),
-        catalogue: JSON.parse(readGolden('catalogue-3.8.3.json'))
+        catalogue: JSON.parse(readGolden('catalogue-3.10.0.json'))
     };
 }
 
@@ -67,7 +67,7 @@ function compareGenerationInputs(actual, golden) {
     const expected = new Map(golden.files.map((file) => [file.name, file.sha256]));
     if (actual.files.length !== golden.files.length
         || actual.files.some((file, index) => file.name !== golden.files[index].name)) {
-        reasons.push('the processing file list differs from the 3.8.3 golden');
+        reasons.push('the processing file list differs from the golden');
     }
     for (const file of actual.files) {
         if (expected.get(file.name) !== file.sha256) reasons.push(`${file.name} ${file.sha256} != ${expected.get(file.name)}`);
@@ -120,9 +120,9 @@ function catalogueView(route, status, bodyText) {
 }
 
 /**
- * Compare the image's two catalogue views with the 3.8.3 golden: status,
+ * Compare the image's two catalogue views with the golden: status,
  * schema, `catalogue_sha256`, the row set and every row's identity keys
- * (a key absent at 3.8.3 must stay absent). `body_sha256` is not compared
+ * (a key absent in the golden must stay absent). `body_sha256` is not compared
  * here: a 3.9.0 catalogue may legitimately differ in non-identity text; the
  * byte equality of the bodies is §8's private-container check.
  * @returns {string[]} Differences.
@@ -357,7 +357,7 @@ if (require.main === module) {
             failures = [error.message];
         }
         const summary = failures.length === 0
-            ? '\n### Generation, Python stack and catalogue goldens\n\nThe image equals the 3.8.3 goldens (processing digest, pip freeze, catalogue identities); choom present.\n'
+            ? '\n### Generation, Python stack and catalogue goldens\n\nThe image equals the goldens (3.10.0 processing digest and catalogue, 3.8.3 pip freeze; catalogue identities); choom present.\n'
             : `\n### Generation, Python stack and catalogue goldens\n\nFAILED:\n${failures.map((reason) => `- ${reason.replace(/[`|<>]/g, '?')}`).join('\n')}\n`;
         if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
         for (const reason of failures) console.error(reason);

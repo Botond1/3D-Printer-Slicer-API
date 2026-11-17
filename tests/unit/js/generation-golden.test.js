@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * The 3.8.3 goldens (§4.11): the 23-file processing digest recomputed from
+ * The goldens (§4.11; moved deliberately by 3.10.0): the 23-file processing digest recomputed from
  * the committed blobs (`git cat-file blob HEAD:app/<name>`, never the working
- * tree: CRLF checkouts) equals the image capture, and the image gate's
+ * tree: CRLF checkouts) equals the golden, and the image gate's
  * comparisons refuse a moved digest, a moved Python package and one altered
  * catalogue row. A change to the digest needs a CHANGELOG line
  * "generation changes" and a new golden.
@@ -29,7 +29,10 @@ const {
 } = require('../../golden/image-golden-gate');
 
 const GOLDENS = loadGoldens();
-const LIVE_IMAGE = 'sha256:8f582f9e54ef44020e638d1f2dd8848ac730c19845d5d1c65a79206f17abb436';
+/** 3.10.0 moved the generation deliberately; these are the five files it changed. */
+const CHANGED_IN_3_10_0 = ['orient.py', 'inspect_mesh.py', 'services/slice/bambu-receipt.js',
+    'services/slice/bambu-source.js', 'services/slice/pipeline.js'];
+const GENERATION_3_10_0 = '363ba36daac0ecd8eb78d8c7f6c53c2a6d97c4d52cba0c4ca73503c3b5f1dda3';
 
 function blobAtHead(repositoryPath) {
     const result = spawnSync('git', ['cat-file', 'blob', `HEAD:${repositoryPath}`], { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 });
@@ -37,15 +40,18 @@ function blobAtHead(repositoryPath) {
     return result.stdout;
 }
 
-test('the generation golden is the 3.8.3 image capture of the 23 processing files', () => {
+test('the generation golden is the 23 processing files of the 3.10.0 release commit', () => {
     const golden = GOLDENS.generation;
-    assert.ok(golden.captured_from.image.endsWith(LIVE_IMAGE));
+    assert.equal(golden.captured_from.release, '3.10.0');
+    assert.match(golden.captured_from.source_commit, /^[0-9a-f]{40}$/);
+    assert.deepEqual(golden.captured_from.changed_files, CHANGED_IN_3_10_0);
+    assert.equal(golden.captured_from.measurement_generation, GENERATION_3_10_0);
     assert.equal(golden.processing_schema, 'r3d-bambu-processing-v1');
     assert.equal(golden.files.length, 23);
     assert.equal(golden.processing_sha256, hashValue(golden.files));
 });
 
-test('the committed processing files at HEAD hash to the 3.8.3 golden', () => {
+test('the committed processing files at HEAD hash to the 3.10.0 golden', () => {
     const recipe = parseGenerationRecipe(blobAtHead('app/services/slice/bambu-generation.js').toString('utf8'));
     const actual = { processing_schema: recipe.schema,
         ...computeGenerationInputs(recipe.files, (name) => blobAtHead(`app/${name}`), hashValue) };
@@ -85,8 +91,9 @@ function goldenAsViews() {
     return { v2: clone.v2, v3: clone.v3 };
 }
 
-test('the catalogue golden carries both 3.8.3 catalogue hashes and 96 rows each', () => {
-    assert.equal(GOLDENS.catalogue.v2.catalogue_sha256, 'bb07e0c325041bef95475db892e98de4c77125c59b54a4a6c3d3b59d4c19916c');
+test('the catalogue golden carries both 3.10.0 catalogue hashes and 96 rows each', () => {
+    assert.equal(GOLDENS.catalogue.v2.catalogue_sha256, '3623aab2ff63d9959c09f882714d3eb6918c8df0545aadcc2d86f2f5d7af998b');
+    assert.equal(GOLDENS.catalogue.v3.catalogue_sha256, '2dca687c09000c4ef3e0992b782dbea06642309e3b31eca39262c888d81aec75');
     assert.equal(GOLDENS.catalogue.v3.schema, 'r3d-profile-catalogue-v3');
     for (const key of ['v2', 'v3']) {
         assert.equal(GOLDENS.catalogue[key].rows.length, 96);
@@ -94,7 +101,10 @@ test('the catalogue golden carries both 3.8.3 catalogue hashes and 96 rows each'
         const bambu = GOLDENS.catalogue[key].rows.filter((row) => row.id.startsWith('bambu:'));
         assert.equal(bambu.length, 60);
         assert.equal(new Set(bambu.map((row) => row.measurement_generation)).size, 1);
-        assert.equal(bambu[0].measurement_generation, '0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27');
+        assert.equal(bambu[0].measurement_generation, GENERATION_3_10_0);
+        assert.equal(GOLDENS.generation.captured_from.measurement_generation, hashValue({
+            build_sha256: bambu[0].engine_build_sha256, bundle_sha256: bambu[0].profile_bundle_sha256,
+            processing_schema: GOLDENS.generation.processing_schema, processing_sha256: GOLDENS.generation.processing_sha256 }));
     }
     assert.deepEqual(compareCatalogue(goldenAsViews(), GOLDENS.catalogue), []);
 });

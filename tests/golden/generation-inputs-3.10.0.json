@@ -1,9 +1,22 @@
 {
   "captured_from": {
-    "image": "ghcr.io/botond1/3d-printer-slicer-api@sha256:8f582f9e54ef44020e638d1f2dd8848ac730c19845d5d1c65a79206f17abb436",
-    "source_commit": "dbc539e",
-    "release": "3.8.3",
-    "method": "read-only in-container hash of /app/<name> (sha256 of the bytes, hashValue of the list, as bambu-generation.js:46) on the live 3d-psa-backend-server container running that image, 2026-11-11; equal to the git blobs at dbc539e"
+    "image": null,
+    "source_commit": "8b1ce79a5914fc876a1fa6a942fef8f7f35b00b8",
+    "release": "3.10.0",
+    "method": "sha256 of the git blobs app/<name> at source_commit, hashValue of the list as bambu-generation.js does; the exact-image gate recomputes the same digest from /app/<name> inside the built image",
+    "previous": {
+      "release": "3.8.3",
+      "source_commit": "dbc539e",
+      "processing_sha256": "5d461b7c4968ed0b2b61c555d8614bf9ffbf5d9d9067fc7eb970205d0dfbdfdc"
+    },
+    "changed_files": [
+      "orient.py",
+      "inspect_mesh.py",
+      "services/slice/bambu-receipt.js",
+      "services/slice/bambu-source.js",
+      "services/slice/pipeline.js"
+    ],
+    "measurement_generation": "363ba36daac0ecd8eb78d8c7f6c53c2a6d97c4d52cba0c4ca73503c3b5f1dda3"
   },
   "processing_schema": "r3d-bambu-processing-v1",
   "files": [
@@ -17,7 +30,7 @@
     },
     {
       "name": "orient.py",
-      "sha256": "c081d943320c82fb0776d40ac1a8aff971d4df7f023cf2ad7aeeb8afaa7fdb77"
+      "sha256": "d98d606f2b0d290e0b700f707dbf5030ba85658a693d11b6d8940b9f09872461"
     },
     {
       "name": "scale_model.py",
@@ -25,7 +38,7 @@
     },
     {
       "name": "inspect_mesh.py",
-      "sha256": "70b42e4730d8b6000e90ff9a8148110385cd975af7fa825e3628ab7bbcd6277a"
+      "sha256": "ab0b177105e9f8fdfaaf87180c166689a742f38c580bc67f69bf4fb924634c8e"
     },
     {
       "name": "services/slice/gcode-metrics.js",
@@ -33,11 +46,11 @@
     },
     {
       "name": "services/slice/bambu-receipt.js",
-      "sha256": "d7d4b922c3f5049188a1dfb98f040d2ea586bb5d0b7580073e03f2c34d906ded"
+      "sha256": "1a9ea037a4fad07d5f3938434a1f07c01b44c282ea1e6d878631023d4d3bc9d2"
     },
     {
       "name": "services/slice/bambu-source.js",
-      "sha256": "0ce7bc3b6751eb8cacb763af8460c8451c5ea00ed9f608d9344f22a8194f3ffa"
+      "sha256": "8f38b4f75a2a125f47e33ca9520cc52095adc4093bffd7c0ed623755f657aaed"
     },
     {
       "name": "services/slice/bambu-artifact.js",
@@ -53,7 +66,7 @@
     },
     {
       "name": "services/slice/pipeline.js",
-      "sha256": "146f13b4fde88d67bcfaaabf6f6367b460c0d5824b0b76ecd31d89fa6de2fa2e"
+      "sha256": "876e35920e2087e812e7425f735e1d601f690e05e49537ea7f54c52ba94ebb21"
     },
     {
       "name": "services/slice/input-processing.js",
@@ -100,5 +113,5 @@
       "sha256": "28478762f0fd1d251477390794ff7c5ef6f91e31bd99a0bb5aaf6601ae96fac4"
     }
   ],
-  "processing_sha256": "5d461b7c4968ed0b2b61c555d8614bf9ffbf5d9d9067fc7eb970205d0dfbdfdc"
+  "processing_sha256": "c15de2a3f5346e06167665aa1ed3a23494e10e1631f057c9cde482c0c712a659"
 }
