@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented in this file.
 
+## v3.10.0 (2026-11-16, speed release — NOT DEPLOYED at the time of writing)
+
+**generation changes.** Five of the 23 hashed processing files changed (`inspect_mesh.py`, `orient.py`, `services/slice/bambu-source.js`, `services/slice/bambu-receipt.js`, `services/slice/pipeline.js`), so the Bambu `measurement_generation` moves from `0af5bd3e2fb980f41e754064b7f869038500f1523bbbb48a5d00b406aa394e27` to `363ba36daac0ecd8eb78d8c7f6c53c2a6d97c4d52cba0c4ca73503c3b5f1dda3` (`processing_sha256` `c15de2a3f5346e06167665aa1ed3a23494e10e1631f057c9cde482c0c712a659`). Every catalogue row carries the generation, so both `catalogue_sha256` values move with it; no other catalogue field changes. A consumer that pins the generation re-prices its open quotes once. The goldens moved with the release (`tests/golden/generation-inputs-3.10.0.json`, `tests/golden/catalogue-3.10.0.json`); the CI gate admits a moved golden only with this paragraph.
+
+### Why
+A slice job ran seven child processes, three of them the same single-threaded mesh inspection (source, oriented, final). On large or open meshes those three dominated: a 578 000-triangle open STL took 214 s, 131 s of it in the inspections and 33 s in the stable-pose heuristic. A 280-triangle model waited 174 s behind two such jobs.
+
+### Changed
+- **Mesh inspection in linear time** (`inspect_mesh.py`). Exact vertex indexing and duplicate detection are one stable lexicographic sort each (the labels of `numpy.unique(axis=0)`, without sorting structured rows); edge uses, shells (`scipy.sparse.csgraph`) and per-shell closedness come from edge-use counts per shell label instead of one `Trimesh` per shell; the volume is trimesh's own divergence integral summed the same way; trimesh's `fix_normals(multibody=True)` decisions (its own breadth-first walk decides the kept side of an open shell) are computed for all triangles at once. **Every field equals the 3.9.0 answer exactly**, the volume and dimensions to the last bit: `tests/unit/python/reference/inspect_mesh_3_9_0.py` is the 3.9.0 helper byte for byte and `tests/unit/python/test_inspect_mesh_linear.py` compares both.
+- **One full inspection per request where that is provable** (`bambu-source.js`, `pipeline.js`, `bambu-receipt.js`). The inspection now also reports `topology_sha256`: the kept triangles with every corner named by the file position where its coordinates first appear. A rigid motion or scale that keeps distinct corners distinct and the triangle order intact gives the same digest, and nothing else does. The oriented, scaled and final inspections receive the source inspection (`--prior`); when the file's own digest equals the source's and the source is a closed, consistently wound solid, the watertight, winding, shell and open-edge facts are taken from it. **Always measured on the file itself**, also on the final priced mesh: the exact indexing, both dropped-triangle counts, the triangle count, the dimensions and the volume. Any other case (an open or inconsistently wound surface, a digest that differs because a motion merged corners) is inspected in full, as before. The receipt's schema and fields are unchanged.
+- **No stable-pose heuristic above 300 000 triangles** (`orient.py`, `HEURISTIC_MAX_TRIANGLES`). The heuristic ran only when the engine's own pose was unavailable or was refused as not this mesh (`ORIENTATION_REFERENCE_MISMATCH`). Above the threshold the submitted pose is kept and reported as `fallback_unmodified` with the existing `ORIENTATION_FALLBACK` warning, exactly as when the heuristic itself fails or times out. At or below 300 000 triangles nothing changes. A reference pose with another triangle count is refused from the two STL headers before any mesh is loaded (same marker, same exit code).
+- **Small-model fast lane** (`fast-lane.js`, `queue-scheduler.js`; not hashed). An upload whose name ends in `.stl` and whose size is at most 2 500 084 bytes (a binary STL of 50 000 triangles) may start while every normal slot is busy, at most one such job at a time and never during a solo hold. Normal jobs keep `MAX_CONCURRENT_SLICES` and their order; a small job takes a free normal slot like any job. `SLICE_FAST_LANE=off` removes the lane, `SLICE_FAST_LANE_MAX_BYTES` (84 … 16 777 216) moves the limit. `GET /capabilities` gains `fast_lane {enabled, max_upload_bytes, formats, max_concurrent}` and `service_version` `3.10.0`; one `queue.fast_lane` event per lane start.
+- **Logs.** `native.started` / `native.completed` carry `extra.native_kind` (`inspect_mesh`, `inspect_mesh_3mf_scope`, `orient`, `scale_model`, `mesh2stl`, `cad2stl`, `engine_reference_pose`, `engine`); one `slice.model_inspected` event per Bambu job carries the kept triangle count.
+
+### Unchanged
+- No new `errorCode`, no changed status, no new or changed receipt field, no change to authentication, the key ring, rate limiting, archive admission or the export contract. A model at or below 300 000 triangles, and any model whose engine pose is usable, gets the same pose, print time, grams, dimensions and receipt geometry as on 3.9.0.
+- No dependency changes (`scipy` and `networkx` were already pinned).
+
+### Behaviour that does change, plainly
+- A mesh above 300 000 triangles whose engine pose cannot be used is now priced in the submitted pose. On 3.9.0 it was priced in the heuristic's pose when the heuristic finished inside its 60 s budget, and in the submitted pose when it did not.
+
+### Operations
+- `ops/hostinger/cutover/deploy-310.sh` (`capture`, `checks <generation>`, `deploy <ref> <sha> <generation>`, `rollback`): only `SLICER_API_IMAGE` changes; the post-checks require the new generation on every Bambu row and in the receipts, every other catalogue field and every identity object and priced fact of the control slices equal to the capture, the active and the previous key answering `/capabilities`, and the new log lines.
+
 ## Unreleased (operations and CI only; no image or application change)
 
 ### Fixed

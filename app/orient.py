@@ -26,10 +26,43 @@ REFERENCE_MAX_DISTANCE_MM = 0.05
 REFERENCE_IDENTITY_SNAP = 1e-6
 REFERENCE_MISMATCH_MARKER = "ORIENTATION_REFERENCE_MISMATCH"
 REFERENCE_MISMATCH_EXIT_CODE = 3
+# Above this many triangles the stable-pose heuristic is not run (3.10.0): its
+# convex-hull sampling took tens of seconds to minutes on such meshes and ran
+# only when the engine's own pose was unavailable or was not this mesh. The
+# submitted pose is kept and reported as `fallback_unmodified`, exactly as when
+# the heuristic itself fails. At or below the threshold nothing changes.
+HEURISTIC_MAX_TRIANGLES = 300_000
+BINARY_STL_HEADER_BYTES = 84
+BINARY_STL_TRIANGLE_BYTES = 50
 
 
 class ReferencePoseError(ValueError):
     """The reference pose is not a rigid motion of the submitted triangles."""
+
+
+def _binary_stl_triangle_count(path):
+    """The triangle count a binary STL declares, when the file length agrees
+    with it; None for anything else (ASCII STL, another format, unreadable)."""
+    try:
+        size = os.path.getsize(path)
+        if size < BINARY_STL_HEADER_BYTES:
+            return None
+        with open(path, "rb") as handle:
+            header = handle.read(BINARY_STL_HEADER_BYTES)
+    except OSError:
+        return None
+    count = int.from_bytes(header[80:84], "little")
+    if size != BINARY_STL_HEADER_BYTES + count * BINARY_STL_TRIANGLE_BYTES:
+        return None
+    return count
+
+
+def _keep_submitted_pose(input_path, output_path, orientation_mode, metadata_path, triangles):
+    """Large mesh without a usable engine pose: no heuristic, submitted pose kept."""
+    print(f"[PYTHON ORIENT] {triangles} triangles exceed {HEURISTIC_MAX_TRIANGLES}: "
+          "stable-pose heuristic skipped, keeping the submitted pose.")
+    shutil.copyfile(input_path, output_path)
+    _write_orientation_metadata(metadata_path, orientation_mode, 'fallback_unmodified', IDENTITY_ROTATION_MATRIX)
 
 
 def _rotation_from_reference(input_path, reference_path):
@@ -200,6 +233,18 @@ def optimize_orientation(
     print(f"[PYTHON ORIENT] Analyzing orientation for {technology}: {input_path}")
 
     try:
+        declared_triangles = _binary_stl_triangle_count(input_path)
+        if orientation_mode == 'auto' and reference_path is not None and declared_triangles is not None:
+            # The same refusal `_rotation_from_reference` reaches after loading
+            # both files, read from the two headers first.
+            reference_triangles = _binary_stl_triangle_count(reference_path)
+            if reference_triangles is not None and reference_triangles != declared_triangles:
+                raise ReferencePoseError("reference triangle count differs from the submitted mesh")
+        if (orientation_mode == 'auto' and reference_path is None
+                and declared_triangles is not None and declared_triangles > HEURISTIC_MAX_TRIANGLES):
+            _keep_submitted_pose(input_path, output_path, orientation_mode, metadata_path, declared_triangles)
+            return
+
         # 1. Load the mesh
         mesh = trimesh.load(input_path)
 
@@ -225,6 +270,11 @@ def optimize_orientation(
 
         if reference_path is not None:
             _apply_reference_pose(mesh, input_path, reference_path, output_path, orientation_mode, metadata_path)
+            return
+
+        loaded_triangles = len(getattr(mesh, 'faces', ()))
+        if loaded_triangles > HEURISTIC_MAX_TRIANGLES:
+            _keep_submitted_pose(input_path, output_path, orientation_mode, metadata_path, loaded_triangles)
             return
 
         # 3. Compute stable poses

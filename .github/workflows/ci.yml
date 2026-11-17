@@ -172,7 +172,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # The Bambu measurement_generation must not move (3.9.0 §4.11): every
+          # The Bambu measurement_generation must not move unless a release moves
+          # its golden deliberately (3.9.0 §4.11; 3.10.0 did): every
           # processing file, bundle input and measurement configuration file is
           # blob-identical to the base, bambu-generation.js differs by allowed
           # hunks only, and the live plugin's validators accept every answer.
@@ -188,16 +189,26 @@ jobs:
           # A base equal to the candidate (a dispatched run of a SHA already on
           # main: merge-base = the candidate) compares a revision with itself
           # and cannot fail, so every run ALSO compares against the fixed
-          # baseline whose generation is known (the 3.8.3 golden's commit).
-          pinned_base_sha="$(node -e "process.stdout.write(require('./tests/golden/generation-inputs-3.8.3.json').captured_from.source_commit)")"
+          # baseline whose generation is known (the generation golden's commit).
+          pinned_base_sha="$(node -e "process.stdout.write(require('./tests/golden/generation-inputs-3.10.0.json').captured_from.source_commit)")"
           pinned_base_sha="$(git rev-parse --verify --quiet "${pinned_base_sha}^{commit}")" || {
             echo "The pinned generation baseline is not in the history (fetch-depth 0 is required)." >&2
             exit 1
           }
-          if [ "$generation_base_sha" != "$CANDIDATE_SHA" ]; then
+          if [ "$generation_base_sha" = "$CANDIDATE_SHA" ]; then
+            echo "Generation base equals the candidate; the pinned baseline ${pinned_base_sha} is the check."
+          elif git merge-base --is-ancestor "$pinned_base_sha" "$generation_base_sha"; then
             node scripts/check-generation-inputs.js "$generation_base_sha" --ref "$CANDIDATE_SHA"
           else
-            echo "Generation base equals the candidate; the pinned baseline ${pinned_base_sha} is the check."
+            # A deliberate generation release (3.10.0): this change set moves the
+            # golden itself, so its source commit is not in the base. The base
+            # comparison would fail by design; the moved golden is then the only
+            # baseline, and the release must say so where an operator reads it.
+            expected_generation="$(node -e "process.stdout.write(String(require('./tests/golden/generation-inputs-3.10.0.json').captured_from.measurement_generation))")"
+            [[ "$expected_generation" =~ ^[0-9a-f]{64}$ ]] || { echo "The moved golden names no measurement_generation." >&2; exit 1; }
+            grep -q 'generation changes' CHANGELOG.md || { echo "A moved generation golden needs a CHANGELOG line with the words: generation changes" >&2; exit 1; }
+            grep -q "$expected_generation" CHANGELOG.md || { echo "CHANGELOG.md does not name the new measurement_generation ${expected_generation}." >&2; exit 1; }
+            echo "Deliberate generation release: golden ${pinned_base_sha} is not in the base ${generation_base_sha}; the pinned comparison below is the check."
           fi
           node scripts/check-generation-inputs.js "$pinned_base_sha" --ref "$CANDIDATE_SHA"
           node --test tests/unit/js/check-generation-inputs.test.js tests/unit/js/generation-golden.test.js \

@@ -60,7 +60,7 @@ test('structured events enforce schema, correlation identifiers, bounds, and fix
     assert.equal(Object.isFrozen(entries[0]), true);
     // 3.8.2 added async.retry_alone and native.failure_detail; 3.9.0 added
     // eleven identity/auth/runtime/export names; still a fixed, bounded vocabulary.
-    assert.ok(EVENT_NAMES.length <= 45);
+    assert.ok(EVENT_NAMES.length <= 47);
     assert.equal(new Set(EVENT_NAMES).size, EVENT_NAMES.length);
 });
 

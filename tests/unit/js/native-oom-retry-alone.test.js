@@ -217,7 +217,7 @@ test('native.completed failure carries the exit facts and a printable stderr tai
     assert.equal(completed.length, 1);
     assert.equal(completed[0].outcome, 'failure');
     assert.deepEqual(completed[0].extra, {
-        exit_code: 1, signal: null, killed_by_runner: false, stderr_tail: 'boom [31mred'
+        native_kind: 'engine', exit_code: 1, signal: null, killed_by_runner: false, stderr_tail: 'boom [31mred'
     });
 
     since = events.length;

@@ -53,7 +53,7 @@ function validateS1bSources(sources) {
     assert.match(scheduler, /job\.controller\.abort\(abortReason\(job\.externalSignal\)\)/);
     assert.match(scheduler,
         /if \(shuttingDown\) return rejectAdmission\(config\.createShutdownError\(\), correlation\)/);
-    assert.match(scheduler, /while \(!shuttingDown && activeJobs\.size < config\.maxConcurrent/);
+    assert.match(scheduler, /while \(!shuttingDown && normalActive\(\) < config\.maxConcurrent/);
     assert.match(scheduler, /for \(const job of \[\.\.\.queuedJobs, \.\.\.activeJobs\]\)/);
     assert.match(service, /const taskSignal = effectiveSignal \|\| binding\.signal/);
     assert.match(service, /process\(req, res, \{ forcedTechnology, engine, signal: taskSignal \}\)/);
@@ -89,7 +89,7 @@ test('S1b source contracts reject deadline, abort, shutdown, response, counter, 
         ['shutdown admission reopened', 'scheduler',
             'if (shuttingDown) return rejectAdmission(config.createShutdownError(), correlation)',
             'if (false) return rejectAdmission(config.createShutdownError(), correlation)'],
-        ['shutdown starts queued work', 'scheduler', 'while (!shuttingDown && activeJobs.size < config.maxConcurrent', 'while (activeJobs.size < config.maxConcurrent'],
+        ['shutdown starts queued work', 'scheduler', 'while (!shuttingDown && normalActive() < config.maxConcurrent', 'while (normalActive() < config.maxConcurrent'],
         ['route cleanup no longer awaits safe settlement', 'service', 'settlementError = await safelyAwaitResponseSettlement(', 'settlementError = safelyAwaitResponseSettlement('],
         ['route cleanup duplicated', 'route', 'cleanupError = await finalizeLifecycle(', 'cleanupError = await finalizeLifecycle(\n                    {});\n                cleanupError = await finalizeLifecycle(']
     ];

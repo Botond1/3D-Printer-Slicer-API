@@ -137,7 +137,9 @@ test('the pre-3.9.0 vocabulary is unchanged and unknown names stay dropped', () 
         'artifact.cleanup', 'async.accepted', 'async.retry_alone', 'auth.rejected',
         'native.failure_detail', 'resource.rejected', 'request.completed', 'startup.completed'
     ]) assert.ok(EVENT_NAMES.includes(name), name);
-    assert.equal(EVENT_NAMES.length, 34 + NEW_EVENT_NAMES.length);
+    // 3.10.0 adds two names: the fast lane start and the per-job model size.
+    for (const name of ['queue.fast_lane', 'slice.model_inspected']) assert.ok(EVENT_NAMES.includes(name), name);
+    assert.equal(EVENT_NAMES.length, 34 + NEW_EVENT_NAMES.length + 2);
     const { emit, entries } = captureEmitter();
     assert.equal(emit('export.unknown', {}), false);
     assert.equal(entries.length, 0);

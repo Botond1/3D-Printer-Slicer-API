@@ -9,6 +9,13 @@
  * system-killed native) pre-empts a running export: the export's signal is
  * aborted and the export is re-queued at the head of its class, keeping its
  * own external deadline. Without exports every path below is the 3.8.3 one.
+ *
+ * Fast lane (3.10.0): a queued slice admitted with `fastLane: true` (a small
+ * STL upload, see `fast-lane.js`) may start while every normal slot is busy,
+ * at most one such extra job at a time and never during a solo hold. It is an
+ * ordinary queued job in every other respect (queue place, per-key share,
+ * deadline, order within its class) and takes a normal slot whenever one is
+ * free. With `config.fastLane` absent or disabled nothing below differs.
  */
 
 function abortReason(signal) {
@@ -70,6 +77,13 @@ function createQueueScheduler(config) {
     const queuedExports = [];
     let activeExport = null;
     let maxExportJobs;
+    /** Fast lane (3.10.0): the one job running beyond the normal slots, or null. */
+    let fastLaneJob = null;
+    const fastLaneEnabled = config.fastLane?.enabled === true;
+    /** Jobs holding a normal slot (slices outside the lane and the export). */
+    function normalActive() {
+        return activeJobs.size - (fastLaneJob ? 1 : 0);
+    }
     /** The export limit, resolved on the first export admission. */
     function exportLimit() {
         if (maxExportJobs === undefined) {
@@ -267,6 +281,7 @@ function createQueueScheduler(config) {
         if (job.state !== 'active') return;
         job.state = 'settled';
         activeJobs.delete(job);
+        if (fastLaneJob === job) fastLaneJob = null;
         decrement(activeByKey, job.queueKey);
         cleanJobResources(job);
         if (solo?.job === job) releaseSolo(soloUnavailable('Slice job settled before it ran alone.'));
@@ -321,19 +336,43 @@ function createQueueScheduler(config) {
             return;
         }
         // A pending or running solo hold (3.8.2) starts nothing until it ends.
-        while (!shuttingDown && activeJobs.size < config.maxConcurrent && !solo && queuedJobs.length > 0) {
+        while (!shuttingDown && normalActive() < config.maxConcurrent && !solo && queuedJobs.length > 0) {
             const job = nextQueuedJob();
             if (expireJobAtDequeue(job)) continue;
             queuedJobs.splice(queuedJobs.indexOf(job), 1);
             activateJob(job);
         }
+        startFastLaneJobIfBlocked();
         startNextExportIfIdle();
+    }
+
+    /**
+     * Fast lane (3.10.0): with every normal slot busy, the first queued
+     * small-model job (synchronous before asynchronous, FIFO within each)
+     * starts as the one extra job. Never during a solo hold.
+     */
+    function startFastLaneJobIfBlocked() {
+        while (fastLaneEnabled && !shuttingDown && !solo && fastLaneJob === null
+            && normalActive() >= config.maxConcurrent) {
+            const job = queuedJobs.find((candidate) => candidate.fastLane && !candidate.ignoreQueueWait)
+                || queuedJobs.find((candidate) => candidate.fastLane);
+            if (!job) return;
+            if (expireJobAtDequeue(job)) continue;
+            queuedJobs.splice(queuedJobs.indexOf(job), 1);
+            fastLaneJob = job;
+            emitQueueEvent('queue.fast_lane', {
+                outcome: 'started',
+                duration_ms: Math.max(0, config.now() - job.enqueuedAt),
+                extra: { queue_state: 'fast_lane' }
+            }, job.correlation);
+            activateJob(job);
+        }
     }
 
     /** The lowest class: a free slot, no waiting slice, no solo hold, no running export. */
     function startNextExportIfIdle() {
         if (shuttingDown || solo || activeExport || queuedJobs.length > 0) return;
-        if (activeJobs.size >= config.maxConcurrent || queuedExports.length === 0) return;
+        if (normalActive() >= config.maxConcurrent || queuedExports.length === 0) return;
         const job = queuedExports.shift();
         job.state = 'active';
         job.controller.signal.removeEventListener('abort', job.onEffectiveAbort);
@@ -495,6 +534,7 @@ function createQueueScheduler(config) {
     function acceptJob(task, queueKey, signal, resolve, reject, admission = {}) {
         const job = createJob(task, queueKey, signal, resolve, reject);
         job.ignoreQueueWait = admission.ignoreQueueWait === true;
+        job.fastLane = fastLaneEnabled && admission.fastLane === true;
         signal?.addEventListener('abort', job.onExternalAbort, { once: true });
         job.controller.signal.addEventListener('abort', job.onEffectiveAbort, { once: true });
         queuedJobs.push(job);
@@ -527,6 +567,7 @@ function createQueueScheduler(config) {
         }
         const admission = {
             ignoreQueueWait: options.ignoreQueueWait === true,
+            fastLane: options.fastLane === true,
             onAdmitted: options.onAdmitted
         };
         return new Promise((resolve, reject) => acceptJob(task, queueKey, signal, resolve, reject, admission));
@@ -571,6 +612,9 @@ function createQueueScheduler(config) {
         // 3.9.0 export class, also non-enumerable (no serialized change).
         Object.defineProperty(status, 'exportQueueLength', { value: queuedExports.length, enumerable: false });
         Object.defineProperty(status, 'exportActive', { value: activeExport !== null, enumerable: false });
+        // 3.10.0 fast lane, non-enumerable as well. `activeJobs` counts the lane's job too.
+        Object.defineProperty(status, 'fastLaneEnabled', { value: fastLaneEnabled, enumerable: false });
+        Object.defineProperty(status, 'fastLaneActive', { value: fastLaneJob !== null, enumerable: false });
         return status;
     }
 
